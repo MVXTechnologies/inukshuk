@@ -96,6 +96,15 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
     ['lost-GPS ink on elevation 5', t.status.gpsLostInk, t.elevation.level5, TEXT],
     ['text on lost-GPS fill', t.status.onGpsLost, t.status.gpsLost, TEXT],
     ['recording dot on recording chip', t.status.recordingDot, t.status.recording, GRAPHIC],
+    // External GNSS receiver chip (#588): words on surfaces, icons on map chrome.
+    ['RTK-fixed ink on surface', t.status.gnssFixed, t.surface, TEXT],
+    ['RTK-fixed ink on elevation 5', t.status.gnssFixed, t.elevation.level5, TEXT],
+    ['DGPS ink on surface', t.status.gnssDgps, t.surface, TEXT],
+    ['DGPS ink on elevation 5', t.status.gnssDgps, t.elevation.level5, TEXT],
+    ['receiver fixed icon on map chrome', t.map.gnssFixed, t.map.chrome, GRAPHIC],
+    ['receiver DGPS icon on map chrome', t.map.gnssDgps, t.map.chrome, GRAPHIC],
+    ['receiver warning icon on map chrome', t.map.gnssWarn, t.map.chrome, GRAPHIC],
+    ['receiver lost icon on map chrome', t.map.gnssLost, t.map.chrome, GRAPHIC],
     // Data marks.
     ['route on its casing', t.data.route, t.data.routeCasing, GRAPHIC],
     ['route casing on paper', t.data.routeCasing, palette.paper, GRAPHIC],

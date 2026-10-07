@@ -167,6 +167,53 @@ const extractHeartRate = (raw: AnyRecord): number | undefined => {
   return ext && typeof ext === 'object' ? findHrDeep(ext as AnyRecord) : undefined;
 };
 
+/** Our own receiver extension (#588): marks a fix that came from an external GNSS receiver. */
+const INUKSHUK_GNSS_NS = 'urn:inukshuk:gnss:1';
+
+/** GPX 1.1 `<fix>` for a receiver solution kind; RTK float/fixed travel in `inukshuk:gnss`. */
+function gpxFixOf(kind: string): string | undefined {
+  switch (kind) {
+    case 'rtk-fixed':
+    case 'rtk-float':
+    case 'dgps':
+    case 'sbas':
+      return 'dgps';
+    case 'autonomous':
+      return '3d';
+    case 'none':
+      return 'none';
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * An external receiver's fix fields from a trkpt we wrote: `<sat>`, `<hdop>`,
+ * `<ageofdgpsdata>` (GPX 1.1) and `inukshuk:gnss` (solution kind, 95 %
+ * accuracies). Other apps' `<src>` / `<fix>` don't make a point "external".
+ */
+const extractGnss = (raw: AnyRecord, point: TrackPoint): void => {
+  const ext = raw['extensions'];
+  const g = ext && typeof ext === 'object' ? (ext as AnyRecord)['inukshuk:gnss'] : undefined;
+  if (!g || typeof g !== 'object') return;
+  const rec = g as AnyRecord;
+  const kind = textOf(rec['inukshuk:fix']);
+  if (kind === undefined || kind === '') return;
+  point.source = 'external';
+  const gnss: NonNullable<TrackPoint['gnss']> = { fix: kind };
+  const sats = toNum(textOf(raw['sat']));
+  if (sats !== undefined) gnss.sats = sats;
+  const hdop = toNum(textOf(raw['hdop']));
+  if (hdop !== undefined) gnss.hdop = hdop;
+  const age = toNum(textOf(raw['ageofdgpsdata']));
+  if (age !== undefined) gnss.ageS = age;
+  point.gnss = gnss;
+  const hacc = toNum(textOf(rec['inukshuk:hacc']));
+  if (hacc !== undefined) point.accuracy = hacc;
+  const vacc = toNum(textOf(rec['inukshuk:vacc']));
+  if (vacc !== undefined) point.altitudeAccuracy = vacc;
+};
+
 const parsePoint = (raw: AnyRecord): TrackPoint | undefined => {
   const lat = toNum(raw[`${ATTR_PREFIX}lat`]);
   const lon = toNum(raw[`${ATTR_PREFIX}lon`]);
@@ -188,6 +235,7 @@ const parsePoint = (raw: AnyRecord): TrackPoint | undefined => {
   if (speed !== undefined && speed >= 0) point.speed = speed;
   const hr = extractHeartRate(raw);
   if (hr !== undefined && hr > 0) point.heartRateBpm = hr;
+  extractGnss(raw, point);
   return point;
 };
 
@@ -336,6 +384,7 @@ export function buildGpx(args: {
   segmentStarts?: readonly number[];
 }): string {
   const { points, metadata, waypoints, segmentStarts } = args;
+  const mixed = points.some((p) => p.source === 'external');
 
   const toTrkpt = (p: TrackPoint) => {
     const node: AnyRecord = {
@@ -351,11 +400,29 @@ export function buildGpx(args: {
     if (p.speed !== undefined && Number.isFinite(p.speed) && p.speed >= 0) {
       node['speed'] = round(p.speed, 3);
     }
+    const extensions: AnyRecord = {};
     if (p.heartRateBpm !== undefined && Number.isFinite(p.heartRateBpm) && p.heartRateBpm > 0) {
-      node['extensions'] = {
-        'gpxtpx:TrackPointExtension': { 'gpxtpx:hr': Math.round(p.heartRateBpm) },
-      };
+      extensions['gpxtpx:TrackPointExtension'] = { 'gpxtpx:hr': Math.round(p.heartRateBpm) };
     }
+    // An external receiver's fix (#588): GPX 1.1's own fields first (in the
+    // schema's order: src, fix, sat, hdop, ageofdgpsdata), then the solution
+    // kind and the receiver's 95 % accuracies, which GPX has no field for.
+    // In a track that mixes sources, the phone's points say so too.
+    if (p.source === 'external' && p.gnss) {
+      node['src'] = 'External GNSS receiver';
+      const fix = gpxFixOf(p.gnss.fix);
+      if (fix !== undefined) node['fix'] = fix;
+      if (p.gnss.sats !== undefined) node['sat'] = Math.round(p.gnss.sats);
+      if (p.gnss.hdop !== undefined) node['hdop'] = round(p.gnss.hdop, 2);
+      if (p.gnss.ageS !== undefined) node['ageofdgpsdata'] = round(p.gnss.ageS, 1);
+      const g: AnyRecord = { 'inukshuk:fix': p.gnss.fix };
+      if (p.accuracy !== undefined) g['inukshuk:hacc'] = round(p.accuracy, 3);
+      if (p.altitudeAccuracy !== undefined) g['inukshuk:vacc'] = round(p.altitudeAccuracy, 3);
+      extensions['inukshuk:gnss'] = g;
+    } else if (mixed) {
+      node['src'] = 'Phone GPS';
+    }
+    if (Object.keys(extensions).length > 0) node['extensions'] = extensions;
     return node;
   };
 
@@ -372,6 +439,7 @@ export function buildGpx(args: {
   if (points.some((p) => p.heartRateBpm !== undefined)) {
     gpx[`${ATTR_PREFIX}xmlns:gpxtpx`] = 'http://www.garmin.com/xmlschemas/TrackPointExtension/v1';
   }
+  if (mixed) gpx[`${ATTR_PREFIX}xmlns:inukshuk`] = INUKSHUK_GNSS_NS;
   if (Object.keys(metaNode).length > 0) gpx['metadata'] = metaNode;
   // <wpt> must precede <trk> in the GPX 1.1 sequence.
   if (waypoints && waypoints.length > 0) {

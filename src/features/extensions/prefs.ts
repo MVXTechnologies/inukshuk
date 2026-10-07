@@ -2,7 +2,7 @@
  * The extensions' persisted state in the settings store (`extensions[key]`,
  * `@core/extensions/prefs`): read it, change it, subscribe to it.
  */
-import type { ExtensionKey } from '@core/extensions/keys';
+import type { AnyExtensionKey } from '@core/extensions/keys';
 import { withExtensionPrefs } from '@core/extensions/prefs';
 import type { ExtensionsState } from '@core/extensions/state';
 import type { ExtensionPrefs } from '@core/extensions/types';
@@ -10,12 +10,12 @@ import { useSettingsStore } from '@state/settingsStore';
 
 import { availableExtensions } from './availability';
 
-export function extensionPrefs(key: ExtensionKey): ExtensionPrefs {
+export function extensionPrefs(key: AnyExtensionKey): ExtensionPrefs {
   return useSettingsStore.getState().extensions[key];
 }
 
 /** Change some of one extension's fields (one settings write; none when nothing changes). */
-export function setExtensionPrefs(key: ExtensionKey, patch: Partial<ExtensionPrefs>): void {
+export function setExtensionPrefs(key: AnyExtensionKey, patch: Partial<ExtensionPrefs>): void {
   const { extensions, set } = useSettingsStore.getState();
   const current = extensions[key];
   const changed = (Object.keys(patch) as (keyof ExtensionPrefs)[]).some(
@@ -24,7 +24,7 @@ export function setExtensionPrefs(key: ExtensionKey, patch: Partial<ExtensionPre
   if (changed) set('extensions', withExtensionPrefs(extensions, key, patch));
 }
 
-export function useExtensionPrefs(key: ExtensionKey): ExtensionPrefs {
+export function useExtensionPrefs(key: AnyExtensionKey): ExtensionPrefs {
   return useSettingsStore((s) => s.extensions[key]);
 }
 

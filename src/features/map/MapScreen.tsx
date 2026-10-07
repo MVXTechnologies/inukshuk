@@ -59,7 +59,6 @@ import {
   Map,
   type MapRef,
   Marker,
-  UserLocation,
   type ViewState,
   type ViewStateChangeEvent,
 } from '@maplibre/maplibre-react-native';
@@ -116,7 +115,7 @@ import {
 } from '@features/extensions/mapHost';
 import { bottomCardSlotFree } from '@core/map/bottomCardSlot';
 import { overlayAnchor } from '@core/map/layerSlots';
-import { PuckLayers } from './components/PuckLayers';
+import { UserPuck } from './components/UserPuck';
 import { NightExitPill } from '@features/display/NightExitPill';
 import { useDisplayCondition } from '@ui/displayCondition';
 import { NIGHT_MAP } from '@ui/tokens';
@@ -129,6 +128,9 @@ import { ScaleBar } from './components/ScaleBar';
 import { metersPerPixel } from '@core/geo/scaleBar';
 import { heatTapRadiusPx } from '@core/heat/heatStyle';
 import { RecordingPanel } from './components/RecordingPanel';
+import { ReceiverFollow } from '@features/gnss/ReceiverFollow';
+import { ReceiverMapOverlay } from '@features/gnss/ReceiverMapOverlay';
+import { useGnssStore } from '@state/gnssStore';
 import { TrailInspectPanel } from './components/TrailInspectPanel';
 import { TipButton } from '@features/support/TipButton';
 import { TipBubble } from '@features/support/TipBubble';
@@ -420,6 +422,16 @@ export function MapScreen() {
 
   const followUser = useMapStore((s) => s.followUser);
   const setFollowUser = useMapStore((s) => s.setFollowUser);
+  // #588 — an external GNSS receiver is the position source: MapLibre's own
+  // follow mode tracks the PHONE's location, so following eases the camera to
+  // the receiver's fix instead (and a user pan ends it, like native follow).
+  // A boolean (rarely changes): the fix itself is followed by <ReceiverFollow>, so
+  // this screen doesn't re-render at the receiver's rate.
+  const externalActive = useGnssStore((s) => s.use === 'external' && s.map !== null);
+  const externalActiveRef = useRef(false);
+  useEffect(() => {
+    externalActiveRef.current = externalActive;
+  }, [externalActive]);
   const basemap = useMapStore((s) => s.basemap);
   const shownTrail = useLongTrailsStore((s) => s.shown);
   const [trailSheetHeight, setTrailSheetHeight] = useState(0);
@@ -2416,6 +2428,13 @@ export function MapScreen() {
             // trap this guards against.
             onRegionWillChange={(e) => {
               gesturePause.willChange(e.nativeEvent.userInteraction === true);
+              if (
+                e.nativeEvent.userInteraction === true &&
+                externalActiveRef.current &&
+                useMapStore.getState().followUser
+              ) {
+                setFollowUser(false);
+              }
             }}
             onRegionIsChanging={windEnabled ? onWindRegionIsChanging : undefined}
             onRegionDidChange={(e) => {
@@ -2499,9 +2518,12 @@ export function MapScreen() {
               {...(headingForCamera !== undefined
                 ? { duration: 150, easing: 'linear' as const }
                 : {})}
-              trackUserLocation={followUser ? 'default' : undefined}
+              trackUserLocation={followUser && !externalActive ? 'default' : undefined}
               onTrackUserLocationChange={(e) => {
-                if (e.nativeEvent.trackUserLocation === null) setFollowUser(false);
+                // Handing follow to the receiver turns native tracking off: not a user pan.
+                if (e.nativeEvent.trackUserLocation === null && !externalActiveRef.current) {
+                  setFollowUser(false);
+                }
               }}
               // 0, the lowest MapLibre allows: at z1 the world is ~1,000 pt wide,
               // so a phone could never show more than part of it ("half of the
@@ -2834,11 +2856,10 @@ export function MapScreen() {
             {/* Revamp puck, replacing MapLibre's default one (children do):
               halo, ring and dot in the scheme's puck tokens, plus the amber
               uncertainty ring on a weak signal while recording. */}
-            <UserLocation animated>
-              <PuckLayers
-                weakAccuracyM={status !== 'idle' && gpsQuality === 'weak' ? lastAccuracyM : null}
-              />
-            </UserLocation>
+            <ReceiverFollow cameraRef={cameraRef} enabled={followUser && externalActive} />
+            <UserPuck
+              weakAccuracyM={status !== 'idle' && gpsQuality === 'weak' ? lastAccuracyM : null}
+            />
           </Map>
         )}
 
@@ -3277,6 +3298,21 @@ export function MapScreen() {
               onHeightChange={setPanelHeight}
             />
           </View>
+        )}
+
+        {/* External GNSS receiver (#588): its chip in the top-centre lane (the
+          panel's own chip replaces it while recording) and its detail sheet,
+          above the panel. Below the destination / night / marine chip when
+          one holds the lane. */}
+        {makeMapState === null && (
+          <ReceiverMapOverlay
+            top={
+              insets.top +
+              TOP_CHIP_OFFSET +
+              (marineActive || destination !== null || displayCondition === 'night' ? 44 : 0)
+            }
+            showChip={!recordingPanelUp}
+          />
         )}
 
         {/* Right-edge activity carousel: opened by tapping a "hot" heat spot

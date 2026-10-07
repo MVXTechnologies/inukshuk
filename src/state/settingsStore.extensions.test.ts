@@ -46,6 +46,7 @@ it('a file from before any extension: nothing installed', async () => {
   expect(store.getState().extensions).toEqual({
     geodetic: { installedAt: 0, show: true, offline: true },
     tides: { installedAt: 0, show: true, offline: false },
+    gnss: { installedAt: 0, show: true, offline: false },
   });
   // The rest of the file is untouched by the migration.
   expect(store.getState().themeMode).toBe('dark');
@@ -70,6 +71,7 @@ it('both installed (main, 39dd7848): kept, filter and tab too', async () => {
   expect(s.extensions).toEqual({
     geodetic: { installedAt: 1_759_683_600_000, show: true, offline: true },
     tides: { installedAt: 1_759_770_000_000, show: false, offline: false },
+    gnss: { installedAt: 0, show: true, offline: false },
   });
   expect(s.geodeticFilter.hasHeights).toBe(true);
   expect(s.overlaysTab).toBe('extensions');

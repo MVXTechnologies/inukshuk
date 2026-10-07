@@ -23,6 +23,9 @@ import {
   formatSpeed,
 } from '@state/formatters';
 import { DisplaySheet } from '@features/display/DisplaySheet';
+import { ReceiverChipView } from '@features/gnss/ReceiverChipView';
+import { useReceiverChip } from '@features/gnss/useReceiverChip';
+import { useGnssStore } from '@state/gnssStore';
 import { useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useDisplayCondition } from '@ui/displayCondition';
@@ -124,6 +127,8 @@ export function RecordingPanel(props: Props) {
   const now = useNow(1000);
   const paused = status === 'paused';
   const chip = gpsChip(gpsQuality, lastAccuracyM, lastFixAt, now);
+  const receiverChip = useReceiverChip();
+  const setReceiverSheetOpen = useGnssStore((s) => s.setSheetOpen);
 
   const valueOf = (field: HeroField): string => {
     switch (field) {
@@ -280,46 +285,57 @@ export function RecordingPanel(props: Props) {
                 <Text style={[styles.chipCaps, { color: palette.paper }]}>REC</Text>
               </View>
             )}
-            <View
-              accessibilityLabel={chip.label}
-              style={[
-                styles.chip,
-                chip.kind === 'lost'
-                  ? { backgroundColor: tokens.status.gpsLost }
-                  : {
-                      borderWidth: 1,
-                      borderColor:
-                        chip.kind === 'weak' ? tokens.status.gpsWeak : tokens.outlineVariant,
-                    },
-              ]}
-            >
-              <Icon
-                source={chip.kind === 'lost' ? 'crosshairs-off' : 'crosshairs-gps'}
-                size={14}
-                color={
-                  chip.kind === 'lost'
-                    ? tokens.status.onGpsLost
-                    : chip.kind === 'weak'
-                      ? tokens.status.gpsWeak
-                      : ink
-                }
+            {/* #588: with an external receiver in use, its chip (state, accuracy)
+              replaces the phone's; tapping it opens the receiver sheet. */}
+            {receiverChip !== null ? (
+              <ReceiverChipView
+                chip={receiverChip}
+                variant="surface"
+                onPress={() => setReceiverSheetOpen(true)}
+                testID="gnss-panel-chip"
               />
-              <Text
+            ) : (
+              <View
+                accessibilityLabel={chip.label}
                 style={[
-                  styles.chipText,
-                  {
-                    color:
-                      chip.kind === 'lost'
-                        ? tokens.status.onGpsLost
-                        : chip.kind === 'weak'
-                          ? tokens.status.gpsWeak
-                          : ink,
-                  },
+                  styles.chip,
+                  chip.kind === 'lost'
+                    ? { backgroundColor: tokens.status.gpsLost }
+                    : {
+                        borderWidth: 1,
+                        borderColor:
+                          chip.kind === 'weak' ? tokens.status.gpsWeak : tokens.outlineVariant,
+                      },
                 ]}
               >
-                {chip.label}
-              </Text>
-            </View>
+                <Icon
+                  source={chip.kind === 'lost' ? 'crosshairs-off' : 'crosshairs-gps'}
+                  size={14}
+                  color={
+                    chip.kind === 'lost'
+                      ? tokens.status.onGpsLost
+                      : chip.kind === 'weak'
+                        ? tokens.status.gpsWeak
+                        : ink
+                  }
+                />
+                <Text
+                  style={[
+                    styles.chipText,
+                    {
+                      color:
+                        chip.kind === 'lost'
+                          ? tokens.status.onGpsLost
+                          : chip.kind === 'weak'
+                            ? tokens.status.gpsWeak
+                            : ink,
+                    },
+                  ]}
+                >
+                  {chip.label}
+                </Text>
+              </View>
+            )}
           </View>
           <View style={styles.rowEnd}>
             <Pressable

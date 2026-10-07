@@ -6,9 +6,21 @@
  * § "Adding an extension".
  */
 import { GEODETIC_EXTENSION } from './descriptors/geodetic';
+import { GNSS_EXTENSION } from './descriptors/gnss';
 import { TIDES_EXTENSION } from './descriptors/tides';
-import { EXTENSION_KEYS, type ExtensionKey } from './keys';
-import type { ExtensionDescriptor, StyleInputOf } from './types';
+import {
+  EXTENSION_KEYS,
+  isExtensionKey,
+  type AnyExtensionKey,
+  type DeviceExtensionKey,
+  type ExtensionKey,
+} from './keys';
+import type {
+  DeviceExtensionDescriptor,
+  ExtensionDescriptor,
+  ExtensionPrefs,
+  StyleInputOf,
+} from './types';
 
 export const EXTENSIONS = {
   geodetic: GEODETIC_EXTENSION,
@@ -17,6 +29,23 @@ export const EXTENSIONS = {
 
 export function extensionDescriptor(key: ExtensionKey): ExtensionDescriptor {
   return EXTENSIONS[key];
+}
+
+/** The device extensions' descriptors (no map half), by key. */
+export const DEVICE_EXTENSIONS = {
+  gnss: GNSS_EXTENSION,
+} satisfies Record<DeviceExtensionKey, DeviceExtensionDescriptor>;
+
+/** What every extension, map or device, has: its name, its teaser, its first switches. */
+export interface ExtensionBasics {
+  label: string;
+  teaser: string;
+  defaults: Pick<ExtensionPrefs, 'show' | 'offline'>;
+  legacySettings?: ExtensionDescriptor['legacySettings'];
+}
+
+export function extensionBasics(key: AnyExtensionKey): ExtensionBasics {
+  return isExtensionKey(key) ? EXTENSIONS[key] : DEVICE_EXTENSIONS[key];
 }
 
 /**
@@ -32,4 +61,12 @@ export function companionExtensions(): ExtensionKey[] {
   return EXTENSION_KEYS.filter((k) => EXTENSIONS[k].offline.companion !== undefined);
 }
 
-export { EXTENSION_KEYS, isExtensionKey, type ExtensionKey } from './keys';
+export {
+  ALL_EXTENSION_KEYS,
+  DEVICE_EXTENSION_KEYS,
+  EXTENSION_KEYS,
+  isExtensionKey,
+  type AnyExtensionKey,
+  type DeviceExtensionKey,
+  type ExtensionKey,
+} from './keys';

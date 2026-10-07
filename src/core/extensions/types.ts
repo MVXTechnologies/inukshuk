@@ -8,7 +8,7 @@
  */
 import type { LayerSpecification, SourceSpecification } from '@maplibre/maplibre-react-native';
 
-import type { ExtensionKey } from './keys';
+import type { AnyExtensionKey } from './keys';
 
 /**
  * A published tile archive on our host (`@data/datasets` resolves it to its
@@ -30,7 +30,19 @@ export interface ExtensionPrefs {
   offline: boolean;
 }
 
-export type ExtensionPrefsMap = Record<ExtensionKey, ExtensionPrefs>;
+/** Every extension's persisted state, map and device ones (`ALL_EXTENSION_KEYS`). */
+export type ExtensionPrefsMap = Record<AnyExtensionKey, ExtensionPrefs>;
+
+/**
+ * The pure half of a device extension (`DEVICE_EXTENSION_KEYS`): what it is
+ * called and how a fresh install starts. Its `show` is the extension's own
+ * on/off switch (for the receiver: "use the receiver"); `offline` is unused.
+ */
+export interface DeviceExtensionDescriptor {
+  label: string;
+  teaser: string;
+  defaults: Pick<ExtensionPrefs, 'show' | 'offline'>;
+}
 
 /**
  * What the map hands an extension's style builder (`buildOsmStyle`'s

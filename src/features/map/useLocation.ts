@@ -13,6 +13,7 @@ import {
 } from '@core/recording/locationWatchdog';
 import { isBackgroundFeedConfirmed, toTrackPoint } from '@lib/backgroundLocation';
 import { reportError } from '@lib/errorReporting';
+import { phoneFeedsRecorder, useGnssStore } from '@state/gnssStore';
 import { useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import * as Location from 'expo-location';
@@ -69,6 +70,46 @@ export interface LocationTracking {
   unavailableReason: string | null;
 }
 
+/** How often the external receiver's fix reaches `location` (the map screen re-renders on it). */
+export const EXTERNAL_LOCATION_MS = 1000;
+
+/**
+ * The external receiver's position for `location` (#588), at most once per
+ * {@link EXTERNAL_LOCATION_MS}; null while the phone is the source.
+ */
+function useExternalLocation(): LatLng | null {
+  const [pos, setPos] = useState<LatLng | null>(null);
+  useEffect(() => {
+    let lastAt = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const read = (): LatLng | null => {
+      const s = useGnssStore.getState();
+      return s.use === 'external' && s.map ? { latitude: s.map.lat, longitude: s.map.lon } : null;
+    };
+    const apply = () => {
+      lastAt = Date.now();
+      timer = undefined;
+      setPos(read());
+    };
+    apply();
+    const unsub = useGnssStore.subscribe((s, prev) => {
+      if (s.map === prev.map && s.use === prev.use) return;
+      if (s.use !== prev.use) {
+        if (timer) clearTimeout(timer);
+        apply();
+        return;
+      }
+      if (timer) return;
+      timer = setTimeout(apply, Math.max(0, EXTERNAL_LOCATION_MS - (Date.now() - lastAt)));
+    });
+    return () => {
+      unsub();
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+  return pos;
+}
+
 /** Resolve `promise`, or null after `ms` (the promise is left to settle on its own). */
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -116,6 +157,17 @@ export function useLocationTracking(): LocationTracking {
   // The watchdog probe, reachable from the watch effect (declared below it).
   const probeRef = useRef<(force?: boolean) => Promise<void>>(async () => undefined);
   const minDisplacement = useSettingsStore((s) => s.minDisplacementM);
+  // #588 — an external GNSS receiver may be the position source: the phone's
+  // GPS then idles (low-power standby, or off), its fixes don't feed the
+  // recorder, and `location` is the receiver's fix.
+  const phoneMode = useGnssStore((s) => s.phone);
+  const externalInUse = useGnssStore((s) => s.use === 'external');
+  const receiverLost = useGnssStore(
+    (s) => s.use === 'external' && (s.status === null || s.status.freshness === 'lost'),
+  );
+  const externalLocation = useExternalLocation();
+  // Only the first watch of the hook's life may prompt (see the effect below).
+  const askedRef = useRef(false);
   // Bumped on every foreground so permission + device-location availability are
   // re-checked and the position watch is re-established. #90: permission or
   // device location revoked mid-recording used to go undetected — the watch
@@ -172,16 +224,24 @@ export function useLocationTracking(): LocationTracking {
         // request()ing on each foreground re-prompted a denied-but-askable
         // user on every app switch, and the prompt itself churns AppState —
         // prompt → background → active → recheck → prompt again.
-        const { status } =
-          recheck === 0
-            ? await Location.requestForegroundPermissionsAsync()
-            : await Location.getForegroundPermissionsAsync();
+        const firstRun = !askedRef.current;
+        const { status } = firstRun
+          ? await Location.requestForegroundPermissionsAsync()
+          : await Location.getForegroundPermissionsAsync();
+        // Set once a request has been answered (a superseded run may re-ask, as before).
+        askedRef.current = true;
         if (cancelled) return;
         if (status !== 'granted') {
           setPermission('denied');
           return;
         }
         setPermission('granted');
+        // The receiver is good and the user chose "phone GPS off": no watch.
+        if (phoneMode === 'off') {
+          lastAliveAtRef.current = Date.now();
+          setLoss(null);
+          return;
+        }
         // High accuracy first, degrading on "unsatisfied device settings":
         // that rejection doesn't always mean location is off — Play services'
         // settings gate also fails it when the device can't satisfy the
@@ -218,7 +278,12 @@ export function useLocationTracking(): LocationTracking {
           // task is CONFIRMED delivering does the watch stand down to just
           // driving the marker — a started-but-silent task must never mute
           // the only working feeder (the v1.0.2 no-points regression).
-          if (!isBackgroundFeedConfirmed()) useRecorderStore.getState().addPoint(fix);
+          if (!isBackgroundFeedConfirmed() && phoneFeedsRecorder()) {
+            useRecorderStore.getState().addPoint(fix);
+          }
+          if (useGnssStore.getState().link !== 'idle') {
+            useGnssStore.getState().publish({ phoneAccuracyM: fix.accuracy ?? null });
+          }
           // Foreground last-position persistence, throttled: the first fix
           // of the session writes immediately (survives a later crash/kill),
           // then at most one write per interval while fixes keep flowing.
@@ -229,7 +294,12 @@ export function useLocationTracking(): LocationTracking {
         };
         let settingsRefused = false;
         try {
-          sub = await watch(Location.Accuracy.BestForNavigation, recheck === 0);
+          // Standby (#588, owner A9): the lowest-power watch that still
+          // delivers, so a fallback starts from a recent fix.
+          sub = await watch(
+            phoneMode === 'standby' ? Location.Accuracy.Low : Location.Accuracy.BestForNavigation,
+            firstRun,
+          );
         } catch (err) {
           // A superseded rejection goes to the outer handler (see there).
           if (cancelled || !isDeviceSettingsRejection(err)) throw err;
@@ -274,7 +344,7 @@ export function useLocationTracking(): LocationTracking {
       if (retryTimer) clearTimeout(retryTimer);
       sub?.remove();
     };
-  }, [minDisplacement, recheck, persistPosition, setLoss]);
+  }, [minDisplacement, recheck, persistPosition, setLoss, phoneMode]);
 
   /**
    * #324 — the watchdog. A subscribed watch that has gone silent is probed:
@@ -288,6 +358,8 @@ export function useLocationTracking(): LocationTracking {
     async (force = false) => {
       if (probingRef.current || !mountedRef.current) return;
       if (!foregroundRef.current) return;
+      // The receiver is the source: a quiet standby watch is expected.
+      if (useGnssStore.getState().use === 'external') return;
       const current = lossRef.current;
       const silent = isWatchSilent(lastAliveAtRef.current, Date.now());
       if (!force && !silent && current !== 'off') return;
@@ -345,6 +417,19 @@ export function useLocationTracking(): LocationTracking {
     return () => clearInterval(timer);
   }, [permission]);
 
-  const unavailableReason = unavailableKind === null ? null : locationLossMessage(unavailableKind);
-  return { location, lastFix, permission, unavailableKind, unavailableReason };
+  // While the receiver is the source, the phone's watch state doesn't matter;
+  // a lost receiver with no fallback allowed is "no signal" (auto-pause).
+  const kind: LocationLossKind | null = externalInUse
+    ? receiverLost
+      ? 'no-signal'
+      : null
+    : unavailableKind;
+  const unavailableReason = kind === null ? null : locationLossMessage(kind);
+  return {
+    location: externalInUse && externalLocation ? externalLocation : location,
+    lastFix,
+    permission,
+    unavailableKind: kind,
+    unavailableReason,
+  };
 }
