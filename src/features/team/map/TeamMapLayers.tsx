@@ -10,6 +10,9 @@
  *   is three bands, never a continuous value (maplibre-symbol-sort-key-cost).
  * - Labels only when the style has a glyph host (`glyphs`); the font stack
  *   follows it like the extensions' labels do (`mapStyle.ts`).
+ * - Teammates and shared waypoints draw on top of the whole map (above the
+ *   base labels and patterns: they are what a team map is for); shared
+ *   trails sit with the trail lines.
  * - Children are arrays, never Fragments (see `mapLayers.tsx`).
  */
 import { overlayAnchor } from '@core/map/layerSlots';
@@ -27,7 +30,6 @@ import { useMemo } from 'react';
 
 import { TEAM_MEMBER_LAYER, TEAM_WAYPOINT_LAYER } from './layerIds';
 
-const MARKERS_ANCHOR = overlayAnchor('markers');
 const LINES_ANCHOR = overlayAnchor('trailLines');
 const OFM = 'openfreemap';
 
@@ -83,7 +85,6 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
         key="halo"
         id="team-member-halo"
         type="circle"
-        beforeId={MARKERS_ANCHOR}
         filter={['==', ['get', 'band'], 'fresh']}
         paint={{
           'circle-radius': 15,
@@ -96,7 +97,6 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
         key="dot"
         id={TEAM_MEMBER_LAYER}
         type="circle"
-        beforeId={MARKERS_ANCHOR}
         paint={{
           'circle-radius': 9,
           'circle-color': ['get', 'color'],
@@ -113,7 +113,6 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
               key="initials"
               id="team-member-initials"
               type="symbol"
-              beforeId={MARKERS_ANCHOR}
               layout={{
                 'text-field': ['get', 'initials'],
                 'text-font': font,
@@ -127,7 +126,6 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
               key="label"
               id="team-member-label"
               type="symbol"
-              beforeId={MARKERS_ANCHOR}
               layout={{
                 'text-field': ['get', 'label'],
                 'text-font': font,
@@ -157,7 +155,6 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
         key="wpt"
         id={TEAM_WAYPOINT_LAYER}
         type="circle"
-        beforeId={MARKERS_ANCHOR}
         paint={{
           'circle-radius': 6,
           'circle-color': paper,
@@ -172,7 +169,6 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
               key="wpt-label"
               id="team-waypoint-label"
               type="symbol"
-              beforeId={MARKERS_ANCHOR}
               minzoom={12}
               layout={{
                 'text-field': ['get', 'label'],
