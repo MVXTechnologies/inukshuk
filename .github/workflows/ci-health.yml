@@ -149,19 +149,16 @@ jobs:
             ).filter((r) => r.name !== context.workflow);
             const completed = runs.filter((r) => r.status === 'completed');
 
-            // Red time needs main's state at the window start too: include
-            // the last run of each workflow before it.
-            const mainRuns = completed.filter((r) => r.head_branch === 'main');
+            // Red time needs main's state at the window start too (see
+            // withStateAtStart).
             const earlier = await github.rest.actions.listWorkflowRunsForRepo({
               owner, repo, branch: 'main', status: 'completed', per_page: 100,
               created: `<${new Date(since).toISOString()}`,
             });
-            const seen = new Set();
-            for (const r of earlier.data.workflow_runs) {
-              if (r.name === context.workflow || seen.has(r.workflow_id)) continue;
-              seen.add(r.workflow_id);
-              mainRuns.push(r);
-            }
+            const mainRuns = m.withStateAtStart(
+              completed.filter((r) => r.head_branch === 'main'),
+              earlier.data.workflow_runs.filter((r) => r.name !== context.workflow),
+            );
 
             // Jobs of red runs (causes) and of runs that retried (flakes):
             // annotations live on check runs, whose id is the job id.

@@ -9,6 +9,7 @@ import {
   redHours,
   renderReport,
   topCauses,
+  withStateAtStart,
 } from './ciWeekly.mjs';
 
 const H = 3600 * 1000;
@@ -53,6 +54,21 @@ describe('redHours', () => {
   it('treats a cancelled run (no verdict) as red', () => {
     const runs = [run({ conclusion: 'cancelled', updated_at: at(1) }), run({ updated_at: at(2) })];
     assert.equal(redHours(runs, T0, T0 + 10 * H), 1);
+  });
+});
+
+describe('withStateAtStart', () => {
+  it('adds only the latest pre-window run of workflows active this week', () => {
+    const inWindow = [run({ workflow_id: 1, updated_at: at(5) })];
+    const earlier = [
+      run({ workflow_id: 1, conclusion: 'failure', updated_at: at(-2) }),
+      run({ workflow_id: 1, updated_at: at(-9) }),
+      run({ workflow_id: 7, conclusion: 'failure', updated_at: at(-500) }),
+    ];
+    const merged = withStateAtStart(inWindow, earlier);
+    assert.equal(merged.length, 2);
+    // CI was red at the window start until its green run at hour 5.
+    assert.equal(redHours(merged, T0, T0 + 10 * H), 5);
   });
 });
 

@@ -22,6 +22,23 @@ const HOUR = 3600 * 1000;
 const time = (iso) => new Date(iso).getTime();
 
 /**
+ * main's runs in the window plus, for each workflow that ran in the window,
+ * its last run BEFORE the window, so a workflow already red at the start
+ * counts from the start. A workflow that did not run on main this week is
+ * left out: its months-old last run says nothing about this week.
+ */
+export function withStateAtStart(windowRuns, earlierRuns) {
+  const active = new Set(windowRuns.map((r) => r.workflow_id));
+  const last = new Map();
+  for (const r of earlierRuns) {
+    if (!active.has(r.workflow_id)) continue;
+    const prev = last.get(r.workflow_id);
+    if (!prev || time(r.updated_at) > time(prev.updated_at)) last.set(r.workflow_id, r);
+  }
+  return [...windowRuns, ...last.values()];
+}
+
+/**
  * Hours in [since, now] during which main had at least one red workflow.
  * A workflow is red from the end of a red run until the end of its next
  * green run (or `now`). Intervals of different workflows are merged, so two
