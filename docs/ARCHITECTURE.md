@@ -242,8 +242,8 @@ one registry, not hand-wired screens (architecture review P1-3):
    `core/extensions/registry.ts`. No `legacySettings`: its state lives in
    `extensions[key]`, migrated for free. Its **`summary`** (required) is the
    one line its collapsed Settings row and its overlays row show: sentence
-   case, no full stop, at most `EXTENSION_SUMMARY_MAX` (50) characters, e.g.
-   "Survey marks and benchmarks worldwide" (`registry.test.ts` checks it).
+   case, no full stop, at most `EXTENSION_SUMMARY_MAX` (32) characters, e.g.
+   "Survey marks and benchmarks" (`registry.test.ts` checks it).
    `summary`, `label` and `teaser` come from `ExtensionIdentity`, which every
    extension descriptor type extends (map and device extensions alike), so
    an extension without a summary does not type-check.

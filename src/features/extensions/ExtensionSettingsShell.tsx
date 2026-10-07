@@ -138,7 +138,7 @@ export function ExtensionSettingsShell({
             </View>
             <Icon
               source={expanded ? 'chevron-up' : 'chevron-down'}
-              size={22}
+              size={20}
               color={tokens.inkMuted}
             />
           </View>

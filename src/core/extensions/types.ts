@@ -76,8 +76,12 @@ export interface ExtensionCredit {
   osmLink?: boolean;
 }
 
-/** The longest `summary` the compact Settings → Extensions row shows uncut, in characters. */
-export const EXTENSION_SUMMARY_MAX = 50;
+/**
+ * The longest `summary`, in characters: what the collapsed Settings →
+ * Extensions row shows uncut on a 411-dp phone (Pixel 6) beside "Get"
+ * (measured on the CI review screenshots, 2026-10-07: 37 characters were cut).
+ */
+export const EXTENSION_SUMMARY_MAX = 32;
 
 /**
  * What every extension is called, map or device extension alike. Every
@@ -91,7 +95,7 @@ export interface ExtensionIdentity {
   teaser: string;
   /**
    * Its one-line pitch in the collapsed Settings → Extensions row and the
-   * overlays row ("Survey marks and benchmarks worldwide"): sentence case, no
+   * overlays row ("Survey marks and benchmarks"): sentence case, no
    * full stop, one line of at most `EXTENSION_SUMMARY_MAX` characters (the
    * registry test checks it).
    */

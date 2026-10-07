@@ -24,7 +24,7 @@ export interface TideStyleInput extends ExtensionStyleInput {
 export const TIDES_EXTENSION: ExtensionDescriptor<TideStyleInput> = {
   label: 'Tide stations',
   teaser: 'tide stations',
-  summary: 'Tide gauges, tidal levels, chart datum',
+  summary: 'Tide gauges and tidal levels',
   dataset: 'tides',
   defaults: { show: true, offline: false },
   legacySettings: { installedAt: 'tidesInstalledAt', show: 'showTideStations' },

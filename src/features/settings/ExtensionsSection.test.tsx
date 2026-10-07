@@ -61,9 +61,9 @@ describe('collapsed by default', () => {
     await renderSection();
     expect(expanded('geodetic')).toBe(false);
     expect(expanded('tides')).toBe(false);
-    const summary = screen.getByText('Survey marks and benchmarks worldwide');
+    const summary = screen.getByText('Survey marks and benchmarks');
     expect(summary.props.numberOfLines).toBe(1);
-    expect(screen.getByText('Tide gauges, tidal levels, chart datum').props.numberOfLines).toBe(1);
+    expect(screen.getByText('Tide gauges and tidal levels').props.numberOfLines).toBe(1);
     expect(screen.getByLabelText('Get Geodetic points')).toBeTruthy();
     expect(screen.getByLabelText('Get Tide stations')).toBeTruthy();
     expect(screen.queryByTestId('extension-details-geodetic')).toBeNull();
@@ -112,7 +112,7 @@ describe('the primary control works without expanding', () => {
     expect(within(row('geodetic')).queryByLabelText('Show geodetic points')).toBeNull();
     expect(row('geodetic').props.accessibilityRole).toBe('button');
     expect(row('geodetic').props.accessibilityLabel).toBe(
-      'Geodetic points, Survey marks and benchmarks worldwide',
+      'Geodetic points, Survey marks and benchmarks',
     );
   });
 });
@@ -206,6 +206,6 @@ it('geodetic’s row says when the marks are in the offline regions', async () =
   await renderSection();
   expect(screen.getByText('Offline ✓')).toBeTruthy();
   expect(row('geodetic').props.accessibilityLabel).toBe(
-    'Geodetic points, Offline ✓, Survey marks and benchmarks worldwide',
+    'Geodetic points, Offline ✓, Survey marks and benchmarks',
   );
 });
