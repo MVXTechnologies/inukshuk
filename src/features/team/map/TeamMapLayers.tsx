@@ -24,6 +24,7 @@ import type { MemberRow } from '@core/teamui/view';
 import { useExtensionPrefs } from '@features/extensions/prefs';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useTeamStore } from '@state/teamStore';
+import { useMockV2 } from '../mock2/MockV2';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { FeatureCollection } from 'geojson';
 import { useMemo } from 'react';
@@ -79,7 +80,9 @@ export function TeamMapLayers({
   const top = topLayerId;
   const { installedAt, show } = useExtensionPrefs('team');
   const view = useTeamStore((s) => s.view);
-  const positions = useTeamStore((s) => s.positions);
+  const mockShot = useMockV2((s) => s.shot);
+  const realPositions = useTeamStore((s) => s.positions);
+  const positions = mockShot !== null ? [] : realPositions;
   const shares = useTeamStore((s) => s.shares);
   const members = view?.members;
   // Keep the same object while nothing drawn changed: every new `data` makes

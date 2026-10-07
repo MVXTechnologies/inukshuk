@@ -22,6 +22,7 @@ import { MemberAvatar, ROLE_LABEL } from '../components';
 import { openPeers } from '../syncLine';
 import { TEAM_TAP_LAYERS } from './layerIds';
 import { TeamPinCard } from './TeamPinCard';
+import { useMockV2 } from '../mock2/MockV2';
 import { TeamPinComposer, usePinDraft } from './TeamPinComposer';
 
 export type TeamMapHit =
@@ -99,7 +100,9 @@ export function TeamMapOverlay({
   const hit = useTeamMapSelection((s) => s.hit);
   const select = useTeamMapSelection((s) => s.select);
   const gnssChip = useReceiverChip();
+  const mockShot = useMockV2((s) => s.shot);
   if (installedAt === 0 || !show || view === null) return null;
+  if (mockShot !== null) return null;
 
   const nearby = openPeers(peers).length;
   const others = view.activeCount - 1;
