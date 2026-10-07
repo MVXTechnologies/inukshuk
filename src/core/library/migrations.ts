@@ -403,11 +403,26 @@ export function migrateLibraryIndex(raw: unknown, documentDir?: string): Library
   const tracks = recordsWithId<TrackSummary>(doc.tracks)
     .filter((track) => typeof track.fileUri === 'string' && track.fileUri.trim() !== '')
     .map((track) => {
-      const { origin: rawOrigin, plan: rawPlan, ...rest } = track;
+      const {
+        origin: rawOrigin,
+        plan: rawPlan,
+        photoCount: rawPhotoCount,
+        coverPhotoId: rawCover,
+        ...rest
+      } = track;
       const origin = rawOrigin === undefined ? undefined : sanitizeTrackOrigin(rawOrigin);
       const plan = rawPlan === undefined ? null : sanitizeRoutePlan(rawPlan);
+      // The photo count is a cache of the trail's sidecar (#587): junk is dropped.
+      const photoCount =
+        typeof rawPhotoCount === 'number' && Number.isInteger(rawPhotoCount) && rawPhotoCount > 0
+          ? rawPhotoCount
+          : undefined;
       return {
         ...rest,
+        ...(photoCount !== undefined ? { photoCount } : {}),
+        ...(photoCount !== undefined && typeof rawCover === 'string' && rawCover !== ''
+          ? { coverPhotoId: rawCover }
+          : {}),
         ...(track.notes !== undefined ? { notes: normalizeNotes(track.notes) } : {}),
         // A junk origin is dropped, never the trail: it just loses its source mark.
         ...(origin ? { origin } : {}),

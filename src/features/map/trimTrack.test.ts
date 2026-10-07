@@ -24,6 +24,14 @@ jest.mock('@data/storage', () => {
   };
 });
 
+jest.mock('@data/photos/sidecarStore', () => ({ readWritableSidecar: jest.fn(async () => ({})) }));
+jest.mock('@data/photos/trailPhotos', () => ({ onTrailTrimmed: jest.fn(async () => 2) }));
+jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));
+const sidecars = jest.requireMock('@data/photos/sidecarStore') as {
+  readWritableSidecar: jest.Mock;
+};
+const trailPhotos = jest.requireMock('@data/photos/trailPhotos') as { onTrailTrimmed: jest.Mock };
+
 const files = (jest.requireMock('@data/storage') as { __files: Map<string, string> }).__files;
 const points: TrackPoint[] = [0, 1, 2, 3].map((i) => ({
   latitude: 45 + i / 1000,
@@ -135,4 +143,42 @@ it('does not publish metadata or delete assets when writing the new revision fai
   expect(commit).not.toHaveBeenCalled();
   expect(files.get(summary.fileUri)).toBe(original);
   expect(storage.deleteFileAt).not.toHaveBeenCalled();
+});
+
+describe('trail photos (#587)', () => {
+  it('moves the photos with the trim, after the commit', async () => {
+    const commit = jest.fn();
+    const result = await overwriteWithTrim(summary, points, 1, 2, commit);
+    expect(result.photosRemoved).toBe(2);
+    const [id, startM, endM, kept] = trailPhotos.onTrailTrimmed.mock.calls[0] as [
+      string,
+      number,
+      number,
+      TrackPoint[],
+    ];
+    expect(id).toBe('original');
+    // Points are ~111 m apart: the kept window is [111, 222] m of the old trail.
+    expect(startM).toBeCloseTo(111.2, 0);
+    expect(endM).toBeCloseTo(222.4, 0);
+    expect(kept).toHaveLength(2);
+    expect(commit.mock.invocationCallOrder[0]).toBeLessThan(
+      trailPhotos.onTrailTrimmed.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('blocks the trim before any change when the photo list cannot be rewritten', async () => {
+    sidecars.readWritableSidecar.mockRejectedValueOnce(new Error('newer version'));
+    const commit = jest.fn();
+    await expect(overwriteWithTrim(summary, points, 1, 2, commit)).rejects.toThrow(
+      'newer version',
+    );
+    expect(storage.writeTrackGpx).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it('keeps a committed trim when moving the photos fails', async () => {
+    trailPhotos.onTrailTrimmed.mockRejectedValueOnce(new Error('io'));
+    const result = await overwriteWithTrim(summary, points, 1, 2, jest.fn());
+    expect(result).toMatchObject({ photosRemoved: 0, patch: { fileUri: expect.any(String) } });
+  });
 });

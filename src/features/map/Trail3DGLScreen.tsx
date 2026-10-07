@@ -67,7 +67,7 @@ import { NameDialog } from '../library/NameDialog';
 import { TrailViewerRail } from './TrailViewerRail';
 import { TrimRangeSlider } from './components/TrimRangeSlider';
 import { Trail2DView } from './Trail2DView';
-import { overwriteWithTrim, saveTrimmedCopy, type TrimRange } from './trimTrack';
+import { overwriteWithTrim, photoTrimRange, saveTrimmedCopy, type TrimRange } from './trimTrack';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
 import { useTrailNoteEditor } from './hooks/useTrailNoteEditor';
 import { useLazyMovingStats } from './hooks/useLazyMovingStats';
@@ -80,6 +80,17 @@ import { OverviewTab } from './trailView/OverviewTab';
 import { TimelineTab, type TimelineItem } from './trailView/TimelineTab';
 import { SplitsTab } from './trailView/SplitsTab';
 import { TRAIL_ACTION_BAR_H, TrailActionBar, type TrailAction } from './trailView/TrailActionBar';
+import { photosOnAxis } from '@core/photos/axis';
+import { isNotePhoto } from '@core/photos/model';
+import { combineTrailPhotos, notePhotosOnTrail } from '@core/photos/notePhotos';
+import { photoEditFailureMessage, photoListNotice } from '@core/photos/status';
+import { visiblePhotos } from '@core/photos/stack';
+import { photoCountLabel } from '@core/photos/summary';
+import { indexTrack } from '@core/photos/trackIndex';
+import { photosEditable, useTrailPhotos, useTrailPhotosStore } from '@state/trailPhotosStore';
+import { AddPhotosSheet } from '../photos/AddPhotosSheet';
+import { photoViewerHref } from '../photos/photoUri';
+import { ShareTrailSheet } from '../photos/ShareTrailSheet';
 
 interface Props {
   trackId: string;
@@ -176,6 +187,15 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const notes = track?.notes;
   const ordered = useMemo(() => orderNotes(notes ?? []), [notes]);
 
+  // Trail photos (#587): the trail's own (sidecar) plus its note photos, one
+  // set in time order for the map, the strip, the lane and the viewer.
+  const trailPhotos = useTrailPhotos(trackId);
+  const canEditPhotos = photosEditable(trailPhotos.status);
+  const photoNotice = photoListNotice(trailPhotos.status);
+  const [addingPhotos, setAddingPhotos] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
+
   const fileUri = track?.fileUri;
   const bbox = track?.stats.bbox;
 
@@ -263,7 +283,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
     if (!track || !points || !trimRange) return;
     setTrimSaving(true);
     try {
-      const { patch } = await overwriteWithTrim(
+      const { patch, photosRemoved } = await overwriteWithTrim(
         track,
         points,
         trimRange.start,
@@ -272,10 +292,20 @@ export function Trail3DGLScreen({ trackId }: Props) {
         segmentStarts,
       );
       await reloadPoints(patch.fileUri);
-      showSnack(`Trimmed "${track.name}"`);
+      void useTrailPhotosStore.getState().refresh(track.id);
+      showSnack(
+        photosRemoved > 0
+          ? `Trimmed "${track.name}" and removed ${photoCountLabel(photosRemoved)}`
+          : `Trimmed "${track.name}"`,
+      );
       setTrimRange(null);
     } catch (err) {
-      showSnack(`Trim failed: ${err instanceof Error ? err.message : 'could not save'}`);
+      showSnack(
+        photoEditFailureMessage(
+          err,
+          `Trim failed: ${err instanceof Error ? err.message : 'could not save'}`,
+        ),
+      );
     }
     setTrimSaving(false);
   };
@@ -341,6 +371,15 @@ export function Trail3DGLScreen({ trackId }: Props) {
     [points, segmentStarts],
   );
   const keptM = trimRange ? (cumM[trimRange.end] ?? 0) - (cumM[trimRange.start] ?? 0) : 0;
+  // Trail photos on the cut ends, for the overwrite confirmation (#587).
+  const photosCutByTrim = useMemo(() => {
+    if (!confirmOverwrite || !trimRange || !points) return 0;
+    const { keptStartM, keptEndM } = photoTrimRange(points, trimRange.start, trimRange.end);
+    // The same half-metre tolerance as the data layer: a photo exactly on a cut stays.
+    return trailPhotos.photos.filter(
+      (p) => p.distanceM < keptStartM - 0.5 || p.distanceM > keptEndM + 0.5,
+    ).length;
+  }, [confirmOverwrite, trimRange, points, trailPhotos.photos]);
   const totalM = cumM.length > 0 ? (cumM[cumM.length - 1] ?? 0) : 0;
 
   // #511: everything the tabs show beyond the stats — splits, stops, the
@@ -386,6 +425,39 @@ export function Trail3DGLScreen({ trackId }: Props) {
   );
   const avgHeartRate = useMemo(() => averageHeartRate(points ?? []), [points]);
   const marks = useMemo(() => jumpMarks(analysis), [analysis]);
+
+  // Photo anchors are metres along every GPX step; the view's axis skips
+  // pauses (#325). Both index the same points, so photos map across.
+  const photoIndex = useMemo(() => (points ? indexTrack(points) : null), [points]);
+  const shownPhotos = useMemo(() => {
+    if (!photoIndex) return [];
+    const own = visiblePhotos(trailPhotos.photos);
+    return combineTrailPhotos(own, notePhotosOnTrail(notes, trackId, photoIndex));
+  }, [photoIndex, trailPhotos.photos, notes, trackId]);
+  const photosAlong = useMemo(
+    () =>
+      photoIndex && analysis ? photosOnAxis(shownPhotos, photoIndex.cumM, analysis.axis.cumM) : [],
+    [shownPhotos, photoIndex, analysis],
+  );
+  const ownPhotosAlong = useMemo(
+    () => photosAlong.filter((p) => !isNotePhoto(p.photo)),
+    [photosAlong],
+  );
+  const ownPhotoCount = useMemo(
+    () => shownPhotos.filter((p) => !isNotePhoto(p)).length,
+    [shownPhotos],
+  );
+  const openPhoto = useCallback(
+    (photoId: string) => router.push(photoViewerHref(trackId, photoId) as never),
+    [router, trackId],
+  );
+  const openAddPhotos = useCallback(() => {
+    if (!canEditPhotos) {
+      showSnack(photoNotice ?? 'Photos are still loading');
+      return;
+    }
+    setAddingPhotos(true);
+  }, [canEditPhotos, photoNotice, showSnack]);
 
   // Dragging a chart: every chart's cursor, the map marker and the readout follow.
   const scrubTo = useCallback(
@@ -493,12 +565,17 @@ export function Trail3DGLScreen({ trackId }: Props) {
   }
 
   const s = profileStats ?? track.stats;
-  const subtitle = trailSubtitle(
-    findCategory(track.category, customCategories)?.name ?? null,
-    track.startedAt,
-    track.endedAt,
-    timed,
-  );
+  const subtitle = [
+    trailSubtitle(
+      findCategory(track.category, customCategories)?.name ?? null,
+      track.startedAt,
+      track.endedAt,
+      timed,
+    ),
+    ownPhotoCount > 0 ? photoCountLabel(ownPhotoCount) : '',
+  ]
+    .filter((part) => part !== '')
+    .join(' · ');
   const viewedNote = numberedNotes.find((n) => n.note.id === viewingNoteId) ?? null;
   // The cursor badge on the map: "2.73 km · 800 m · +4 %" (or "· summit").
   const highM = analysis?.extremes ? analysis.axis.cumM[analysis.extremes.highIndex] : undefined;
@@ -530,7 +607,13 @@ export function Trail3DGLScreen({ trackId }: Props) {
   // Only actions that exist today; "Follow again" waits for route following.
   const actions: TrailAction[] = [
     { key: 'map', label: 'On map', icon: 'map-outline', onPress: onShowOnMap },
-    { key: 'share', label: 'Share', icon: 'share-variant', onPress: () => void onShareGpx() },
+    {
+      key: 'share',
+      label: 'Share',
+      icon: 'share-variant',
+      // With photos, the sheet offers "Trail + photos" (owner Q8: GPX alone by default).
+      onPress: () => (ownPhotoCount > 0 ? setSharing(true) : void onShareGpx()),
+    },
     {
       key: 'export',
       label: 'Export',
@@ -558,6 +641,9 @@ export function Trail3DGLScreen({ trackId }: Props) {
             basemap={basemap}
             onNotePress={openNote}
             focus={focusAt}
+            photos={shownPhotos}
+            selectedPhotoId={selectedPhotoId}
+            onPhotoPress={openPhoto}
           />
         ) : (
           <View style={styles.center} pointerEvents="none">
@@ -712,6 +798,10 @@ export function Trail3DGLScreen({ trackId }: Props) {
                     onJump={jumpTo}
                     notes={ordered}
                     onOpenNote={openNote}
+                    photos={photosAlong}
+                    onOpenPhoto={openPhoto}
+                    {...(canEditPhotos ? { onAddPhotos: openAddPhotos } : {})}
+                    photoNotice={photoNotice}
                   />
                 )}
                 {tab === 'charts' && (
@@ -720,6 +810,9 @@ export function Trail3DGLScreen({ trackId }: Props) {
                     display={timing?.display ?? 'pace'}
                     cursorDistanceM={scrub?.distanceM ?? null}
                     onScrub={scrubTo}
+                    photos={photosAlong}
+                    onOpenPhoto={openPhoto}
+                    onCursorPhoto={setSelectedPhotoId}
                   />
                 )}
                 {tab === 'timeline' && (
@@ -747,6 +840,9 @@ export function Trail3DGLScreen({ trackId }: Props) {
                       showSnack('Note deleted');
                     }}
                     onViewPhoto={setViewingPhoto}
+                    photos={ownPhotosAlong}
+                    onOpenPhoto={openPhoto}
+                    {...(canEditPhotos ? { onAddPhotos: openAddPhotos } : {})}
                   />
                 )}
                 {tab === 'splits' && (
@@ -783,7 +879,9 @@ export function Trail3DGLScreen({ trackId }: Props) {
           <Dialog.Title>Overwrite trail</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodyMedium">
-              {`Replace "${track.name}" with the trimmed segment? The cut portions (and any notes on them) are permanently removed.`}
+              {`Replace "${track.name}" with the trimmed segment? The cut portions (and any notes${
+                photosCutByTrim > 0 ? ` and ${photoCountLabel(photosCutByTrim)}` : ''
+              } on them) are permanently removed.`}
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
@@ -872,6 +970,29 @@ export function Trail3DGLScreen({ trackId }: Props) {
       </Portal>
 
       <TrailActionBar actions={actions} />
+
+      {/* Trail photos (#587): themed View sheets, never a Paper Portal. */}
+      {points && (
+        <AddPhotosSheet
+          visible={addingPhotos}
+          track={track}
+          points={points}
+          fallbackDistanceM={scrub?.distanceM ?? 0}
+          onClose={() => setAddingPhotos(false)}
+          onDone={(message) => {
+            setAddingPhotos(false);
+            void useTrailPhotosStore.getState().refresh(track.id);
+            showSnack(message);
+          }}
+        />
+      )}
+      <ShareTrailSheet
+        visible={sharing}
+        track={track}
+        photos={trailPhotos.photos}
+        onClose={() => setSharing(false)}
+        onMessage={showSnack}
+      />
 
       {/* A note tapped on the map, the strip or a pin: the waypoint card
           (#505/#508), floating above the action bar — not a Portal dialog. */}

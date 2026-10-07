@@ -39,6 +39,14 @@ import {
   sanitizeWeatherModel,
   type WeatherModelId,
 } from '@core/weather/weatherModels';
+import {
+  DEFAULT_PHOTO_CIRCLES_APPEAR,
+  DEFAULT_PHOTO_COPY_SIZE,
+  isPhotoCirclesAppear,
+  isPhotoCopySize,
+  type PhotoCirclesAppear,
+  type PhotoCopySize,
+} from '@core/photos/settings';
 import { Platform } from 'react-native';
 import { create } from 'zustand';
 
@@ -303,6 +311,16 @@ export interface Settings {
    * from the activities (99th percentile of the last 12 months' samples).
    */
   maxHeartRateBpm: number;
+  /** Settings → Photos (#587): trail photos on the main map, for trails shown there. */
+  photosOnMainMap: boolean;
+  /** Where photo circles appear: the trail view only, zoomed in (z12+), or always. */
+  photoCirclesAppear: PhotoCirclesAppear;
+  /** Copies kept: the optimized 2048 px copy, or the full-size original (location removed). */
+  photoCopySize: PhotoCopySize;
+  /** Sharing a trail sends a zip with its photos instead of the GPX alone (owner Q8: off). */
+  includePhotosWhenSharing: boolean;
+  /** The one-time "Add photos from this outing?" after saving a recording (owner Q6). */
+  photoPromptAfterSaveShown: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -357,6 +375,11 @@ const DEFAULTS: Settings = {
   tipJarHiddenUntil: 0,
   tipJarRestingUntil: 0,
   maxHeartRateBpm: 0,
+  photosOnMainMap: true,
+  photoCirclesAppear: DEFAULT_PHOTO_CIRCLES_APPEAR,
+  photoCopySize: DEFAULT_PHOTO_COPY_SIZE,
+  includePhotosWhenSharing: false,
+  photoPromptAfterSaveShown: false,
 };
 
 interface SettingsState extends Settings {
@@ -448,6 +471,11 @@ function snapshot(s: SettingsState): Settings {
     tipJarHiddenUntil,
     tipJarRestingUntil,
     maxHeartRateBpm,
+    photosOnMainMap,
+    photoCirclesAppear,
+    photoCopySize,
+    includePhotosWhenSharing,
+    photoPromptAfterSaveShown,
   } = s;
   return {
     tileUrl,
@@ -501,6 +529,11 @@ function snapshot(s: SettingsState): Settings {
     tipJarHiddenUntil,
     tipJarRestingUntil,
     maxHeartRateBpm,
+    photosOnMainMap,
+    photoCirclesAppear,
+    photoCopySize,
+    includePhotosWhenSharing,
+    photoPromptAfterSaveShown,
   };
 }
 
@@ -561,6 +594,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             ? (saved as { pdfWhiteKey?: unknown }).pdfWhiteKey
             : undefined,
         ) ?? DEFAULT_WHITE_KEY;
+      if (!isPhotoCirclesAppear(next.photoCirclesAppear)) {
+        next.photoCirclesAppear = DEFAULT_PHOTO_CIRCLES_APPEAR;
+      }
+      if (!isPhotoCopySize(next.photoCopySize)) next.photoCopySize = DEFAULT_PHOTO_COPY_SIZE;
       if (!isImageryLook(next.satelliteImagery)) next.satelliteImagery = DEFAULT_IMAGERY_LOOK;
       // 0 (estimate) or a plausible typed max; anything else falls back to the estimate.
       if (

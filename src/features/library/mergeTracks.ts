@@ -4,6 +4,9 @@ import { buildImportedTrack } from '@core/geo/track';
 import type { Track, TrackSummary } from '@core/models';
 import * as storage from '@data/storage';
 import type { SeedNote } from '@state/libraryStore';
+import { useTrailPhotosStore } from '@state/trailPhotosStore';
+import { onTrailsMerged } from '@data/photos/trailPhotos';
+import { reportError } from '@lib/errorReporting';
 
 export interface MergedLibraryTrack {
   track: Track;
@@ -14,6 +17,27 @@ export interface MergedLibraryTrack {
    * trail owns — deleting either it or a source never strands the other.
    */
   notes: SeedNote[];
+}
+
+/**
+ * Copy the source trails' photos (#587) onto the merged trail, re-placed on
+ * it. Never throws: the merge itself is done, so a photo failure is reported
+ * and counted, not fatal. `skippedTrails` counts sources whose photos could
+ * not be read safely (corrupt, or saved by a newer app version) and were left
+ * where they are.
+ */
+export async function copyMergedTrailPhotos(
+  sourceIds: readonly string[],
+  merged: Pick<Track, 'id' | 'points'>,
+): Promise<{ copied: number; skippedTrails: number }> {
+  try {
+    const result = await onTrailsMerged(sourceIds, merged.id, merged.points, storage.newId);
+    if (result.copied > 0) void useTrailPhotosStore.getState().refresh(merged.id);
+    return { copied: result.copied, skippedTrails: result.skippedTrails.length };
+  } catch (err) {
+    reportError(err, 'merge-photos');
+    return { copied: 0, skippedTrails: sourceIds.length };
+  }
 }
 
 /** Best-effort removal of files this merge created before it failed. */

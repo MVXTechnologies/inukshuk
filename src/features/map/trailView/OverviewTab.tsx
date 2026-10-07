@@ -1,6 +1,7 @@
 import { sampleIndexAt, type ChartSeries } from '@core/geo/track';
 import type { StatTile } from '@core/library/trailViewText';
 import type { TrackNote } from '@core/models';
+import type { PhotoOnAxis } from '@core/photos/axis';
 import { formatDistance, formatElevation } from '@state/formatters';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -22,6 +23,13 @@ interface Props {
   /** Notes in trail order (numbered 1..N). */
   notes: readonly TrackNote[];
   onOpenNote: (noteId: string) => void;
+  /** Trail photos (#587, own + note photos), time order, on the view's axis. */
+  photos?: readonly PhotoOnAxis[];
+  onOpenPhoto?: (photoId: string) => void;
+  /** "Add photos"; absent while photos cannot be added. */
+  onAddPhotos?: () => void;
+  /** Why photos can't be added or changed (newer version, unreadable), if so. */
+  photoNotice?: string | null;
 }
 
 /**

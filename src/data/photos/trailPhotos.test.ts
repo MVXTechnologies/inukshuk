@@ -202,15 +202,32 @@ describe('trail photos', () => {
     expect(fs.text('/doc/photos/t3/photos.json')).toBe(empty);
   });
 
-  it('merges: photos move folders and are re-placed by time', async () => {
+  it('merges: photos are copied to the new trail under new ids, originals kept', async () => {
     seedTrail('t2', [photo('t2', 'other', 50)]);
     const merged = lineTrack({ lengthM: 1000 });
-    expect(await onTrailsMerged(['t1', 't2'], 't1', merged, 9)).toBe(1);
-    const all = await loadTrailPhotos('t1');
-    expect(all.map((p) => p.id)).toEqual(['other', 'early', 'mid', 'late']);
-    expect(all[0]).toMatchObject({ trackId: 't1', file: 'photos/t1/other.jpg' });
-    expect(fs.files.has('/doc/photos/t1/other.map.png')).toBe(true);
-    expect(fs.list('/doc/photos/t2')).toEqual([]);
+    let n = 0;
+    const newId = () => `m${++n}`;
+    expect(await onTrailsMerged(['t1', 't2'], 'new', merged, newId, 9)).toEqual({
+      copied: 4,
+      skippedTrails: [],
+    });
+    const all = await loadTrailPhotos('new');
+    expect(all).toHaveLength(4);
+    expect(all.every((p) => p.trackId === 'new' && p.file.startsWith('photos/new/m'))).toBe(true);
+    expect(fs.files.has(`/doc/${all[0]!.sprite}`)).toBe(true);
+    // The sources are untouched.
+    expect((await loadTrailPhotos('t1')).map((p) => p.id)).toEqual(['early', 'mid', 'late']);
+    expect((await loadTrailPhotos('t2')).map((p) => p.id)).toEqual(['other']);
+    expect(fs.files.has('/doc/photos/t2/other.jpg')).toBe(true);
+  });
+
+  it('a merge without photos writes nothing', async () => {
+    const merged = lineTrack({ lengthM: 1000 });
+    expect(await onTrailsMerged(['x', 'y'], 'new', merged, () => 'id', 9)).toEqual({
+      copied: 0,
+      skippedTrails: [],
+    });
+    expect(fs.list('/doc/photos/new')).toEqual([]);
   });
 
   describe.each([
@@ -240,17 +257,21 @@ describe('trail photos', () => {
       expect(fs.text('/doc/photos/t1/photos.json')).toBe(text);
     });
 
-    it('a merge from or into it fails before moving anything', async () => {
+    it('a merge leaves it out (reported), and refuses to write into it', async () => {
       seedTrail('t2', [photo('t2', 'other', 50)]);
-      const before = fs.list('/doc/photos/');
       const merged = lineTrack({ lengthM: 1000 });
-      await expect(onTrailsMerged(['t1', 't2'], 't2', merged, 9)).rejects.toThrow(
+      const before = files();
+      expect(await onTrailsMerged(['t1', 't2'], 'new', merged, () => 'c1', 9)).toEqual({
+        copied: 1,
+        skippedTrails: ['t1'],
+      });
+      expect(files()).toEqual(before);
+      expect(fs.text('/doc/photos/t1/photos.json')).toBe(text);
+      const listing = fs.list('/doc/photos/');
+      await expect(onTrailsMerged(['t2'], 't1', merged, () => 'c2', 9)).rejects.toThrow(
         SidecarUnavailableError,
       );
-      await expect(onTrailsMerged(['t1', 't2'], 't1', merged, 9)).rejects.toThrow(
-        SidecarUnavailableError,
-      );
-      expect(fs.list('/doc/photos/')).toEqual(before);
+      expect(fs.list('/doc/photos/')).toEqual(listing);
     });
   });
 

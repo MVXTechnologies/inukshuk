@@ -768,6 +768,24 @@ describe('malformed nested library records', () => {
     expect(index.tracks[0]?.origin).toEqual(origin);
   });
 
+  it('keeps a trail photo count and cover, and drops junk ones (#587)', () => {
+    const index = migrateLibraryIndex({
+      schemaVersion: LIBRARY_SCHEMA_VERSION,
+      tracks: [
+        { ...track('t1'), photoCount: 33, coverPhotoId: 'p1' },
+        { ...track('t2'), photoCount: -1, coverPhotoId: 'p2' },
+        { ...track('t3'), photoCount: '4', coverPhotoId: 7 },
+        { ...track('t4'), photoCount: 2, coverPhotoId: '' },
+      ],
+    });
+    expect(index.tracks[0]).toMatchObject({ photoCount: 33, coverPhotoId: 'p1' });
+    expect(index.tracks[1]).not.toHaveProperty('photoCount');
+    expect(index.tracks[1]).not.toHaveProperty('coverPhotoId');
+    expect(index.tracks[2]).not.toHaveProperty('photoCount');
+    expect(index.tracks[3]).toMatchObject({ photoCount: 2 });
+    expect(index.tracks[3]).not.toHaveProperty('coverPhotoId');
+  });
+
   it('upgrades a v10 index: maps follow the global see-through white', () => {
     const index = migrateLibraryIndex({
       schemaVersion: 10,

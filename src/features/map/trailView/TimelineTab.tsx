@@ -1,5 +1,6 @@
 import type { TimelineEvent, TimelineEventKind } from '@core/geo/track';
 import type { TimelineText } from '@core/library/trailViewText';
+import type { PhotoOnAxis } from '@core/photos/axis';
 import { palette, type SchemeTokens } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
@@ -25,6 +26,11 @@ interface Props {
   /** Fired only after a completed hold (or a screen-reader action). */
   onDeleteNote: (noteId: string) => void;
   onViewPhoto: (uri: string) => void;
+  /** Trail photos (#587, own photos only; note photos ride their note), on the view's axis. */
+  photos?: readonly PhotoOnAxis[];
+  onOpenPhoto?: (photoId: string) => void;
+  /** "Add photos"; absent while photos cannot be added. */
+  onAddPhotos?: () => void;
 }
 
 function dotColor(kind: TimelineEventKind, t: SchemeTokens): string {

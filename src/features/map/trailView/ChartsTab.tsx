@@ -1,4 +1,5 @@
 import { formatSpan } from '@core/format';
+import type { PhotoOnAxis } from '@core/photos/axis';
 import { heartRateBands, sampleIndexAt, type ChartSeries } from '@core/geo/track';
 import { formatElevation, formatPace, formatSpeed } from '@state/formatters';
 import { palette } from '@ui/tokens';
@@ -13,6 +14,11 @@ interface Props {
   display: 'pace' | 'speed';
   cursorDistanceM: number | null;
   onScrub: (distanceM: number) => void;
+  /** Trail photos (#587, own + note photos), time order, on the view's axis: the photo lane. */
+  photos?: readonly PhotoOnAxis[];
+  onOpenPhoto?: (photoId: string) => void;
+  /** The cursor caught a photo (or let go: null): the map rings it. */
+  onCursorPhoto?: (photoId: string | null) => void;
 }
 
 /**

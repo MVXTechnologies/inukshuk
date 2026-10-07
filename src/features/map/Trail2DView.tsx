@@ -1,4 +1,6 @@
 import type { TrackNote, TrackPoint } from '@core/models';
+import type { TrackPhoto } from '@core/photos/model';
+import { TrailPhotoLayers } from '../photos/TrailPhotoLayers';
 import type { TrackPointAt } from '@core/geo/track';
 import { splitSegments } from '@core/geo/track/segments';
 import { numberNotesOnTrack } from '@core/library/notes';
@@ -33,7 +35,16 @@ export function Trail2DView({
   basemap,
   onNotePress,
   focus,
+  photos,
+  selectedPhotoId,
+  onPhotoPress,
 }: {
+  /** Trail photos (#587), time order: clustered circles on the line. */
+  photos?: readonly TrackPhoto[];
+  /** The photo the profile cursor caught: ringed on the map. */
+  selectedPhotoId?: string | null;
+  /** A photo (or an unsplittable stack's first photo) was tapped. */
+  onPhotoPress?: (photoId: string) => void;
   points: readonly TrackPoint[];
   /** Recording segment boundaries (pauses) — the trace is not drawn across them. */
   segmentStarts?: readonly number[];
@@ -228,6 +239,19 @@ export function Trail2DView({
             }}
           />
         </GeoJSONSource>
+      )}
+
+      {/* Trail photos (#587): GL symbols (never RN Markers — hundreds of them). */}
+      {photos && photos.length > 0 && (
+        <TrailPhotoLayers
+          id="trail-2d"
+          photos={photos}
+          selectedId={selectedPhotoId ?? null}
+          onPhotoPress={(ids) => {
+            const first = ids[0];
+            if (first) onPhotoPress?.(first);
+          }}
+        />
       )}
 
       {/* Numbered note pins. Markers (RN views), not a symbol layer: the raster

@@ -29,6 +29,7 @@ import {
   readInterruptedPdfRender,
   recordPdfRenderInterruption,
 } from '@data/pdfRenderRecovery';
+import { deleteTrailPhotoFolder } from '@data/photos/trailFolder';
 import { reportError } from '@lib/errorReporting';
 import { create } from 'zustand';
 
@@ -293,6 +294,7 @@ function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolea
 function persistAndDelete(
   state: LibraryState,
   orphanedUris: readonly (string | undefined)[],
+  deletedTrackIds: readonly string[] = [],
 ): void {
   // Nothing was committed: the files are still referenced by the index on disk.
   if (!persist(state)) return;
@@ -302,6 +304,14 @@ function persistAndDelete(
       storage.deleteFileAt(uri);
     } catch {
       // Metadata is committed: keep memory consistent even if an orphan remains.
+    }
+  }
+  // A deleted trail's photos (#587) go with it: copies and sidecar.
+  for (const id of deletedTrackIds) {
+    try {
+      deleteTrailPhotoFolder(id);
+    } catch {
+      // Same as above: an orphan folder must not undo a committed delete.
     }
   }
 }
@@ -639,7 +649,11 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         // A deleted trail must not linger as (or come back as) a map overlay.
         activeTrackIds: s.activeTrackIds.filter((x) => x !== id),
       };
-      persistAndDelete(next, [t?.fileUri, ...(t?.notes?.map((n) => n.photoUri) ?? [])]);
+      persistAndDelete(
+        next,
+        [t?.fileUri, ...(t?.notes?.map((n) => n.photoUri) ?? [])],
+        t ? [t.id] : [],
+      );
       return next;
     }),
 
@@ -656,6 +670,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       persistAndDelete(
         next,
         removed.flatMap((t) => [t.fileUri, ...(t.notes?.map((n) => n.photoUri) ?? [])]),
+        removed.map((t) => t.id),
       );
       return next;
     }),
