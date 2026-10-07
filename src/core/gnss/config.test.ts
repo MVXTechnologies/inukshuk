@@ -3,6 +3,7 @@ import {
   correctionsOf,
   DEFAULT_GNSS_CONFIG,
   newProfile,
+  profileLine,
   profileProblem,
   sanitizeGnssConfig,
   type NtripProfile,
@@ -125,6 +126,12 @@ describe('profiles', () => {
     expect(activeProfile(on)).toBe(PROFILE);
     expect(correctionsOf(on)).toEqual({ frame: 'csrs', epoch: 2010 });
     expect(correctionsOf({ ...on, profiles: [{ ...PROFILE, frame: null }] })).toBeNull();
+  });
+
+  it('names a profile once: the mountpoint only when the label lacks it', () => {
+    expect(profileLine({ label: 'RTK2go · LEVIS', mountpoint: 'LEVIS' })).toBe('RTK2go · LEVIS');
+    expect(profileLine({ label: 'My caster', mountpoint: 'LEVIS' })).toBe('My caster · LEVIS');
+    expect(profileLine({ label: 'My caster', mountpoint: '' })).toBe('My caster');
   });
 
   it('new profiles from a preset, or blank', () => {

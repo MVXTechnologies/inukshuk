@@ -8,7 +8,7 @@ import {
   kindLabel,
   type ReceiverChip,
 } from '@core/gnss/chip';
-import { activeProfile, correctionsOf } from '@core/gnss/config';
+import { activeProfile, correctionsOf, profileLine } from '@core/gnss/config';
 import { receiverFrame, receiverFrameLabel } from '@core/gnss/datum';
 import type { PositionResult } from '@core/gnss/output';
 import { projectDatumOption } from '@core/gnss/projectDatum';
@@ -223,11 +223,6 @@ export function ReceiverSheet({ chip }: { chip: ReceiverChip }) {
       </View>
     </View>
   );
-}
-
-/** "RTK2go · LEVIS": the label, with the mountpoint when the label doesn't already say it. */
-export function profileLine(p: { label: string; mountpoint: string }): string {
-  return p.mountpoint && !p.label.includes(p.mountpoint) ? `${p.label} · ${p.mountpoint}` : p.label;
 }
 
 function correctionLine(

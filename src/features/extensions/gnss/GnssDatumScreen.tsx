@@ -17,7 +17,7 @@ export function routeLine(r: OutputPlanResult | null): { ok: boolean; text: stri
   const acc = r.out.datumAccuracyM;
   return {
     ok: true,
-    text: `${r.out.method}${acc === null ? '' : ` · conversion ${formatAccuracy(acc)}`}`,
+    text: `${r.out.method}${acc === null ? '' : acc === 0 ? ' · no conversion' : ` · conversion ${formatAccuracy(acc)}`}`,
   };
 }
 

@@ -1,5 +1,5 @@
 import { stateLabel } from '@core/gnss/chip';
-import { activeProfile } from '@core/gnss/config';
+import { activeProfile, profileLine } from '@core/gnss/config';
 import { projectDatumOption } from '@core/gnss/projectDatum';
 import { useGnssStore, type NtripState } from '@state/gnssStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -107,7 +107,7 @@ export function GnssSettings() {
         title="RTK corrections (NTRIP)"
         description={
           profile
-            ? `${profile.label}${profile.mountpoint ? ` · ${profile.mountpoint}` : ''} · ${ntripLine(ntrip)}`
+            ? `${profileLine(profile)} · ${ntripLine(ntrip)}`
             : 'Off · add a caster for centimetre RTK'
         }
         descriptionNumberOfLines={3}

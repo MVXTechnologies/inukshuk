@@ -82,7 +82,7 @@ describe('Settings → Extensions: External GNSS receiver', () => {
     for (const dark of [false, true]) {
       const { unmount } = await render(wrap(<ExtensionsSection />, dark));
       expect(screen.getByText('RTK Facet · connected · RTK fixed')).toBeTruthy();
-      expect(screen.getByText('RTK2go · LEVIS · LEVIS · streaming')).toBeTruthy();
+      expect(screen.getByText('RTK2go · LEVIS · streaming')).toBeTruthy();
       expect(screen.getByText(/NAD83\(CSRS\) epoch 1997\.0/)).toBeTruthy();
       await fireEvent(screen.getByLabelText('Phone GPS in standby'), 'valueChange', false);
       expect(useGnssStore.getState().config.phoneWhileGood).toBe('off');

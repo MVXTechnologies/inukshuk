@@ -156,6 +156,13 @@ export function sanitizeGnssConfig(raw: unknown): GnssConfig {
   };
 }
 
+/** "RTK2go · LEVIS": the label, with the mountpoint when the label doesn't already say it. */
+export function profileLine(p: Pick<NtripProfile, 'label' | 'mountpoint'>): string {
+  return p.mountpoint !== '' && !p.label.includes(p.mountpoint)
+    ? `${p.label} · ${p.mountpoint}`
+    : p.label;
+}
+
 /** The active profile, if any. */
 export function activeProfile(c: GnssConfig): NtripProfile | null {
   return c.profiles.find((p) => p.id === c.activeProfileId) ?? null;
