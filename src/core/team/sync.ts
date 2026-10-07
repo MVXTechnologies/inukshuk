@@ -81,6 +81,8 @@ export interface SyncStore {
   ingest(raws: readonly unknown[], now: number): IngestReport;
   isActiveMember(memberId: string): boolean;
   admit(proof: JoinProof, now: number): { op: SignedOp } | { error: string };
+  /** Fold anything the store deferred (called from {@link SyncSession.tick}). */
+  flush?(now: number): void;
 }
 
 export type SessionEvent =
@@ -275,6 +277,7 @@ export class SyncSession {
       this.fail(step, 'timeout');
       return step;
     }
+    if (now !== undefined) this.store.flush?.(now);
     if (this.phase === 'open') this.sendSealed({ t: 'vv', v: this.store.versionVector() }, step);
     return step;
   }

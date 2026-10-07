@@ -331,25 +331,29 @@ memberId|keyId)`, then the key is sealed under `kek` with a zero nonce.
 - **Removal ⇒ rotation, fail closed.**
   - A key that reached a now-removed member is unsafe, so `sendKeyId` becomes
     undefined and `needsRotation` true.
-  - **A rejected admission can still hand out a key (review H1).** An earlier
-    version of this document claimed the loser of an invite race never got the
-    key. That was wrong: the losing `m.admit` was delivered to its joiner with a
-    wrap of the live key.
-  - A rejected `m.admit`/`m.add` counts its wrap recipients as key holders, but
-    only when all of these hold:
+  - **A rejected admission can still hand out a key (review H1), so leaks
+    are advisory (re-review #3).** The losing `m.admit` of an invite race was
+    delivered to its joiner with a wrap of the live key.
+  - It counts as a leak only when all of these hold:
     - it lost for a race-type reason (`invite`, `exists`, `limit`, `expired`,
       `closed`);
-    - its author could legitimately admit: an active non-guest with a verified
-      join proof against an existing invite, or an admin for `m.add`;
-    - its author held that key.
-
-    If such a holder isn't an active member, the key is unsafe and the team
-    rotates.
-
-  - Every other rejected wrap-carrying op is only recorded in `wrapEvidence`
-    against its author, with no rotation. Wrap bytes are unverifiable, so
-    letting them force rotations would let a guest block all group messaging
-    (re-review #1).
+    - its author could admit: an active non-guest with a verified proof against
+      an existing invite, or an admin for `m.add`;
+    - its wraps go to **exactly the joiner**, who has **never been a member**;
+    - the author holds every wrapped key;
+    - it is the **first** such op for that (invite, author).
+  - A leak sets `rotationAdvised`; it does **not** block writes. Admin replicas
+    auto-rotate, at most once per leaking author per 30 min
+    (`AUTO_ROTATE_INTERVAL_MS`).
+  - Every other rejected wrap-carrying op is only recorded in `wrapEvidence`.
+  - **Trade-off.** Fail-closed (block sending until a rotation) protects
+    nothing here: the holder already has the key and everything sent under it.
+    Meanwhile any member able to manufacture a "leak" could stop the whole team,
+    over and over. Advisory keeps the team working and closes the window at the
+    next rotation (seconds when an admin is online). It accepts that messages
+    sent before then are readable by that one joiner, who held a valid invite.
+  - **Removal stays fail-closed** (`needsRotation`): only admins can remove, so
+    it cannot be spammed.
   - Group-mode writes return `undefined` until an admin rotates.
   - Two admins racing removals and rotations end up with no safe key, and the
     team waits for a fresh rotation (tested).
@@ -523,6 +527,10 @@ safetyCode = HKDF(DH, H("sas" ‖ cm ‖ nI ‖ ephI ‖ ephR), "safety") mod 10
     (`FORK_REFOLD_INTERVAL_MS`). A forking member cannot make peers refold per
     op (re-review #3).
   - An op the anchored chain pins always triggers a refold.
+- **Gap buffer (re-review #3).** An op whose predecessor (`pv`) we don't hold
+  is parked: not stored, not folded. It is promoted when the predecessor
+  arrives. The buffer holds at most 4096 ops, 256 per author, oldest evicted
+  first. A pinned (chain-repairing) op bypasses it.
 - **Quarantine.** Validly signed ops from not-yet-known authors are held:
   - at most 512 ops and 1 MiB in total, and 64 per author;
   - the oldest entry is evicted first.
@@ -597,32 +605,41 @@ write to its id.
 
 ## 12. Security properties and threat model
 
-| Threat                                               | Protected?               | How / residual risk                                                                                                                                                                                                       |
-| ---------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Eavesdropper on the Wi-Fi or hotspot                 | Yes                      | Session AEAD. Op bodies are encrypted end to end anyway                                                                                                                                                                   |
-| Outsider forges ops                                  | Yes                      | Ed25519 on every op; invalid signatures are struck                                                                                                                                                                        |
-| A member forges another's ops                        | Yes                      | Same                                                                                                                                                                                                                      |
-| A member escalates privileges                        | Yes                      | The fold checks authority at each op's position                                                                                                                                                                           |
-| Removed member keeps sending                         | Yes                      | `cut` + status; past the cut, ops are refused even backdated, and not stored                                                                                                                                              |
-| Removed member rewrites old history                  | Yes (H3)                 | The cut pins the hash chain; a different op at an old seq is never canonical, and peers re-pull the real one                                                                                                              |
-| Loser of an invite race / late admit keeps the key   | Yes, after rotation (H1) | Verified, race-type rejected admissions count as key holders, so the team rotates                                                                                                                                         |
-| Guest or member spams fake wraps to force rotations  | Yes (re-review #1)       | Unverified rejected wraps are evidence only (`wrapEvidence`), never a rotation                                                                                                                                            |
-| Hostile field names (`toString`, `__proto__`…)       | Yes (H2)                 | Null-prototype dictionaries and own-property reads in every merge; fuzz-tested                                                                                                                                            |
-| MITM with a stolen invite during a join              | Detectable (M3)          | The 6-digit safety code is transcript-bound with a committed nonce: 10⁻⁶ chance to match                                                                                                                                  |
-| Small-order Ed25519 keys (forge-anything signatures) | Yes                      | Every implementation refuses small-order public keys (RFC vector test)                                                                                                                                                    |
-| Removed member reads new data                        | Yes, after rotation      | Fail-closed send key. **Residual:** everything they already had stays on their phone (no remote wipe; the UI must say so)                                                                                                 |
-| Replay of ops                                        | Yes                      | Content-addressed ids; per-author seq and hash chain; equivocation detection                                                                                                                                              |
-| Replay of session frames                             | Yes                      | Counter nonces; the session dies                                                                                                                                                                                          |
-| Clock skew                                           | Bounded                  | > 24 h ahead is refused; the local clock never leads by more than 5 min (M1). **Residual:** a member can backdate within the past (e.g. write into a closed or expired team's history), visible as an old stamp. Accepted |
-| Oversized or malformed payloads, floods              | Yes                      | Caps before parsing, token buckets, strikes, bans. Fuzz-tested: never throws                                                                                                                                              |
-| Malicious member equivocates (two histories)         | Detected, provable       | Both signed ops are kept and pushed; a deterministic rule picks one; removal anchors the chain. **Residual:** a member who signs more than 4 forks per seq can leave peers on different forks until removed               |
-| Malicious admin                                      | No (trusted role)        | Can add or remove members, rotate, close. The owner can demote them with a cut                                                                                                                                            |
-| Lost phone                                           | Partly                   | Remove + rotate. The phone's local copy is only as safe as its lock screen and the secure store                                                                                                                           |
-| Metadata to relays                                   | Partly                   | Envelopes reveal team id, author key, type, size, timing, audience. Nostr will gift-wrap them (§13). Session handshakes hide identities (§10.1)                                                                           |
-| Forward secrecy inside an epoch                      | No                       | See §7. Rotate on removal; MLS later                                                                                                                                                                                      |
+| Threat                                                                | Protected?                             | How / residual risk                                                                                                                                                                                                       |
+| --------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Eavesdropper on the Wi-Fi or hotspot                                  | Yes                                    | Session AEAD. Op bodies are encrypted end to end anyway                                                                                                                                                                   |
+| Outsider forges ops                                                   | Yes                                    | Ed25519 on every op; invalid signatures are struck                                                                                                                                                                        |
+| A member forges another's ops                                         | Yes                                    | Same                                                                                                                                                                                                                      |
+| A member escalates privileges                                         | Yes                                    | The fold checks authority at each op's position                                                                                                                                                                           |
+| Removed member keeps sending                                          | Yes                                    | `cut` + status; past the cut, ops are refused even backdated, and not stored                                                                                                                                              |
+| Removed member rewrites old history                                   | Yes (H3)                               | The cut pins the hash chain; a different op at an old seq is never canonical, and peers re-pull the real one                                                                                                              |
+| Loser of an invite race / late admit keeps the key                    | Until the next rotation (H1, advisory) | Verified, joiner-only, first-per-invite leaks set `rotationAdvised`; admins auto-rotate (≤ 1 per member per 30 min); writes never block                                                                                   |
+| Guest or member spams wraps or replays join proofs to force rotations | Yes (re-reviews #1, #3)                | Anything not meeting every leak rule is evidence only (`wrapEvidence`); counted leaks are one per invite and author and only advise                                                                                       |
+| Hostile field names (`toString`, `__proto__`…)                        | Yes (H2)                               | Null-prototype dictionaries and own-property reads in every merge; fuzz-tested                                                                                                                                            |
+| MITM with a stolen invite during a join                               | Detectable (M3)                        | The 6-digit safety code is transcript-bound with a committed nonce: 10⁻⁶ chance to match                                                                                                                                  |
+| Small-order Ed25519 keys (forge-anything signatures)                  | Yes                                    | Every implementation refuses small-order public keys (RFC vector test)                                                                                                                                                    |
+| Removed member reads new data                                         | Yes, after rotation                    | Fail-closed send key. **Residual:** everything they already had stays on their phone (no remote wipe; the UI must say so)                                                                                                 |
+| Replay of ops                                                         | Yes                                    | Content-addressed ids; per-author seq and hash chain; equivocation detection                                                                                                                                              |
+| Replay of session frames                                              | Yes                                    | Counter nonces; the session dies                                                                                                                                                                                          |
+| Clock skew                                                            | Bounded                                | > 24 h ahead is refused; the local clock never leads by more than 5 min (M1). **Residual:** a member can backdate within the past (e.g. write into a closed or expired team's history), visible as an old stamp. Accepted |
+| Oversized or malformed payloads, floods                               | Yes                                    | Caps before parsing, token buckets, strikes, bans. Fuzz-tested: never throws                                                                                                                                              |
+| Malicious member equivocates (two histories)                          | Detected, provable                     | Both signed ops are kept and pushed; a deterministic rule picks one; removal anchors the chain. **Residual:** a member who signs more than 4 forks per seq can leave peers on different forks until removed               |
+| Malicious admin                                                       | No (trusted role)                      | Can add or remove members, rotate, close. The owner can demote them with a cut                                                                                                                                            |
+| Lost phone                                                            | Partly                                 | Remove + rotate. The phone's local copy is only as safe as its lock screen and the secure store                                                                                                                           |
+| Metadata to relays                                                    | Partly                                 | Envelopes reveal team id, author key, type, size, timing, audience. Nostr will gift-wrap them (§13). Session handshakes hide identities (§10.1)                                                                           |
+| Forward secrecy inside an epoch                                       | No                                     | See §7. Rotate on removal; MLS later                                                                                                                                                                                      |
 
 ## 12a. Performance (review M2)
 
+- **Coalesced rebuilds.**
+  - Membership changes and pinned ops fold immediately.
+  - Data-only batches that can't append rebuild at most once per second
+    (`MIN_REFOLD_GAP_MS`); a forking author's further forks at most every 10 s.
+  - Deferred work is folded by the next read (`data()`), the next due ingest,
+    or `flush(now)`, which `SyncSession.tick(now)` calls. An idle replica still
+    converges.
+  - The version vector comes from the chains _held_, so sync never waits on a
+    deferred fold.
 - **What triggers a refold.**
   - Positions never enter the membership fold. They are checked against the
     current state when read, and the positions view is cached until a new
@@ -650,8 +667,9 @@ write to its id.
   Before this change: 6.4 ms per position update, 332 ms per `data()`, and
   35 s for 20k sequential writes.
 
-- **Full rebuild of a 100k-op single-author log: 0.24 s** (`review.test.ts`,
-  budget 0.5 s). Max seqs are tracked incrementally and no unbounded collection
+- **Full rebuild of a 100k-op single-author log: 0.24 s locally, about 0.6 s on
+  a 2-core CI runner with coverage** (`review.test.ts`, budget 5 s, which
+  still catches the regression by 25×). Max seqs are tracked incrementally and no unbounded collection
   is ever spread into a call. Before re-review #2 the same rebuild took 141 s,
   and at 200k it overflowed the stack.
 
@@ -681,6 +699,8 @@ UI must follow them.
 | **Cuts**                     | `m.remove {m, cut}` and admin demotions `m.update {…, cut}` use `cut = [seq, opId]` (or `[0]`), always produced with `cutFor(state, memberId)`                                                                                                                                                   |
 | **Handshake shapes**         | `hi1 {t, v, tm, e, cm}` · `hi2 {t, e, x}` · `hi3 {t, x}`. `x` is the sealed inner `{id, mc, sg}` / `{id, mc, nn, join?, sg}`. The transport moves frames as opaque bytes and never parses them                                                                                                   |
 | **`SyncSession.safetyCode`** | Six digits, set once the session is open, equal on both phones. Show it during a join for the two people to compare. There is no other safety-code API (the old `ids.safetyCode` is gone)                                                                                                        |
+| **Replica `flush(now)`**     | Call it (or `SyncSession.tick(now)`) periodically: it folds deferred rebuilds. `data()` flushes on read                                                                                                                                                                                          |
+| **Rotation advice**          | Show `state.rotationAdvised` to admins ("a join raced; rotate the key"). Admin replicas auto-rotate (`autoRotate`, default on). `state.wrapEvidence` lists suspicious ops by author                                                                                                              |
 | **Handshake deadline**       | Pass `now` to `initiate` (or the first `receive` sets it) and call `tick(now)` periodically. A handshake past 30 s closes with `timeout`                                                                                                                                                         |
 
 ## 13. What changes for Nostr relays (opt-in, after the MVP)

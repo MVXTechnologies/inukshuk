@@ -61,10 +61,12 @@ import {
  *
  * **Rejected admissions can still leak a key (review H1).** An admit that
  * loses an invite race was still delivered to its joiner with a wrap of the
- * live key. A verified admission rejected for a race-type reason, by an author
- * holding the key, counts its wrap recipients as key holders, so the team
- * rotates. Any other rejected wrap is evidence only (`wrapEvidence`): wrap bytes
- * are unverifiable, and a guest must not be able to force rotations.
+ * live key. A verified admission rejected for a race-type reason (wraps to
+ * exactly the never-member joiner, keys the author holds, first per invite
+ * and author) sets `rotationAdvised`; admins rotate. It never blocks writes:
+ * the joiner has the key either way, and fail-closed would let any member stop
+ * the team. Every other rejected wrap is evidence only (`wrapEvidence`).
+ * Removal stays fail-closed (`needsRotation`): only admins can remove.
  */
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
@@ -165,6 +167,10 @@ export interface TeamState {
   rejected: Map<string, Rejection>;
   /** Each author's canonical chain (`chain.ts`): the version vector and what peers serve. */
   chains: Map<string, Chain>;
+  /** A verified admission that lost still reached its joiner with the newest key. */
+  rotationAdvised: boolean;
+  /** Counted leaks (one per invite and author), for the admins' rotation policy. */
+  leaks: { opId: string; author: string; keyId: string; holder: string }[];
   /** Rejected wrap-carrying ops that did NOT count as leaks: evidence for admins. */
   wrapEvidence: { opId: string; author: string; why: Rejection }[];
   /** The last op folded (incremental appends must sort after it). */
@@ -219,6 +225,8 @@ function emptyState(teamId: string): TeamState {
     rejected: new Map(),
     chains: new Map(),
     wrapEvidence: [],
+    rotationAdvised: false,
+    leaks: [],
   };
 }
 
@@ -350,17 +358,21 @@ function makeFolder(ctx: Ctx, genesis: SignedOp): Folder {
     reject(op, why);
     const kw = isRecord(op.env.b) ? parseKeyWraps(op.env.b['kw']) : undefined;
     if (kw === undefined) return;
-    if (!plausibleLeak(op, why)) {
-      // Unverified wraps (anyone can publish bytes next to a public key id):
-      // evidence against the author, never a forced rotation (re-review #1).
+    const slot = plausibleLeak(op, why, kw);
+    if (slot === undefined || countedLeaks.has(slot)) {
+      // Unverified, re-used or repeated wraps: evidence against the author,
+      // never a rotation signal (re-reviews #1 and #3).
       s.wrapEvidence.push({ opId: op.id, author: op.env.au, why });
       return;
     }
+    countedLeaks.add(slot);
     for (const [m, k] of kw.w) {
-      const key = s.keys.get(k);
-      if (key?.recipients.has(op.env.au)) key.leaked.add(m);
+      s.keys.get(k)!.leaked.add(m);
+      s.leaks.push({ opId: op.id, author: op.env.au, keyId: k, holder: m });
     }
   };
+  /** One counted leak per (invite, author): the rest is evidence. */
+  const countedLeaks = new Set<string>();
 
   /**
    * Only an admission that genuinely lost (a race, a revocation, expiry, a
@@ -369,20 +381,43 @@ function makeFolder(ctx: Ctx, genesis: SignedOp): Folder {
    * exist and the joiner's proof must verify; `m.add` must come from an admin.
    */
   const LEAK_REASONS: readonly Rejection[] = ['invite', 'exists', 'limit', 'expired', 'closed'];
-  const plausibleLeak = (op: SignedOp, why: Rejection): boolean => {
-    if (!LEAK_REASONS.includes(why)) return false;
+  /**
+   * The (invite, author) slot of a rejected admission that may really have
+   * handed a key to its joiner, or `undefined`. All of: a race-type reason;
+   * an author who could admit (active non-guest with a verified proof against
+   * an existing invite, or an admin for `m.add`); wraps addressed to exactly
+   * the joiner, who has never been a member; every wrapped key held by the
+   * author.
+   */
+  const plausibleLeak = (op: SignedOp, why: Rejection, kw: KeyWraps): string | undefined => {
+    if (!LEAK_REASONS.includes(why)) return undefined;
     const author = s.members.get(op.env.au);
-    if (author?.status !== 'active') return false;
-    if (op.env.t === 'm.add') return helpers.adminOk(author, op.env.sq);
-    if (op.env.t !== 'm.admit' || author.role === 'guest') return false;
-    const proof = parseJoinProof(op.env.b);
-    if (proof === undefined || !s.invites.has(proof.inv)) return false;
-    let ok = ctx.proofCache.get(op.id);
-    if (ok === undefined) {
-      ok = verifyJoinProof(ctx.c, ctx.teamId, proof);
-      ctx.proofCache.set(op.id, ok);
+    if (author?.status !== 'active') return undefined;
+    let target: unknown;
+    let slot: string;
+    if (op.env.t === 'm.add') {
+      if (!helpers.adminOk(author, op.env.sq) || !isRecord(op.env.b)) return undefined;
+      target = op.env.b['m'];
+      slot = `add|${op.env.au}`;
+    } else if (op.env.t === 'm.admit' && author.role !== 'guest') {
+      const proof = parseJoinProof(op.env.b);
+      if (proof === undefined || !s.invites.has(proof.inv)) return undefined;
+      let ok = ctx.proofCache.get(op.id);
+      if (ok === undefined) {
+        ok = verifyJoinProof(ctx.c, ctx.teamId, proof);
+        ctx.proofCache.set(op.id, ok);
+      }
+      if (!ok) return undefined;
+      target = proof.m;
+      slot = `${proof.inv}|${op.env.au}`;
+    } else {
+      return undefined;
     }
-    return ok;
+    if (typeof target !== 'string' || s.members.has(target)) return undefined;
+    if (!kw.w.every(([m, k]) => m === target && s.keys.get(k)?.recipients.has(op.env.au))) {
+      return undefined;
+    }
+    return slot;
   };
 
   function apply(op: SignedOp): void {
@@ -416,10 +451,16 @@ function makeFolder(ctx: Ctx, genesis: SignedOp): Folder {
   function finalize(): void {
     const newest = s.keyOrder[s.keyOrder.length - 1];
     const key = newest === undefined ? undefined : s.keys.get(newest);
-    const holders = key === undefined ? [] : [...key.recipients, ...key.leaked];
-    const unsafe = key === undefined || holders.some((m) => s.members.get(m)?.status !== 'active');
+    // Removal is fail-closed (only admins can remove, so it can't be spammed).
+    const unsafe =
+      key === undefined || [...key.recipients].some((m) => s.members.get(m)?.status !== 'active');
     s.needsRotation = unsafe;
     s.sendKeyId = unsafe ? undefined : newest;
+    // A leak through a rejected admission is ADVISORY (re-review #3): the holder
+    // got the key either way, and blocking writes would hand any member a
+    // switch to stop the team. Admins rotate (replica auto-rotation, rate-limited).
+    s.rotationAdvised =
+      key !== undefined && [...key.leaked].some((m) => s.members.get(m)?.status !== 'active');
     s.missingKey =
       key === undefined
         ? []

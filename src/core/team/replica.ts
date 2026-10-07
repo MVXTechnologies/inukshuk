@@ -1,7 +1,7 @@
 import { fromB64uLen } from './bytes';
 import { isRecord, type Json } from './canonical';
 import { KEY_BYTES, type DeviceKeys, type TeamCrypto } from './crypto';
-import { admitBody, OpWriter, type WriterCursor } from './actions';
+import { admitBody, OpWriter, rotateBody, type WriterCursor } from './actions';
 import { applyDataOp, emptyData, type TeamData } from './data';
 import {
   checkEnvelope,
@@ -18,6 +18,7 @@ import { verifyJoinProof, type JoinProof } from './invite';
 import { parseKeyWraps, unwrapKeys, type TeamKey } from './keys';
 import { OpLog, type VersionVector } from './log';
 import {
+  activeMembers,
   admitEphemeral,
   appendOps,
   canAppend,
@@ -44,7 +45,8 @@ import { isAdminRole, type Audience, type Priority } from './roles';
  * Every peer-facing method is total: hostile input yields a report, never an
  * exception.
  */
-export type IngestRejection = RejectReason | 'removed' | 'quarantine-full' | 'stale' | 'full';
+export type IngestRejection =
+  RejectReason | 'removed' | 'quarantine-full' | 'gap-full' | 'stale' | 'full';
 
 export interface IngestReport {
   /** Ops newly stored (logged or ephemeral). */
@@ -55,6 +57,8 @@ export interface IngestReport {
   equivocations: [string, string][];
   /** Validly signed ops from authors we don't know yet, held until their admission arrives. */
   quarantined: number;
+  /** Ops waiting for a missing predecessor (gap buffer). */
+  parked: number;
 }
 
 /** Bounds on ops from not-yet-known authors (they cost storage before anyone vouches for them). */
@@ -67,6 +71,13 @@ export const MAX_QUARANTINE_PER_AUTHOR = 64;
  * (re-review #3): a forking member cannot make every peer refold per op.
  */
 export const FORK_REFOLD_INTERVAL_MS = 10_000;
+/** Data-only rebuilds (old ops arriving) run at most this often; reads flush them. */
+export const MIN_REFOLD_GAP_MS = 1_000;
+/** Ops whose predecessor (`pv`) we don't hold wait here, unfolded (re-review #2). */
+export const MAX_GAP_OPS = 4096;
+export const MAX_GAP_PER_AUTHOR = 256;
+/** An admin replica auto-rotates for a given leaking author at most this often. */
+export const AUTO_ROTATE_INTERVAL_MS = 30 * 60 * 1000;
 
 export class TeamReplica {
   readonly log = new OpLog();
@@ -86,6 +97,18 @@ export class TeamReplica {
   private lastFullFold = -Infinity;
   /** Diagnostics: how many full refolds this replica has run. */
   fullFolds = 0;
+  /** Logged ops stored but not folded yet (a coalesced rebuild is pending). */
+  private dataDirty = false;
+  /** Per author, the chain we hold (for the version vector and serving). */
+  private held = new Map<string, string[]>();
+  /** Gap buffer: by op id (insertion order = eviction order) and by awaited predecessor. */
+  private readonly gap = new Map<string, SignedOp>();
+  private readonly gapByPrev = new Map<string, SignedOp[]>();
+  private readonly gapPerAuthor = new Map<string, number>();
+  /** Admin policy: rotate for leaks automatically, at most once per author per interval. */
+  autoRotate = true;
+  private readonly autoRotated = new Map<string, number>();
+  private rotating = false;
   private entityCache: TeamData | undefined;
   /** Positions view; dropped on a new position, a refold or the first expiry. */
   private positionCache:
@@ -129,8 +152,8 @@ export class TeamReplica {
   /** Per author, the length of the canonical chain held (`chain.ts`). */
   versionVector(): VersionVector {
     const out: VersionVector = Object.create(null) as VersionVector;
-    for (const a of [...this.state.chains.keys()].sort()) {
-      const n = this.state.chains.get(a)!.ids.length;
+    for (const a of [...this.held.keys()].sort()) {
+      const n = this.held.get(a)!.length;
       if (n > 0) out[a] = n;
     }
     // Ops held before the genesis resolves still count, so a joiner can relay.
@@ -139,7 +162,7 @@ export class TeamReplica {
 
   /** Canonical ops `from..to` of one author. */
   opsInRange(author: string, from: number, to: number): SignedOp[] {
-    const ids = this.state.chains.get(author)?.ids ?? [];
+    const ids = this.held.get(author) ?? [];
     return ids.slice(Math.max(0, from - 1), Math.max(0, to)).map((id) => this.log.get(id)!);
   }
 
@@ -166,8 +189,11 @@ export class TeamReplica {
       duplicates: 0,
       equivocations: [],
       quarantined: 0,
+      parked: 0,
     };
     const fresh: SignedOp[] = [];
+    /** Ops that must fold now: membership changes and chain-repairing (pinned) ops. */
+    const urgent = new Set<string>();
     // Ops whose author is admitted earlier in this same batch: retried after the fold.
     const pending: SignedOp[] = [];
     for (const raw of raws) {
@@ -183,30 +209,80 @@ export class TeamReplica {
         continue;
       }
       const known = member !== undefined || (op.env.t === 'm.genesis' && this.isOurGenesis(op));
-      if (known) this.store(op, now, report, fresh);
+      if (known) this.store(op, now, report, fresh, urgent);
       else pending.push(op);
     }
     // Folding can admit authors (an admit in this batch, or in the quarantine): iterate.
     for (let round = 0; round < 8 && fresh.length > 0; round++) {
-      this.refold(fresh.splice(0), now);
+      this.refold(fresh.splice(0), now, urgent);
+      const ready: SignedOp[] = [];
       for (let i = pending.length - 1; i >= 0; i--) {
-        const op = pending[i]!;
-        if (!this.state.members.has(op.env.au)) continue;
-        pending.splice(i, 1);
-        this.store(op, now, report, fresh);
+        if (this.state.members.has(pending[i]!.env.au)) ready.push(pending.splice(i, 1)[0]!);
       }
       for (const [id, op] of this.quarantine) {
         if (!this.state.members.has(op.env.au)) continue;
         this.quarantine.delete(id);
         this.quarantineBytes -= op.bytes;
-        this.store(op, now, report, fresh);
+        ready.push(op);
       }
+      // In chain order, so predecessors are stored before the ops naming them.
+      ready.sort((x, y) => x.env.sq - y.env.sq || compareOps(x, y));
+      for (const op of ready) this.store(op, now, report, fresh, urgent);
     }
     for (const op of pending) this.hold(op, report);
-    if (this.deferredForks && now - this.lastFullFold >= FORK_REFOLD_INTERVAL_MS) {
-      this.refold([], now, true);
-    }
+    this.flushIfDue(now);
+    this.maybeAutoRotate(now);
     return report;
+  }
+
+  /**
+   * Fold everything stored but not yet folded (deferred data or forks). Call
+   * from the app's periodic tick (`SyncSession.tick(now)` does), so an idle
+   * replica converges.
+   */
+  flush(now: number): void {
+    if (this.dataDirty || this.deferredForks) this.refold([], now, undefined, true);
+  }
+
+  private flushIfDue(now: number): void {
+    const since = now - this.lastFullFold;
+    if (
+      (this.dataDirty && since >= MIN_REFOLD_GAP_MS) ||
+      (this.deferredForks && since >= FORK_REFOLD_INTERVAL_MS)
+    ) {
+      this.refold([], now, undefined, true);
+    }
+  }
+
+  /**
+   * Admin replicas rotate when a verified admission leaked the current key
+   * (advisory, see `membership.ts`), at most once per leaking author per
+   * {@link AUTO_ROTATE_INTERVAL_MS}, so no member can drive a rotation storm.
+   */
+  private maybeAutoRotate(now: number): void {
+    if (!this.autoRotate || this.rotating || !this.state.rotationAdvised) return;
+    const self = this.state.members.get(this.id);
+    if (self?.status !== 'active' || !isAdminRole(self.role) || this.sendKey() === undefined) {
+      return;
+    }
+    const newest = this.state.keyOrder[this.state.keyOrder.length - 1];
+    const due = this.state.leaks.filter(
+      (l) =>
+        l.keyId === newest &&
+        now - (this.autoRotated.get(l.author) ?? -Infinity) >= AUTO_ROTATE_INTERVAL_MS,
+    );
+    if (due.length === 0) return;
+    for (const l of due) this.autoRotated.set(l.author, now);
+    this.rotating = true;
+    try {
+      this.control(
+        now,
+        'k.rotate',
+        rotateBody(this.c, this.teamId, activeMembers(this.state)).body,
+      );
+    } finally {
+      this.rotating = false;
+    }
   }
 
   /** Park a validly signed op from an author we don't know yet (bounded, oldest evicted). */
@@ -234,8 +310,25 @@ export class TeamReplica {
     report.quarantined++;
   }
 
-  private store(op: SignedOp, now: number, report: IngestReport, fresh: SignedOp[]): void {
+  private store(
+    op: SignedOp,
+    now: number,
+    report: IngestReport,
+    fresh: SignedOp[],
+    urgent: Set<string>,
+  ): void {
     const pinned = this.state.chains.get(op.env.au)?.pinned.get(op.env.sq);
+    const logged = !isEphemeralType(op.env.t);
+    // A dangling predecessor: park it, unfolded, until the gap fills (re-review #2).
+    if (
+      logged &&
+      op.env.pv !== undefined &&
+      this.log.get(op.env.pv) === undefined &&
+      op.id !== pinned
+    ) {
+      this.park(op, report);
+      return;
+    }
     const result = this.log.insert(op, now, pinned);
     if (result === 'duplicate') {
       report.duplicates++;
@@ -251,19 +344,84 @@ export class TeamReplica {
         // Already proven: keep as evidence, fold later in one coalesced refold.
         report.accepted.push(op);
         this.deferredForks = true;
+        this.promote(op, now, report, fresh, urgent);
         return;
       }
       this.equivocators.add(op.env.au);
     }
     report.accepted.push(op);
-    if (isEphemeralType(op.env.t)) this.positionCache = undefined;
-    else fresh.push(op);
+    if (!logged) {
+      this.positionCache = undefined;
+      return;
+    }
+    fresh.push(op);
+    if (op.id === pinned || isControlType(op.env.t)) urgent.add(op.id);
+    const ids = this.held.get(op.env.au) ?? [];
+    if (op.env.sq === ids.length + 1 && op.env.pv === ids[ids.length - 1]) {
+      ids.push(op.id);
+      this.held.set(op.env.au, ids);
+    }
+    this.promote(op, now, report, fresh, urgent);
+  }
+
+  /** Store parked ops that were waiting for `op`. */
+  private promote(
+    op: SignedOp,
+    now: number,
+    report: IngestReport,
+    fresh: SignedOp[],
+    urgent: Set<string>,
+  ): void {
+    const waiting = this.gapByPrev.get(op.id);
+    if (waiting === undefined) return;
+    this.gapByPrev.delete(op.id);
+    for (const next of waiting) {
+      if (!this.gap.delete(next.id)) continue;
+      this.gapPerAuthor.set(next.env.au, (this.gapPerAuthor.get(next.env.au) ?? 1) - 1);
+      this.store(next, now, report, fresh, urgent);
+    }
+  }
+
+  /** Bounded gap buffer: per-author cap, oldest evicted first. */
+  private park(op: SignedOp, report: IngestReport): void {
+    if (this.gap.has(op.id)) {
+      report.duplicates++;
+      return;
+    }
+    const mine = this.gapPerAuthor.get(op.env.au) ?? 0;
+    if (mine >= MAX_GAP_PER_AUTHOR) {
+      report.rejected.push({ reason: 'gap-full', id: op.id });
+      return;
+    }
+    while (this.gap.size >= MAX_GAP_OPS) {
+      const [oldId, old] = this.gap.entries().next().value as [string, SignedOp];
+      this.unpark(oldId, old);
+    }
+    this.gap.set(op.id, op);
+    this.gapPerAuthor.set(op.env.au, mine + 1);
+    const list = this.gapByPrev.get(op.env.pv!) ?? [];
+    list.push(op);
+    this.gapByPrev.set(op.env.pv!, list);
+    report.parked++;
+  }
+
+  private unpark(id: string, op: SignedOp): void {
+    this.gap.delete(id);
+    this.gapPerAuthor.set(op.env.au, (this.gapPerAuthor.get(op.env.au) ?? 1) - 1);
+    const list = (this.gapByPrev.get(op.env.pv!) ?? []).filter((o) => o.id !== id);
+    if (list.length > 0) this.gapByPrev.set(op.env.pv!, list);
+    else this.gapByPrev.delete(op.env.pv!);
+  }
+
+  /** For tests and diagnostics. */
+  get parkedSize(): number {
+    return this.gap.size;
   }
 
   /** Fold new logged ops: append incrementally when possible, else refold once. */
-  private refold(ops: SignedOp[], now: number, force = false): void {
+  private refold(ops: SignedOp[], now: number, urgent?: Set<string>, force = false): void {
     const sorted = ops.sort(compareOps);
-    let incremental = !force && this.folder !== undefined;
+    let incremental = !force && !this.dataDirty && this.folder !== undefined;
     if (incremental) {
       // Check the whole batch extends the fold before taking the fast path.
       const grown = new Map<string, string[]>();
@@ -290,6 +448,14 @@ export class TeamReplica {
           }
         }
       }
+    } else if (
+      !force &&
+      !sorted.some((op) => urgent?.has(op.id)) &&
+      now - this.lastFullFold < MIN_REFOLD_GAP_MS
+    ) {
+      // Data-only, out of order, and we rebuilt very recently: coalesce (re-review #3).
+      this.dataDirty = true;
+      return;
     } else {
       const { state, folder } = resolveFolder(this.c, this.teamId, this.log.logged(), {
         proofCache: this.proofCache,
@@ -297,8 +463,10 @@ export class TeamReplica {
       this.state = state;
       this.folder = folder;
       this.deferredForks = false;
+      this.dataDirty = false;
       this.lastFullFold = now;
       this.fullFolds++;
+      this.held = new Map([...state.chains].map(([a, ch]) => [a, [...ch.ids]]));
       this.entityCache = undefined;
       this.positionCache = undefined;
       for (const m of state.members.values()) {
@@ -351,6 +519,8 @@ export class TeamReplica {
    * recomputed from the (≤ one per member) live ephemeral ops on each read.
    */
   data(now = this.now): TeamData {
+    // A read folds anything deferred (bounded by how often the app reads).
+    this.flush(now);
     if (this.entityCache === undefined) {
       const fresh = emptyData();
       for (const op of this.state.data) applyDataOp(fresh, this.state, op, (o) => this.decode(o));
