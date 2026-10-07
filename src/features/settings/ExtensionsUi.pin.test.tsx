@@ -1,8 +1,10 @@
 /**
- * Pins the rendered trees of the extension screens (Settings → Extensions and
- * the overlays sheet's Extensions tab) in every install state, light and
- * dark: the extension registry refactor (architecture review P1-3) must leave
- * them element-for-element, prop-for-prop identical. Each snapshot is the
+ * Pins the rendered trees of the extension screens (Settings → Extensions,
+ * collapsed and with each entry open, and the overlays sheet's Extensions
+ * tab) in every install state, light and dark, so a refactor leaves them
+ * element-for-element, prop-for-prop identical. Regenerated on purpose when
+ * the screens change by design (2026-10-07: one-line rows that expand to
+ * their details; one-line overlays rows without the legends). Each snapshot is the
  * SHA-256 of the rendered tree's JSON (the full trees are ~1 MB), with every
  * `style` prop flattened (`[a, false, b]` and `[a, b]` draw the same pixels)
  * and image paths cut to `assets/…` (they are relative to the checkout).
@@ -93,6 +95,18 @@ for (const [name, s] of Object.entries(STATES)) {
         );
         expect(treeHash(view.toJSON())).toMatchSnapshot();
       });
+
+      for (const open of ['geodetic', 'tides'] as const) {
+        it(`Settings → Extensions, ${open} open: ${label}`, async () => {
+          setExtensionsForTest({ ...s, geoOffline: shown, geoShown: shown, tidesShown: shown });
+          const view = await render(
+            <PaperProvider theme={dark ? MD3DarkTheme : MD3LightTheme}>
+              <ExtensionsSection openExtension={open} />
+            </PaperProvider>,
+          );
+          expect(treeHash(view.toJSON())).toMatchSnapshot();
+        });
+      }
 
       it(`Overlays › Extensions: ${label}`, async () => {
         setExtensionsForTest({ ...s, geoOffline: shown, geoShown: shown, tidesShown: shown });

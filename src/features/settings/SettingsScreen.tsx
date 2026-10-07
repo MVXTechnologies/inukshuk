@@ -116,8 +116,10 @@ const DISPLAY_LABEL = { normal: 'Normal', sunlight: 'Sunlight', night: 'Night re
 
 export function SettingsScreen() {
   const router = useRouter();
-  // `?open=<category>` opens that category (Statistics' "change" max-HR link).
-  const { open } = useLocalSearchParams<{ open?: string }>();
+  // `?open=<category>` opens that category (Statistics' "change" max-HR link);
+  // `&ext=<key>` with `open=extensions` also opens that extension's details
+  // (`extensionSettingsHref`).
+  const { open, ext } = useLocalSearchParams<{ open?: string; ext?: string }>();
   const [expanded, setExpanded] = useState<string | number | undefined>(
     typeof open === 'string' ? open : undefined,
   );
@@ -588,7 +590,7 @@ export function SettingsScreen() {
             titleStyle={accordionTitleStyle}
           >
             <View style={styles.accordionBody}>
-              <ExtensionsSection />
+              <ExtensionsSection openExtension={typeof ext === 'string' ? ext : undefined} />
             </View>
           </List.Accordion>
 

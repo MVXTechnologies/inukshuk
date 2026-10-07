@@ -240,10 +240,24 @@ one registry, not hand-wired screens (architecture review P1-3):
 2. Write `core/extensions/descriptors/<key>.ts` (its style builder goes in
    `core/map/<key>Style.ts` with its tests) and register it in
    `core/extensions/registry.ts`. No `legacySettings`: its state lives in
-   `extensions[key]`, migrated for free.
+   `extensions[key]`, migrated for free. Its **`summary`** (required) is the
+   one line its collapsed Settings row and its overlays row show: sentence
+   case, no full stop, at most `EXTENSION_SUMMARY_MAX` (50) characters, e.g.
+   "Survey marks and benchmarks worldwide" (`registry.test.ts` checks it).
+   `summary`, `label` and `teaser` come from `ExtensionIdentity`, which every
+   extension descriptor type extends (map and device extensions alike), so
+   an extension without a summary does not type-check.
 3. Write its components under `features/extensions/<key>/` — a Settings body
    in `ExtensionSettingsShell`, a panel row and, if it has a map card, a map
-   module — and add one line to each surface registry it uses.
+   module — and add one line to each surface registry it uses. The shell
+   draws the entry as one row (badge, name, summary, optional short
+   `status` such as "Offline ✓", and Get or its switch) that expands inline
+   to its details: description, legend, the extension's own rows
+   (`children`) and Remove; one entry open at a time, nothing persisted
+   (`features/extensions/expansion`). Its overlays row is one line too
+   (`SwitchRow` with the summary as hint, no legend underneath). To link to
+   its details from elsewhere, push `extensionSettingsHref(key)`
+   (`/settings?open=extensions&ext=<key>`), which opens it expanded.
 4. Pick its offline policy (`'installed'` for a few kB a region, `'opt-in'`
    with companion packs for more), then run `extensionStyles.pin.test.ts`:
    the existing extensions' hashes must not move.

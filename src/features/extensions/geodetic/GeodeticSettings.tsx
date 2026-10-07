@@ -51,6 +51,12 @@ export function GeodeticSettings() {
       : covered.length > 0
         ? `${covered.map((r) => r.label).join(', ')}${companionBytes > 0 ? ` · ${formatBytes(companionBytes)}` : ''}`
         : 'Your offline regions';
+  // The collapsed row's status: the marks are in the user's offline regions.
+  const status = syncing
+    ? 'Syncing…'
+    : offline && covered.length > 0 && error === null
+      ? 'Offline ✓'
+      : undefined;
 
   return (
     <ExtensionSettingsShell
@@ -60,6 +66,7 @@ export function GeodeticSettings() {
       description="Every known survey mark and benchmark: 3D, horizontal, vertical and GNSS stations. Tap one for its summary and datasheet."
       legend={<GeodeticLegend />}
       note="Free · usually under 1 MB per offline region · included in the regions you download"
+      status={status}
       showLabel="Show geodetic points"
       removeDescription={`Hides the layer${companionBytes > 0 ? ` and frees ${formatBytes(companionBytes)}` : ''}`}
       removeMessage="The marks leave the map and your offline regions. You can get them again any time."

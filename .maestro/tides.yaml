@@ -1,8 +1,9 @@
 # Tide stations extension e2e: Settings → Extensions → "Get Tide stations"
-# installs it; the overlays sheet's Extensions tab then carries its switch
-# and legend (NOAA, SHOM, Kartverket, JMA, and Canada live from CHS); the flow
-# flips it off and on, then removes the extension again so other flows see
-# the default state. The station card itself (levels in three datums, copy
+# installs it from its collapsed one-line row, whose switch then works
+# without expanding; tapping the row expands its details (coverage, Remove);
+# the overlays sheet's Extensions tab then carries its one-line switch row;
+# the flow flips it off and on, then removes the extension again so other
+# flows see the default state. The station card itself (levels in three datums, copy
 # buttons) is covered by src/core/tides/card.test.ts and the sim screenshots.
 #
 # Settings rows merge title + subtitle on iOS, so their matches are wildcard
@@ -54,25 +55,41 @@ appId: com.inukshuk.app
           timeout: 5000
 # Start from "not installed" whatever a previous run left (its rows may be
 # below the fold: scroll to whichever of Get / Remove is there).
+# Collapsed rows: Get when not installed, the switch once installed.
 - scrollUntilVisible:
-    element: '(Get|Remove) Tide stations.*'
+    element: '(Get Tide stations|Show tide stations)'
     direction: DOWN
+# Start from "not installed" whatever a previous run left.
 - runFlow:
     when:
-      visible: 'Remove Tide stations extension'
+      visible: 'Show tide stations'
     commands:
+      - tapOn:
+          id: 'extension-row-tides'
+      - scrollUntilVisible:
+          element: 'Remove Tide stations extension'
+          direction: DOWN
       - tapOn: 'Remove Tide stations extension'
       - tapOn: 'Remove'
 - scrollUntilVisible:
     element: 'Get Tide stations'
     direction: DOWN
 - tapOn: 'Get Tide stations'
+# Get works from the collapsed row: its switch takes Get's place, and the
+# switch works without expanding (off, then on again).
+- extendedWaitUntil:
+    visible: 'Show tide stations'
+    timeout: 10000
+- assertNotVisible: 'Tide coverage & sources.*'
+- tapOn: 'Show tide stations'
+- tapOn: 'Show tide stations'
+# Tapping the row expands its details; the Remove row lands below the fold
+# on a Pixel 6: scroll to it, don't assert in place.
+- tapOn:
+    id: 'extension-row-tides'
 - extendedWaitUntil:
     visible: 'Tide coverage & sources.*'
     timeout: 10000
-# Installed, the tide rows grow (switch, coverage & sources) and the Remove
-# row lands below the fold on a Pixel 6: scroll to it, don't assert in place
-# (CI 2026-10-06: the in-place assert failed on the first attempt).
 - scrollUntilVisible:
     element: 'Remove Tide stations extension'
     direction: DOWN
@@ -83,7 +100,8 @@ appId: com.inukshuk.app
 - tapOn: 'Map overlays'
 - tapOn: 'Extensions tab'
 - assertVisible: 'Tide stations'
-- assertVisible: 'Live gauge'
+# One line per extension: the gauge legend is in Settings, not here.
+- assertNotVisible: 'Live gauge'
 - assertVisible: 'Get more extensions'
 # Off, then on again.
 - tapOn: 'Tide stations'
@@ -117,6 +135,13 @@ appId: com.inukshuk.app
       - extendedWaitUntil:
           visible: 'Geodetic points.*'
           timeout: 5000
+# Every visit starts collapsed: expand it to reach Remove.
+- scrollUntilVisible:
+    element:
+      id: 'extension-row-tides'
+    direction: DOWN
+- tapOn:
+    id: 'extension-row-tides'
 - scrollUntilVisible:
     element: 'Remove Tide stations extension'
     direction: DOWN

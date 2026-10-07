@@ -1,0 +1,198 @@
+# Settings → Extensions as one-line rows (2026-10-07), with review screenshots
+# (review-*.png, uploaded by e2e.yml) in light and dark: nothing installed;
+# both installed and collapsed; one open; the overlays sheet's one-line rows;
+# and, in dark, one installed beside one not installed. Also checks a second
+# row's tap closes the first (one open at a time). Leaves both extensions
+# removed and the theme on System so later flows see the default state.
+#
+# Settings rows merge title + subtitle on iOS: matches are wildcard regexes.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Settings'
+    timeout: 15000
+- tapOn: 'Settings'
+- scrollUntilVisible:
+    element: 'Extensions.*'
+    direction: DOWN
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Geodetic points.*'
+          commands:
+            - tapOn: 'Extensions.*'
+      - extendedWaitUntil:
+          visible: 'Geodetic points.*'
+          timeout: 5000
+- scrollUntilVisible:
+    element:
+      id: 'extension-row-tides'
+    direction: DOWN
+# --- Nothing installed: two one-line rows with Get (previous flows remove
+# what they install).
+- assertVisible: 'Get Geodetic points'
+- assertVisible: 'Get Tide stations'
+- assertNotVisible: 'Coverage & sources.*'
+- takeScreenshot: review-extensions-none-light
+# --- Both installed from the collapsed rows; they stay collapsed.
+- tapOn: 'Get Geodetic points'
+- extendedWaitUntil:
+    visible: 'Show geodetic points'
+    timeout: 10000
+- tapOn: 'Get Tide stations'
+- extendedWaitUntil:
+    visible: 'Show tide stations'
+    timeout: 10000
+- assertNotVisible: 'Coverage & sources.*'
+- takeScreenshot: review-extensions-installed-light
+# --- One open: geodetic's details; then tides' row closes it.
+- tapOn:
+    id: 'extension-row-geodetic'
+- extendedWaitUntil:
+    visible: 'Coverage & sources.*'
+    timeout: 5000
+- takeScreenshot: review-extensions-open-light
+- scrollUntilVisible:
+    element:
+      id: 'extension-row-tides'
+    direction: DOWN
+- tapOn:
+    id: 'extension-row-tides'
+- extendedWaitUntil:
+    visible: 'Tide coverage & sources.*'
+    timeout: 5000
+- assertNotVisible: 'Coverage & sources.*'
+# --- The overlays sheet's Extensions tab: one line per extension.
+- tapOn: 'Back'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- tapOn: 'Map overlays'
+- tapOn: 'Extensions tab'
+- assertVisible: 'Geodetic points'
+- assertVisible: 'Tide stations'
+- takeScreenshot: review-extensions-overlays-light
+- tapOn: 'Close overlays'
+# --- Dark theme (the owner's phone runs dark mode).
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Settings'
+    timeout: 15000
+- tapOn: 'Settings'
+- assertVisible: 'App settings.*'
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Theme.*'
+          commands:
+            - tapOn: 'App settings.*'
+      - scrollUntilVisible:
+          element:
+            text: 'Theme.*'
+          direction: DOWN
+          timeout: 5000
+- tapOn: 'Dark'
+- scrollUntilVisible:
+    element: 'Extensions.*'
+    direction: DOWN
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Geodetic points.*'
+          commands:
+            - tapOn: 'Extensions.*'
+      - extendedWaitUntil:
+          visible: 'Geodetic points.*'
+          timeout: 5000
+- scrollUntilVisible:
+    element:
+      id: 'extension-row-tides'
+    direction: DOWN
+- takeScreenshot: review-extensions-installed-dark
+- tapOn:
+    id: 'extension-row-geodetic'
+- extendedWaitUntil:
+    visible: 'Coverage & sources.*'
+    timeout: 5000
+- takeScreenshot: review-extensions-open-dark
+# --- Remove tides: one installed beside one not installed.
+- scrollUntilVisible:
+    element:
+      id: 'extension-row-tides'
+    direction: DOWN
+- tapOn:
+    id: 'extension-row-tides'
+- scrollUntilVisible:
+    element: 'Remove Tide stations extension'
+    direction: DOWN
+- tapOn: 'Remove Tide stations extension'
+- tapOn: 'Remove'
+- extendedWaitUntil:
+    visible: 'Get Tide stations'
+    timeout: 5000
+- tapOn:
+    id: 'extension-row-tides'
+- scrollUntilVisible:
+    element:
+      id: 'extension-row-geodetic'
+    direction: UP
+- takeScreenshot: review-extensions-mixed-dark
+# --- Leave both removed and the theme on System.
+- tapOn:
+    id: 'extension-row-geodetic'
+- scrollUntilVisible:
+    element: 'Remove Geodetic points extension'
+    direction: DOWN
+- tapOn: 'Remove Geodetic points extension'
+- tapOn: 'Remove'
+- extendedWaitUntil:
+    visible: 'Get Geodetic points'
+    timeout: 5000
+- scrollUntilVisible:
+    element: 'App settings.*'
+    direction: UP
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Theme.*'
+          commands:
+            - tapOn: 'App settings.*'
+      - scrollUntilVisible:
+          element:
+            text: 'Theme.*'
+          direction: DOWN
+          timeout: 5000
+- tapOn: 'System'
+- assertVisible: 'Theme.*'

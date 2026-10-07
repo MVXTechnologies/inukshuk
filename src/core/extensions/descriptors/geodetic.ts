@@ -21,6 +21,7 @@ export interface GeodeticStyleInput extends ExtensionStyleInput {
 export const GEODETIC_EXTENSION: ExtensionDescriptor<GeodeticStyleInput> = {
   label: 'Geodetic points',
   teaser: 'survey marks',
+  summary: 'Survey marks and benchmarks worldwide',
   dataset: 'geodetic',
   defaults: { show: true, offline: true },
   legacySettings: {

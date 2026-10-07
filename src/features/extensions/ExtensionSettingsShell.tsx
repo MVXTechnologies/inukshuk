@@ -1,20 +1,30 @@
 /**
  * Settings → Extensions: the frame every extension's entry shares.
  *
- * - not installed: its badge, name and what it is, "Get", its legend and a
- *   one-line note (cost, caveats);
- * - installed: its layer switch (also in Map overlays › Extensions), the
- *   extension's own rows (`children`: offline, coverage & sources…), then
- *   "Remove extension" behind a confirmation.
+ * Collapsed (the default), one settings-row high: its badge, name (and a
+ * short status when there is one), its one-line `summary` and, on the right,
+ * its primary control: "Get" before the install, its on/off switch after.
+ * Tapping the row (or its chevron) expands the details inline
+ * (`./expansion`: one entry open at a time):
+ *
+ * - not installed: what it is, its legend and a one-line note (cost, caveats);
+ * - installed: what it is, its legend, the extension's own rows (`children`:
+ *   offline, coverage & sources…), then "Remove extension" behind a
+ *   confirmation.
+ *
+ * The row and the control are separate accessibility elements: the row is a
+ * button with its expanded state, the Get button or switch is reachable
+ * without expanding, and the details follow them in reading order.
  */
 import type { AnyExtensionKey } from '@core/extensions/keys';
 import { extensionBasics } from '@core/extensions/registry';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { ReactNode } from 'react';
 import { Alert, Image, StyleSheet, View, type ImageRequireSource } from 'react-native';
-import { Button, Icon, List, Switch, Text, useTheme } from 'react-native-paper';
+import { Button, Icon, List, Switch, Text, TouchableRipple, useTheme } from 'react-native-paper';
 
 import { installExtension, removeExtension } from './actions';
+import { useExtensionExpanded } from './expansion';
 import { setExtensionPrefs, useExtensionPrefs } from './prefs';
 
 interface Props {
@@ -24,28 +34,34 @@ interface Props {
   badgeIcon?: string;
   /** The badge symbol's side, px. */
   badgeIconSize: number;
-  /** What it is, under its name before the install. */
+  /** What it is, first in its details. */
   description: string;
   legend: ReactNode;
-  /** The line under the legend before the install ("Free · …"). */
+  /** The details' last line before the install ("Free · …"). */
   note: string;
+  /**
+   * A few words after its name in the collapsed row, once installed, when
+   * there is something to say ("Offline ✓", "Update available"). Keep it
+   * short: the name gives way first, and long ones are cut.
+   */
+  status?: string;
+  /**
+   * The line under the description once installed: what the switch does
+   * (default: where the layer's switch also lives, Map overlays ›
+   * Extensions). Device extensions say what their switch does.
+   */
+  switchDescription?: (on: boolean) => string;
   /** The layer switch's accessibility label ("Show geodetic points"). */
   showLabel: string;
   /** The Remove row's second line. */
   removeDescription: string;
   /** The Remove confirmation's message. */
   removeMessage: string;
-  /** Its own rows once installed, between the switch and Remove. */
+  /** Its own rows once installed, between the description and Remove. */
   children?: ReactNode;
-  /**
-   * The switch row's second line (default: where the layer also lives, Map
-   * overlays › Extensions). Device extensions say what their switch does.
-   */
-  switchDescription?: (on: boolean) => string;
 }
 
-const layerSwitchDescription = (on: boolean): string =>
-  on ? 'On · Map overlays › Extensions' : 'Off · switch it on here or in Map overlays › Extensions';
+const layerSwitchDescription = (): string => 'Also on and off in Map overlays › Extensions';
 
 export function ExtensionSettingsShell({
   extKey,
@@ -55,51 +71,20 @@ export function ExtensionSettingsShell({
   description,
   legend,
   note,
+  status,
+  switchDescription = layerSwitchDescription,
   showLabel,
   removeDescription,
   removeMessage,
   children,
-  switchDescription = layerSwitchDescription,
 }: Props) {
   const tokens = useSchemeTokens();
   const theme = useTheme();
   const { installedAt, show } = useExtensionPrefs(extKey);
-  const { label } = extensionBasics(extKey);
-  const icon = { width: badgeIconSize, height: badgeIconSize };
-
-  if (installedAt === 0) {
-    return (
-      <View style={styles.pad}>
-        <View style={styles.getRow}>
-          <View style={[styles.badge, { backgroundColor: tokens.surfaceVariant }]}>
-            {badge !== undefined && <Image source={badge} style={icon} />}
-            {badgeIcon !== undefined && (
-              <Icon source={badgeIcon} size={badgeIconSize} color={tokens.ink} />
-            )}
-          </View>
-          <View style={styles.flex}>
-            <Text variant="titleSmall">{label}</Text>
-            <Text variant="bodySmall" style={{ color: tokens.inkVariant }}>
-              {description}
-            </Text>
-          </View>
-          <Button
-            mode="contained"
-            compact
-            icon="download"
-            onPress={() => installExtension(extKey)}
-            accessibilityLabel={`Get ${label}`}
-          >
-            Get
-          </Button>
-        </View>
-        <View style={styles.legend}>{legend}</View>
-        <Text variant="bodySmall" style={[styles.note, { color: tokens.inkMuted }]}>
-          {note}
-        </Text>
-      </View>
-    );
-  }
+  const { label, summary } = extensionBasics(extKey);
+  const [expanded, toggle] = useExtensionExpanded(extKey);
+  const installed = installedAt !== 0;
+  const shownStatus = installed ? status : undefined;
 
   const confirmRemove = () =>
     Alert.alert(`Remove ${label}?`, removeMessage, [
@@ -108,37 +93,102 @@ export function ExtensionSettingsShell({
     ]);
 
   return (
-    <List.Section>
-      <List.Item
-        title={label}
-        description={switchDescription(show)}
-        left={() => (
-          <View
-            style={[styles.badge, styles.badgeInline, { backgroundColor: tokens.surfaceVariant }]}
-          >
-            {badge !== undefined && <Image source={badge} style={icon} />}
-            {badgeIcon !== undefined && (
-              <Icon source={badgeIcon} size={badgeIconSize} color={tokens.ink} />
-            )}
+    <View>
+      <View style={styles.row}>
+        <TouchableRipple
+          onPress={toggle}
+          style={styles.rowTouch}
+          accessibilityRole="button"
+          accessibilityLabel={[label, shownStatus, summary].filter(Boolean).join(', ')}
+          accessibilityHint={expanded ? 'Hides the details' : 'Shows the details'}
+          accessibilityState={{ expanded }}
+          testID={`extension-row-${extKey}`}
+        >
+          <View style={styles.rowInner}>
+            <View style={[styles.badge, { backgroundColor: tokens.surfaceVariant }]}>
+              {badge !== undefined && (
+                <Image source={badge} style={{ width: badgeIconSize, height: badgeIconSize }} />
+              )}
+              {badgeIcon !== undefined && (
+                <Icon source={badgeIcon} size={badgeIconSize} color={tokens.ink} />
+              )}
+            </View>
+            <View style={styles.text}>
+              <View style={styles.titleLine}>
+                <Text
+                  variant="bodyLarge"
+                  numberOfLines={1}
+                  style={[styles.title, { color: tokens.ink }]}
+                >
+                  {label}
+                </Text>
+                {shownStatus !== undefined && (
+                  <Text
+                    variant="labelSmall"
+                    numberOfLines={1}
+                    style={[styles.status, { color: tokens.inkMuted }]}
+                  >
+                    {shownStatus}
+                  </Text>
+                )}
+              </View>
+              <Text variant="bodyMedium" numberOfLines={1} style={{ color: tokens.inkVariant }}>
+                {summary}
+              </Text>
+            </View>
+            <Icon
+              source={expanded ? 'chevron-up' : 'chevron-down'}
+              size={22}
+              color={tokens.inkMuted}
+            />
           </View>
-        )}
-        right={() => (
-          <Switch
-            value={show}
-            onValueChange={(v) => setExtensionPrefs(extKey, { show: v })}
-            accessibilityLabel={showLabel}
-          />
-        )}
-      />
-      {children}
-      <List.Item
-        title="Remove extension"
-        titleStyle={{ color: theme.colors.error }}
-        description={removeDescription}
-        onPress={confirmRemove}
-        accessibilityLabel={`Remove ${label} extension`}
-      />
-    </List.Section>
+        </TouchableRipple>
+        <View style={styles.control}>
+          {installed ? (
+            <Switch
+              value={show}
+              onValueChange={(v) => setExtensionPrefs(extKey, { show: v })}
+              accessibilityLabel={showLabel}
+            />
+          ) : (
+            <Button
+              mode="contained-tonal"
+              compact
+              onPress={() => installExtension(extKey)}
+              accessibilityLabel={`Get ${label}`}
+              style={styles.get}
+            >
+              Get
+            </Button>
+          )}
+        </View>
+      </View>
+      {expanded && (
+        <View style={styles.details} testID={`extension-details-${extKey}`}>
+          <View style={styles.about}>
+            <Text variant="bodyMedium" style={{ color: tokens.inkVariant }}>
+              {description}
+            </Text>
+            <View style={styles.legend}>{legend}</View>
+            <Text variant="bodySmall" style={[styles.note, { color: tokens.inkMuted }]}>
+              {installed ? switchDescription(show) : note}
+            </Text>
+          </View>
+          {installed && (
+            <>
+              {children}
+              <List.Item
+                title="Remove extension"
+                titleStyle={{ color: theme.colors.error }}
+                description={removeDescription}
+                onPress={confirmRemove}
+                accessibilityLabel={`Remove ${label} extension`}
+              />
+            </>
+          )}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -151,9 +201,20 @@ export const extensionRowStyles = StyleSheet.create({
   sourceRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 8 },
 });
 
+/** Badge 36 + gap 12 past the row's 16 padding: where the name starts. */
+const TEXT_INSET = 16 + 36 + 12;
+
 const styles = StyleSheet.create({
-  ...extensionRowStyles,
-  getRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', minHeight: 64 },
+  rowTouch: { flex: 1, alignSelf: 'stretch', justifyContent: 'center' },
+  rowInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingLeft: 16,
+    paddingRight: 8,
+    paddingVertical: 8,
+  },
   badge: {
     width: 36,
     height: 36,
@@ -161,6 +222,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeInline: { marginLeft: 8 },
-  legend: { marginTop: 10, marginLeft: 48 },
+  text: { flex: 1, minWidth: 0 },
+  titleLine: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  title: { flexShrink: 1 },
+  status: { flexShrink: 0 },
+  control: { paddingRight: 16, minWidth: 64, alignItems: 'flex-end' },
+  get: { minWidth: 56 },
+  // The details hang under the name, so they read as this entry's; its own
+  // List.Items bring their 16 px padding.
+  details: { paddingLeft: TEXT_INSET - 16, paddingBottom: 4 },
+  about: { paddingHorizontal: 16, paddingBottom: 4 },
+  legend: { marginTop: 10 },
+  note: { marginTop: 8 },
 });

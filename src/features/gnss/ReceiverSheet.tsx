@@ -14,6 +14,7 @@ import { missingGrids, type PositionResult } from '@core/gnss/output';
 import { projectDatumOption } from '@core/gnss/projectDatum';
 import { usesCorrections } from '@core/gnss/quality';
 import { BASELINE_WARN_KM } from '@core/gnss/sourcetable';
+import { extensionSettingsHref } from '@features/extensions/expansion';
 import { useGnssStore } from '@state/gnssStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -218,7 +219,7 @@ export function ReceiverSheet({ chip }: { chip: ReceiverChip }) {
               icon="cog-outline"
               onPress={() => {
                 close(false);
-                router.push('/settings');
+                router.push(extensionSettingsHref('gnss'));
               }}
             >
               Receiver settings
