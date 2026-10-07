@@ -6,6 +6,7 @@ import { initRecorderRecovery, useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useEffect, useMemo, useState } from 'react';
+import { useRecordingHealth } from '@features/recording/useRecordingHealth';
 import { useBackgroundRecording } from './useBackgroundRecording';
 
 /**
@@ -14,7 +15,15 @@ import { useBackgroundRecording } from './useBackgroundRecording';
  * background foreground-service feed, crash recovery, and the start/stop
  * handlers.
  */
-export function useRecordingSession({ showSnack }: { showSnack: (message: string) => void }) {
+export function useRecordingSession({
+  showSnack,
+  onRecordingIssue,
+}: {
+  showSnack: (message: string) => void;
+  /** A fixable GPS problem was detected (approximate location, screen-off
+   * gaps) — during the recording or after Stop. See useRecordingHealth. */
+  onRecordingIssue: (message: string) => void;
+}) {
   const keepAwake = useSettingsStore((s) => s.keepAwakeWhileRecording);
 
   const status = useRecorderStore((s) => s.status);
@@ -53,6 +62,10 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   // Android, background mode on iOS), including the "Allow all the time"
   // permission flow and its rationale dialog.
   const { bgRationaleVisible, respondToBgRationale } = useBackgroundRecording({ showSnack });
+
+  // Approximate location / GPS stopped with the screen off: explained live
+  // and after Stop, with the Recording check to fix it.
+  const health = useRecordingHealth({ onIssue: onRecordingIssue });
 
   // One-shot crash recovery: if a previous session died mid-hike, restore its
   // checkpoint as a paused recording and tell the user.
@@ -132,6 +145,7 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
 
   const handleStop = async () => {
     try {
+      const diagnostics = health.capture();
       const track = await stop();
       setElapsedS(0);
       showSnack(
@@ -139,6 +153,7 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
           ? `Saved "${track.name}"`
           : 'Recording discarded (no points)',
       );
+      if (track && diagnostics) health.reviewStopped(diagnostics, track.points);
     } catch (err) {
       // stop() persists the GPX before it resets the store, so a write failure
       // (e.g. storage full) rejects with the session STILL intact — status

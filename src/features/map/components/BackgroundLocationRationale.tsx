@@ -1,4 +1,4 @@
-import { Platform, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Button, Icon, Surface, Text, useTheme } from 'react-native-paper';
 
 interface Props {
@@ -8,10 +8,11 @@ interface Props {
 }
 
 /**
- * Rationale shown before the "Allow all the time" system prompt. Android 11+
- * requires background location to be requested separately from foreground, and
- * Play policy expects an in-app explanation first; iOS shows its own upgrade
- * prompt but benefits from the same heads-up.
+ * Rationale shown before the Android "Allow all the time" system prompt.
+ * Android 11+ requires background location to be requested separately from
+ * foreground, and Play policy expects an in-app explanation first. iOS never
+ * shows it: "While Using" already records with the screen locked (see
+ * ensureBackgroundLocationPermission).
  *
  * Deliberately NOT a paper `<Portal>`/`<Dialog>`: this sits on the recording
  * path, and paper's Portal animations can leave an invisible touch-swallowing
@@ -33,11 +34,8 @@ export function BackgroundLocationRationale({ visible, onRespond }: Props) {
           Record with the screen off
         </Text>
         <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-          {Platform.OS === 'android'
-            ? 'To keep recording your trail while the screen is off or you switch apps, set ' +
-              'location access to “Allow all the time” on the next screen.'
-            : 'To keep recording your trail while the screen is off or you switch apps, allow ' +
-              '“Always” location access on the next prompt.'}
+          {'To keep recording your trail while the screen is off or you switch apps, set ' +
+            'location access to “Allow all the time” on the next screen.'}
           {' Your location is only used while a recording is running and never leaves your device.'}
         </Text>
         <View style={styles.actions}>

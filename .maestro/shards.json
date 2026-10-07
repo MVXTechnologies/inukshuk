@@ -17,7 +17,13 @@
       "folders.yaml",
       "record.yaml"
     ],
-    "map": ["smoke.yaml", "waypoint.yaml", "map-overlays.yaml", "settings.yaml"],
+    "map": [
+      "smoke.yaml",
+      "waypoint.yaml",
+      "map-overlays.yaml",
+      "settings.yaml",
+      "recording-check.yaml"
+    ],
     "catalog": ["make-map.yaml", "store.yaml", "pdf-overlays.yaml"],
     "extensions": ["convert.yaml", "geodetic.yaml", "tides.yaml"]
   },
