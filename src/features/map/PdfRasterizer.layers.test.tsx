@@ -11,6 +11,8 @@
  * draw the defaults).
  */
 import { runInNewContext } from 'node:vm';
+import { Blob as NodeBlob } from 'node:buffer';
+import { URL as NodeURL } from 'node:url';
 import { writeServedText } from '@data/localServer';
 import React from 'react';
 import { act, renderHook } from '@testing-library/react-native';
@@ -152,7 +154,8 @@ async function loadPage(scenario: Scenario) {
   const scripted = scriptedPdfjs(scenario);
   const window: Record<string, unknown> = {
     location: { href: 'http://127.0.0.1:8080/.rasterizer/index.html' },
-    URL,
+    URL: NodeURL,
+    Blob: NodeBlob,
     document: { getElementById: () => canvas },
     setTimeout,
     clearTimeout,

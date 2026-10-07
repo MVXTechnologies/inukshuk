@@ -1,24 +1,33 @@
 import { PDF_LAYER_RUNTIME_SOURCE } from './pdfLayers';
 
 /**
- * Teach the bundled pdf.js 3.11.174 worker to skip content hidden by optional
+ * Teach the bundled pdf.js 6.4.299 worker to skip content hidden by optional
  * content (see `pdfLayers.ts` for why: hidden US Topo imagery costs seconds of
- * JPEG decoding per render).
+ * JPEG decoding per render). pdf.js 6 still decodes hidden content while
+ * building the operator list and hides it only when painting, as 3.11 did:
+ * the visibility config never reaches the worker.
  *
- * The worker ships minified (`assets/pdfjs/pdf.worker.legacy.min.js.pdfjs`,
- * pinned — see PdfRasterizer.README "Why pdfjs-dist 3.11.174"), so this is a
- * handful of exact-text insertions into its evaluator, each anchored on a
- * snippet that occurs exactly once. It is all-or-nothing: if any anchor is
- * missing or ambiguous (a different pdf.js build), the source is returned
- * untouched and rendering simply keeps paying for hidden content. The runtime
- * (`__inkOC`) is prepended, so the patched code can never run without it.
+ * The worker ships minified (`assets/pdfjs/pdf.worker.legacy.min.mjs.pdfjs`,
+ * see PdfRasterizer.README), so this is a handful of exact-text insertions
+ * into its evaluator, each anchored on a snippet that occurs exactly once. It
+ * is all-or-nothing: if any anchor is missing or ambiguous (a different
+ * pdf.js build), the source is returned untouched and rendering simply keeps
+ * paying for hidden content. The runtime (`__inkOC`) is prepended, so the
+ * patched code can never run without it.
  *
- * Insertions (minified names: `t` = op fn, `e` = op args, `s` = operator
- * list, `r` = pdf.js util, `i` = primitives, `l` = XObject dict):
- * 1. Before the evaluator's operator switch: track marked-content nesting and
- *    drop image/form XObjects, inline images and shading fills inside hidden
- *    sections — before anything is fetched or decoded.
- * 2. Where pdf.js adds an `/OC` section: record its visibility.
+ * Minified names in `getOperatorList` (6.4.299): `w` = the call's
+ * StateManager (one per call, so a form XObject's nested call has its own;
+ * the preprocessor `j` would do too, but a `const j` inside the operator
+ * switch shadows it there), `r` = op code, `y` = pdf.js' marked-content
+ * depth, `Ir` = `OPS.paintXObject`; `p` / `u` = the parsed `/OC` of an image
+ * / form XObject.
+ *
+ * Insertions:
+ * 1. Before the evaluator's operator switch: drop image/form XObjects, inline
+ *    images and shading fills inside hidden sections, before anything is
+ *    fetched or decoded. The depth is pdf.js' own counter.
+ * 2. Where pdf.js adds a parsed `/OC` section: record its visibility at the
+ *    depth it opened.
  * 3/4. Image and form XObjects carrying their own `/OC`: return before
  *    decoding when hidden.
  */
@@ -34,20 +43,20 @@ interface Insertion {
 export const PDF_WORKER_INSERTIONS: readonly Insertion[] = [
   {
     label: 'operator switch',
-    anchor: 'switch(0|t){case r.OPS.paintXObject:D=e[0]instanceof i.Name;',
-    text: 'if(__inkOC.op(s,t,e,r.OPS,i.Name))continue;',
+    anchor: 'switch(0|r){case Ir:S=e[0]instanceof Name;',
+    text: 'if(__inkOC.op(w,r,y))continue;',
     position: 'before',
   },
   {
     label: 'optional content section',
-    anchor: 's.addOp(r.OPS.beginMarkedContentProps,["OC",e])',
-    text: '__inkOC.push(s,e);',
-    position: 'before',
+    anchor: 'next(f.parseMarkedContentProps(e[1],n).then(e=>{',
+    text: '__inkOC.push(w,e,y);',
+    position: 'after',
   },
   {
     label: 'image XObject /OC',
-    anchor: 'l.has("OC")&&(g=await this.parseMarkedContentProps(l.get("OC"),t));',
-    text: 'if(void 0!==g&&!__inkOC.visible(g))return;',
+    anchor: 'c.has("OC")&&(p=await this.parseMarkedContentProps(c.get("OC"),e));',
+    text: 'if(void 0!==p&&!__inkOC.visible(p))return;',
     position: 'after',
   },
   {

@@ -9,6 +9,7 @@ import {
   type WhiteKeyLevel,
 } from '@core/geo/pdfWhiteKey';
 import { patchPdfWorkerSource } from '@core/geo/pdfWorkerPatch';
+import { PDFJS_POLYFILL_SOURCE } from '@core/geo/pdfjsPolyfills';
 /**
  * PdfRasterizer — fully-offline PDF page → PNG rasterizer for MapLibre overlays.
  *
@@ -77,8 +78,7 @@ import { beginPdfRender, finishPdfRender } from '@data/pdfRenderRecovery';
 import { loadVerifiedNativePages, saveVerifiedNativePages } from '@data/nativePdfGeometry';
 import { addBreadcrumb, reportError } from '@lib/errorReporting';
 import { PDF_BENCH, pdfBenchEmit, pdfBenchId } from '@lib/pdfBenchProbe';
-import { Asset } from 'expo-asset';
-import { File } from 'expo-file-system';
+import { loadPdfjsSources, stagePdfjsFallbacks, type PdfjsSources } from './pdfjsAssets';
 import React, {
   createContext,
   useCallback,
@@ -94,17 +94,6 @@ import type {
   WebViewErrorEvent,
   WebViewHttpErrorEvent,
 } from 'react-native-webview/lib/WebViewTypes';
-
-// The bundled pdf.js builds. The `.pdfjs` extension is registered as a Metro
-// asset extension (see metro.config.js) so these resolve to local file URIs at
-// runtime and ship inside the app — guaranteeing offline operation. Metro asset
-// modules can only be referenced with `require()`, so we opt out of the import
-// rule for this block.
-/* eslint-disable @typescript-eslint/no-require-imports */
-const PDFJS_MAIN_ASSET = require('../../../assets/pdfjs/pdf.legacy.min.js.pdfjs') as number;
-const PDFJS_WORKER_ASSET =
-  require('../../../assets/pdfjs/pdf.worker.legacy.min.js.pdfjs') as number;
-/* eslint-enable @typescript-eslint/no-require-imports */
 
 /**
  * Per-request timeout. Generous enough to cover the worker watchdog (12s) plus a
@@ -341,44 +330,69 @@ const PdfRasterizerContext = createContext<RasterizerContextValue | null>(null);
 type Engine = { kind: 'served'; uri: string } | { kind: 'inline'; html: string };
 
 /**
- * Build the offscreen HTML document, inlining the pdf.js main + worker bundles.
- *
- * The worker is wired up as a same-origin Blob-URL `Worker` so pdf.js parses
- * off the main thread while staying fully offline. If Blob workers are
- * unavailable on a given WebView, pdf.js transparently falls back to its
- * main-thread "fake worker", so rendering still succeeds (just less smoothly).
+ * The page's Content-Security-Policy. pdf.js 6 has no eval path at all
+ * (`scripts/pdfjs/assets.test.mjs` checks the shipped files), and this keeps
+ * it that way at the engine level: without `'unsafe-eval'` no string can be
+ * compiled as JavaScript on the page or in its worker, whatever a PDF holds —
+ * the defence in depth `isEvalSupported: false` gave against CVE-2024-4367.
+ * `'wasm-unsafe-eval'` lets the JPEG 2000 / JBIG2 decoders compile (iOS 16+,
+ * Chrome 97+); `'unsafe-inline'` and `blob:` are the inlined scripts and the
+ * worker. `connect-src` keeps fetches on the page's own origin (the loopback
+ * server), so a script that did run could not send data off the device.
  */
-function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
-  // The worker source is embedded as a JSON string literal so no `</script>` or
-  // other content inside it can break out of the document. The main bundle is
-  // injected directly inside its own <script> element so pdf.js evaluates at
-  // load time and exposes window.pdfjsLib.
-  //
-  // The worker is patched to skip content hidden by optional content (layers)
-  // instead of decoding it (#477: a US Topo sheet's hidden orthoimage and
-  // shaded relief cost ~5 s of JPEG decoding per render). Unpatchable sources
-  // (a different pdf.js build) run stock: slower, never wrong.
-  const worker = patchPdfWorkerSource(pdfWorkerSource);
-  if (!worker.patched && pdfWorkerSource.length > 0) {
+export const RASTERIZER_PAGE_CSP =
+  "script-src 'self' 'unsafe-inline' blob: 'wasm-unsafe-eval'; " +
+  "connect-src 'self' blob: data:; object-src 'none'; base-uri 'none'";
+
+/**
+ * Make text safe inside an inline `<script>` element: `</script` (any case)
+ * would end the element early. `<\/` means the same as `</` inside a JS
+ * string, template or regex, the only places that sequence can occur.
+ */
+export function scriptSafe(source: string): string {
+  return source.replace(/<\/(script)/gi, '<\\/$1');
+}
+
+/**
+ * Build the offscreen HTML document, inlining pdf.js 6 (`@/features/map/
+ * pdfjsAssets`): the main module, the worker module (as a string, started as
+ * a Blob module worker or evaluated on the page), and the wasm decoders.
+ *
+ * pdf.js 6 is ES modules only. The main build runs as an inline
+ * `<script type="module">`, which is deferred: the page script below starts
+ * once the document is parsed (`DOMContentLoaded`), when the module has run
+ * and set `window.pdfjsLib` — or failed, which the page reports as not ready.
+ */
+export function buildHtml(sources: Omit<PdfjsSources, 'fallbacks'>): string {
+  // The worker is patched to skip content hidden by optional content (#477:
+  // a US Topo sheet's hidden orthoimage and shaded relief cost ~5 s of JPEG
+  // decoding per render). Unpatchable sources (a different pdf.js build) run
+  // stock: slower, never wrong. The polyfills go first: the worker is its
+  // own global scope.
+  const worker = patchPdfWorkerSource(sources.worker);
+  if (!worker.patched && sources.worker.length > 0) {
     console.warn(
       `PdfRasterizer: pdf.js worker not patched (${worker.unmatched.join(', ')}); ` +
         'hidden PDF layers will still be decoded',
     );
   }
-  const workerLiteral = JSON.stringify(worker.source);
+  const workerLiteral = scriptSafe(JSON.stringify(`${PDFJS_POLYFILL_SOURCE}\n;${worker.source}`));
+  const wasmLiteral = JSON.stringify(sources.wasm);
 
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="${RASTERIZER_PAGE_CSP}" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>html,body{margin:0;padding:0;background:#fff;}#stage{position:absolute;left:-99999px;top:0;}</style>
 </head>
 <body>
 <div id="stage"><canvas id="canvas"></canvas></div>
+<script>${PDFJS_POLYFILL_SOURCE}</script>
 <script>${PDF_LAYER_RUNTIME_SOURCE}</script>
 <script>${PDF_WHITE_KEY_RUNTIME_SOURCE}</script>
-<script>${pdfMainSource}</script>
+<script type="module">${scriptSafe(sources.main)}</script>
 <script>
 (function () {
   'use strict';
@@ -387,6 +401,10 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
   var WORKER_FILTERS_LAYERS = ${worker.patched ? 'true' : 'false'};
   // Aerial imagery stays off until there is a per-map switch for it (#477).
   var LAYER_PREFS = { showImagery: false };
+  // The JPEG 2000 / JBIG2 decoders (base64), handed to pdf.js on request.
+  var WASM = ${wasmLiteral};
+  var HAS_WASM = typeof WebAssembly === 'object' && WebAssembly !== null &&
+    typeof WebAssembly.instantiate === 'function';
 
   // Decide every optional-content group's visibility (document defaults plus
   // __inkPlanLayers' rules), apply it to the config pdf.js paints with, and
@@ -395,15 +413,19 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
   // document has no layers or they could not be read (pdf.js defaults apply).
   function prepareLayers(doc, loadingTask) {
     var none = { config: null, changed: 0, drawnChanged: 0 };
+    var OPS = window.pdfjsLib.OPS || {};
+    var ops = { paintXObject: OPS.paintXObject, endInlineImage: OPS.endInlineImage, shadingFill: OPS.shadingFill };
     function filterWorker(visibility) {
       if (!WORKER_FILTERS_LAYERS) return;
       // Same port as pdf.js' own messages, so it lands before the operator
       // list request. The fake (main-thread) worker shares this global.
       try {
         var port = loadingTask._worker && loadingTask._worker.port;
-        if (port && typeof port.postMessage === 'function') port.postMessage({ inukshukOptionalContent: visibility });
+        if (port && typeof port.postMessage === 'function') {
+          port.postMessage({ inukshukOptionalContent: visibility, inukshukOps: ops });
+        }
       } catch (e) {}
-      if (window.__inkOC) window.__inkOC.set(visibility);
+      if (window.__inkOC) window.__inkOC.set(visibility, ops);
     }
     if (!doc || typeof doc.getOptionalContentConfig !== 'function' || typeof window.__inkPlanLayers !== 'function') {
       filterWorker(null);
@@ -411,14 +433,20 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
     }
     return doc.getOptionalContentConfig().then(function (config) {
       try {
-        var groups = config && typeof config.getGroups === 'function' ? config.getGroups() : null;
-        if (!groups) {
+        // pdf.js 6: the config iterates [id, group] pairs (3.11's getGroups()
+        // is gone). An empty config means no layers.
+        var list = [];
+        if (config && typeof config[Symbol.iterator] === 'function') {
+          var it = config[Symbol.iterator]();
+          for (var step = it.next(); !step.done; step = it.next()) {
+            var entry = step.value;
+            if (entry && entry[1]) list.push({ id: String(entry[0]), name: entry[1].name, visible: !!entry[1].visible });
+          }
+        }
+        if (list.length === 0) {
           filterWorker(null);
           return none;
         }
-        var list = Object.keys(groups).map(function (id) {
-          return { id: id, name: groups[id].name, visible: groups[id].visible };
-        });
         var plan = window.__inkPlanLayers(list, LAYER_PREFS);
         // Paint config first, worker second: a failure in between leaves the
         // worker unfiltered, which is only slower, never wrong.
@@ -538,50 +566,89 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
   }
   if (typeof window.fetch === 'function') window.fetch = tracedFetch(window.fetch);
 
-  if (!window.pdfjsLib || typeof window.pdfjsLib.getDocument !== 'function') {
-    post({ id: '__ready__', ok: false, error: 'pdfjsLib failed to load' });
-    return;
+  function base64ToBytes(b64) {
+    var binary = atob(b64);
+    var len = binary.length;
+    var bytes = new Uint8Array(len);
+    for (var i = 0; i < len; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
   }
 
-  // Point pdf.js at the worker via a same-origin Blob URL (fully offline). Using
-  // workerSrc — rather than manually constructing a Worker and assigning
-  // workerPort — lets pdf.js own the worker lifecycle and, crucially, fall back
-  // to its main-thread "fake worker" if the Android System WebView can't spin up
-  // a real Blob Worker. The manual workerPort path had no such fallback and hung
-  // forever (30s render timeout) when the worker initialized silently-broken.
+  // pdf.js asks the page for its wasm decoders (useWorkerFetch: false) instead
+  // of fetching them by URL, so JPEG 2000 and JBIG2 decode in served and
+  // inline mode alike. Nothing else is bundled: standard fonts and CMaps fall
+  // back as before, and ICC profiles are ignored (as with 3.11), which keeps
+  // colours and timing unchanged.
+  function InkBinaryDataFactory() {}
+  InkBinaryDataFactory.prototype.fetch = function (request) {
+    var kind = request && request.kind;
+    var name = request && request.filename;
+    if (kind === 'wasmUrl' && typeof name === 'string' && Object.prototype.hasOwnProperty.call(WASM, name) && WASM[name]) {
+      try {
+        return Promise.resolve(base64ToBytes(WASM[name]));
+      } catch (e) {
+        return Promise.reject(e);
+      }
+    }
+    return Promise.reject(new Error('Unable to load ' + kind + ' data: ' + name + ' is not bundled'));
+  };
+
+  // pdf.js parses PDFs in a Web Worker: a same-origin Blob-URL module worker
+  // built from the bundled source (fully offline).
   //
   // pdf.js's "fake worker" is NOT self-contained (#554): it runs the worker's
   // WorkerMessageHandler on this thread, which it takes from
-  // window.pdfjsWorker or else loads with a <script src=workerSrc>. An empty
-  // workerSrc, or a blob URL the page cannot load as a script, fails every
-  // render with 'Setting up fake worker failed: "…"' — and pdf.js caches that
+  // window.pdfjsWorker or else imports from workerSrc — and it caches a
   // failure for the page's lifetime. useMainThreadWorker() evaluates the
-  // bundled worker into this page instead, which needs no URL at all.
-  function useMainThreadWorker() {
-    if (window.pdfjsWorker && window.pdfjsWorker.WorkerMessageHandler) return true;
-    try {
-      var script = document.createElement('script');
-      script.text = WORKER_SOURCE;
-      (document.head || document.documentElement || document.body).appendChild(script);
-    } catch (e) {}
+  // bundled worker module into this page instead (an inline module script,
+  // no URL at all) and resolves true once window.pdfjsWorker is defined.
+  var MAIN_THREAD_WORKER_TIMEOUT_MS = 10000;
+  var mainThreadWorker = null;
+  function hasMainThreadWorker() {
     return !!(window.pdfjsWorker && window.pdfjsWorker.WorkerMessageHandler);
   }
-  // Inline mode (no loopback server) loads this page as about:blank, an
-  // opaque origin. pdf.js then cannot treat the blob URL as same-origin and
-  // wraps it in a second blob that importScripts() it — the path that left
-  // one Android 11 phone failing every render (#554). Inline mode only takes
-  // small files, so parse them on this (hidden) page's thread from the start.
-  var opaqueOrigin = false;
-  try {
-    opaqueOrigin = window.location.origin === 'null' || /^(about|data):/.test(window.location.href);
-  } catch (e) {}
-  if (opaqueOrigin) useMainThreadWorker();
-  try {
-    var blob = new Blob([WORKER_SOURCE], { type: 'application/javascript' });
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
-  } catch (e) {
-    useMainThreadWorker();
+  function useMainThreadWorker() {
+    if (hasMainThreadWorker()) return Promise.resolve(true);
+    if (mainThreadWorker) return mainThreadWorker;
+    mainThreadWorker = new Promise(function (resolve) {
+      var done = false;
+      var timer = null;
+      function finish() {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        window.removeEventListener('error', finish);
+        window.__inkWorkerLoaded = undefined;
+        resolve(hasMainThreadWorker());
+      }
+      timer = setTimeout(finish, MAIN_THREAD_WORKER_TIMEOUT_MS);
+      // A module that throws while evaluating reports to window.onerror.
+      window.addEventListener('error', finish);
+      window.__inkWorkerLoaded = finish;
+      try {
+        var script = document.createElement('script');
+        script.type = 'module';
+        script.text = WORKER_SOURCE + '\\n;window.__inkWorkerLoaded && window.__inkWorkerLoaded();';
+        (document.head || document.documentElement || document.body).appendChild(script);
+      } catch (e) {
+        finish();
+      }
+    }).then(function (ok) {
+      // A failed attempt may be retried by the next request.
+      if (!ok) mainThreadWorker = null;
+      return ok;
+    });
+    return mainThreadWorker;
   }
+
+  // Where the served page finds pdf.js' no-WebAssembly decoders (staged by
+  // RN under .rasterizer/pdfjs/). Inline mode has no URL to give.
+  var wasmUrl;
+  // True when pdf.js must run on this thread (inline mode, or no Blob
+  // worker): every render first makes sure the worker module is loaded.
+  var mainThreadMode = false;
 
   // Incremental base64 assembly (inline mode) so multi-MB PDFs never exceed
   // bridge limits.
@@ -593,16 +660,6 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
   window.__pdfAppend = function (chunk) {
     chunks.push(chunk);
   };
-
-  function base64ToBytes(b64) {
-    var binary = atob(b64);
-    var len = binary.length;
-    var bytes = new Uint8Array(len);
-    for (var i = 0; i < len; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    return bytes;
-  }
 
   // Watchdog: if pdf.js makes no progress opening the document within this
   // window, the real Blob worker has most likely wedged. We then force the
@@ -653,6 +710,17 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
     } else {
       dropHeld();
     }
+    // Every open: the page's own wasm hand-off, never a worker fetch, and no
+    // string evaluation (isEvalSupported is a no-op in pdf.js 6, which has no
+    // eval path; it stays as a guard should a future build bring one back).
+    var common = {
+      isEvalSupported: false,
+      disableFontFace: false,
+      useWorkerFetch: false,
+      BinaryDataFactory: InkBinaryDataFactory,
+      useWasm: HAS_WASM,
+    };
+    if (wasmUrl) common.wasmUrl = wasmUrl;
     var params;
     if (input.url) {
       // Served: let pdf.js range-fetch. disableStream cancels the full-body
@@ -664,8 +732,6 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
         rangeChunkSize: RANGE_CHUNK_BYTES,
         disableAutoFetch: true,
         disableStream: true,
-        isEvalSupported: false,
-        disableFontFace: false,
       };
     } else {
       var bytes;
@@ -676,8 +742,9 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
         post({ id: id, ok: false, error: 'base64 decode failed: ' + (e && e.message) });
         return;
       }
-      params = { data: bytes, isEvalSupported: false, disableFontFace: false };
+      params = { data: bytes };
     }
+    Object.keys(common).forEach(function (k) { params[k] = common[k]; });
 
     var t0 = Date.now();
     var loadingTask = reuse ? reuse.task : window.pdfjsLib.getDocument(params);
@@ -717,14 +784,15 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
           // Drop to the main-thread fake worker and retry once. (Emptying
           // workerSrc, as this used to, makes pdf.js throw 'No
           // "GlobalWorkerOptions.workerSrc" specified' instead, #554.)
-          if (!useMainThreadWorker()) {
-            post({ id: id, ok: false, error: 'pdf load stalled and the pdf.js worker could not run on the page' + fetchSummary() });
-            return;
-          }
-          renderOnce(id, pageIndex, targetWidthPx, input, 1, crop, nativePage, look);
-        } else {
-          post({ id: id, ok: false, error: 'pdf load stalled in both worker modes' + fetchSummary() });
+          return useMainThreadWorker().then(function (ok) {
+            if (!ok) {
+              post({ id: id, ok: false, error: 'pdf load stalled and the pdf.js worker could not run on the page' + fetchSummary() });
+              return;
+            }
+            renderOnce(id, pageIndex, targetWidthPx, input, 1, crop, nativePage, look);
+          });
         }
+        post({ id: id, ok: false, error: 'pdf load stalled in both worker modes' + fetchSummary() });
       }, releaseFailure);
     }
     function armWatchdog() {
@@ -891,10 +959,55 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
       input = { base64: chunks.join('') };
     }
     chunks = [];
-    renderOnce(id, pageIndex, targetWidthPx, input, 0, crop, nativePage, look);
+    (mainThreadMode ? useMainThreadWorker() : Promise.resolve(true)).then(function (ok) {
+      if (!ok) {
+        post({ id: id, ok: false, error: 'the pdf.js worker could not run on the page' });
+        return;
+      }
+      renderOnce(id, pageIndex, targetWidthPx, input, 0, crop, nativePage, look);
+    });
   };
 
-  post({ id: '__ready__', ok: true });
+  // pdf.js (an inline module script, so deferred) has run once the document
+  // is parsed. Then pick the worker and tell RN the page is ready.
+  var started = false;
+  function start() {
+    if (started) return;
+    started = true;
+    if (!window.pdfjsLib || typeof window.pdfjsLib.getDocument !== 'function') {
+      post({ id: '__ready__', ok: false, error: 'pdfjsLib failed to load' });
+      return;
+    }
+    // Inline mode (no loopback server) loads this page as about:blank, an
+    // opaque origin. pdf.js then cannot treat the blob URL as same-origin and
+    // wraps it in a second blob that imports it — the path that left one
+    // Android 11 phone failing every render (#554). Inline mode only takes
+    // small files, so parse them on this (hidden) page's thread from the start.
+    var opaqueOrigin = false;
+    try {
+      opaqueOrigin = window.location.origin === 'null' || /^(about|data):/.test(window.location.href);
+    } catch (e) {}
+    if (!opaqueOrigin) {
+      try {
+        wasmUrl = new URL('pdfjs/', window.location.href).href;
+      } catch (e) {}
+    }
+    mainThreadMode = opaqueOrigin;
+    if (!mainThreadMode) {
+      try {
+        // pdf.js starts it as a module worker ({ type: "module" }).
+        var blob = new Blob([WORKER_SOURCE], { type: 'text/javascript' });
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+      } catch (e) {
+        mainThreadMode = true;
+      }
+    }
+    // Start loading it now; the first render waits for it.
+    if (mainThreadMode) useMainThreadWorker();
+    post({ id: '__ready__', ok: true });
+  }
+  if (window.pdfjsLib) start();
+  else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
 </body>
@@ -1016,18 +1129,11 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     const settled = settledRef.current;
     (async () => {
       let html: string;
+      let fallbacks: PdfjsSources['fallbacks'];
       try {
-        const [mainAsset, workerAsset] = await Promise.all([
-          Asset.fromModule(PDFJS_MAIN_ASSET).downloadAsync(),
-          Asset.fromModule(PDFJS_WORKER_ASSET).downloadAsync(),
-        ]);
-        const mainUri = mainAsset.localUri ?? mainAsset.uri;
-        const workerUri = workerAsset.localUri ?? workerAsset.uri;
-        const [mainSource, workerSource] = await Promise.all([
-          new File(mainUri).text(),
-          new File(workerUri).text(),
-        ]);
-        html = buildHtml(mainSource, workerSource);
+        const sources = await loadPdfjsSources();
+        fallbacks = sources.fallbacks;
+        html = buildHtml(sources);
       } catch (err) {
         if (!cancelled) {
           // The WebView never mounts (engine stays null), so rasterize() calls
@@ -1051,6 +1157,14 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         // Rewritten on every mount: the served copy can never be older than
         // this code, and the hash in the URL defeats any WebView cache.
         writeServedText(RASTERIZER_PAGE_PATH, html);
+        // The no-WebAssembly decoders next to it. Only a WebView without
+        // WebAssembly needs them, so a failed copy is reported, not fatal.
+        try {
+          await stagePdfjsFallbacks(fallbacks);
+        } catch (err) {
+          reportError(err, 'pdfjs-fallbacks-stage');
+        }
+        if (cancelled) return;
         const pageUrl = servedFileUrl(lease.value, RASTERIZER_PAGE_PATH);
         if (pageUrl === null)
           throw new Error(`${RASTERIZER_PAGE_PATH} is not on the served allowlist`);

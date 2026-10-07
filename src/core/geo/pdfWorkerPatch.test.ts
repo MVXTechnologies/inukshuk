@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import vm from 'node:vm';
 import { PDF_LAYER_RUNTIME_SOURCE } from './pdfLayers';
 import { PDF_WORKER_INSERTIONS, patchPdfWorkerSource } from './pdfWorkerPatch';
 
@@ -51,11 +52,11 @@ describe('patchPdfWorkerSource', () => {
   });
 });
 
-describe('the bundled pdf.js 3.11.174 worker', () => {
+describe('the bundled pdf.js worker', () => {
   // The asset the app ships. If pdf.js is ever rebuilt or bumped, this is the
   // test that says the layer filter silently stopped applying.
   const asset = readFileSync(
-    join(__dirname, '../../../assets/pdfjs/pdf.worker.legacy.min.js.pdfjs'),
+    join(__dirname, '../../../assets/pdfjs/pdf.worker.legacy.min.mjs.pdfjs'),
     'utf8',
   );
 
@@ -66,8 +67,13 @@ describe('the bundled pdf.js 3.11.174 worker', () => {
     expect(out.source.length).toBeGreaterThan(asset.length);
   });
 
-  it('still parses as JavaScript once patched', () => {
+  it('still parses as a JavaScript module once patched', () => {
     const out = patchPdfWorkerSource(asset);
-    expect(() => new Function(out.source)).not.toThrow();
+    // Parsing only (nothing is linked or evaluated). Needs Jest's
+    // --experimental-vm-modules, which `npm test` passes.
+    const { SourceTextModule } = vm as unknown as {
+      SourceTextModule: new (source: string, options: object) => unknown;
+    };
+    expect(() => new SourceTextModule(out.source, { context: vm.createContext({}) })).not.toThrow();
   });
 });

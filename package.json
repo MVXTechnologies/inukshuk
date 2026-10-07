@@ -41,7 +41,7 @@
     "jpeg-js": "^0.4.4",
     "nanoid": "^6.0.1",
     "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^3.11.174",
+    "pdfjs-dist": "^6.4.299",
     "proj4": "^2.22.0",
     "react": "19.2.3",
     "react-native": "0.85.3",
@@ -77,9 +77,6 @@
     "isomorphic-fetch": {
       "node-fetch": "^2.6.12"
     },
-    "pdfjs-dist": {
-      "canvas": "^3.2.0"
-    },
     "@istanbuljs/load-nyc-config": {
       "js-yaml": "^3.15.2"
     },
@@ -107,9 +104,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:ci": "jest --ci --coverage --maxWorkers=2",
+    "test": "node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js --watch",
+    "test:ci": "node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js --ci --coverage --maxWorkers=2",
     "wind:motion": "node scripts/wind-motion-check.mjs",
     "doctor": "npx expo-doctor",
     "test:scripts": "node --test 'scripts/**/*.test.mjs'",

@@ -35,17 +35,10 @@ jest.mock('react-native-webview', () => {
     }),
   };
 });
-jest.mock('../../../assets/pdfjs/pdf.legacy.min.js.pdfjs', () => 1);
-jest.mock('../../../assets/pdfjs/pdf.worker.legacy.min.js.pdfjs', () => 2);
-jest.mock('expo-asset', () => ({
-  Asset: { fromModule: () => ({ downloadAsync: async () => ({ localUri: 'file://asset' }) }) },
-}));
-jest.mock('expo-file-system', () => ({
-  File: class {
-    async text() {
-      return '';
-    }
-  },
+// The bundled pdf.js sources (see ./pdfjsAssets); these tests script pdf.js.
+jest.mock('./pdfjsAssets', () => ({
+  loadPdfjsSources: async () => ({ main: '', worker: '', wasm: {}, fallbacks: {} }),
+  stagePdfjsFallbacks: async () => undefined,
 }));
 jest.mock('@data/localServer', () => ({
   acquireLocalServer: async () => ({
