@@ -82,6 +82,15 @@ export function SimulationPanel() {
           >
             Add a guest
           </Button>
+          <Button
+            mode="outlined"
+            icon="speedometer"
+            disabled={!s.running}
+            onPress={() => teamSimulation.stress(200)}
+            testID="team-sim-stress"
+          >
+            Stress: 200 items
+          </Button>
           <Text variant="bodySmall" style={{ color: t.inkVariant }}>
             Try: “+task @Sam check the bridge” on a photo, “@Julie t’es où?” in the chat, or + → Pin
             a team message on the map.

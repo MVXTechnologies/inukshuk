@@ -394,6 +394,32 @@ class Simulation {
     });
   }
 
+  /**
+   * Stress: 200 pins around the teammates (the clustering and frame-time check).
+   * Signed in small batches between frames so the UI keeps drawing.
+   */
+  stress(count = 200): void {
+    if (this.bots.length === 0) return;
+    this.frames = [];
+    let made = 0;
+    const batch = () => {
+      for (let i = 0; i < 10 && made < count; i++, made++) {
+        const b = this.bots[made % this.bots.length]!;
+        const r = (between(50, 1500) / 111_320) * Math.sqrt(rnd());
+        const a = rnd() * 2 * Math.PI;
+        b.session.dropPin(
+          b.pos[0] + (r * Math.cos(a)) / Math.cos((b.pos[1] * Math.PI) / 180),
+          b.pos[1] + r * Math.sin(a),
+          pick(rnd, PIN_LINES),
+        );
+      }
+      if (made < count) setTimeout(batch, 50);
+      else this.note(`Stress: ${count} pins added — pan and zoom, then read the frame times`);
+    };
+    batch();
+    if (this.raf === null) this.sampleFrames();
+  }
+
   async addGuest(): Promise<void> {
     if (!this.state.running || this.bots.some((b) => b.spec.key === GUEST.key)) return;
     useSimStatus.setState({ busy: `${GUEST.name}…` });
