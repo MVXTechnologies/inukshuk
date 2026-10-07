@@ -46,6 +46,7 @@ import { patchPdfWorkerSource } from '@core/geo/pdfWorkerPatch';
 import { fnv1a32 } from '@core/encoding/fnv1a';
 import {
   applyLoopbackSignal,
+  isExpectedServerDeath,
   isServedTransportFailure,
   needsProbe,
   rebaseServedUrl,
@@ -53,6 +54,7 @@ import {
   startedHealth,
   type LoopbackHealth,
   type LoopbackSignal,
+  type VerifyReason,
 } from '@core/storage/loopbackLiveness';
 import {
   appPhaseAt,
@@ -73,7 +75,7 @@ import {
 import { nativePdfAvailable, renderNativePdfCrop, deleteNativePdfOutput } from '@data/nativePdf';
 import { beginPdfRender, finishPdfRender } from '@data/pdfRenderRecovery';
 import { loadVerifiedNativePages, saveVerifiedNativePages } from '@data/nativePdfGeometry';
-import { reportError } from '@lib/errorReporting';
+import { addBreadcrumb, reportError } from '@lib/errorReporting';
 import { PDF_BENCH, pdfBenchEmit, pdfBenchId } from '@lib/pdfBenchProbe';
 import { Asset } from 'expo-asset';
 import { File } from 'expo-file-system';
@@ -86,7 +88,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
+import { AppState, Platform, StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import type {
   WebViewErrorEvent,
@@ -321,9 +323,6 @@ function finishRecovery(pending: PendingRequest): void {
 }
 
 type RasterizeFn = (args: RasterizeArgs) => Promise<RasterResult>;
-
-/** Why the loopback server's liveness is being checked. */
-type VerifyReason = 'resume' | 'idle' | 'transport' | 'page-load';
 
 /**
  * Resolves to the loopback origin the engine serves PDFs from, or `null` when
@@ -1710,14 +1709,14 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           }
           origin = await restartLocalServer(staleOrigin);
           signalHealth({ kind: 'restarted' });
-          // Field evidence for the resume hypothesis: how often, and why.
-          reportError(
-            new Error(
-              `Loopback server was unreachable (${reason}); restarted on ` +
-                `${origin === staleOrigin ? 'the same' : 'a new'} port`,
-            ),
-            'pdf-rasterizer-server-restart',
-          );
+          const restarted =
+            `Loopback server was unreachable (${reason}); restarted on ` +
+            `${origin === staleOrigin ? 'the same' : 'a new'} port`;
+          // iOS reclaiming a suspended app's listener is documented and now
+          // confirmed in the field (#582): a breadcrumb for context, not a
+          // report. Any other death is still unexplained: report it.
+          if (isExpectedServerDeath(reason, Platform.OS)) addBreadcrumb(restarted);
+          else reportError(new Error(restarted), 'pdf-rasterizer-server-restart');
         }
         if (!mountedRef.current || leaseRef.current !== lease) return;
         if (
