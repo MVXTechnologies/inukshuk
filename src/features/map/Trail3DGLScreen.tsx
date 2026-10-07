@@ -80,7 +80,7 @@ import { OverviewTab } from './trailView/OverviewTab';
 import { TimelineTab, type TimelineItem } from './trailView/TimelineTab';
 import { SplitsTab } from './trailView/SplitsTab';
 import { TRAIL_ACTION_BAR_H, TrailActionBar, type TrailAction } from './trailView/TrailActionBar';
-import { photosOnAxis } from '@core/photos/axis';
+import { mapAlongPoints, photosOnAxis } from '@core/photos/axis';
 import { isNotePhoto } from '@core/photos/model';
 import { combineTrailPhotos, notePhotosOnTrail } from '@core/photos/notePhotos';
 import { photoEditFailureMessage, photoListNotice } from '@core/photos/status';
@@ -993,7 +993,11 @@ export function Trail3DGLScreen({ trackId }: Props) {
           visible={addingPhotos}
           track={track}
           points={points}
-          fallbackDistanceM={scrub?.distanceM ?? 0}
+          fallbackDistanceM={
+            scrub && photoIndex && analysis
+              ? mapAlongPoints(analysis.axis.cumM, photoIndex.cumM, scrub.distanceM)
+              : 0
+          }
           onClose={() => setAddingPhotos(false)}
           onDone={(message) => {
             setAddingPhotos(false);
