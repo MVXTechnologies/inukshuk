@@ -371,7 +371,7 @@ export function MapScreen() {
   const settingsHydrated = useSettingsStore((s) => s.hydrated);
   const lastKnownPosition = useSettingsStore((s) => s.lastKnownPosition);
 
-  const { permission, location, unavailableReason } = useLocationTracking();
+  const { permission, location, unavailableKind, unavailableReason } = useLocationTracking();
   const headingForCamera = useHeadingCamera();
 
   const maps = useLibraryStore((s) => s.maps);
@@ -1047,8 +1047,7 @@ export function MapScreen() {
   // #90 — location lost mid-recording: auto-pause, but only on a SUSTAINED
   // loss (debounced in the hook; transient watch re-subscription and the
   // permission dialog's AppState churn must not pause a healthy recording).
-  const locationLost = permission === 'denied' || unavailableReason !== null;
-  useAutoPauseOnLocationLoss(locationLost, showSnack);
+  useAutoPauseOnLocationLoss(permission === 'denied' ? 'denied' : unavailableKind, showSnack);
 
   const {
     selecting,

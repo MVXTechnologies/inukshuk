@@ -38,7 +38,7 @@ describe('useAutoPauseOnLocationLoss', () => {
   const render = (lost: boolean) =>
     renderHook(
       ({ locationLost }: { locationLost: boolean }) =>
-        useAutoPauseOnLocationLoss(locationLost, showSnack),
+        useAutoPauseOnLocationLoss(locationLost ? 'off' : null, showSnack),
       { initialProps: { locationLost: lost } },
     );
 
@@ -70,6 +70,14 @@ describe('useAutoPauseOnLocationLoss', () => {
 
     expect(useRecorderStore.getState().status).toBe('recording');
     expect(showSnack).not.toHaveBeenCalled();
+  });
+
+  it('says "no GPS signal" when the loss is a signal dropout, not location off (#324)', async () => {
+    useRecorderStore.getState().start('Hike');
+    await renderHook(() => useAutoPauseOnLocationLoss('no-signal', showSnack));
+    await act(async () => jest.advanceTimersByTime(LOCATION_LOST_PAUSE_DELAY_MS));
+    expect(useRecorderStore.getState().status).toBe('paused');
+    expect(showSnack).toHaveBeenCalledWith(expect.stringContaining('No GPS signal'));
   });
 
   it('does nothing while idle or already paused', async () => {
