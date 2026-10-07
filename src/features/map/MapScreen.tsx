@@ -1,6 +1,7 @@
 import { MapAreaBottomContext, useWindowEdge } from './mapAreaBottom';
 import { reportError } from '@lib/errorReporting';
 import { fnv1a32 } from '@core/encoding/fnv1a';
+import { isWebUrl } from '@core/links/externalUrl';
 import {
   nearestPinAt,
   projectablePins,
@@ -53,7 +54,6 @@ import {
   Camera,
   type CameraRef,
   GeoJSONSource,
-  Images,
   ImageSource,
   Layer,
   Map,
@@ -65,7 +65,7 @@ import {
 } from '@maplibre/maplibre-react-native';
 import { useLibraryStore } from '@state/libraryStore';
 import { useLongTrailsStore } from '@state/longTrailsStore';
-import { prefillFromMark, prefillFromPoint } from '@core/convert/prefill';
+import { prefillFromPoint } from '@core/convert/prefill';
 import { openConvert } from '@features/convert/openConvert';
 import { useMapAimStore } from '@state/mapAimStore';
 import { useMapStore } from '@state/mapStore';
@@ -102,27 +102,19 @@ import { SearchHitMarker } from './search/SearchHitMarker';
 import { cameraTargetFor } from '@core/search/camera';
 import type { Place } from '@core/search/place';
 import { usePlaceRecentsStore } from '@state/placeRecentsStore';
-import {
-  geodeticTilesUrl,
-  tideTilesUrl,
-  imageryContoursOption,
-  vectorBasemapOption,
-  vectorContoursUrl,
-  vectorGlyphsUrl,
-} from '@data/basemapTiles';
-import { pickTappedMark, type GeodeticMark } from '@core/geodetic/record';
-import { GEODETIC_TAP_LAYERS, geodeticColors } from '@core/map/geodeticStyle';
+import { imageryContoursOption, vectorBasemapOption, vectorContoursUrl } from '@data/basemapTiles';
 import { cardCameraCenterPx } from '@core/map/cardCamera';
-import { buildGeodeticFilters } from '@core/geodetic/filter';
-import { GeodeticPointCard } from './components/GeodeticPointCard';
-import type { TideStation } from '@core/tides/station';
-import { tideColors } from '@core/map/tideStyle';
-import { TideStationCard } from './components/TideStationCard';
-import { tideImages } from './tideImages';
-import { tideStationAt } from './tideTap';
+import {
+  ExtensionCardDock,
+  ExtensionImages,
+  extensionHitPosition,
+  extensionRecenters,
+  hitTestExtensions,
+  renderExtensionSelection,
+  useExtensionMap,
+  type ExtensionHit,
+} from '@features/extensions/mapHost';
 import { bottomCardSlotFree } from '@core/map/bottomCardSlot';
-import { useChsStations } from './hooks/useChs';
-import { geodeticImages } from './geodeticImages';
 import { overlayAnchor } from '@core/map/layerSlots';
 import { PuckLayers } from './components/PuckLayers';
 import { NightExitPill } from '@features/display/NightExitPill';
@@ -240,15 +232,6 @@ const MARKERS_ANCHOR = overlayAnchor('markers');
 
 /** The search pill and its row below the safe-area top: the map's top chrome, px. */
 const MAP_TOP_CHROME_PX = 60;
-
-/** Half the side of the box a tap searches for a geodetic mark, px (DESIGN §7.2: ~12). */
-const GEODETIC_HIT_PX = 12;
-
-/** Our glyph host for the geodetic ID labels, when the build has one. */
-function geodeticGlyphs(): { glyphs?: string } {
-  const glyphs = vectorGlyphsUrl();
-  return glyphs !== null ? { glyphs } : {};
-}
 
 // Live-recording line throttle: rebuilding the LineString on every GPS fix
 // re-serializes the entire track so far and pushes it across the bridge each
@@ -542,19 +525,14 @@ export function MapScreen() {
   const peakDensity = useSettingsStore((s) => s.peakDensity);
   /** "Parks & protected areas": boundaries and names on the vector layers. */
   const showParks = useSettingsStore((s) => s.showParks);
-  /** Settings → Extensions → Geodetic points: installed, and its overlay switch on. */
-  const geodeticInstalled = useSettingsStore((s) => s.geodeticInstalledAt > 0);
-  const showGeodetic = useSettingsStore((s) => s.showGeodetic);
-  const geodeticTiles = geodeticInstalled && showGeodetic ? geodeticTilesUrl() : null;
-  const geodeticFilter = useSettingsStore((s) => s.geodeticFilter);
-  const geodeticFilters = useMemo(() => buildGeodeticFilters(geodeticFilter), [geodeticFilter]);
-  /** Overlays → Tide stations (`@core/map/tideStyle`). */
-  const showTideStations = useSettingsStore((s) => s.showTideStations);
-  // Settings → Extensions → Tide stations: installed, and its switch on.
-  const tidesInstalled = useSettingsStore((s) => s.tidesInstalledAt > 0);
-  const tideTiles = tidesInstalled && showTideStations ? tideTilesUrl() : null;
-  /** Canadian stations: fetched live from CHS by the phone and kept on it (never our tiles). */
-  const chsStations = useChsStations(tideTiles !== null, offlineOnly);
+  /**
+   * Settings → Extensions (`@features/extensions/mapHost`): the extensions
+   * drawn now (installed, switched on) and their style inputs.
+   */
+  const { shown: shownExtensions, styleOptions: extensionStyle } = useExtensionMap({
+    dark: theme.dark,
+    offlineOnly,
+  });
   /** How much that shading deepens when the map is tilted — "3D relief", #480. */
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const betaTerrain3d = useSettingsStore((s) => s.betaTerrain3d);
@@ -874,21 +852,9 @@ export function MapScreen() {
             },
           }
         : {}),
-      // Geodetic points (Settings → Extensions): on every base map, not in
-      // the map maker (its frame shows what the printed sheet will carry).
-      ...(geodeticTiles !== null && editorStyle === null
-        ? {
-            geodetic: {
-              tiles: geodeticTiles,
-              dark: theme.dark,
-              filters: geodeticFilters,
-              ...geodeticGlyphs(),
-            },
-          }
-        : {}),
-      ...(tideTiles !== null && editorStyle === null
-        ? { tides: { tiles: tideTiles, dark: theme.dark, chs: chsStations, ...geodeticGlyphs() } }
-        : {}),
+      // The map extensions (Settings → Extensions): on every base map, not
+      // in the map maker (its frame shows what the printed sheet will carry).
+      ...(editorStyle === null ? extensionStyle : {}),
     };
     // While the map maker is open the base raster becomes the source the
     // composer stitches, so the frame and the sheet cannot disagree (#349).
@@ -931,10 +897,7 @@ export function MapScreen() {
     imageryLabels,
     imageryContours,
     satelliteImagery,
-    geodeticTiles,
-    geodeticFilters,
-    tideTiles,
-    chsStations,
+    extensionStyle,
   ]);
 
   // Native 3D terrain (docs/plans/native-terrain.md): with "3D relief" on and
@@ -1554,19 +1517,17 @@ export function MapScreen() {
   const [newWp, setNewWp] = useState<WaypointDraft | null>(null);
   // Read-only viewer target (pin tap). Editing is an explicit step from it.
   const [viewWp, setViewWp] = useState<{ source: 'live' | 'saved'; id: string } | null>(null);
-  /** The tapped geodetic mark (its summary card is up). */
-  const [geodeticMark, setGeodeticMark] = useState<GeodeticMark | null>(null);
+  /** The tapped extension feature — a survey mark, a tide station — whose card is up. */
+  const [extensionHit, setExtensionHit] = useState<ExtensionHit | null>(null);
   /**
-   * The mark whose card still has to bring it into view: set by the tap,
+   * The hit whose card still has to bring it into view: set by the tap,
    * consumed ONCE by the card's first layout (when its height is known).
    * After that the camera is the user's — a pan, or the card growing, never
    * moves it back.
    */
-  const geodeticRecenterRef = useRef<GeodeticMark | null>(null);
-  const geodeticDockRef = useRef<View>(null);
+  const extensionRecenterRef = useRef<ExtensionHit | null>(null);
+  const extensionDockRef = useRef<View>(null);
   const mapSizeRef = useRef<{ width: number; height: number } | null>(null);
-  /** The tapped tide station (its card is up). */
-  const [tideStation, setTideStation] = useState<TideStation | null>(null);
   const findWp = useCallback(
     (ref: { source: 'live' | 'saved'; id: string } | null) =>
       ref === null
@@ -1940,51 +1901,29 @@ export function MapScreen() {
             ? null
             : { source: pin.source, id: pin.id },
         );
-        setGeodeticMark(null);
-        setTideStation(null);
+        setExtensionHit(null);
         return;
       }
 
-      // Tide stations (Overlays → Tide stations): above the survey marks.
-      if (tideTiles !== null && lngLatArr) {
-        const station = await tideStationAt(map, px, py, [lngLatArr[0], lngLatArr[1]]);
-        if (station !== null) {
+      // The map extensions (Settings → Extensions): under the waypoint pins
+      // and the chip, above the trails, heat spots and the bare map; asked
+      // top-down (a tide station wins over the survey marks round its
+      // harbour). Nothing there (or the query unavailable mid-teardown)
+      // falls through to the routes below.
+      if (shownExtensions.length > 0 && lngLatArr) {
+        const hit = await hitTestExtensions(shownExtensions, {
+          map,
+          px,
+          py,
+          lngLat: [lngLatArr[0], lngLatArr[1]],
+        });
+        if (hit !== null) {
           drawingRef.current.closeAreaCard();
           setPointAt(null);
           setViewWp(null);
           setForecastAt(null);
-          setGeodeticMark(null);
-          setTideStation(station);
-          return;
-        }
-      }
-
-      // Geodetic points (Settings → Extensions): under the waypoint pins and
-      // the chip, above the trails, heat spots and the bare map. A small box
-      // round the finger, the nearest mark in it wins; nothing there (or the
-      // query unavailable mid-teardown) falls through to the routes below.
-      if (geodeticTiles !== null && lngLatArr) {
-        let mark: GeodeticMark | null = null;
-        try {
-          const features = await map.queryRenderedFeatures(
-            [
-              [px - GEODETIC_HIT_PX, py - GEODETIC_HIT_PX],
-              [px + GEODETIC_HIT_PX, py + GEODETIC_HIT_PX],
-            ],
-            { layers: [...GEODETIC_TAP_LAYERS] },
-          );
-          mark = pickTappedMark(features, [lngLatArr[0], lngLatArr[1]]);
-        } catch {
-          mark = null;
-        }
-        if (mark !== null) {
-          drawingRef.current.closeAreaCard();
-          setPointAt(null);
-          setViewWp(null);
-          setForecastAt(null);
-          geodeticRecenterRef.current = mark;
-          setTideStation(null);
-          setGeodeticMark(mark);
+          extensionRecenterRef.current = extensionRecenters(hit) ? hit : null;
+          setExtensionHit(hit);
           return;
         }
       }
@@ -2070,11 +2009,10 @@ export function MapScreen() {
           // behaviour) made it follow the finger around the map with no
           // obvious way to be rid of it. The NEXT tap, on a clean map, drops
           // a fresh chip as before.
-          // A survey-mark card is up: this tap only closes it (#258's rule —
+          // An extension's card is up: this tap only closes it (#258's rule —
           // the chip never drops in the same tap that dismisses a card).
-          if (geodeticMark !== null || tideStation !== null) {
-            setGeodeticMark(null);
-            setTideStation(null);
+          if (extensionHit !== null) {
+            setExtensionHit(null);
             return;
           }
           setPointAt(
@@ -2084,14 +2022,11 @@ export function MapScreen() {
       }
       setViewWp(null); // tapping empty map dismisses the waypoint viewer
       setForecastAt(null); // ... and the forecast card
-      setGeodeticMark(null); // ... and the survey-mark card
-      setTideStation(null); // ... and the tide-station card
+      setExtensionHit(null); // ... and an extension's card
     },
     [
-      geodeticTiles,
-      geodeticMark,
-      tideTiles,
-      tideStation,
+      shownExtensions,
+      extensionHit,
       visiblePins,
       trackHeat,
       scaleAt?.zoom,
@@ -2107,20 +2042,22 @@ export function MapScreen() {
       runPointChipHit,
     ],
   );
-  // A tapped survey mark slides into the middle of the map left visible
-  // between the top chrome and its card (owner, 2026-10-05) — once, at the
-  // card's first layout, keeping the user's zoom. `cardTop` is the dock's y
-  // in the map area, the same pixel space as `map.project`.
-  const recenterOnGeodeticCard = useCallback(
+  // A tapped survey mark (an extension whose card recentres) slides into the
+  // middle of the map left visible between the top chrome and its card
+  // (owner, 2026-10-05) — once, at the card's first layout, keeping the
+  // user's zoom. `cardTop` is the dock's y in the map area, the same pixel
+  // space as `map.project`.
+  const recenterOnExtensionCard = useCallback(
     (cardTop: number) => {
-      const mark = geodeticRecenterRef.current;
+      const hit = extensionRecenterRef.current;
       const size = mapSizeRef.current;
       const map = mapRef.current;
-      geodeticRecenterRef.current = null;
-      if (!mark || !size || !map) return;
+      extensionRecenterRef.current = null;
+      const at = hit ? extensionHitPosition(hit) : null;
+      if (!at || !size || !map) return;
       void (async () => {
         try {
-          const px = await map.project([mark.lng, mark.lat]);
+          const px = await map.project(at);
           const centerPx = cardCameraCenterPx({
             featurePx: [px[0], px[1]],
             mapSize: size,
@@ -2754,62 +2691,15 @@ export function MapScreen() {
               </GeoJSONSource>
             )}
 
-            {/* Geodetic points: the symbols the style's layers name, and a
-              ring under the mark whose card is up. */}
-            {geodeticTiles !== null && (
-              <Images images={geodeticImages(theme.dark ? 'dark' : 'light')} />
-            )}
-            {tideTiles !== null && <Images images={tideImages(theme.dark ? 'dark' : 'light')} />}
-            {tideTiles !== null && tideStation !== null && (
-              <GeoJSONSource
-                id="tide-selected"
-                data={{
-                  type: 'Feature',
-                  geometry: { type: 'Point', coordinates: [tideStation.lng, tideStation.lat] },
-                  properties: {},
-                }}
-              >
-                <Layer
-                  id="tide-selected-ring"
-                  beforeId={MARKERS_ANCHOR}
-                  type="circle"
-                  paint={{
-                    'circle-radius': 17,
-                    'circle-color': tideColors(theme.dark ? 'dark' : 'light').station,
-                    'circle-opacity': 0.16,
-                    'circle-stroke-width': 2,
-                    'circle-stroke-color': tideColors(theme.dark ? 'dark' : 'light').station,
-                  }}
-                />
-              </GeoJSONSource>
-            )}
-            {geodeticTiles !== null && geodeticMark !== null && (
-              <GeoJSONSource
-                id="geodetic-selected"
-                data={{
-                  type: 'Feature',
-                  geometry: { type: 'Point', coordinates: [geodeticMark.lng, geodeticMark.lat] },
-                  properties: {},
-                }}
-              >
-                <Layer
-                  id="geodetic-selected-ring"
-                  beforeId={MARKERS_ANCHOR}
-                  type="circle"
-                  paint={{
-                    'circle-radius': 13,
-                    'circle-color': geodeticColors(theme.dark ? 'dark' : 'light')[
-                      geodeticMark.type
-                    ],
-                    'circle-opacity': 0.18,
-                    'circle-stroke-width': 2,
-                    'circle-stroke-color': geodeticColors(theme.dark ? 'dark' : 'light')[
-                      geodeticMark.type
-                    ],
-                  }}
-                />
-              </GeoJSONSource>
-            )}
+            {/* The map extensions: the symbols their layers name, and a ring
+              under the feature whose card is up. */}
+            <ExtensionImages shown={shownExtensions} dark={theme.dark} />
+            {extensionHit !== null &&
+              shownExtensions.includes(extensionHit.key) &&
+              renderExtensionSelection(extensionHit, {
+                dark: theme.dark,
+                beforeId: MARKERS_ANCHOR,
+              })}
 
             {markerAt && (
               <GeoJSONSource
@@ -3438,8 +3328,7 @@ export function MapScreen() {
               routingEngines: drawing.routingEngines,
               weather: weatherLayer !== null && !offlineOnly,
               marine: marineActive,
-              geodetic: geodeticTiles !== null,
-              tides: tideTiles !== null,
+              extensions: shownExtensions,
             })}
             bottom={
               // The bottom column's own lift, same precedence as its style.
@@ -3530,81 +3419,56 @@ export function MapScreen() {
           </View>
         )}
 
-        {/* Geodetic points: the tapped survey mark's summary card. Same
-          bottom-card slot rules as the waypoint viewer. */}
+        {/* The map extensions: the tapped feature's card (a survey mark, a
+          tide station), one at a time. Same bottom-card slot rules as the
+          waypoint viewer. */}
         {cardSlotFree &&
-          geodeticTiles !== null &&
-          geodeticMark !== null &&
+          extensionHit !== null &&
+          shownExtensions.includes(extensionHit.key) &&
           viewWaypoint === null && (
-            <View
+            <ExtensionCardDock
+              key={extensionHit.key}
+              hit={extensionHit}
               style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
-              pointerEvents="box-none"
-              testID="geodetic-card-dock"
-              ref={geodeticDockRef}
+              dockRef={extensionDockRef}
               onLayout={() => {
                 // The dock's own y is relative to its container, not the map:
                 // measure both in window space and take the difference.
-                const dock = geodeticDockRef.current;
+                const dock = extensionDockRef.current;
                 const area = mapAreaRef.current;
-                if (!dock || !area || geodeticRecenterRef.current === null) return;
+                if (!dock || !area || extensionRecenterRef.current === null) return;
                 area.measureInWindow((_ax, areaTop) => {
                   dock.measureInWindow((_dx, dockTop) => {
                     if (Number.isFinite(areaTop) && Number.isFinite(dockTop)) {
-                      recenterOnGeodeticCard(dockTop - areaTop);
+                      recenterOnExtensionCard(dockTop - areaTop);
                     }
                   });
                 });
               }}
-            >
-              <GeodeticPointCard
-                mark={geodeticMark}
-                floating={recordingPanelUp}
-                offline={offlineOnly}
-                onOpenLink={(url) => {
-                  Linking.openURL(url).catch(() => showSnack("Couldn't open the datasheet"));
-                }}
-                onNavigate={() => {
-                  setDestination({ latitude: geodeticMark.lat, longitude: geodeticMark.lng });
-                  setGeodeticMark(null);
-                }}
-                onConvert={() => openConvert(router, prefillFromMark(geodeticMark))}
-                onCopy={(text, what) => {
+              host={{
+                floating: recordingPanelUp,
+                offline: offlineOnly,
+                close: () => setExtensionHit(null),
+                navigateTo: (latitude, longitude) => {
+                  setDestination({ latitude, longitude });
+                  setExtensionHit(null);
+                },
+                openLink: (url, failMessage) => {
+                  // Datasheet and agency links come from downloaded data: web addresses only.
+                  if (!isWebUrl(url)) {
+                    showSnack(failMessage);
+                    return;
+                  }
+                  Linking.openURL(url).catch(() => showSnack(failMessage));
+                },
+                copy: (text, message) => {
                   void Clipboard.setStringAsync(text);
-                  showSnack(`Copied ${what}`);
-                }}
-                onClose={() => setGeodeticMark(null)}
-              />
-            </View>
-          )}
-
-        {/* Tide stations: the tapped station's card. Same bottom-card slot
-          rules as the survey-mark card. */}
-        {cardSlotFree && tideTiles !== null && tideStation !== null && viewWaypoint === null && (
-          <View
-            style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
-            pointerEvents="box-none"
-            testID="tide-card-dock"
-          >
-            <TideStationCard
-              station={tideStation}
-              floating={recordingPanelUp}
-              offline={offlineOnly}
-              onOpenLink={(url) => {
-                Linking.openURL(url).catch(() => showSnack("Couldn't open the agency page"));
+                  showSnack(message);
+                },
+                openConvert: (req) => openConvert(router, req),
               }}
-              onNavigate={() => {
-                setDestination({ latitude: tideStation.lat, longitude: tideStation.lng });
-                setTideStation(null);
-              }}
-              onCopy={(text) => {
-                void Clipboard.setStringAsync(text);
-                showSnack(`Copied: ${text.length > 80 ? `${text.slice(0, 77)}…` : text}`);
-              }}
-              onClose={() => setTideStation(null)}
-              onConvert={(req) => openConvert(router, req)}
             />
-          </View>
-        )}
+          )}
 
         {/* ECCC forecast card (weather long-press): nearest citypage forecast +
           the gridded value under the finger. Same bottom-card slot rules as

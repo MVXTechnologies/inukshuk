@@ -9,12 +9,17 @@ on:
     - cron: '0 5 * * *'
   workflow_dispatch:
 
+# Least privilege: the GITHUB_TOKEN can only read the repository. A job that
+# needs more says so itself.
+permissions:
+  contents: read
+
 jobs:
   health:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -42,9 +47,23 @@ jobs:
       # audit-ci instead of raw `npm audit`: same high+ threshold, but accepted
       # advisories can be allowlisted (with reasons and exit plans) in
       # audit-ci.jsonc instead of failing the gate every night.
+      #
+      # The audits run even when an earlier step failed (`!cancelled()`): a
+      # red typecheck must not hide a new critical advisory for days.
       - name: Security audit (high+, allowlist in audit-ci.jsonc)
         id: audit
+        if: ${{ !cancelled() }}
         run: npx audit-ci@^7 --config ./audit-ci.jsonc
+      # The tile Worker is deployed from its own package (infra/tiles/worker,
+      # its own lockfile). Its runtime deps (pmtiles, fast-png) ship to
+      # Cloudflare; its dev deps (wrangler, miniflare) run on the deploying
+      # machine with Cloudflare credentials, so high+ fails here too. `npm
+      # audit` reads the lockfile only: nothing is installed.
+      - name: Security audit — tile Worker (high+)
+        id: audit-worker
+        if: ${{ !cancelled() }}
+        working-directory: infra/tiles/worker
+        run: npm audit --audit-level=high
 
   report-failure:
     needs: health
@@ -55,7 +74,7 @@ jobs:
       actions: read
       checks: read
     steps:
-      - uses: actions/github-script@v9
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const title = '🩺 Nightly health check failed';

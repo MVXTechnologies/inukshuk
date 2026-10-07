@@ -183,6 +183,15 @@ in the field, branch from its release tag, cherry-pick the fix, and run
 branch). If the branch's native project matches the binary, the fingerprint
 matches and the update lands on it.
 
+Pick **platform** when the branch matches only one store build. Example: 2.3.0's iOS
+build 18 predates #581 (a hashed build script), but Android vc63 does not, so
+`hotfix/2.3.x` (cut at 17cfebb) serves iOS only: `gh workflow run
+ota-update.yml --ref hotfix/2.3.x -f platform=ios`. Publishing `all` from it
+would push the hotfix bundle over main's newer update on Android. The OTA
+runtime check (`runtime-check.yml`) names the platform and branch when main
+leaves a store build behind. Compare fingerprints from a clean `npm ci`, not
+from a shared `node_modules` that local native builds have written into.
+
 ### Credentials in an update
 
 Installed apps read `extra` (Strava keys, error-report channel) from the
@@ -214,53 +223,51 @@ channel configured, reports simply stay queued on the device and nothing is
 shown. Reports become public issues, so on the way out each one is scrubbed of
 file paths and URIs, container ids, quoted text (map and trail names) and
 coordinates (`src/core/errors/scrub.ts`), which is what lets the privacy page
-promise "no location, no map or trail content". Pick **one** of the two
-channels below.
+promise "no location, no map or trail content". Use the relay (A); the
+embedded token (B) is the old channel, kept only until the relay is live.
 
-### A. Embedded fine-grained token (simplest)
+### A. The tile Worker's relay: `POST /error-report` (no secret in the app)
 
-Create a **fine-grained personal access token** at _github.com → Settings →
-Developer settings → Personal access tokens → Fine-grained tokens_ with:
+`infra/tiles/worker/src/errorReport.ts` holds the GitHub token server-side and
+files each report itself. The app POSTs the report as JSON (`ErrorReportPayload`:
+`{ fingerprint, marker, title, body, comment, report }`); the relay accepts only
+an issue titled `[auto-report:<8 hex>] …` or a one-line "Seen again (…)"
+comment on the open issue with that marker, rate-limits per client
+(`ERROR_REPORT_LIMITER`) and caps new issues. 202 = filed, 400 = the app drops
+the report, 429/5xx = the app retries with backoff, 404 = not configured.
 
-- **Repository access**: only `MVXTechnologies/inukshuk`
-- **Repository permissions**: `Issues` → **Read and write** (nothing else)
+1. Token: a **fine-grained** token with _Repository access_ = only
+   `MVXTechnologies/inukshuk`, _Permissions_ = `Issues: Read and write`, nothing
+   else. Better on a bot account than on a person's (issues are filed as
+   whoever owns it). Then, in `infra/tiles/worker/`:
+   `npx wrangler secret put ERROR_REPORT_GITHUB_TOKEN` and `npx wrangler deploy`.
+2. Check it answers (a malformed body must be a 400, which files nothing):
+   `curl -s -X POST https://<worker>/error-report -d '{}'`.
+3. Point the app at it, in both places (store builds read EAS, OTA updates read
+   the GitHub variable — see _Credentials in an update_):
 
-Then register it as an EAS environment variable, so builds pick it up:
+   ```sh
+   eas env:create --name ERROR_REPORT_ENDPOINT \
+     --value https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/error-report \
+     --environment production --visibility plaintext
+   ```
 
-```sh
-eas env:create --name ERROR_REPORT_TOKEN \
-  --value <fine-grained PAT> \
-  --environment production --visibility secret
-```
+   and the repo **variable** `ERROR_REPORT_ENDPOINT` with the same value.
+   With an endpoint set, `app.config.ts` leaves `errorReportToken` out of
+   `extra` even if the token variable still exists.
 
-Add the same value as the GitHub Actions secret `ERROR_REPORT_TOKEN`, so OTA
-updates carry it too (a secret EAS variable never reaches the runner that
-publishes them — see _Credentials in an update_).
+4. Once an update with the endpoint is out: delete `ERROR_REPORT_TOKEN` from EAS
+   and from the GitHub secrets, and **revoke that token** on GitHub. It is in
+   every binary and update published while it was set, and those stay public.
 
-`app.config.ts` reads `process.env.ERROR_REPORT_TOKEN` into
-`extra.errorReportToken`, so the token is **baked into the shipped binary** at
-build time. Anyone who unpacks the app can extract it — the narrow scope is the
-mitigation: the worst it can do is open/comment on issues in this one repo, and
-it can be revoked and re-issued at any time. Never grant it code, contents, or
-Actions permissions, and never reuse a classic PAT here.
+### B. Embedded fine-grained token (deprecated)
 
-### B. Relay endpoint (no secret in the binary)
-
-Alternatively, host a tiny endpoint that holds the token server-side and set:
-
-```sh
-eas env:create --name ERROR_REPORT_ENDPOINT \
-  --value https://your-relay.example/error-report \
-  --environment production --visibility plaintext
-```
-
-The app then POSTs each report as JSON (`ErrorReportPayload`:
-`{ fingerprint, marker, title, body, comment, report }`) and files nothing
-itself, so no credential ships in the binary at all. The relay forwards
-`title`/`body` to the Issues API, deduping on `marker` (an existing open issue
-with that marker gets `comment` instead of a duplicate). It should return 2xx on
-success; 5xx/429 make the app retry with backoff, 400 makes it drop the report.
-When both variables are set, the endpoint wins.
+`ERROR_REPORT_TOKEN` (EAS secret + GitHub secret) is read into
+`extra.errorReportToken`, and `extra` ships in every binary **and every OTA
+manifest**: anyone can read it and post, edit, close and relabel issues in the
+repository as the token's owner. The OTA job warns while it is set
+(`scripts/ci/assert-update-extra.mjs`). When both are set, the endpoint wins
+and the token is not shipped.
 
 Users can opt out entirely in _Settings → Privacy → Automatic error reporting_
 (on by default). The row below it shows the pending-report count and can force a
@@ -386,9 +393,9 @@ ask you to run your own instance. Hence the Worker:
 - caches every answer at the edge for a day (`SEARCH_CACHE_CONTROL`), keyed on
   the case- and space-folded query, so every phone typing "Mont-Sainte-Anne"
   costs Photon three requests a day (at most `MAX_UPSTREAM_CALLS` per search);
-- limits searches that miss the cache per client IP (`SEARCH_RATE_PER_MIN`, default 60 —
-  per isolate; for a global limit, enable the commented `[[ratelimits]]`
-  binding `SEARCH_LIMITER` in `wrangler.toml`);
+- limits searches that miss the cache per client IP (the `SEARCH_LIMITER`
+  `[[ratelimits]]` binding in `wrangler.toml`, 60 a minute; without it a
+  per-isolate counter, `SEARCH_RATE_PER_MIN`);
 - the app debounces 250 ms, needs 2 characters, and aborts stale requests.
 
 If traffic grows past "reasonable", self-host Photon on the NAS (Docker image

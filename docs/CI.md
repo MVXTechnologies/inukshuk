@@ -3,17 +3,17 @@
 All automation lives in `.github/workflows/`. The goal is a project that builds,
 tests, and corrects itself without anyone watching.
 
-| Workflow                   | Trigger                              | What it does                                                                                   |
-| -------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| `ci.yml`                   | every push / PR                      | typecheck · lint · format-check · unit + script tests · tiles Worker · expo-doctor (advisory)  |
-| `native-build.yml`         | every PR (builds if native); nightly | real **iOS** (`xcodebuild`) + **Android** (`gradlew assembleDebug`) compiles on latest runners |
-| `e2e.yml`                  | nightly; manual                      | Maestro flows on Android emulators, in parallel shards (`.maestro/shards.json`)                |
-| `release-path.yml`         | PRs/main touching the hook; weekly   | runs the EAS `eas-build-pre-install` hook like EAS does (Android + iOS → `pod install`)        |
-| `runtime-check.yml`        | every PR; push to `main`             | compares the native runtime fingerprint with the latest store builds; warns, never fails       |
-| `nightly.yml`              | nightly; manual                      | full gate + **blocking** expo-doctor + `npm audit`; opens a tracking issue on failure          |
-| `ota-update.yml`           | push to `main` (JS/assets)           | publishes an EAS Update so installed apps self-correct                                         |
-| `release.yml`              | version tag `v*`; manual             | EAS build + auto-submit to App Store & Play Store                                              |
-| `dependabot-automerge.yml` | Dependabot PRs                       | auto-merges green minor/patch updates, except native-bearing ones (they need a store build)    |
+| Workflow                   | Trigger                              | What it does                                                                                         |
+| -------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `ci.yml`                   | every push / PR                      | typecheck · lint · format-check · unit + script tests · tiles Worker · expo-doctor (advisory)        |
+| `native-build.yml`         | every PR (builds if native); nightly | real **iOS** (`xcodebuild`) + **Android** (`gradlew assembleDebug`) compiles on latest runners       |
+| `e2e.yml`                  | nightly; manual                      | Maestro flows on Android emulators, in parallel shards (`.maestro/shards.json`)                      |
+| `release-path.yml`         | PRs/main touching the hook; weekly   | runs the EAS `eas-build-pre-install` hook like EAS does (Android + iOS → `pod install`)              |
+| `runtime-check.yml`        | every PR; push to `main`             | compares the native runtime fingerprint with the latest store builds; warns, never fails             |
+| `nightly.yml`              | nightly; manual                      | full gate + **blocking** expo-doctor + high+ audits (app, Worker); opens a tracking issue on failure |
+| `ota-update.yml`           | push to `main` (JS/assets)           | publishes an EAS Update so installed apps self-correct                                               |
+| `release.yml`              | version tag `v*`; manual             | EAS build + auto-submit to App Store & Play Store                                                    |
+| `dependabot-automerge.yml` | Dependabot PRs                       | auto-merges green minor/patch updates, except native-bearing ones (they need a store build)          |
 
 Plus `.github/dependabot.yml` (weekly npm + actions updates, grouped).
 
@@ -184,3 +184,61 @@ ship iOS fixes until 2.3.1/2.4.0 is in the store.
 Workers `tsconfig`). CI installs it with `npm ci --ignore-scripts`, typechecks
 it, and runs its Jest suites. Deploying it is still the owner's manual step
 (`infra/tiles/README.md`).
+
+## Workflow security
+
+- **Least privilege.** Every workflow declares `permissions: contents: read` at
+  the top; a job that needs more (the nightly's issue filing, the Dependabot
+  auto-merge) declares it on that job only. `runtime-check.yml` (one job) adds
+  `pull-requests: write` for its sticky PR comment. The repository default is
+  also read-only.
+- **Actions are pinned to a commit SHA** (`uses: owner/action@<sha> # vX.Y.Z`).
+  A tag can be moved by whoever controls the action's repository; a SHA cannot.
+  Dependabot's `github-actions` updater understands the comment and bumps
+  both together, so pins don't go stale.
+- **No untrusted text in `run:`.** `${{ … }}` inside a script is pasted in
+  before the shell parses it. Event data and inputs go through `env:` and are
+  read as `"$VAR"`.
+- **`pull_request_target`** is used only by `dependabot-automerge.yml`, which
+  never checks out the PR, and runs only for PRs Dependabot opened in this
+  repository (`pull_request.user.login`, not just `github.actor`).
+- Fork PRs get no secrets (`pull_request`), so CI, native builds and E2E never
+  see a credential.
+
+### Who can publish to users
+
+An OTA update (`ota-update.yml`) reaches every installed app on the matching
+runtime within minutes, and a store build (`release.yml`) goes to TestFlight /
+the Play internal track. Both jobs (and their guards) run in the GitHub
+**environment `production`**, which is where the owner decides who may do it
+(Settings → Environments → production):
+
+1. **Deployment branches and tags → Selected**: `main`, `hotfix/*` (the
+   branch-from-a-release-tag fix path in DEPLOYMENT.md), and tag `v*`.
+   Without it, anyone with write access can run _OTA Update_ on any branch from
+   the Actions tab and ship that branch to users.
+2. **Move `EXPO_TOKEN`, `ASC_API_KEY_P8`, `GOOGLE_SERVICE_ACCOUNT_JSON` and
+   `ERROR_REPORT_TOKEN` from repository secrets to environment secrets**, so
+   only jobs that pass the rules above can read them (a workflow pushed on a
+   side branch can read every repository secret).
+3. Optional: **Required reviewers** = the owner, if every publish should wait
+   for a click.
+
+The guard jobs sit in the same environment, so they keep seeing `EXPO_TOKEN`
+after the move.
+
+### `runtime-check.yml` and `EXPO_TOKEN`
+
+`runtime-check.yml` runs on `pull_request` and reads the latest store builds
+with the **repository** secret `EXPO_TOKEN` (`eas build:list`, read only). It
+keeps working while the token stays at repo level. If `EXPO_TOKEN` moves into
+the `production` environment (step 2 above), give this check its own token
+instead: a **read-only Expo robot token** stored as the repository secret
+`EXPO_READ_TOKEN`, and point the workflow's `HAS_EXPO_TOKEN` / `token:` at
+it. Never hand a publishing token to a `pull_request` job.
+
+Without any token the check degrades on its own: the EAS steps are skipped
+(`HAS_EXPO_TOKEN` is false), `runtime-check.mjs` treats the missing
+`store-*.json` as optional, and the report still compares this PR's
+fingerprints with its base's ("Latest store build: n/a"). Fork and
+Dependabot PRs run that way today.

@@ -50,7 +50,7 @@ bbox touches it; pieces never overlap.
    take `tiles.mvxtechnologies.com`.
 5. **Deploy the Worker** (from `infra/tiles/worker/`):
    ```sh
-   npm install
+   npm ci   # exactly the committed package-lock.json, never a fresh resolve
    npx wrangler login
    # uncomment the `routes` line in wrangler.toml once the zone is on Cloudflare
    npx wrangler deploy
@@ -448,7 +448,7 @@ decodes a tile instead of 5, but half the detail — CDEM has real 20 m data at 
 
 ```sh
 cd infra/tiles/worker
-npm install            # drops maplibre-contour, no longer used
+npm ci                 # the committed lockfile; `npm install` would re-resolve ^ranges
 npx tsc --noEmit
 npx wrangler deploy
 ```
@@ -495,11 +495,15 @@ No Cloudflare needed: cut a small extract and serve it with the Worker itself.
 ```sh
 pmtiles extract https://build.protomaps.com/<YYYYMMDD>.pmtiles quebec-dev.pmtiles \
   --bbox=-71.65,46.65,-70.75,47.40
-cd infra/tiles/worker && npm install
+cd infra/tiles/worker && npm ci
 npx wrangler r2 object put inukshuk-tiles/quebec-dev.pmtiles --file=../../../quebec-dev.pmtiles --local
-npx wrangler dev --port 8787
+npx wrangler dev --port 8787 --var ARCHIVES:quebec-dev
 # build the app with VECTOR_TILES_URL='http://127.0.0.1:8787/quebec-dev/{z}/{x}/{y}.mvt'
 ```
+
+Only the archives named in `ARCHIVES` (default: `basemap`, `peaks`, `parks`,
+`geodetic`, `tides`, `crags`) are served; any other `/{archive}/…` is a 404
+without touching R2, hence the `--var` above for a local test archive.
 
 ## Cost (Cloudflare list prices, Sept 2026 — check before relying on them)
 
@@ -508,6 +512,29 @@ npx wrangler dev --port 8787
   $0.30 per million. Edge-cached tiles still count as Worker requests.
 - R2 reads (cache misses only): 10M/month free, then $0.36 per million. No egress fees.
 - Roughly **$6–8/month at 1,000 monthly users, ~$25 at 10,000, ~$50 at 25,000.**
+
+## Abuse and cost limits
+
+The Worker is public and unauthenticated by design (a phone app can hold no
+secret), so these keep one abusive client from running up the bill or
+starving everyone else (`worker/src/guards.ts`, security audit 2026-10):
+
+| Route                               | Guard                                                                                                                                                            |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| every static GET                    | edge-cache key = path + the app's `?v=N` only, so a random query string can't force an R2 read; unknown archives and malformed font stacks are refused before R2 |
+| `/contours/…` (generation, R2 miss) | `CONTOUR_LIMITER`: 300 new tiles per client per minute, then `429` + `Retry-After: 30` (MapLibre and offline packs retry)                                        |
+| `/search`, `/route` (cache misses)  | `SEARCH_LIMITER` 60/min, `ROUTE_LIMITER` 30/min per client; route upstreams paced at 1/s per isolate                                                             |
+| `/strava/token`, `/strava/refresh`  | `STRAVA_LIMITER` 10/min plus 30/hour per isolate; only URL-safe tokens ≤ 256 chars go upstream                                                                   |
+| `/donors`, `/donor-verify/*`        | `DONOR_LIMITER` 3/min plus per-isolate hourly caps; at most `VERIFY_DAILY_SEND_CAP` (90) code emails per UTC day in total                                        |
+| every POST                          | the body is read with a hard byte cap (1–8 KB), whatever `Content-Length` says                                                                                   |
+| `/_upload/…`                        | bearer `UPLOAD_TOKEN` (404 when unset), constant-time compare                                                                                                    |
+
+Rate-limit bindings count per client IP per Cloudflare location and are free on
+every plan. They do not stop a distributed flood: that is what the dashboard
+settings in the security report are for (custom domain + WAF rate-limit rule,
+usage notifications). Edge-cached tiles still count as Worker requests, so on
+the free plan a flood past 100k requests/day makes the Worker fail for
+everyone until 00:00 UTC; on the paid plan it costs $0.30 per extra million.
 
 ## Licences
 

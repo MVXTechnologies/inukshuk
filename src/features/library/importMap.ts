@@ -82,11 +82,20 @@ function documentOf(
   };
 }
 
+/**
+ * Copy a PDF at `sourceUri` (a picked file, or an "Open with" `file://` /
+ * `content://` uri, #246) into app storage and parse it into a MapDocument
+ * named `name`. Throws on failure, leaving nothing behind.
+ */
+export async function importMapFromUri(sourceUri: string, name: string): Promise<MapDocument> {
+  const id = storage.newId();
+  const fileUri = await storage.importPdf(sourceUri, id);
+  return mapDocumentFromStoredPdf(id, fileUri, name);
+}
+
 /** Copy + parse one picked PDF asset into a MapDocument (throws on failure). */
 async function importOne(asset: DocumentPicker.DocumentPickerAsset): Promise<MapDocument> {
-  const id = storage.newId();
-  const fileUri = await storage.importPdf(asset.uri, id);
-  return mapDocumentFromStoredPdf(id, fileUri, asset.name?.replace(/\.pdf$/i, '') ?? 'Map');
+  return importMapFromUri(asset.uri, asset.name?.replace(/\.pdf$/i, '') ?? 'Map');
 }
 
 /**

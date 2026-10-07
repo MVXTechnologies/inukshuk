@@ -24,6 +24,11 @@ concurrency:
   group: native-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege: the GITHUB_TOKEN can only read the repository. A job that
+# needs more says so itself.
+permissions:
+  contents: read
+
 jobs:
   # Decides whether this PR can affect the native build. Schedule and manual
   # runs always build.
@@ -35,7 +40,7 @@ jobs:
     steps:
       # A pull_request checkout is the PR's merge commit; depth 2 brings its
       # first parent, which is the base branch tip it merges onto.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: github.event_name == 'pull_request'
         with:
           fetch-depth: 2
@@ -74,7 +79,7 @@ jobs:
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.native != 'false') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The RN + reanimated/worklets NDK build exhausts the runner's small disk
       # ("No space left on device"). Reclaim the large preinstalled toolchains we
@@ -86,12 +91,12 @@ jobs:
           sudo docker image prune --all --force || true
           echo "After:"; df -h /
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
 
-      - uses: actions/setup-java@v6
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 17
@@ -104,7 +109,7 @@ jobs:
       - name: Verify native 3D terrain engine (C++)
         run: sh modules/inukshuk-terrain/tests/run.sh
 
-      - uses: android-actions/setup-android@v4
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
       # Gradle's dependency caches live in ~/.gradle regardless of the
       # prebuild-generated android/ dir, so they ARE cacheable in this CNG repo
@@ -112,7 +117,7 @@ jobs:
       # don't exist at checkout, see #77). Keyed on the lockfile since the
       # native deps derive from the RN/Expo packages.
       - name: Cache Gradle dependencies
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.gradle/caches
@@ -125,7 +130,7 @@ jobs:
       # Convert's PROJ static libs + proj.db + bundled grids (gitignored; built
       # from sha-pinned sources), cached on the scripts that pin them.
       - name: Cache PROJ build (Convert)
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             modules/inukshuk-proj/prebuilt
@@ -142,7 +147,7 @@ jobs:
         run: ./gradlew assembleDebug --no-daemon
         working-directory: android
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: android-debug-apk
           path: android/app/build/outputs/apk/debug/*.apk
@@ -155,17 +160,17 @@ jobs:
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.native != 'false') }}
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # A Swift Package dependency requires Swift tools 6.2; the image's default
       # Xcode 16.4 ships Swift 6.1, so package resolution fails ("Could not
       # resolve package dependencies"). Select the newest stable Xcode (Swift 6.2+).
       - name: Select newest Xcode (Swift 6.2+)
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: latest-stable
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -175,7 +180,7 @@ jobs:
       # Caches downloaded pod artifacts (not the generated Pods/ dir, which
       # depends on the prebuild output) — keyed on the lockfile like Gradle.
       - name: Cache CocoaPods downloads
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/Library/Caches/CocoaPods
           key: pods-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -185,7 +190,7 @@ jobs:
         run: sh modules/inukshuk-pdf/ios/Tests/run.sh
 
       - name: Cache PROJ build (Convert)
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             modules/inukshuk-proj/prebuilt
@@ -199,7 +204,7 @@ jobs:
       # (macOS libc++, which matches the phones; Linux libstdc++ picks another
       # NTv2 sub-grid in NA83SCRS). The official-tool reference suite, every pair.
       - name: Cache PROJ-data grids for the Convert suite
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/convert-grids
           key: convert-grids-${{ hashFiles('src/core/convert/fixtures/reference.json') }}

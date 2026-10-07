@@ -45,17 +45,58 @@ ROUTE_RATE_PER_MIN = "30"
 # FOSSGIS allows at most one request per second: pace each engine per isolate.
 ROUTE_UPSTREAM_INTERVAL_MS = "1000"
 
-# Optional global rate limit for /search (otherwise a per-isolate counter):
-# [[ratelimits]]
-# name = "SEARCH_LIMITER"
-# namespace_id = "1001"
-# simple = { limit = 60, period = 60 }
+# Abuse/cost guards (src/guards.ts, security audit 2026-10). Archives served as
+# /{archive}/… (default: basemap, peaks, parks, geodetic, tides, crags) —
+# list them here to add one without a code change:
+# ARCHIVES = "basemap,peaks,parks,geodetic,tides,crags"
+# Contour tiles one client may GENERATE per minute (R2 misses only), floor per
+# isolate; the CONTOUR_LIMITER binding below is the real limit.
+CONTOUR_GEN_PER_MIN = "300"
+# Code emails /donor-verify/start may send per UTC day, all addresses
+# together. Keep it under the Resend plan's daily quota (free: 100/day).
+VERIFY_DAILY_SEND_CAP = "90"
 
-# Optional global rate limit for /route (otherwise a per-isolate counter):
-# [[ratelimits]]
-# name = "ROUTE_LIMITER"
-# namespace_id = "1002"
-# simple = { limit = 30, period = 60 }
+# Rate-limiting bindings (per client IP, counted per Cloudflare location; free
+# on every plan). Each route also keeps a per-isolate floor, so a missing
+# binding degrades to that floor instead of no limit. namespace_id is any
+# integer unique within the account.
+
+# /search: cache misses only (answers come from the edge cache first).
+[[ratelimits]]
+name = "SEARCH_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 60
+  period = 60
+
+# /route: cache misses only.
+[[ratelimits]]
+name = "ROUTE_LIMITER"
+namespace_id = "1002"
+
+  [ratelimits.simple]
+  limit = 30
+  period = 60
+
+# /contours: tiles GENERATED (R2 miss) per client per minute. Offline packs
+# downloading a fresh region get 429 + Retry-After past this and resume.
+[[ratelimits]]
+name = "CONTOUR_LIMITER"
+namespace_id = "1003"
+
+  [ratelimits.simple]
+  limit = 300
+  period = 60
+
+# /strava/token|refresh: a phone needs one exchange and a refresh every ~6 h.
+[[ratelimits]]
+name = "STRAVA_LIMITER"
+namespace_id = "1004"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
 
 # POST /donors (#476): at most 3 donor-name submissions per client IP per
 # minute, on top of the per-isolate hourly cap in src/donors.ts. The IP is the
@@ -66,4 +107,17 @@ namespace_id = "1476"
 
   [ratelimits.simple]
   limit = 3
+  period = 60
+
+# POST /error-report (src/errorReport.ts): the app's crash reports, filed as
+# GitHub issues with `wrangler secret put ERROR_REPORT_GITHUB_TOKEN` (a
+# fine-grained token: Issues read/write on this repository only). Without the
+# secret the route answers 404. Per client IP 5 a minute (plus 20 an hour per
+# isolate); the key "report:new-issue" also caps NEW issues at 5 a minute.
+[[ratelimits]]
+name = "ERROR_REPORT_LIMITER"
+namespace_id = "1005"
+
+  [ratelimits.simple]
+  limit = 5
   period = 60

@@ -1,5 +1,8 @@
+import { FALLBACK_MAP_NAME, mapNameFromUri } from '@core/import/openedFile';
+import { NO_GEOREFERENCE_NOTICE } from '@core/library/overlayPages';
 import { findDuplicateTrack } from '@features/share/findDuplicateTrack';
 import { importGpxFromUri } from '@features/library/importGpx';
+import { importMapFromUri } from '@features/library/importMap';
 import {
   activityImportMessage,
   importActivitiesFromUri,
@@ -22,6 +25,10 @@ import { useLibraryStore } from '@state/libraryStore';
  * `importGpxFromUri` throws "No track points" if it isn't one. The trail name
  * comes from the GPX's own <metadata><name>, not the URI. This runs outside
  * React, so we use the stores' non-hook `.getState()` API.
+ *
+ * A PDF (sniffed by its `%PDF-` header, #246) is a map: iOS offers the app for
+ * PDFs (CFBundleDocumentTypes), and it used to fall down the GPX path into
+ * "Could not import that file".
  */
 export async function redirectSystemPath({
   path,
@@ -45,9 +52,17 @@ export async function redirectSystemPath({
       // adding a track before the on-disk index is loaded would persist an
       // index built from the empty initial state and wipe the library.
       await useLibraryStore.getState().hydrate();
-      // FIT / TCX / gzip / zip (Strava & Garmin exports, #431) are sniffed by
-      // content; plain GPX (and anything unrecognized) keeps the GPX path below.
+      // PDF maps (#246) and FIT / TCX / gzip / zip (Strava & Garmin exports,
+      // #431) are sniffed by content; plain GPX (and anything unrecognized)
+      // keeps the GPX path below.
       const opened = await openImportedUri(path);
+      if (opened.format === 'pdf') {
+        try {
+          return await importOpenedMap(opened.uri, mapNameFromUri(path));
+        } finally {
+          opened.dispose();
+        }
+      }
       if (opened.format !== 'gpx' && opened.format !== 'unknown') {
         try {
           return await importOpenedActivities(opened.uri);
@@ -77,6 +92,24 @@ export async function redirectSystemPath({
     }
   }
   return path;
+}
+
+/**
+ * Import an opened PDF as a map, like the Library's picker does: it lands on
+ * the Library, active, with the same wording. A PDF without georeferencing is
+ * still imported (viewable as a plain document) and the snackbar says so.
+ * Throws when the file cannot be copied or read, for the caller's error path.
+ */
+async function importOpenedMap(uri: string, name: string): Promise<string> {
+  const doc = await importMapFromUri(uri, name);
+  useLibraryStore.getState().addMap(doc);
+  // A nameless uri (most Android content uris) gets FALLBACK_MAP_NAME, which
+  // would read "Imported Imported map".
+  const imported = name === FALLBACK_MAP_NAME ? 'Map imported' : `Imported ${doc.name}`;
+  useImportFeedbackStore
+    .getState()
+    .show(doc.georeferences.length > 0 ? imported : `${imported}. ${NO_GEOREFERENCE_NOTICE}`);
+  return '/(tabs)/library';
 }
 
 /**

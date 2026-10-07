@@ -35,3 +35,5 @@ modules/inukshuk-proj/prebuilt/
 modules/inukshuk-proj/assets/
 scripts/convert-extra-references.json
 src/core/convert/fixtures/
+# GNSS: public receiver / caster captures (byte-exact) and the official-tool datum vectors.
+src/core/gnss/fixtures/

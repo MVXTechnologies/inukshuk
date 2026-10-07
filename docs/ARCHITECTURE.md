@@ -21,8 +21,9 @@ a thin shell around it.**
   lives in `@core/format`; `src/state/formatters.ts` binds it to the user's
   chosen units.
 - `app/**` — expo-router routes only; each file just renders a feature screen.
-  `+native-intent.tsx` intercepts "Open with" file intents (GPX, and FIT /
-  TCX / gzip / zip activity exports sniffed by content) before routing.
+  `+native-intent.tsx` intercepts "Open with" file intents (GPX, FIT / TCX /
+  gzip / zip activity exports, and PDF maps, all sniffed by content —
+  `core/import/openedFile`) before routing.
 
 Path aliases (`@core`, `@data`, `@features`, `@state`, `@ui`, `@lib`, `@/`) are
 declared once in `tsconfig.json` and mirrored in `jest.config.js`.
@@ -181,6 +182,50 @@ quietly imports "since last import" on launch/foreground at most every
   available" placeholder tiles past its data, so without the cap MapLibre
   renders grey placeholders instead of overscaling real tiles.
 
+## Map extensions (Settings → Extensions)
+
+Layers the user installs on purpose (Geodetic points, Tide stations, …) are
+one registry, not hand-wired screens (architecture review P1-3):
+
+- **Pure half**, `src/core/extensions/`: `keys.ts` (every key, in draw
+  order), one `ExtensionDescriptor` per extension in `descriptors/` (label,
+  dataset, default switches, style builder, offline-pack policy, credit
+  line), `registry.ts`, `state.ts` (installed / shown / pack rules) and
+  `prefs.ts` (the persisted `extensions` entry of settings.json and its
+  migration from the pre-registry flat keys).
+- **Platform half**, `src/features/extensions/`, one registry per surface
+  so each loads only what it shows: `settingsModules.ts` (the Settings entry
+  in the shared `ExtensionSettingsShell`, and the install / remove / offline
+  hooks), `panelEntries.ts` (its row in Map overlays › Extensions) and
+  `mapModules.ts` (style extras, symbol images, tap → card; MapScreen's
+  `mapHost` iterates it). `actions.ts` is the one Get / Remove / Offline
+  lifecycle; `companions.ts` the companion packs for regions downloaded
+  before an install.
+- Tile data: the descriptor names a `DatasetId`; `data/datasets.ts` maps it
+  to its tile template (still the frozen constants of `data/basemapTiles.ts`,
+  pinned by `tileUrls.contract.test.ts`) and its TileJSON.
+- `buildOsmStyle`, offline pack styles, credits, Settings, the overlays panel
+  and the map's tap / card host all iterate the registry.
+- Persistence: `settings.extensions[key] = { installedAt, show, offline }`.
+  Geodetic and tides also keep writing their old flat keys
+  (`legacySettings`), so a build from before the registry reads the same
+  state after an OTA rollback.
+
+### Adding an extension
+
+1. Add its key to `EXTENSION_KEYS` (`core/extensions/keys.ts`) at its draw
+   position, and its archive to `DatasetId` + `data/datasets.ts`.
+2. Write `core/extensions/descriptors/<key>.ts` (its style builder goes in
+   `core/map/<key>Style.ts` with its tests) and register it in
+   `core/extensions/registry.ts`. No `legacySettings`: its state lives in
+   `extensions[key]`, migrated for free.
+3. Write its components under `features/extensions/<key>/` — a Settings body
+   in `ExtensionSettingsShell`, a panel row and, if it has a map card, a map
+   module — and add one line to each surface registry it uses.
+4. Pick its offline policy (`'installed'` for a few kB a region, `'opt-in'`
+   with companion packs for more), then run `extensionStyles.pin.test.ts`:
+   the existing extensions' hashes must not move.
+
 ## Long-distance trails (Explore)
 
 Explore's "Long-distance trails near you" (#467) comes from OpenStreetMap
@@ -262,6 +307,17 @@ Field operators rely on it, so **PROJ never chooses an operation**:
 - UI: `features/convert` (route `app/convert.tsx`); entry points share
   `openConvert` + the `core/convert/prefill` builders (map chip, geodetic and
   tide cards, map-actions row, deep link).
+
+## External GNSS receivers (#588)
+
+- Stage 1 (pure core, `core/gnss`): NMEA / UBX / RTCM 3 framing over
+  arbitrary byte chunks (`stream.ts`, fuzz-tested), fix assembly, the quality
+  state machine and the phone-GPS standby policy (`quality.ts`), the NTRIP
+  v1/v2 protocol (`ntrip.ts`, `sourcetable.ts`) and the output datum
+  (`datum.ts`), which plans every datum change through `core/convert` and is
+  gated by official-tool vectors (`fixtures/datum-vectors.json`, also run on
+  the host PROJ). Module boundaries for the native transport and the UI:
+  `src/core/gnss/README.md`.
 
 ## Error reporting ("no silent fails")
 

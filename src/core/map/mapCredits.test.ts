@@ -85,6 +85,26 @@ it('adds weather and marine only when they are drawn', () => {
   expect(marine?.credit).toMatch(/Not for navigation/);
 });
 
+it('lists the drawn extensions after weather and before marine, in draw order', () => {
+  expect(ids({})).not.toContain('geodetic');
+  expect(ids({ weather: true, marine: true, extensions: ['geodetic', 'tides'] }).slice(-4)).toEqual(
+    ['weather', 'geodetic', 'tides', 'marine'],
+  );
+  expect(ids({ extensions: ['tides'] })).not.toContain('geodetic');
+  const lines = mapCredits({ ...base, extensions: ['geodetic', 'tides'] });
+  expect(lines.find((l) => l.id === 'geodetic')).toEqual({
+    id: 'geodetic',
+    label: 'Geodetic points',
+    credit:
+      "Survey agencies' published data (each mark's card names its source and licence) · " +
+      'survey points © OpenStreetMap contributors',
+    link: { label: 'openstreetmap.org/copyright', url: 'https://www.openstreetmap.org/copyright' },
+  });
+  const tides = lines.find((l) => l.id === 'tides');
+  expect(tides).not.toHaveProperty('link');
+  expect(tides?.credit).toMatch(/^NOAA\/NOS\/CO-OPS · Shom, 2025\..*Not for navigation$/);
+});
+
 it('gives every line a non-empty label and credit', () => {
   const all = mapCredits({
     ...base,

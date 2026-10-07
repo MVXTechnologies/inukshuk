@@ -22,7 +22,6 @@ describe('checkExtra', () => {
       { require: STRAVA, anyOf: REPORTS },
     );
     assert.equal(verdict.ok, true);
-    assert.deepEqual(verdict.warnings, []);
     const printed = [...verdict.notes, ...verdict.problems, ...verdict.warnings].join('\n');
     assert.match(printed, /extra\.stravaClientId is set/);
     for (const secret of ['12345', 's3cret', 'ghp_x']) assert.ok(!printed.includes(secret));
@@ -65,6 +64,18 @@ describe('checkExtra', () => {
       anyOf: REPORTS,
     });
     assert.deepEqual(verdict.warnings, []);
+  });
+
+  // The token in `extra` is public; the relay endpoint replaces it.
+  it('warns, without failing, when a GitHub token would ship in the update', () => {
+    const withToken = checkExtra(config({ errorReportToken: 'ghp_x' }), { anyOf: REPORTS });
+    assert.equal(withToken.ok, true);
+    assert.match(withToken.warnings.join(' '), /errorReportToken is set: a GitHub token ships/);
+    assert.ok(!withToken.warnings.join(' ').includes('ghp_x'));
+    const relay = checkExtra(config({ errorReportEndpoint: 'https://relay.example' }), {
+      anyOf: REPORTS,
+    });
+    assert.deepEqual(relay.warnings, []);
   });
 
   it('passes with nothing required', () => {
