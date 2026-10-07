@@ -34,7 +34,7 @@ import { useStravaStore } from '@state/stravaStore';
 import Constants from 'expo-constants';
 import { File } from 'expo-file-system';
 import * as Linking from 'expo-linking';
-import { nanoid } from 'nanoid/non-secure';
+import { uuid } from 'expo-modules-core';
 import { AppState } from 'react-native';
 
 /**
@@ -124,7 +124,9 @@ export async function connectStrava(): Promise<ConnectOutcome> {
   if (!config) return { ok: false, message: 'Strava is not configured in this build' };
   if (pendingRedirect !== null) return { ok: false, message: 'A Strava sign-in is already open' };
 
-  const state = nanoid(16);
+  // OAuth state from the native CSPRNG (not Math.random): it is what makes a
+  // forged or replayed redirect fail the state check.
+  const state = uuid.v4();
 
   const redirectUrl = await new Promise<string | null>((resolve) => {
     let done = false;

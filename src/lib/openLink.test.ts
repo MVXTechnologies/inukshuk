@@ -48,3 +48,16 @@ it('ignores an empty address', async () => {
   await expect(openExternalLink('  ')).resolves.toBe(false);
   expect(open).not.toHaveBeenCalled();
 });
+
+// Links from downloaded, crowd-edited data (an OSM trail's website tag) must
+// never become a deep link into another app, a phone call or a store page.
+it('refuses anything but a web address, without touching the OS', async () => {
+  const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  for (const url of ['inukshuk://settings', 'tel:+15555550100', 'intent://x#Intent;end']) {
+    await expect(openExternalLink(url)).resolves.toBe(false);
+  }
+  expect(open).not.toHaveBeenCalled();
+  expect(alert).not.toHaveBeenCalled();
+  expect(Clipboard.setStringAsync).not.toHaveBeenCalled();
+});

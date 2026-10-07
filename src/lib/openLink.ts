@@ -1,6 +1,8 @@
 import * as Clipboard from 'expo-clipboard';
 import { Alert, Linking } from 'react-native';
 
+import { isWebUrl } from '@core/links/externalUrl';
+
 /**
  * Open a web link in the system browser, and never leave the tap unanswered.
  *
@@ -13,6 +15,9 @@ import { Alert, Linking } from 'react-native';
  */
 export async function openExternalLink(url: string): Promise<boolean> {
   if (url.trim() === '') return false;
+  // Only web addresses: many links come from downloaded, partly crowd-edited
+  // data (an OSM trail's website tag), and the OS would open any scheme.
+  if (!isWebUrl(url)) return false;
   try {
     await Linking.openURL(url);
     return true;
