@@ -143,13 +143,41 @@ export function topCauses(failedJobs, limit = 5) {
     .slice(0, limit);
 }
 
+/** Red hours of each workflow on main, worst first, zero-hour ones left out. */
+export function redHoursByWorkflow(mainRuns, since, now) {
+  const names = new Map();
+  for (const r of mainRuns) names.set(r.workflow_id, r.name);
+  return [...names.entries()]
+    .map(([id, name]) => [
+      name,
+      redHours(
+        mainRuns.filter((r) => r.workflow_id === id),
+        since,
+        now,
+      ),
+    ])
+    .filter(([, h]) => h > 0)
+    .sort((a, b) => b[1] - a[1]);
+}
+
 /** The comment body. */
-export function renderReport({ from, to, redHoursMain, failures, rates, flaky, causes, runCount }) {
+export function renderReport({
+  from,
+  to,
+  redHoursMain,
+  redByWorkflow = [],
+  failures,
+  rates,
+  flaky,
+  causes,
+  runCount,
+}) {
   const list = (rows, fmt, none) => (rows.length ? rows.map(fmt).join('\n') : none);
   return [
     `## CI weekly · ${from.slice(0, 10)} → ${to.slice(0, 10)}`,
     '',
     `**main red time: ${redHoursMain} h** · ${runCount} completed runs`,
+    ...redByWorkflow.slice(0, 5).map(([name, h]) => `- ${name}: ${h} h`),
     '',
     '**Failed runs (workflow · branch · event)**',
     list(failures.slice(0, 10), ([k, n]) => `- ${n}× ${k}`, '- none'),

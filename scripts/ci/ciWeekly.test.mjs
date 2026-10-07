@@ -7,6 +7,7 @@ import {
   flakes,
   isRed,
   redHours,
+  redHoursByWorkflow,
   renderReport,
   topCauses,
   withStateAtStart,
@@ -69,6 +70,21 @@ describe('withStateAtStart', () => {
     assert.equal(merged.length, 2);
     // CI was red at the window start until its green run at hour 5.
     assert.equal(redHours(merged, T0, T0 + 10 * H), 5);
+  });
+});
+
+describe('redHoursByWorkflow', () => {
+  it('splits red time per workflow, worst first, dropping green ones', () => {
+    const runs = [
+      run({ conclusion: 'failure', updated_at: at(1) }),
+      run({ updated_at: at(2) }),
+      run({ workflow_id: 2, name: 'Nightly', conclusion: 'failure', updated_at: at(3) }),
+      run({ workflow_id: 3, name: 'Pages' }),
+    ];
+    assert.deepEqual(redHoursByWorkflow(runs, T0, T0 + 10 * H), [
+      ['Nightly', 7],
+      ['CI', 1],
+    ]);
   });
 });
 

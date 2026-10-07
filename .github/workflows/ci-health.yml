@@ -184,6 +184,7 @@ jobs:
               from: new Date(since).toISOString(),
               to: new Date(now).toISOString(),
               redHoursMain: m.redHours(mainRuns, since, now),
+              redByWorkflow: m.redHoursByWorkflow(mainRuns, since, now),
               failures: m.failuresBy(completed),
               rates: m.branchFailureRates(completed),
               flaky: m.flakes(annotations),
