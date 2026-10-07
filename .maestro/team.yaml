@@ -226,11 +226,24 @@ appId: com.inukshuk.app
 - tapOn:
     text: 'Map(, tab.*)?'
     retryTapIfNoChange: true
+# Team signal mode: the team button is the map's only team chrome.
 - extendedWaitUntil:
     visible:
-      id: 'team-map-chip'
+      id: 'team-fab'
     timeout: 10000
+- assertNotVisible: 'Search places'
 - takeScreenshot: team-map
+# Its menu: my status (shown on the map to the others).
+- tapOn:
+    id: 'team-fab'
+- tapOn:
+    id: 'team-fab-status'
+- tapOn:
+    id: 'team-status-arrived'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-status-card'
+    timeout: 5000
 # A pin: + → Pin a team message, its card with the thread.
 - tapOn: 'Map actions'
 - tapOn: 'Pin a team message'
@@ -250,9 +263,11 @@ appId: com.inukshuk.app
 - assertVisible: '.*Fallen tree here.*'
 - takeScreenshot: team-pin
 - tapOn: 'Close'
-# Leave the team (deletes it from this phone).
+# Leave the team (deletes it from this phone): the menu's Members & team.
 - tapOn:
-    id: 'team-map-chip'
+    id: 'team-fab'
+- tapOn:
+    id: 'team-fab-members'
 - extendedWaitUntil:
     visible:
       id: 'team-hub-screen'

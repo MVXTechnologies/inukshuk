@@ -147,7 +147,7 @@ describe('leaving a focused trail by tapping the map (2.1.1)', () => {
     expect(leave).toBeGreaterThan(0);
     expect(leave).toBeLessThan(press.indexOf('await tapHitsUserDot()'));
     expect(leave).toBeLessThan(press.indexOf('drawingRef.current.onAreaTap('));
-    expect(leave).toBeLessThan(press.indexOf('setPointAt(\n            pointChipAfterBareTap('));
+    expect(leave).toBeLessThan(press.indexOf('pointChipAfterBareTap(pointAt'));
   });
 
   it('closes the focus, forgets the camera snapshot and returns: no bubble, no glide back', () => {

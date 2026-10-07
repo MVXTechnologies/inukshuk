@@ -8,7 +8,6 @@
  */
 import type { TrackPhoto } from '@core/photos/model';
 import type { TeamPhoto } from '@core/teamui/comments';
-import { trailUrl } from '@core/teamui/alerts';
 import {
   teamPhotoFileExists,
   teamPhotoPaths,
@@ -17,9 +16,9 @@ import {
 } from '@data/team/teamPhotoFiles';
 import { useExtensionPrefs } from '@features/extensions/prefs';
 import { photoResizer } from '@features/photos/photoResizer';
+import { usePhotoCard } from '@features/photos/PhotoBottomCard';
 import { TrailPhotoLayers } from '@features/photos/TrailPhotoLayers';
 import { useTeamStore } from '@state/teamStore';
-import { useRouter } from 'expo-router';
 import { useEffect, useMemo } from 'react';
 import { create } from 'zustand';
 
@@ -68,7 +67,6 @@ export function TeamTrailPhotos({
   minZoom: number | null;
   deferPress: (run: () => void) => void;
 }) {
-  const router = useRouter();
   const { installedAt, show } = useExtensionPrefs('team');
   const teamId = useTeamStore((s) => s.activeId);
   const me = useTeamStore((s) => s.view?.me ?? null);
@@ -124,7 +122,10 @@ export function TeamTrailPhotos({
       deferPress={deferPress}
       onPhotoPress={(ids) => {
         const p = wanted.find((x) => x.id === ids[0]);
-        if (p) router.push(trailUrl(p.owner, p.trackId, me, p.id) as never);
+        if (p)
+          usePhotoCard
+            .getState()
+            .show({ kind: 'team', owner: p.owner, trackId: p.trackId, photoId: p.id });
       }}
     />
   );

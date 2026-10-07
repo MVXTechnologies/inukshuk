@@ -135,7 +135,8 @@ import { hitTestTeamMarks, useTeamMapMarks } from '@features/team/map/TeamMapMar
 import { useTeamMapFocus } from '@features/team/map/teamMapFocus';
 import { usePinDraft } from '@features/team/map/TeamPinComposer';
 import { TeamTrailPhotos } from '@features/team/map/TeamTrailPhotos';
-import { trailUrl as teamTrailUrl } from '@core/teamui/alerts';
+import { useTeamSheet, useTeamSignalMode } from '@features/team/map/teamMode';
+import { PhotoBottomCard, usePhotoCard } from '../photos/PhotoBottomCard';
 import { useTeamStore } from '@state/teamStore';
 import {
   hitTestTeam,
@@ -218,7 +219,6 @@ import { DepthPointLine } from './marine/DepthPointLine';
 import { MarineLegend } from './marine/MarineLegend';
 import { marineChartSource, useMarineChart } from './marine/useMarineChart';
 import { MainMapPhotoChip, MainMapPhotoLayers, useMainMapPhotos } from '../photos/MainMapPhotos';
-import { photoViewerHref } from '../photos/photoUri';
 import { PHOTO_TAP_FRESH_MS } from '@core/photos/mapStyle';
 import { MapPointChip, MapPointLine, hitMapPointChip } from './components/MapPointChip';
 import { ForecastCard } from './weather/ForecastCard';
@@ -351,6 +351,9 @@ function useThrottledLineFeature(
   return feature;
 }
 
+/** The first bare tap of a session hints at the long-press (coordinates moved there). */
+let holdHintShown = false;
+
 export function MapScreen() {
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
@@ -446,10 +449,17 @@ export function MapScreen() {
     cameraRef.current?.easeTo({ center, zoom, duration: 400 });
   }, []);
 
-  const openPhoto = useCallback(
-    (trackId: string, photoId: string) => router.push(photoViewerHref(trackId, photoId) as never),
-    [router],
-  );
+  // A photo tap opens the bottom card (owner 2026-10-07: not another page);
+  // the full-screen viewer is its expanded state.
+  const openPhoto = useCallback((trackId: string, photoId: string) => {
+    usePhotoCard.getState().show({ kind: 'own', trackId, photoId });
+  }, []);
+  // Team signal mode (#589): taps on the map signal the team.
+  const teamSignal = useTeamSignalMode();
+  const teamSignalRef = useRef(teamSignal);
+  useEffect(() => {
+    teamSignalRef.current = teamSignal;
+  }, [teamSignal]);
   // Tap-selected heat spot (set by onMapPress's hit-test below when a tap
   // lands on a "hot" spot with 2+ trails underneath it): drives the
   // HeatPointCarousel and which trail the heat layers highlight/dim. Null
@@ -2034,8 +2044,9 @@ export function MapScreen() {
             .select({ kind: 'pin', owner: markHit.mark.owner, id: markHit.mark.id });
         } else if (markHit.kind === 'bubble') {
           const ph = markHit.mark.photo;
-          const me = useTeamStore.getState().view?.me ?? '';
-          router.push(teamTrailUrl(ph.owner, ph.trackId, me, ph.id) as never);
+          usePhotoCard
+            .getState()
+            .show({ kind: 'team', owner: ph.owner, trackId: ph.trackId, photoId: ph.id });
         } else {
           router.push('/team/tasks' as never);
         }
@@ -2099,6 +2110,17 @@ export function MapScreen() {
               heatOn,
             )
           : { trackIds: [], hot: false };
+      // Team signal mode: a trail is a place to signal from, never its
+      // profile or focus (owner 2026-10-07).
+      if (teamSignalRef.current && lngLatArr && at.trackIds.length >= 1) {
+        const name = tracks.find((tr) => tr.id === at.trackIds[0])?.name ?? 'Trail';
+        useTeamMapSelection.getState().select(null);
+        setPointAt(null);
+        useTeamSheet
+          .getState()
+          .open({ kind: 'spot', at: [lngLatArr[0], lngLatArr[1]], trail: name });
+        return;
+      }
       if (lngLatArr && at.hot && at.trackIds.length >= 2) {
         drawingRef.current.closeAreaCard();
         inspect(null); // opening the carousel hides the inspect panel
@@ -2166,9 +2188,20 @@ export function MapScreen() {
             setExtensionHit(null);
             return;
           }
-          setPointAt(
-            pointChipAfterBareTap(pointAt, { latitude: lngLatArr[1], longitude: lngLatArr[0] }),
-          );
+          // Owner 2026-10-07: a plain tap on the bare map does nothing; the
+          // coordinates / Navigate / Convert chip is a long-press. Weather and
+          // marine keep their tap readout (it is what those layers are for).
+          if (weatherLayer !== null || marineActive) {
+            setPointAt(
+              pointChipAfterBareTap(pointAt, { latitude: lngLatArr[1], longitude: lngLatArr[0] }),
+            );
+          } else if (pointAt !== null || useTeamSheet.getState().sheet !== null) {
+            setPointAt(null);
+            useTeamSheet.getState().close();
+          } else if (!holdHintShown) {
+            holdHintShown = true;
+            showSnack('Tip: hold anywhere for coordinates, Navigate and Convert');
+          }
         }
       }
       setViewWp(null); // tapping empty map dismisses the waypoint viewer
@@ -2177,6 +2210,10 @@ export function MapScreen() {
     },
     [
       router,
+      marineActive,
+      showSnack,
+      tracks,
+      weatherLayer,
       shownExtensions,
       extensionHit,
       visiblePins,
@@ -2495,6 +2532,14 @@ export function MapScreen() {
               const lngLat = e.nativeEvent?.lngLat;
               if (!lngLat) return;
               const at = { longitude: lngLat[0], latitude: lngLat[1] };
+              // Team signal mode: the team's menu for this place (Navigate,
+              // Coordinates and Convert as its secondary row).
+              if (teamSignalRef.current) {
+                setPointAt(null);
+                useTeamMapSelection.getState().select(null);
+                useTeamSheet.getState().open({ kind: 'press', at: [lngLat[0], lngLat[1]] });
+                return;
+              }
               // Weather/marine gesture (unchanged): long-press opens the
               // forecast card (ECCC forecast + CHS tides) for that point.
               if ((weatherLayer !== null || marineActive) && !offlineOnly) {
@@ -2506,8 +2551,9 @@ export function MapScreen() {
               // permanent chrome — the only thing it adds to the screen is the
               // pin and its readout chip, both of which the ✕ clears. A second
               // long-press moves the pin rather than stacking another.
-              setDestination(at);
-              showSnack(`Destination set — ${formatLatLng(at.latitude, at.longitude)}`);
+              // Owner 2026-10-07: long-press is the coordinates chip (Navigate,
+              // waypoint, Convert); it no longer drops a destination by itself.
+              setPointAt(at);
             }}
             // NOT onWillStartLoadingMap -> setMapLoaded(false): that fires on
             // every STYLE reload as well as a real (re)mount, and the false
@@ -3080,7 +3126,7 @@ export function MapScreen() {
             {shownTrail !== null ? (
               <ShownTrailPill shown={shownTrail} />
             ) : (
-              !searchOpen && <MapSearchPill onPress={() => void openPlaceSearch()} />
+              !searchOpen && !teamSignal && <MapSearchPill onPress={() => void openPlaceSearch()} />
             )}
           </View>
         )}
@@ -3500,17 +3546,24 @@ export function MapScreen() {
           a tapped teammate's or shared waypoint's card. */}
         {makeMapState === null && (
           <TeamMapOverlay
-            top={
-              insets.top +
-              TOP_CHIP_OFFSET +
-              (marineActive || destination !== null || displayCondition === 'night' ? 44 : 0)
-            }
+            fabBottom={(recordingPanelUp ? panelHeight : 0) + 72}
+            onPointActions={(p, what) => {
+              const at = { longitude: p[0], latitude: p[1] };
+              if (what === 'navigate') void openGoToCoordinates(at);
+              else if (what === 'convert')
+                openConvert(router, prefillFromPoint(at.latitude, at.longitude));
+              else setPointAt(at);
+            }}
             here={location}
             cardSlotFree={cardSlotFree && viewWaypoint === null && extensionHit === null}
             cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight)}
             onNavigate={(latitude, longitude) => setDestination({ latitude, longitude })}
           />
         )}
+        {/* A tapped photo's bottom card (app-wide, owner 2026-10-07). */}
+        <View style={waypointCardDockStyle(recordingPanelUp, panelHeight)} pointerEvents="box-none">
+          <PhotoBottomCard />
+        </View>
 
         {/* Right-edge activity carousel: opened by tapping a "hot" heat spot
           (onMapPress above). Mutually exclusive with TrailInspectPanel — the

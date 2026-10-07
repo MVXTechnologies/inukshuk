@@ -233,17 +233,21 @@ describe('the map card', () => {
     await render(
       wrap(
         <TeamMapOverlay
-          top={0}
           here={{ latitude: 47, longitude: -71 }}
           cardSlotFree
           cardStyle={{}}
+          fabBottom={72}
           onNavigate={jest.fn()}
+          onPointActions={jest.fn()}
         />,
       ),
     );
-    expect(screen.getByTestId('team-card-range').props.children).toBe('1.1 km N · 0°');
+    // The popup: position age, accuracy, distance and direction; its actions.
+    expect(screen.getByTestId('team-card-range').props.children).toBe('just now · ±5 m · 1.1 km N');
     expect(screen.getByText('Julie')).toBeTruthy();
-    expect(screen.getByTestId('team-map-chip')).toBeTruthy();
+    expect(screen.getByTestId('team-member-where')).toBeTruthy();
+    // Signal mode (the extension switch on, a team open): the team button.
+    expect(screen.getByTestId('team-fab')).toBeTruthy();
     await session.stopMesh();
   });
 });

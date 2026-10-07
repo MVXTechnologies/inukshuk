@@ -1,26 +1,29 @@
 /**
- * Team mode's chrome on the map (#589, mockup `team-map`): the team chip in
- * the top-centre lane (under the receiver chip when that one is up) and the
- * card of a tapped teammate or shared waypoint — distance and bearing from
- * me, the fix's age and accuracy, Navigate and Message. A plain themed View
+ * Team mode's chrome on the map (#589, mockups v2): in signal mode the team
+ * action button (bottom right, its badge the only team indicator) and its
+ * compact cards; the popup of a tapped teammate (status, position age,
+ * distance; message, task, "where are you?", centre, go to) or shared
+ * waypoint; pins and the pin composer. A plain themed View
  * for the card (paper-surface-ios-flex-collapse); its own state store so
  * MapScreen only routes the tap.
  */
 import { rangeAndBearing, shortAge } from '@core/teamui/positions';
+import { STATUS_LABEL } from '@core/teamui/system';
 import { useExtensionPrefs } from '@features/extensions/prefs';
-import { useReceiverChip } from '@features/gnss/useReceiverChip';
-import { useTeamStore } from '@state/teamStore';
+import { teamService, useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import type { StyleProp, ViewStyle } from 'react-native';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Text } from 'react-native-paper';
 import { create } from 'zustand';
 
-import { MemberAvatar, ROLE_LABEL } from '../components';
-import { openPeers } from '../syncLine';
+import { MemberAvatar } from '../components';
 import { TEAM_TAP_LAYERS } from './layerIds';
+import { Round, TeamFab, TeamSheetCard } from './TeamCards';
+import { useTeamMapFocus } from './teamMapFocus';
+import { useTeamSheet, useTeamSignalMode } from './teamMode';
 import { TeamPinCard } from './TeamPinCard';
 import { TeamPinComposer, usePinDraft } from './TeamPinComposer';
 
@@ -72,38 +75,38 @@ const dist = (m: number) =>
   m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(m < 10_000 ? 1 : 0)} km`;
 
 export function TeamMapOverlay({
-  top,
   here,
   cardStyle,
   cardSlotFree,
+  fabBottom,
   onNavigate,
+  onPointActions,
 }: {
-  top: number;
   /** My position, for distance and bearing. */
   here: { latitude: number; longitude: number } | null;
   cardStyle: StyleProp<ViewStyle>;
   cardSlotFree: boolean;
+  /** Where the team button sits (above the bottom chrome). */
+  fabBottom: number;
   onNavigate: (latitude: number, longitude: number) => void;
+  /** Long-press menu's secondary row: Navigate here / Coordinates / Convert. */
+  onPointActions: (at: [number, number], what: 'navigate' | 'coordinates' | 'convert') => void;
 }) {
   const t = useSchemeTokens();
   const router = useRouter();
   const { installedAt, show } = useExtensionPrefs('team');
   const view = useTeamStore((s) => s.view);
-  const peers = useTeamStore((s) => s.peers);
-  const unread = useTeamStore((s) => s.unread);
   const positions = useTeamStore((s) => s.positions);
+  const statuses = useTeamStore((s) => s.statuses);
   const shares = useTeamStore((s) => s.shares);
   const pins = useTeamStore((s) => s.pins);
   const draft = usePinDraft((s) => s.at);
-  const meshRunning = useTeamStore((s) => s.meshRunning);
   const hit = useTeamMapSelection((s) => s.hit);
   const select = useTeamMapSelection((s) => s.select);
-  const gnssChip = useReceiverChip();
+  const sheet = useTeamSheet((s) => s.sheet);
+  const signal = useTeamSignalMode();
   if (installedAt === 0 || !show || view === null) return null;
 
-  const nearby = openPeers(peers).length;
-  const others = view.activeCount - 1;
-  const faces = view.members.filter((m) => m.active).slice(0, 4);
   const member = hit?.kind === 'member' ? positions.find((p) => p.id === hit.id) : undefined;
   const row = member ? view.members.find((m) => m.id === member.id) : undefined;
   const wpt = hit?.kind === 'waypoint' ? shares.waypoints.find((w) => w.id === hit.id) : undefined;
@@ -115,55 +118,124 @@ export function TeamMapOverlay({
   const rb = target && here ? rangeAndBearing(here, target) : null;
   const pin =
     hit?.kind === 'pin' ? pins.find((p) => p.owner === hit.owner && p.id === hit.id) : undefined;
+  const status = member ? statuses.get(member.id) : undefined;
+  const card = sheet !== null && sheet.kind !== 'menu';
 
   return (
     <>
-      <View style={[styles.lane, { top: top + (gnssChip ? 44 : 0) }]} pointerEvents="box-none">
-        <Pressable
-          onPress={() => router.push('/team')}
-          style={[
-            styles.chip,
-            { backgroundColor: t.elevation.level2, borderColor: t.outlineVariant },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={`${view.name}, ${nearby} of ${others} teammates nearby${unread ? `, ${unread} unread` : ''}`}
-          testID="team-map-chip"
-        >
-          <View style={styles.faces}>
-            {faces.map((m, i) => (
-              <View
-                key={m.id}
-                style={[styles.face, i > 0 && styles.overlap, { borderColor: t.elevation.level2 }]}
-              >
-                <MemberAvatar initials={m.initials} color={m.color} size={24} />
-              </View>
-            ))}
-          </View>
-          <Text variant="labelLarge" style={[styles.chipName, { color: t.ink }]} numberOfLines={1}>
-            {view.name}
-          </Text>
-          <Text variant="labelMedium" style={{ color: t.inkVariant }} numberOfLines={1}>
-            {!meshRunning
-              ? '· not syncing'
-              : others === 0
-                ? '· just you'
-                : `· ${nearby}/${others} nearby`}
-          </Text>
-          {unread > 0 && <View style={[styles.dot, { backgroundColor: t.status.gpsLostInk }]} />}
-        </Pressable>
-      </View>
-
+      {signal && <TeamFab bottom={fabBottom} />}
       {draft !== null && (
         <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
           <TeamPinComposer onPinned={(owner, id) => select({ kind: 'pin', owner, id })} />
         </View>
       )}
-      {draft === null && cardSlotFree && pin && (
+      {draft === null && card && sheet !== null && (
+        <View style={[cardStyle, styles.leaveFab]} pointerEvents="box-none" testID="team-card-dock">
+          <TeamSheetCard sheet={sheet} onPointActions={onPointActions} />
+        </View>
+      )}
+      {draft === null && !card && cardSlotFree && pin && (
         <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
           <TeamPinCard pin={pin} view={view} here={here} onClose={() => select(null)} />
         </View>
       )}
-      {draft === null && cardSlotFree && (member || wpt) && (
+      {draft === null && !card && cardSlotFree && member && row && (
+        <View style={[cardStyle, styles.leaveFab]} pointerEvents="box-none" testID="team-card-dock">
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: t.elevation.level2, shadowColor: palette.shadow },
+            ]}
+            testID="team-card"
+          >
+            <View style={styles.cardHead}>
+              <MemberAvatar initials={row.initials} color={row.color} size={36} />
+              <View style={styles.flex}>
+                <Text variant="titleSmall" style={{ color: t.ink }} numberOfLines={1}>
+                  {status ? `${member.name} · ${STATUS_LABEL[status.id]}` : member.name}
+                </Text>
+                <Text
+                  variant="bodySmall"
+                  style={{ color: member.band === 'fresh' ? t.inkVariant : t.status.gpsLostInk }}
+                  numberOfLines={1}
+                  testID="team-card-range"
+                >
+                  {[
+                    member.band === 'lost'
+                      ? `lost · ${shortAge(member.ageMs)} ago`
+                      : shortAge(member.ageMs) === 'now'
+                        ? 'just now'
+                        : `${shortAge(member.ageMs)} ago`,
+                    member.accuracy !== null ? `±${Math.round(member.accuracy)} m` : null,
+                    rb ? `${dist(rb.meters)} ${rb.compass}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+              </View>
+              <IconButton
+                icon="close"
+                size={20}
+                onPress={() => select(null)}
+                accessibilityLabel="Close"
+              />
+            </View>
+            <View style={styles.roundRow}>
+              <Round
+                icon="message-text-outline"
+                label="Message"
+                testID="team-member-message"
+                onPress={() => {
+                  select(null);
+                  router.push('/team/chat');
+                }}
+              />
+              {row.role !== 'guest' && view.members.find((m) => m.isMe)?.role !== 'guest' && (
+                <Round
+                  icon="checkbox-marked-circle-plus-outline"
+                  label="Task"
+                  testID="team-member-task"
+                  onPress={() => {
+                    select(null);
+                    router.push(`/team/task-new?to=${member.id}` as never);
+                  }}
+                />
+              )}
+              <Round
+                icon="map-marker-question-outline"
+                label="Where are you?"
+                testID="team-member-where"
+                onPress={() => {
+                  const session = teamService()?.active;
+                  const text = `@${member.name} where are you?`;
+                  session?.sendMessage(text, {
+                    mentions: [member.id],
+                    aud: { m: [member.id, view.me] },
+                  });
+                  useTeamStore.getState().refresh();
+                  select(null);
+                }}
+              />
+              <Round
+                icon="crosshairs-gps"
+                label="Centre"
+                testID="team-member-centre"
+                onPress={() => useTeamMapFocus.getState().focus(member.lon, member.lat, 16)}
+              />
+              <Round
+                icon="navigation-variant-outline"
+                label="Go to"
+                testID="team-member-goto"
+                onPress={() => {
+                  onNavigate(member.lat, member.lon);
+                  select(null);
+                }}
+              />
+            </View>
+          </View>
+        </View>
+      )}
+      {draft === null && !card && cardSlotFree && wpt && (
         <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
           <View
             style={[
@@ -173,59 +245,40 @@ export function TeamMapOverlay({
             testID="team-card"
           >
             <View style={styles.cardHead}>
-              {member && row ? (
-                <MemberAvatar initials={row.initials} color={row.color} size={36} />
-              ) : (
-                <Icon source="map-marker" size={28} color={t.ink} />
-              )}
+              <Icon source="map-marker" size={28} color={t.ink} />
               <View style={styles.flex}>
-                <Text variant="titleMedium" style={{ color: t.ink }} numberOfLines={1}>
-                  {member ? member.name : wpt?.name}
+                <Text variant="titleSmall" style={{ color: t.ink }} numberOfLines={1}>
+                  {wpt.name}
                 </Text>
                 <Text variant="bodySmall" style={{ color: t.inkVariant }} numberOfLines={2}>
-                  {member
-                    ? `${ROLE_LABEL[member.role]} · ${shortAge(member.ageMs) === 'now' ? 'just now' : `${shortAge(member.ageMs)} ago`}${member.accuracy !== null ? ` · ±${Math.round(member.accuracy)} m` : ''}`
-                    : `Shared waypoint${wpt?.note ? ` · ${wpt.note}` : ''}`}
+                  {[
+                    `Shared waypoint${wpt.note ? ` · ${wpt.note}` : ''}`,
+                    rb ? `${dist(rb.meters)} ${rb.compass}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </Text>
               </View>
-              <IconButton icon="close" onPress={() => select(null)} accessibilityLabel="Close" />
+              <IconButton
+                icon="close"
+                size={20}
+                onPress={() => select(null)}
+                accessibilityLabel="Close"
+              />
             </View>
-            <View style={styles.rangeRow}>
-              <Icon source="navigation-variant-outline" size={18} color={t.inkVariant} />
-              <Text variant="titleSmall" style={{ color: t.ink }} testID="team-card-range">
-                {rb
-                  ? `${dist(rb.meters)} ${rb.compass} · ${Math.round(rb.bearingDeg)}°`
-                  : 'Your position is unknown'}
-              </Text>
-            </View>
-            <View style={styles.actions}>
-              {target && (
-                <Button
-                  mode="contained"
-                  icon="navigation-variant"
-                  compact
-                  onPress={() => {
-                    onNavigate(target.lat, target.lon);
-                    select(null);
-                  }}
-                >
-                  Navigate
-                </Button>
-              )}
-              {member && (
-                <Button
-                  mode="outlined"
-                  icon="message-text-outline"
-                  compact
-                  onPress={() => {
-                    select(null);
-                    router.push('/team/chat');
-                  }}
-                >
-                  Message
-                </Button>
-              )}
-            </View>
+            {target && (
+              <Button
+                mode="contained"
+                icon="navigation-variant"
+                compact
+                onPress={() => {
+                  onNavigate(target.lat, target.lon);
+                  select(null);
+                }}
+              >
+                Navigate
+              </Button>
+            )}
           </View>
         </View>
       )}
@@ -235,27 +288,12 @@ export function TeamMapOverlay({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  lane: { position: 'absolute', left: 76, right: 76, alignItems: 'center', zIndex: 5 },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingLeft: 6,
-    paddingRight: 12,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    maxWidth: '100%',
-  },
-  chipName: { flexShrink: 1 },
-  faces: { flexDirection: 'row' },
-  face: { borderWidth: 2, borderRadius: 14 },
-  overlap: { marginLeft: -10 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
+  /** Cards stop short of the team button's column. */
+  leaveFab: { right: 84 },
   card: {
     borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingTop: 6,
+    paddingHorizontal: 12,
+    paddingTop: 4,
     paddingBottom: 12,
     gap: 8,
     shadowOpacity: 0.2,
@@ -263,7 +301,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
   },
-  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  rangeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  actions: { flexDirection: 'row', gap: 8 },
+  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 4 },
+  roundRow: { flexDirection: 'row', justifyContent: 'space-around' },
 });
