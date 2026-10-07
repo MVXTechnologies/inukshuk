@@ -12,9 +12,20 @@
 # regexes (maestro-ios-tap-traps). The accordion opener is guarded.
 appId: com.inukshuk.app
 ---
-- launchApp:
-    permissions:
-      location: allow
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000

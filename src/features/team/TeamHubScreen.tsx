@@ -23,6 +23,7 @@ import {
   ChoiceRow,
   MemberAvatar,
   Note,
+  ROLE_LABEL,
   RoleChip,
   SectionLabel,
   TeamScreenFrame,
@@ -302,13 +303,13 @@ export function TeamHubScreen() {
             onPress={() => router.push({ pathname: '/team/member/[id]', params: { id: m.id } })}
             style={[styles.member, !m.active && styles.faded]}
             accessibilityRole="button"
-            accessibilityLabel={`${m.name}, ${m.role}`}
+            accessibilityLabel={`${m.name}, ${m.active ? ROLE_LABEL[m.role] : 'Removed'}`}
             testID={`team-member-${m.isMe ? 'me' : m.name}`}
           >
             <MemberAvatar
               initials={m.initials}
               color={m.color}
-              online={m.isMe ? undefined : connected.has(m.id)}
+              online={m.isMe || !m.active ? undefined : connected.has(m.id)}
               dim={!m.active}
             />
             <View style={styles.flex}>

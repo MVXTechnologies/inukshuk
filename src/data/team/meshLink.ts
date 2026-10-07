@@ -97,8 +97,19 @@ export class MeshLink {
     const existing = this.manual.get(key);
     if (existing !== undefined) return existing;
     try {
-      const id = this.transport.connect(host, port, { reconnect: true });
+      // One at a time (a joiner): no retries, the queue moves on instead; a
+      // typed or hinted address goes first.
+      const single = this.options.oneAtATime === true;
+      if (single && this.current !== null) {
+        const old = this.current;
+        this.current = null;
+        this.services.delete(old.serviceId);
+        this.transport.disconnect(old.dialId);
+        if (!old.serviceId.startsWith('manual:')) this.queue.unshift(old.serviceId);
+      }
+      const id = this.transport.connect(host, port, { reconnect: !single });
       this.manual.set(key, id);
+      if (single) this.current = { serviceId: `manual:${key}`, dialId: id };
       this.options.onChange();
       return id;
     } catch (e) {
@@ -192,8 +203,9 @@ export class MeshLink {
           const { serviceId } = this.current;
           this.services.delete(serviceId);
           this.current = null;
+          if (serviceId.startsWith('manual:')) this.manual.delete(serviceId.slice(7));
           const next = this.queue.shift();
-          this.queue.push(serviceId);
+          if (!serviceId.startsWith('manual:')) this.queue.push(serviceId);
           if (next !== undefined && next !== serviceId) this.dialService(next);
         }
         this.options.onChange();

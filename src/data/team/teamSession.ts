@@ -120,6 +120,8 @@ export class TeamSession {
   private host: MeshSessionHost<SessionEvent, SyncSession> | null = null;
   private readonly meta = new Map<string, PeerMeta>();
   readonly joinNotices: JoinNotice[] = [];
+  /** Connections on which a joiner was admitted (peer id → member id). */
+  private readonly admittedOn = new Map<string, string>();
   private cachedView: { at: number; view: TeamView } | null = null;
   private dirty = true;
   private profileCheckBusy = false;
@@ -313,11 +315,12 @@ export class TeamSession {
       case 'open': {
         if (meta) meta.joining = event.joining;
         if (event.joining && session.safetyCode !== undefined) {
+          // The core admits during the handshake, so 'admitted' may come first.
           this.joinNotices.unshift({
             peerId,
             code: session.safetyCode,
             at: this.deps.now(),
-            memberId: null,
+            memberId: this.admittedOn.get(peerId) ?? null,
           });
           this.joinNotices.splice(5);
         }
@@ -330,16 +333,22 @@ export class TeamSession {
         this.afterStored(event.report.accepted, peerId);
         return;
       case 'admitted': {
+        this.admittedOn.set(peerId, event.member);
         const notice = this.joinNotices.find((n) => n.peerId === peerId);
         if (notice) notice.memberId = event.member;
         this.gossip([event.op], peerId);
         this.changed();
         return;
       }
-      case 'closed':
+      case 'closed': {
         this.meta.delete(peerId);
+        this.admittedOn.delete(peerId);
+        // A join attempt that ended without an admission: its code is moot.
+        const i = this.joinNotices.findIndex((n) => n.peerId === peerId && n.memberId === null);
+        if (i >= 0) this.joinNotices.splice(i, 1);
         this.changed();
         return;
+      }
       default:
         return;
     }
@@ -600,7 +609,12 @@ export class TeamSession {
     if (blocked) return blocked;
     const id = this.control('m.remove', { m: memberId, cut: cutFor(this.replica.state, memberId) });
     if (!this.accepted(id)) return 'not-allowed';
-    return this.rotateKey();
+    const err = this.rotateKey();
+    // Their phone may still be connected: it got the removal; now hang up.
+    for (const p of this.host?.peers() ?? []) {
+      if (p.session.peer === memberId) this.host?.close(p.peer.peerId, 'removed');
+    }
+    return err;
   }
 
   rotateKey(): ActionError | null {

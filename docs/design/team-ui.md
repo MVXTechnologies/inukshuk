@@ -69,6 +69,13 @@ src/core/teamui/              pure view logic (tested): roster, roles, groups,
 0.1.1 (QR encoding, pure JS, already in the tree through the Expo CLI) does
 not. `VIBRATE` is added to the Android manifest (normal permission).
 
+Fingerprints at this PR (CI "Native runtime vs store builds", 2026-10-07): iOS
+`b21b57c714d5d9b66f92703365b5b6c41b17439f`, Android
+`8a04e3fc3c8ca822eda042f50cea95f1d49810ac` (store 2.3.0: iOS `f81e7412…`,
+Android `884f71ce…`). Changed sources: the autolinking config, the Expo config,
+`modules/inukshuk-mesh`, `expo-camera`, `expo-crypto`, `expo-secure-store`,
+`plugins/withTeamMesh.js`. A store build is required.
+
 ## Privacy and store texts (owner)
 
 - **App Store privacy (App Privacy):** no change for data _collected by us_:
