@@ -106,8 +106,16 @@ jobs:
       # to fetch a missing NDK: install the NDK first (EAS images have one).
       - name: Pre-install the NDK (pip variant)
         if: matrix.cmake == 'pip'
+        # Bounded, logged retry of the download only (a truncated NDK zip
+        # failed a build on 2026-10-07); source.properties is written last.
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" > /dev/null || true
+          for attempt in 1 2 3; do
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" > /dev/null || true
+            [ -f "$ANDROID_HOME/ndk/$NDK_VERSION/source.properties" ] && break
+            [ "$attempt" = 3 ] && { echo "::error::ndk;$NDK_VERSION did not install after 3 attempts"; exit 1; }
+            echo "::warning title=NDK download retried::attempt $attempt failed, retrying in 20s"
+            sleep 20
+          done
           test -f "$ANDROID_HOME/ndk/$NDK_VERSION/build/cmake/android.toolchain.cmake"
 
       - name: Make the runner look like an EAS Android worker (no CMake)

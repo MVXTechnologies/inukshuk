@@ -13,6 +13,22 @@
 // GestureDetector, whose native module does not exist under Jest.
 import 'react-native-gesture-handler/jestSetup';
 
+// Resolve every lazy global while this test file's environment is still live.
+// Expo's winter runtime installs `fetch` (and friends) as lazy getters that
+// `require` their module on first read, and jest-runtime's teardown reads
+// EVERY global (Runtime.resetModules: Object.keys(global).forEach(...)) to
+// clear mocks. A file that never touched `fetch` therefore required
+// expo-modules-core during teardown, after the native-module mocks were gone:
+// its JS-logger setup warned "An error occurred while requiring the
+// 'ExpoModulesCoreJSLogger' module", which Jest reported as "Cannot log after
+// tests are done" on every CI run. Reading the globals here does the same
+// reads at a time they can succeed silently.
+afterAll(() => {
+  for (const key of Object.keys(globalThis)) {
+    void (globalThis as Record<string, unknown>)[key];
+  }
+});
+
 // Reanimated 4 (InukshukLoader). Its native entry needs the Worklets native
 // module, which does not exist under Jest: swap both packages for their own
 // shipped mocks (hooks run their worklet once, synchronously; animations

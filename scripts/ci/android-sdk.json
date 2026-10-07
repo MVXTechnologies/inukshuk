@@ -1,0 +1,6 @@
+{
+  "$comment": "AGP's built-in NDK and CMake versions, used by libraries that pin neither (see androidSdk.mjs). Keyed on the AGP version in react-native's libs.versions.toml. Verified against a CI build log (2026-10-07, AGP 8.12.0): ':dr.pogodin_react-native-static-server' downloaded ndk;27.0.12077973 and react-native-nitro-modules' configureCMake downloaded cmake;3.22.1.",
+  "agpDefaults": {
+    "8.12.0": { "ndk": "27.0.12077973", "cmake": "3.22.1" }
+  }
+}

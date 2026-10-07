@@ -26,8 +26,10 @@ on:
   schedule:
     - cron: '15 5 * * *'
 
+# The event is in the group: a manual dispatch on main used to cancel the
+# nightly scheduled run (2026-10-06), which then reported nothing.
 concurrency:
-  group: e2e-${{ github.ref }}
+  group: e2e-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 # Least privilege: the GITHUB_TOKEN can only read the repository.
@@ -69,11 +71,12 @@ jobs:
 
       # Same lockfile-keyed Gradle cache as native-build.yml — ~/.gradle exists
       # independently of the prebuild-generated android/ dir (setup-java's
-      # `cache: gradle` variant hard-fails here, see #77). Saved only when the
-      # job succeeds, which the old all-in-one job (build + every flow) rarely
-      # did — this job is the build alone.
-      - name: Cache Gradle dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # `cache: gradle` variant hard-fails here, see #77). Restored on every
+      # run, saved only from main after a successful build (see
+      # native-build.yml for why branches no longer save it).
+      - name: Restore Gradle dependencies
+        id: gradle-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.gradle/caches
@@ -82,6 +85,30 @@ jobs:
           restore-keys: gradle-${{ runner.os }}-
 
       - run: npm ci
+
+      # The NDKs, CMake, platform and build-tools Gradle needs, installed up
+      # front with a bounded, logged retry; Gradle may not download any itself
+      # (-Pandroid.builder.sdkDownload=false). See native-build.yml.
+      - name: Resolve Android SDK components
+        id: sdk
+        run: node scripts/ci/android-sdk.mjs outputs >> "$GITHUB_OUTPUT"
+
+      - name: Restore Android NDK + CMake
+        id: sdk-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.sdk.outputs.paths }}
+          key: ${{ steps.sdk.outputs.key }}
+
+      - name: Install Android SDK components (bounded retry)
+        run: node scripts/ci/android-sdk.mjs install
+
+      - name: Save Android NDK + CMake (main only)
+        if: steps.sdk-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.sdk.outputs.paths }}
+          key: ${{ steps.sdk.outputs.key }}
 
       # Convert's PROJ static libs, x86_64 only like the APK below.
       - name: Cache PROJ build (Convert)
@@ -102,12 +129,21 @@ jobs:
       - name: Prebuild + assemble release APK
         run: |
           npx expo prebuild --platform android --no-install
-          cd android && ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=x86_64
+          cd android && ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=x86_64 -Pandroid.builder.sdkDownload=false
         env:
           GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g
           # Point the map store at the loopback fixture catalog served by
           # e2e-attempts.sh (adb reverse tcp:8787) — CI must never hit NRCan.
           CATALOG_MANIFEST_URL: http://127.0.0.1:8787/index.json
+
+      - name: Save Gradle dependencies (main only)
+        if: steps.gradle-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -163,9 +199,25 @@ jobs:
           name: e2e-apk
           path: e2e-apk
 
+      # Pinned: an unpinned installer takes whatever Maestro released last
+      # night, so a CLI change could turn every shard red with no change of
+      # ours. Bump deliberately (and re-run every shard) when upgrading. The
+      # installer is downloaded to a file first, so a truncated download can
+      # never run as a partial script; only that download is retried.
       - name: Install Maestro
+        env:
+          MAESTRO_VERSION: 2.11.0
         run: |
-          curl -Ls https://get.maestro.mobile.dev | bash
+          for attempt in 1 2 3; do
+            if curl -fsSL --retry 2 -o "$RUNNER_TEMP/install-maestro.sh" https://get.maestro.mobile.dev \
+              && bash "$RUNNER_TEMP/install-maestro.sh"; then
+              break
+            fi
+            [ "$attempt" = 3 ] && { echo "::error::Maestro install failed 3 times"; exit 1; }
+            echo "::warning title=Maestro install retried::attempt $attempt failed, retrying in 20s"
+            sleep 20
+          done
+          "$HOME/.maestro/bin/maestro" --version
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
       - name: Run the shard's flows on an emulator

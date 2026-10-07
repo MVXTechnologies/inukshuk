@@ -35,6 +35,18 @@ it('is "no" when the store cannot connect', async () => {
   expect(s.fetchTips).not.toHaveBeenCalled();
 });
 
+it('leaves no probe timer behind once the store answers', async () => {
+  jest.useFakeTimers();
+  try {
+    mockGetTipStore.mockReturnValue(store(true, [{ id: 'tip_medium', displayPrice: '$6.99' }]));
+    await probeTipsAvailability();
+    expect(useTipsAvailability.getState().state).toBe('yes');
+    expect(jest.getTimerCount()).toBe(0);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
 it('is "yes" once a tip product comes back, and probes only once', async () => {
   const s = store(true, [{ id: 'tip_medium', displayPrice: '$6.99' }]);
   mockGetTipStore.mockReturnValue(s);

@@ -20,8 +20,10 @@ on:
     # 04:30 UTC daily — catches breakage from new Xcode / Android SDK images.
     - cron: '30 4 * * *'
 
+# A PR push supersedes that PR's previous run. The event is in the group so a
+# manual dispatch on main and the nightly schedule never cancel each other.
 concurrency:
-  group: native-${{ github.ref }}
+  group: native-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 # Least privilege: the GITHUB_TOKEN can only read the repository. A job that
@@ -62,7 +64,7 @@ jobs:
             echo "native=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           printf '%s\n' "$files"
-          native_re='^(package\.json|package-lock\.json|app\.config\.ts|app\.json|\.github/workflows/native-build\.yml)$|^(src|app|assets|plugins|modules)/'
+          native_re='^(package\.json|package-lock\.json|app\.config\.ts|app\.json|\.github/workflows/native-build\.yml)$|^(src|app|assets|plugins|modules)/|^scripts/ci/android(Sdk|-sdk)\.'
           if printf '%s\n' "$files" | grep -Eq "$native_re"; then
             echo "native=true" >> "$GITHUB_OUTPUT"
           else
@@ -121,8 +123,16 @@ jobs:
       # (setup-java's `cache: gradle` is not — it keys on gradle files that
       # don't exist at checkout, see #77). Keyed on the lockfile since the
       # native deps derive from the RN/Expo packages.
-      - name: Cache Gradle dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      #
+      # Restored everywhere, SAVED only from main ("Save Gradle dependencies"
+      # below). Every PR used to save its own 2.6 GB copy under its own ref,
+      # which kept the repo's 10 GB cache over its limit (10.7 GB on
+      # 2026-10-07) and evicted main's entries; the cold builds that followed
+      # fetched everything from Maven Central again — the source of that
+      # day's "Could not find error_prone_annotations-2.15.0.jar".
+      - name: Restore Gradle dependencies
+        id: gradle-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.gradle/caches
@@ -131,6 +141,35 @@ jobs:
           restore-keys: gradle-${{ runner.os }}-
 
       - run: npm ci
+
+      # Every SDK component Gradle needs (platform, build-tools, both NDKs,
+      # CMake; scripts/ci/androidSdk.mjs), installed HERE with a bounded,
+      # logged retry of the download only, never left to AGP: AGP fetches a
+      # missing one mid-build with no retry, and on 2026-10-07 a truncated
+      # ndk;27.0.12077973 zip and a refused cmake;3.22.1 each failed a
+      # 20-minute build. Gradle then runs with -Pandroid.builder.sdkDownload=
+      # false, so anything missed here fails at configuration time, naming the
+      # component, instead of being downloaded.
+      - name: Resolve Android SDK components
+        id: sdk
+        run: node scripts/ci/android-sdk.mjs outputs >> "$GITHUB_OUTPUT"
+
+      - name: Restore Android NDK + CMake
+        id: sdk-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.sdk.outputs.paths }}
+          key: ${{ steps.sdk.outputs.key }}
+
+      - name: Install Android SDK components (bounded retry)
+        run: node scripts/ci/android-sdk.mjs install
+
+      - name: Save Android NDK + CMake (main only)
+        if: steps.sdk-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.sdk.outputs.paths }}
+          key: ${{ steps.sdk.outputs.key }}
 
       # Convert's PROJ static libs + proj.db + bundled grids (gitignored; built
       # from sha-pinned sources), cached on the scripts that pin them.
@@ -149,8 +188,17 @@ jobs:
         run: npx expo prebuild --platform android --no-install
 
       - name: Compile debug APK
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon -Pandroid.builder.sdkDownload=false
         working-directory: android
+
+      - name: Save Gradle dependencies (main only)
+        if: steps.gradle-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

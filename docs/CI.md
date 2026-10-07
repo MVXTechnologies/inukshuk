@@ -14,6 +14,7 @@ tests, and corrects itself without anyone watching.
 | `ota-update.yml`           | push to `main` (JS/assets)           | publishes an EAS Update so installed apps self-correct                                               |
 | `release.yml`              | version tag `v*`; manual             | EAS build + auto-submit to App Store & Play Store                                                    |
 | `dependabot-automerge.yml` | Dependabot PRs                       | auto-merges green minor/patch updates, except native-bearing ones (they need a store build)          |
+| `ci-health.yml`            | every 3 h; manual                    | one `ci-health` issue listing every workflow whose latest run on `main` (24 h) is red; auto-closes   |
 
 Plus `.github/dependabot.yml` (weekly npm + actions updates, grouped).
 
@@ -41,7 +42,8 @@ Plus `.github/dependabot.yml` (weekly npm + actions updates, grouped).
   unmergeable (#369). Instead a cheap `changes` job diffs the PR against its
   base, and when nothing native-affecting changed (`package.json`,
   `package-lock.json`, `app.config.ts`, `app.json`, `src/`, `app/`, `assets/`,
-  `plugins/`, `modules/`, the workflow itself) the build jobs are skipped by
+  `plugins/`, `modules/`, the workflow itself, the Android SDK component list
+  `scripts/ci/android{Sdk,-sdk}.*`) the build jobs are skipped by
   `if` — a job skipped by a conditional reports **Success**, so the required
   check passes without a build. If `changes` fails, the builds run anyway.
   Nightly and manual runs always build. Keep the path list in the workflow and
@@ -68,6 +70,58 @@ usual device pass if a native package moved). Do not hand-edit the lockfile or
 acknowledge the check in `expo-doctor-acknowledged.jsonc`: the fix is mechanical
 and a stale SDK pin is exactly what the check exists to catch. When the nightly
 fails this way, its tracking issue says so and quotes that command.
+
+## No implicit downloads; caches written from `main` only
+
+A red build is a bug or an infrastructure weakness, never "just a flake". The
+recurring infrastructure failures were network fetches made deep inside a
+long job, with no retry:
+
+- **Android SDK components.** AGP downloads a missing NDK or CMake in the middle
+  of the Gradle build. On 2026-10-07 a truncated `ndk;27.0.12077973` zip and a
+  refused `cmake;3.22.1` each failed a 20-minute build. Now
+  `scripts/ci/android-sdk.mjs install` installs every component the build needs
+  (platform, build-tools, React Native's NDK, AGP's default NDK, CMake —
+  computed by `scripts/ci/androidSdk.mjs` from React Native's version catalog
+  and the per-AGP pins in `scripts/ci/android-sdk.json`) before Gradle runs,
+  retrying only that download (3 attempts, each retry a `::warning::`), and
+  Gradle runs with `-Pandroid.builder.sdkDownload=false`. If a dependency bump
+  needs a component the list lacks, Gradle fails at configuration time naming
+  it (and an AGP bump without a pin fails the script in seconds): add it to
+  `android-sdk.json`. The NDKs and CMake are also cached (restored everywhere,
+  saved from `main`).
+- **Maestro** is pinned (`MAESTRO_VERSION` in `e2e.yml`); the installer is
+  downloaded to a file, then run, with a bounded retry of that download only.
+- **Gradle and NDK caches are saved from `main` only** (`actions/cache/restore`
+  everywhere, `actions/cache/save` when `github.ref == refs/heads/main`). Every
+  PR used to save its own 2.6 GB Gradle entry, which kept the repository over
+  GitHub's 10 GB cache limit and evicted `main`'s entries, so builds ran cold
+  and re-fetched everything from Maven Central (2026-10-07: `Could not find
+error_prone_annotations-2.15.0.jar`).
+
+Retries never wrap tests or builds: a flow or a compile that fails is reported
+as failed.
+
+## Concurrency
+
+On a PR, a new push cancels that PR's previous run. On `main`, `ci.yml` and
+`runtime-check.yml` run once per commit (back-to-back merges used to cancel each
+other, leaving no verdict for any but the last), and `native-build.yml` /
+`e2e.yml` group by event, so a manual dispatch on `main` no longer cancels the
+nightly scheduled run.
+
+GitHub delays scheduled runs under load (the 05:00/05:15 UTC nightlies started
+at ~11:40 UTC on 2026-10-07); nothing in the repo can fix that, the monitor
+below just reports on whatever ran.
+
+## CI health monitor (`ci-health.yml`)
+
+Every 3 hours, for each workflow that ran on `main` in the last 24 h, the
+latest completed run decides: failure, timeout, startup failure or
+cancellation (no verdict) is red. Any red workflow opens — or rewrites — the
+single issue labelled `ci-health`, with links; when all are green it closes it.
+The Nightly Health issue (`health-check`) still carries the failing step's
+details; this one answers "is `main` green?".
 
 ## Coverage
 

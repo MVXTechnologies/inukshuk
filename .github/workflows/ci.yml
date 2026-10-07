@@ -7,8 +7,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# On a PR a new push supersedes the previous run. On main every merge commit
+# gets its own group: back-to-back merges used to cancel each other (11 main
+# runs "cancelled" on 2026-10-07), so no commit but the last had a verdict and
+# a red one could not be pinned to the merge that caused it.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: true
 
 # Least privilege: the GITHUB_TOKEN can only read the repository. A job that

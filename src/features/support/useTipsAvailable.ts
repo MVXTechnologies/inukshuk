@@ -22,11 +22,18 @@ export const useTipsAvailability = create<{ state: TipsAvailability }>(() => ({
 
 let probing: Promise<void> | null = null;
 
+/**
+ * `p`, or `fallback` if it rejects or takes longer than PROBE_TIMEOUT_MS. The
+ * timer is cleared as soon as `p` settles: a 10 s timer left pending after
+ * every probe kept Jest workers alive past the suite ("A worker process has
+ * failed to exit gracefully") and held a timer in the app for nothing.
+ */
 function settle<T>(p: Promise<T>, fallback: T): Promise<T> {
-  return Promise.race([
-    p.catch(() => fallback),
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), PROBE_TIMEOUT_MS)),
-  ]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), PROBE_TIMEOUT_MS);
+  });
+  return Promise.race([p.catch(() => fallback), timeout]).finally(() => clearTimeout(timer));
 }
 
 /** Run the probe (once). Exported for tests. */
