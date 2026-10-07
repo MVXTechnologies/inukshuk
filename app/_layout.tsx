@@ -178,6 +178,7 @@ export default function RootLayout() {
                   <Stack.Screen name="team/share" />
                   <Stack.Screen name="team/teams" />
                   <Stack.Screen name="team/tasks" />
+                  <Stack.Screen name="team/resolved" />
                   <Stack.Screen name="team/task-new" />
                   <Stack.Screen name="team/pin/[owner]/[id]" />
                   <Stack.Screen name="team/member/[id]" />

@@ -453,6 +453,7 @@ export function TeamFab({ bottom }: { bottom: number }) {
   const myStatus = useTeamStore((s) => (me ? s.statuses.get(me)?.id : undefined));
   const guest = useTeamStore((s) => s.view?.members.find((m) => m.isMe)?.role === 'guest');
   const menuOpen = sheet?.kind === 'menu';
+  const resolvedCount = useTeamStore((s) => s.resolved.size);
   const items: [string, string, () => void, string][] = [
     [
       'check-circle-outline',
@@ -487,6 +488,15 @@ export function TeamFab({ bottom }: { bottom: number }) {
         router.push('/team/chat');
       },
       'team-fab-chat',
+    ],
+    [
+      'check-all',
+      resolvedCount > 0 ? `Resolved · ${resolvedCount}` : 'Resolved',
+      () => {
+        close();
+        router.push('/team/resolved' as never);
+      },
+      'team-fab-resolved',
     ],
     [
       'account-multiple',

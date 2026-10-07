@@ -94,7 +94,12 @@ export function useTeamMapMarks(zoom: number | null): ReactElement[] {
   const view = useTeamStore((s) => s.view);
   const photos = useTeamStore((s) => s.photos);
   const threads = useTeamStore((s) => s.photoThreads);
-  const pins = useTeamStore((s) => s.pins);
+  const allPins = useTeamStore((s) => s.pins);
+  const resolved = useTeamStore((s) => s.resolved);
+  const pins = useMemo(
+    () => allPins.filter((p) => !resolved.has(`${p.owner}:${p.id}`)),
+    [allPins, resolved],
+  );
   const tasks = useTeamStore((s) => s.tasks);
   const seen = useTeamStore((s) => s.record?.seen);
   const look = useAnchorLookup();

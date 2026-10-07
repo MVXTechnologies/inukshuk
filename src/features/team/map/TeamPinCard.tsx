@@ -5,7 +5,7 @@
  * to the pin) and "New task here". A plain themed View
  * (paper-surface-ios-flex-collapse).
  */
-import { distanceToLine, ON_TRAIL_M, type TeamPin } from '@core/teamui/pins';
+import { canResolve, distanceToLine, ON_TRAIL_M, type TeamPin } from '@core/teamui/pins';
 import { rangeAndBearing } from '@core/teamui/positions';
 import type { TeamView } from '@core/teamui/view';
 import { teamService, useTeamStore } from '@state/teamStore';
@@ -78,6 +78,10 @@ export function TeamPinCard({
     .filter(Boolean)
     .join(' · ');
   const canGive = view.members.find((m) => m.id === view.me)?.role !== 'guest';
+  const root = pin.messages[0];
+  const mayResolve =
+    root !== undefined &&
+    canResolve({ author: root.author, mentions: root.mentions }, view.me, view.isAdmin);
 
   return (
     <View
@@ -98,6 +102,18 @@ export function TeamPinCard({
             {sub}
           </Text>
         </View>
+        {mayResolve && (
+          <IconButton
+            icon="check-circle-outline"
+            onPress={() => {
+              session?.resolveMessage(pin.owner, pin.id, true);
+              useTeamStore.getState().refresh();
+              onClose();
+            }}
+            accessibilityLabel="Mark resolved"
+            testID="team-pin-resolve"
+          />
+        )}
         <IconButton icon="close" onPress={onClose} accessibilityLabel="Close" />
       </View>
       <ScrollView style={styles.thread} keyboardShouldPersistTaps="handled">

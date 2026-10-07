@@ -38,7 +38,15 @@ function time(at: number): string {
     : `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${hm}`;
 }
 
-function Bubble({ m, initials }: { m: ChatMessage; initials: string }) {
+function Bubble({
+  m,
+  initials,
+  onResolve,
+}: {
+  m: ChatMessage;
+  initials: string;
+  onResolve?: () => void;
+}) {
   const t = useSchemeTokens();
   const tag = m.priority === 2 ? 'URGENT' : m.priority === 1 ? 'IMPORTANT' : null;
   return (
@@ -71,6 +79,15 @@ function Bubble({ m, initials }: { m: ChatMessage; initials: string }) {
           {m.text}
         </Text>
       </View>
+      {onResolve && (
+        <IconButton
+          icon="check-circle-outline"
+          size={20}
+          onPress={onResolve}
+          accessibilityLabel="Mark resolved"
+          testID="team-msg-resolve"
+        />
+      )}
     </View>
   );
 }
@@ -80,6 +97,7 @@ export function ChatScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const view = useTeamStore((s) => s.view);
+  const resolved = useTeamStore((s) => s.resolved);
   const [text, setText] = useState('');
   const [audienceId, setAudienceId] = useState('all');
   const [priority, setPriority] = useState<0 | 1 | 2>(0);
@@ -151,10 +169,24 @@ export function ChatScreen() {
       <FlatList
         style={styles.flex}
         contentContainerStyle={styles.list}
-        data={[...view.messages].reverse()}
+        data={[...view.messages].filter((m) => !resolved.has(m.key)).reverse()}
         inverted
         keyExtractor={(m) => m.key}
-        renderItem={({ item }) => <Bubble m={item} initials={initialsOf.get(item.author) ?? '?'} />}
+        renderItem={({ item }) => (
+          <Bubble
+            m={item}
+            initials={initialsOf.get(item.author) ?? '?'}
+            onResolve={
+              item.mentionsMe || (item.mine && item.audience !== null) || view.isAdmin
+                ? () => {
+                    const [owner, id] = item.key.split(':');
+                    if (owner && id) teamService()?.active?.resolveMessage(owner, id, true);
+                    useTeamStore.getState().refresh();
+                  }
+                : undefined
+            }
+          />
+        )}
         ListEmptyComponent={
           <Text variant="bodyMedium" style={[styles.empty, { color: t.inkVariant }]}>
             No messages yet. Everything here stays on the team’s phones.
