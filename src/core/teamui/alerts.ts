@@ -18,6 +18,7 @@
 import type { Json } from '@core/team/canonical';
 import { isRecord } from '@core/team/canonical';
 import { isLive, visibleFields } from '@core/team/crdt';
+import { compareStamp, type Stamp } from '@core/team/hlc';
 import type { SignedOp } from '@core/team/envelope';
 import type { TeamState } from '@core/team/membership';
 import { audienceMembers, LARGE_TEAM, routeDelivery } from '@core/team/notify';
@@ -59,7 +60,9 @@ export interface AlertContext {
   sos?(
     owner: string,
     id: string,
-  ): { text: string; resolved: boolean; createdWall: number } | undefined;
+  ):
+    | { text: string; resolved: boolean; created: Stamp | undefined; reopened: Stamp | undefined }
+    | undefined;
   task(
     owner: string,
     id: string,
@@ -87,7 +90,9 @@ export function alertContext(state: TeamState, data: TeamData): AlertContext {
       return {
         text: typeof f['tx'] === 'string' ? f['tx'] : '',
         resolved: f['res'] === true,
-        createdWall: rec.state.created?.wall ?? 0,
+        created: rec.state.created,
+        // The stamp of the newest `res: false` (a reopen), if that is the current value.
+        reopened: f['res'] === false ? rec.state.fields['res']?.stamp : undefined,
       };
     },
   };
@@ -238,6 +243,9 @@ function taskAlert(
   };
 }
 
+/** One SOS alarm per raiser per this long; more within it only update the banner. */
+export const SOS_ALARM_WINDOW_MS = 5 * 60_000;
+
 /** How long task alerts from one teammate collapse into one notification. */
 export const TASK_ALERT_WINDOW_MS = 60_000;
 
@@ -249,7 +257,16 @@ export const TASK_ALERT_WINDOW_MS = 60_000;
 export class TaskAlertThrottle {
   private readonly bursts = new Map<string, { start: number; count: number }>();
 
+  private readonly alarms = new Map<string, number>();
+
   admit(alert: TeamAlert, now: number): TeamAlert {
+    if (alert.kind === 'sos' && alert.level === 'alert') {
+      const last = this.alarms.get(alert.author);
+      if (last !== undefined && now - last < SOS_ALARM_WINDOW_MS)
+        return { ...alert, level: 'badge' };
+      this.alarms.set(alert.author, now);
+      return alert;
+    }
     if (alert.kind !== 'task') return alert;
     const b = this.bursts.get(alert.author);
     if (b === undefined || now - b.start > TASK_ALERT_WINDOW_MS) {
@@ -295,8 +312,10 @@ function sosAlert(
   }
   const sos = ctx.sos?.(owner, id);
   if (sos === undefined) return null;
-  // Only the creating write alerts (re-writing the place of an open SOS doesn't re-alert).
-  const raise = typeof f['la'] === 'number' && !sos.resolved && sos.createdWall === op.stamp.wall;
+  // Only the creating write, or the write that reopens it, alerts; moving an
+  // open SOS's place is silent (review: alarm spam).
+  const same = (s: Stamp | undefined) => s !== undefined && compareStamp(s, op.stamp) === 0;
+  const raise = !sos.resolved && (same(sos.created) || (f['res'] === false && same(sos.reopened)));
   const resolved = f['res'] === true && sos.resolved;
   if (!raise && !resolved) return null;
   return {

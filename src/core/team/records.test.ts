@@ -1,7 +1,17 @@
 import { isLive, visibleFields } from './crdt';
 import { entityKey, reduceData } from './data';
 import { resolveTeam } from './membership';
-import { baseKey, decodeLine, keyBetween, trailVertices } from './records';
+import {
+  authorizeRecord,
+  baseKey,
+  decodeLine,
+  KEY,
+  keyBetween,
+  MAX_KEY,
+  MAX_LIVE_VERTICES,
+  MAX_VERTEX_RECORDS,
+  trailVertices,
+} from './records';
 import type { TeamReplica } from './replica';
 import { addMember, c, device, exchange, joinReplica, MIN, newWorld, T0 } from './testing/fixtures';
 import { forAll, int, mulberry32, pick, shuffle } from './testing/prop';
@@ -34,12 +44,12 @@ function verticesOf(r: TeamReplica, owner: string, tr: string) {
   const d = r.data();
   const trl = d.entities.get(entityKey('trl', tr, owner))!;
   const base = decodeLine(visibleFields(trl.state)['base'] as string, 2000)!;
-  const edits = [...d.entities.values()].filter((e) => e.kind === 'tve');
+  const edits = [...d.entities.values()].filter((e) => e.kind === 'tve' && e.owner === owner);
   return trailVertices(base, tr, owner, edits);
 }
 
 describe('fractional keys', () => {
-  it('always fit strictly between, at either end too', () => {
+  it('always fit strictly between, at either end too, canonically', () => {
     expect(baseKey(0) < baseKey(1)).toBe(true);
     expect(baseKey(35) < baseKey(36)).toBe(true);
     forAll(
@@ -50,7 +60,8 @@ describe('fractional keys', () => {
         let keys = [baseKey(0), baseKey(1)];
         for (let i = 0; i < 30; i++) {
           const at = int(rnd, 0, keys.length);
-          const k = keyBetween(keys[at - 1] ?? null, keys[at] ?? null);
+          const k = keyBetween(keys[at - 1] ?? null, keys[at] ?? null)!;
+          expect(KEY.test(k)).toBe(true);
           if (at > 0) expect(k > keys[at - 1]!).toBe(true);
           if (at < keys.length) expect(k < keys[at]!).toBe(true);
           keys = [...keys.slice(0, at), k, ...keys.slice(at)];
@@ -58,6 +69,50 @@ describe('fractional keys', () => {
         expect([...keys].sort()).toEqual(keys);
       },
     );
+  });
+
+  it('PoC (review #4): never out of order, null when there is no room, never a dead pair', () => {
+    // The adversarial pair: `a0` is not a canonical key, so there is no a/a0 gap.
+    expect(keyBetween('a', 'a0')).toBeNull();
+    expect(KEY.test('a0')).toBe(false);
+    expect(keyBetween('b', 'a')).toBeNull();
+    expect(keyBetween('a', 'a')).toBeNull();
+    // Random canonical pairs: a key in between, or null; never outside.
+    const D = '0123456789abcdefghijklmnopqrstuvwxyz';
+    forAll(
+      11,
+      2000,
+      (rnd) => {
+        const one = () => {
+          const n = int(rnd, 1, 6);
+          let k = '';
+          for (let i = 0; i < n; i++) k += D[int(rnd, 0, 36)];
+          return k.replace(/0+$/, '') || 'i';
+        };
+        const x = one();
+        const y = one();
+        return x < y ? [x, y] : [y, x];
+      },
+      ([x, y]) => {
+        const k = keyBetween(x!, y!);
+        if (x === y) expect(k).toBeNull();
+        else {
+          expect(k).not.toBeNull();
+          expect(k! > x! && k! < y!).toBe(true);
+          expect(KEY.test(k!)).toBe(true);
+        }
+      },
+    );
+    // Honest appends: a thousand stay ordered, within the bound.
+    let last = baseKey(10);
+    for (let i = 0; i < 1000; i++) {
+      const k = keyBetween(last, null)!;
+      expect(k > last).toBe(true);
+      last = k;
+    }
+    expect(last.length).toBeLessThanOrEqual(MAX_KEY);
+    // A key at the bound has no room after it: null, never a longer key.
+    expect(keyBetween('z'.repeat(MAX_KEY), null)).toBeNull();
   });
 
   it('decodes polylines totally', () => {
@@ -130,7 +185,7 @@ describe('team trails (adversarial)', () => {
       f: { to: bob.id, tr: 't1', la: 0, lo: 0 },
     })!;
     // Bob deletes the last base point.
-    rb.write(T0 + 5 * MIN, 'e.del', { k: 'tve', id: 't1_b2' });
+    rb.write(T0 + 5 * MIN, 'e.del', { k: 'tve', id: 't1_b2', o: bob.id });
     sync(T0 + 6 * MIN);
     for (const r of [w.root, rb, re]) {
       expect(why(r, noBase.id)).toBe('invalid');
@@ -194,7 +249,7 @@ describe('team trails (adversarial)', () => {
             });
           } else {
             const id = rnd() < 0.5 ? `t1_b${int(rnd, 0, 3)}` : `t1_i${int(rnd, 0, inserted + 1)}`;
-            r.write(t, 'e.del', { k: 'tve', id });
+            r.write(t, 'e.del', { k: 'tve', id, o: k.bob.id });
           }
           if (rnd() < 0.3) k.sync(t + 1);
         }
@@ -210,7 +265,7 @@ describe('team trails (adversarial)', () => {
           base,
           't1',
           k.bob.id,
-          [...d.entities.values()].filter((e) => e.kind === 'tve'),
+          [...d.entities.values()].filter((e) => e.kind === 'tve' && e.owner === k.bob.id),
         );
         expect(JSON.stringify(again)).toBe(ref);
       },
@@ -354,5 +409,129 @@ describe('rally points and resolved messages (adversarial)', () => {
     expect(
       visibleFields(re.data().entities.get(entityKey('mres', 'p1', bob.id))!.state),
     ).toMatchObject({ res: true, rby: w.owner.id });
+  });
+});
+
+describe('review regressions (records)', () => {
+  it('PoC V1 (review #1): a member cannot erase another member’s trail of the same id', () => {
+    const { w, bob, eve, rb, re, sync } = crew();
+    re.write(T0 + MIN, 'e.set', { k: 'trl', id: 't1', f: { name: 'Eve', base: LINE } });
+    rb.write(T0 + MIN, 'e.set', { k: 'trl', id: 't1', f: { name: 'Bob', base: LINE } });
+    sync(T0 + 2 * MIN);
+    for (let i = 0; i < 3; i++) {
+      rb.write(T0 + 3 * MIN, 'e.del', { k: 'tve', id: `t1_b${i}`, o: bob.id });
+      rb.write(T0 + 3 * MIN, 'e.set', {
+        k: 'tve',
+        id: `t1_b${i}`,
+        f: { to: bob.id, tr: 't1', la: 0, lo: 0 },
+      });
+    }
+    sync(T0 + 4 * MIN);
+    for (const r of [w.root, rb, re]) {
+      expect(verticesOf(r, eve.id, 't1')).toHaveLength(3);
+      expect(verticesOf(r, eve.id, 't1').map((v) => v.lat)).toEqual([38.5, 40.7, 43.252]);
+    }
+    // An edit whose fields name another trail than its key is ignored, never a deletion.
+    expect(
+      trailVertices(decodeLine(LINE, 10)!, 't1', eve.id, [
+        {
+          id: 't1_b0',
+          state: {
+            fields: { to: { value: bob.id, stamp: { wall: 1, counter: 0, node: 'x' } } },
+          } as never,
+        },
+      ]),
+    ).toHaveLength(3);
+  });
+
+  it('PoC V2 (review #3): inserts stop at the trail’s caps', () => {
+    const live = {
+      state: {
+        fields: { base: { value: LINE, stamp: { wall: 1, counter: 0, node: 'x' } } },
+        created: { wall: 1, counter: 0, node: 'x' },
+      },
+    } as never;
+    const write = (id: string) => ({
+      kind: 'tve' as const,
+      id,
+      o: undefined,
+      f: { to: device().id, tr: 't1', la: 1, lo: 1, k: 'm' },
+      author: 'a',
+      role: 'member' as const,
+    });
+    const many = (n: number, alive: boolean) =>
+      Array.from({ length: n }, (_, i) => ({
+        id: `t1_x${i}`,
+        state: alive
+          ? ({
+              fields: { k: { value: 'm', stamp: { wall: 2, counter: i, node: 'x' } } },
+              created: { wall: 2, counter: i, node: 'x' },
+            } as never)
+          : ({ fields: {}, deleted: { wall: 3, counter: i, node: 'x' } } as never),
+      }));
+    const get = (kind: string) => (kind === 'trl' ? live : undefined);
+    // 3 base points + 1996 live inserts = 1999: one more fits; at 2000, no more.
+    expect(authorizeRecord(write('t1_new'), get, () => many(MAX_LIVE_VERTICES - 4, true))).toEqual({
+      owner: expect.any(String),
+    });
+    expect(authorizeRecord(write('t1_new'), get, () => many(MAX_LIVE_VERTICES - 3, true))).toBe(
+      'forbidden',
+    );
+    // Deleted inserts still count toward the record cap.
+    expect(authorizeRecord(write('t1_new'), get, () => many(MAX_VERTEX_RECORDS, false))).toBe(
+      'forbidden',
+    );
+  });
+
+  it('PoC S1 (review #2): twenty guest writes to an open SOS raise one alarm', () => {
+    const { w, rg, sync } = crew();
+    const ops = [];
+    for (let i = 0; i < 20; i++)
+      ops.push(
+        rg.write(T0 + MIN + i * 1000, 'e.set', {
+          k: 'sos',
+          id: 's1',
+          f: { la: 47 + i / 1e4, lo: -71 },
+        })!,
+      );
+    sync(T0 + 2 * MIN);
+    // A second SOS id while one is open is refused.
+    const second = rg.write(T0 + 3 * MIN, 'e.set', { k: 'sos', id: 's2', f: { la: 47, lo: -71 } })!;
+    sync(T0 + 3 * MIN);
+    expect(why(w.root, second.id)).toBe('forbidden');
+    const created = w.root.data().entities.get(entityKey('sos', 's1', rg.id))!.state.created!;
+    const raises = ops.filter(
+      (op) => op.stamp.wall === created.wall && op.stamp.counter === created.counter,
+    );
+    expect(raises).toHaveLength(1);
+  });
+
+  it('review #5: a re-raise writes the whole trio; a resolution is never deleted', () => {
+    const { w, bob, gus, rb, rg, sync } = crew();
+    rg.write(T0 + MIN, 'e.set', { k: 'sos', id: 's1', f: { la: 47, lo: -71 } });
+    rg.write(T0 + 2 * MIN, 'e.set', { k: 'sos', id: 's1', f: { res: true, rby: gus.id, rat: T0 } });
+    sync(T0 + 3 * MIN);
+    const sloppy = rg.write(T0 + 4 * MIN, 'e.set', { k: 'sos', id: 's1', f: { la: 46, lo: -71 } })!;
+    rg.write(T0 + 5 * MIN, 'e.set', {
+      k: 'sos',
+      id: 's1',
+      f: { la: 46, lo: -71, res: false, rby: null, rat: null },
+    });
+    rb.write(T0 + 5 * MIN, 'msg', { id: 'p1', th: `pin:${bob.id}:p1`, tx: 'x', ll: [-71, 47] });
+    rb.write(T0 + 6 * MIN, 'e.set', {
+      k: 'mres',
+      id: 'p1',
+      f: { res: true, rby: bob.id, rat: T0 },
+    });
+    const del = rb.write(T0 + 7 * MIN, 'e.del', { k: 'mres', id: 'p1' })!;
+    sync(T0 + 8 * MIN);
+    expect(why(w.root, sloppy.id)).toBe('invalid');
+    expect(why(w.root, del.id)).toBe('forbidden');
+    expect(
+      visibleFields(w.root.data().entities.get(entityKey('sos', 's1', gus.id))!.state),
+    ).toMatchObject({
+      res: false,
+      la: 46,
+    });
   });
 });

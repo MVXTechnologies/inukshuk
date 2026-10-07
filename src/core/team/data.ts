@@ -14,7 +14,7 @@ import type { SignedOp } from './envelope';
 import { isMemberId, isShortId } from './ids';
 import type { TeamState } from './membership';
 import { isAdminRole, parseAudience, type Audience } from './roles';
-import { authorizeRecord, RECORD_KINDS, type RecordKind } from './records';
+import { authorizeRecord, RECORD_KINDS, type RecordKind, vertexTrail } from './records';
 import { isTaskStatusUpdate, validTaskFields } from './tasks';
 
 /**
@@ -52,6 +52,7 @@ export const ENTITY_KINDS = [
 ] as const;
 export type EntityKind = (typeof ENTITY_KINDS)[number];
 export const OWNED_KINDS: readonly EntityKind[] = [
+  'tve',
   'task',
   'track',
   'photo',
@@ -65,7 +66,7 @@ export const OWNED_KINDS: readonly EntityKind[] = [
 /** Entity kinds a guest may write (their own records only). */
 export const GUEST_KINDS: readonly EntityKind[] = ['comment', 'sos', 'mres'];
 /** Kinds whose `e.set` may name another member's record (`o`). */
-const O_KINDS: readonly string[] = ['task', 'trl', 'sos', 'mres'];
+const O_KINDS: readonly string[] = ['task', 'trl', 'sos', 'mres', 'tve'];
 
 export const MAX_FIELDS = 64;
 export const MAX_MESSAGE_CHARS = 4000;
@@ -284,7 +285,19 @@ export function applyDataOp(out: TeamData, state: TeamState, op: SignedOp, decod
       const owned = OWNED_KINDS.includes(b.k);
       const owner = owned ? (b.o ?? env.au) : undefined;
       if (role === undefined || (role === 'guest' && !GUEST_KINDS.includes(b.k))) return forbid();
-      if (owned && owner !== env.au && !isAdminRole(role)) return forbid();
+      // A resolution is reopened (res: false), never deleted.
+      if (b.k === 'mres') return forbid();
+      // Trail vertices: any member deletes one of a live trail (`o` = its owner).
+      const vertex =
+        b.k === 'tve' &&
+        owner !== undefined &&
+        (() => {
+          const tr = vertexTrail(b.id);
+          const t = tr === null ? undefined : out.entities.get(entityKey('trl', tr, owner));
+          return t !== undefined && isLive(t.state);
+        })();
+      if (b.k === 'tve' && !vertex) return forbid();
+      if (owned && owner !== env.au && !isAdminRole(role) && !vertex) return forbid();
       const rec: Omit<EntityRecord, 'state'> = { kind: b.k, id: b.id };
       if (owner) rec.owner = owner;
       merge(entityKey(b.k, b.id, owner), rec, deleteOp(stamp));

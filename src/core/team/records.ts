@@ -12,7 +12,7 @@ import { isAdminRole, type Role } from './roles';
  * | kind | key | who writes | who deletes |
  * |---|---|---|---|
  * | `trl` team trail | owned (creator) | creator: all; members: name/desc/color; `base` once, at creation | creator or admin |
- * | `tve` trail vertex | shared | members, on a live `trl` | members |
+ * | `tve` trail vertex | keyed by the TRAIL's owner (`tve:<to>:<id>`) | members, on a live `trl`; inserts capped | members (with `o` = the trail's owner) |
  * | `sos` | owned (raiser) | raiser (guests too); raiser or admin: the resolution | raiser or admin |
  * | `rly` rally point | owned (creator) | creator (members) | creator or admin |
  * | `mres` message resolved | owned by the MESSAGE's author, id = message id | its author, an admin, or someone it mentions (guests too) | — |
@@ -43,8 +43,18 @@ const has = (f: Record<string, Json>, k: string) => Object.prototype.hasOwnPrope
 const only = (f: Record<string, Json>, keys: readonly string[]) =>
   Object.keys(f).every((k) => keys.includes(k));
 
-/** A fractional-index key: base-36 digits. */
-export const KEY = /^[0-9a-z]{1,48}$/;
+/**
+ * A fractional-index key: base-36 digits, at most {@link MAX_KEY} long, never
+ * ending in `0` (canonical: then two different keys always have room between
+ * them, and nobody can plant an `a`/`a0` pair with nothing in between).
+ */
+export const MAX_KEY = 256;
+export const KEY = /^[0-9a-z]{0,255}[1-9a-z]$/;
+/** Trail ids carry no `_` (a vertex id is `<trail>_<suffix>`). */
+export const TRAIL_ID = /^[A-Za-z0-9-]{1,40}$/;
+/** Live vertices a trail may hold, and vertex records it may ever collect. */
+export const MAX_LIVE_VERTICES = 2_000;
+export const MAX_VERTEX_RECORDS = 4_000;
 
 /** Encoded polyline (1e5) → `[lng, lat]` points; null for anything malformed. Total. */
 export function decodeLine(src: string, maxPoints: number): [number, number][] | null {
@@ -122,9 +132,15 @@ export function validTrailFields(f: Record<string, Json>): boolean {
 /** A base vertex's id: `<trail>_b<index>`; an inserted vertex: `<trail>_<random>`. */
 export const BASE_VERTEX = /_b(\d{1,4})$/;
 
+/** The trail a vertex id belongs to (`<trail>_<suffix>`), or null. */
+export function vertexTrail(id: string): string | null {
+  const i = id.indexOf('_');
+  return i > 0 && i < id.length - 1 ? id.slice(0, i) : null;
+}
+
 export function validVertexFields(id: string, f: Record<string, Json>): boolean {
-  if (!isMemberId(f['to']) || !isShortId(f['tr'])) return false;
-  if (!id.startsWith(`${f['tr'] as string}_`)) return false;
+  if (!isMemberId(f['to']) || typeof f['tr'] !== 'string' || !TRAIL_ID.test(f['tr'])) return false;
+  if (vertexTrail(id) !== f['tr']) return false;
   const base = BASE_VERTEX.test(id);
   for (const [k, v] of Object.entries(f)) {
     if (k === 'to' || k === 'tr') continue;
@@ -220,8 +236,8 @@ export function authorizeRecord(
         return { owner };
       }
       if (cur === undefined) {
-        // A new trail: its base line and a name.
-        if (!has(f, 'base') || !has(f, 'name')) return 'invalid';
+        // A new trail: its base line and a name, and an id with no `_`.
+        if (!TRAIL_ID.test(id) || !has(f, 'base') || !has(f, 'name')) return 'invalid';
       } else if (has(f, 'base') && cur.state.fields['base'] !== undefined) {
         return 'forbidden'; // the base is written once
       }
@@ -229,9 +245,30 @@ export function authorizeRecord(
     }
     case 'tve': {
       if (role === 'guest') return 'forbidden';
-      if (w.o !== undefined || !validVertexFields(id, f)) return 'invalid';
-      if (!live(get('trl', f['tr'] as string, f['to'] as string))) return 'forbidden';
-      return { owner: undefined };
+      if (!validVertexFields(id, f)) return 'invalid';
+      const to = f['to'] as string;
+      if (w.o !== undefined && w.o !== to) return 'invalid';
+      const trail = get('trl', f['tr'] as string, to);
+      if (!live(trail)) return 'forbidden';
+      // A new inserted vertex: within the trail's caps.
+      if (!BASE_VERTEX.test(id) && get('tve', id, to) === undefined) {
+        const mine = scan('tve', to).filter((e) => vertexTrail(e.id) === f['tr']);
+        if (mine.length >= MAX_VERTEX_RECORDS) return 'forbidden';
+        const baseText = visibleFields(trail.state)['base'];
+        const base =
+          typeof baseText === 'string'
+            ? (decodeLine(baseText, MAX_TRAIL_VERTICES)?.length ?? 0)
+            : 0;
+        let liveCount = base;
+        for (const e of mine) {
+          const alive = isLive(e.state);
+          if (BASE_VERTEX.test(e.id)) {
+            if (!alive && e.state.deleted !== undefined) liveCount--;
+          } else if (alive) liveCount++;
+        }
+        if (liveCount >= MAX_LIVE_VERTICES) return 'forbidden';
+      }
+      return { owner: to };
     }
     case 'sos': {
       if (!validSosFields(f, author)) return 'invalid';
@@ -242,7 +279,12 @@ export function authorizeRecord(
           return 'forbidden';
         return { owner };
       }
-      if (get('sos', id, owner) === undefined) {
+      const prev = get('sos', id, owner);
+      if (prev !== undefined && live(prev) && visibleFields(prev.state)['res'] === true) {
+        // A resolved SOS opens again only with the whole trio (res: false…).
+        if ((has(f, 'la') || has(f, 'lo') || has(f, 'tx')) && f['res'] !== false) return 'invalid';
+      }
+      if (prev === undefined) {
         if (!has(f, 'la') || !has(f, 'lo')) return 'invalid';
         // Spam guard: one open SOS per member, and a cooldown after a resolve.
         for (const other of scan('sos', owner)) {
@@ -280,23 +322,52 @@ export function authorizeRecord(
 
 const DIGITS = '0123456789abcdefghijklmnopqrstuvwxyz';
 
-/** The base key of base vertex `i`: "h" + four base-36 digits (sorts by index). */
+/** The base key of base vertex `i`: "h" + four base-36 digits + "i" (canonical, sorts by index). */
 export function baseKey(i: number): string {
-  return `h${i.toString(36).padStart(4, '0')}`;
+  return `h${i.toString(36).padStart(4, '0')}i`;
 }
 
-/** A key strictly between `a` and `b` (null = open end). */
-export function keyBetween(a: string | null, b: string | null): string {
+/**
+ * A canonical key strictly between `a` and `b` (null = open end), or null when
+ * there is none within {@link MAX_KEY} characters or the inputs are not two
+ * canonical keys in order. Never out of order (property-tested).
+ */
+export function keyBetween(a: string | null, b: string | null): string | null {
+  if (a !== null && !KEY.test(a)) return null;
+  if (b !== null && !KEY.test(b)) return null;
+  if (a !== null && b !== null && a >= b) return null;
   const lo = a ?? '';
   let out = '';
-  for (let i = 0; ; i++) {
+  for (let i = 0; i < MAX_KEY; i++) {
     const da = i < lo.length ? DIGITS.indexOf(lo[i]!) : 0;
-    const db = b === null ? 36 : i < b.length ? DIGITS.indexOf(b[i]!) : 0;
-    if (db - da > 1) return out + DIGITS[Math.floor((da + db) / 2)]!;
+    let db: number;
+    if (b === null) db = 36;
+    else if (i < b.length) db = DIGITS.indexOf(b[i]!);
+    else return null; // cannot happen for canonical a < b
+    if (db < da) return null;
+    if (db - da > 1) {
+      const key = out + DIGITS[Math.floor((da + db) / 2)]!;
+      return key.length <= MAX_KEY ? key : null;
+    }
     out += DIGITS[da]!;
-    if (db - da === 1) return out + keyBetween(lo.slice(i + 1), null);
-    if (i > 60) return out + 'i';
+    if (db - da === 1) {
+      // Keep a's digit here, then anything above the rest of a.
+      const rest = keyAbove(lo.slice(i + 1), MAX_KEY - out.length);
+      return rest === null ? null : out + rest;
+    }
   }
+  return null;
+}
+
+/** The shortest canonical suffix above `rest` (an open upper end), within `room` chars. */
+function keyAbove(rest: string, room: number): string | null {
+  let out = '';
+  for (let i = 0; i < room; i++) {
+    const d = i < rest.length ? DIGITS.indexOf(rest[i]!) : 0;
+    if (36 - d > 1) return out + DIGITS[Math.floor((d + 36) / 2)]!;
+    out += DIGITS[d]!;
+  }
+  return null;
 }
 
 // ── Reading: a trail's vertices ──────────────────────────────────────────────
@@ -324,8 +395,9 @@ export function trailVertices(
     const id = `${tr}_b${i}`;
     const e = byId.get(id);
     if (e && e.state.deleted !== undefined && !isLive(e.state)) return; // deleted
-    const f = e && isLive(e.state) ? visibleFields(e.state) : {};
-    if (e && (f['to'] !== to || f['tr'] !== tr) && isLive(e.state)) return;
+    const vis = e && isLive(e.state) ? visibleFields(e.state) : {};
+    // An edit naming another trail is ignored (the base point stands).
+    const f = vis['to'] === to && vis['tr'] === tr ? vis : {};
     out.push({
       id,
       key: baseKey(i),

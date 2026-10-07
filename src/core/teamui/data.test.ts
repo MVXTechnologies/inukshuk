@@ -485,7 +485,18 @@ describe('alerts', () => {
       text: 'SOS · Twisted ankle',
     });
     expect(throttle.admit(a, T0)).toEqual(a);
-    expect(throttle.admit(a, T0 + 1)).toEqual(a); // never collapsed
+    // A second alarm from the same raiser within 5 min only updates the banner.
+    expect(throttle.admit(a, T0 + 1)).toMatchObject({ level: 'badge' });
+    expect(throttle.admit(a, T0 + 5 * MIN + 1)).toMatchObject({ level: 'alert' });
+    // PoC S1 (review #2): moving an open SOS twenty times raises nothing more.
+    for (let i = 0; i < 20; i++) {
+      const move = { k: 'sos', id: 's1', f: { la: 47 + i / 1e4, lo: -71 } };
+      const m = rg.write(T0 + MIN + 1 + i, 'e.set', move)!;
+      sync(T0 + MIN + 1 + i);
+      expect(
+        alertFor(ra.state, m, move, alice.id, alertContext(ra.state, ra.data(T0 + 2 * MIN))),
+      ).toBeNull();
+    }
     // A forged resolution by a member raises nothing.
     const fake = { k: 'sos', id: 's1', o: gus.id, f: { res: true, rby: alice.id, rat: T0 } };
     const f = ra.write(T0 + 2 * MIN, 'e.set', fake)!;
