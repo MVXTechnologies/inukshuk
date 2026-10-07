@@ -3,6 +3,7 @@
  * team — where the map point chip is, else the middle of the map. Guests may
  * pin too. `+task @name …` in it makes a task anchored to the new pin.
  */
+import { KEYBOARD_DONE_BAR_ID, KeyboardDoneBar } from '@ui/components/KeyboardDoneBar';
 import { findMentions } from '@core/teamui/compose';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
@@ -78,7 +79,9 @@ export function TeamPinComposer({ onPinned }: { onPinned: (owner: string, id: st
         submitBehavior="blurAndSubmit"
         onSubmitEditing={send}
         testID="team-pin-input"
+        inputAccessoryViewID={KEYBOARD_DONE_BAR_ID}
       />
+      <KeyboardDoneBar />
       {error !== null && (
         <Text variant="bodySmall" style={{ color: t.status.gpsLostInk }}>
           {error}

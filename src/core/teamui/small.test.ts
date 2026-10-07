@@ -13,7 +13,18 @@ import {
 import { createInvite } from '@core/team/actions';
 
 import { initials, memberColor, MEMBER_COLORS } from './colors';
-import { memberStatuses, parseStatusText, STATUS_LABEL, statusText, SYS_STATUS , cleanName, isSystemThread, MAX_NAME_CHARS, nameText, parseNameText } from './system';
+import {
+  memberStatuses,
+  parseStatusText,
+  STATUS_LABEL,
+  statusText,
+  SYS_STATUS,
+  cleanName,
+  isSystemThread,
+  MAX_NAME_CHARS,
+  nameText,
+  parseNameText,
+} from './system';
 import {
   DEFAULT_INVITE,
   inviteExpiresAt,

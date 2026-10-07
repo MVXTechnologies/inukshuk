@@ -3,6 +3,7 @@
  * given tasks), and where — the pin, photo or place it was opened from, or
  * where I am, or nowhere. The same thing `+task @name …` does in a comment.
  */
+import { KEYBOARD_DONE_BAR_ID, KeyboardDoneBar } from '@ui/components/KeyboardDoneBar';
 import type { TaskAnchor } from '@core/team/tasks';
 import { anchorInfo } from '@core/teamui/tasks';
 import { teamService, useTeamStore } from '@state/teamStore';
@@ -97,7 +98,9 @@ export function NewTaskScreen() {
         returnKeyType="done"
         submitBehavior="blurAndSubmit"
         testID="team-task-title"
+        inputAccessoryViewID={KEYBOARD_DONE_BAR_ID}
       />
+      <KeyboardDoneBar />
       <SectionLabel>For</SectionLabel>
       <View style={styles.people}>
         {people.map((m) => {
