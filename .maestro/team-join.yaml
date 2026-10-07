@@ -12,6 +12,7 @@ appId: com.inukshuk.app
       - launchApp:
           permissions:
             location: allow
+            notifications: allow
 - runFlow:
     when:
       platform: iOS
@@ -19,6 +20,7 @@ appId: com.inukshuk.app
       - launchApp:
           permissions:
             location: always
+            notifications: allow
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000

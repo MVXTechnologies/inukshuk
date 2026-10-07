@@ -19,6 +19,7 @@ appId: com.inukshuk.app
       - launchApp:
           permissions:
             location: allow
+            notifications: allow
 - runFlow:
     when:
       platform: iOS
@@ -26,6 +27,7 @@ appId: com.inukshuk.app
       - launchApp:
           permissions:
             location: always
+            notifications: allow
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
@@ -97,6 +99,15 @@ appId: com.inukshuk.app
     id: 'team-create-ends-14d'
 - tapOn:
     id: 'team-create-submit'
+# The first team makes this phone's keys, then the OS may ask for notifications once.
+- extendedWaitUntil:
+    visible: '(Allow|Releve MSA)'
+    timeout: 40000
+- runFlow:
+    when:
+      visible: 'Allow'
+    commands:
+      - tapOn: 'Allow'
 - extendedWaitUntil:
     visible:
       id: 'team-hub-screen'
@@ -158,6 +169,40 @@ appId: com.inukshuk.app
     timeout: 5000
 - takeScreenshot: team-chat
 - tapOn: 'Back'
+# Tasks: a new task for her, in the list, ticked, under Done.
+- scrollUntilVisible:
+    element:
+      id: 'team-tasks-row'
+    direction: DOWN
+- tapOn:
+    id: 'team-tasks-row'
+- extendedWaitUntil:
+    visible:
+      id: 'team-tasks-screen'
+    timeout: 5000
+- tapOn:
+    id: 'team-task-new'
+- tapOn:
+    id: 'team-task-title'
+- inputText: 'Check the culvert at km 2'
+- hideKeyboard
+- tapOn: 'Julie Tremblay'
+- tapOn:
+    id: 'team-task-place-none'
+- tapOn:
+    id: 'team-task-create'
+- extendedWaitUntil:
+    visible: '.*Check the culvert at km 2.*'
+    timeout: 5000
+- takeScreenshot: team-tasks
+- tapOn:
+    id: 'team-task-check'
+- tapOn:
+    id: 'team-task-filter-done'
+- extendedWaitUntil:
+    visible: '.*Check the culvert at km 2.*'
+    timeout: 5000
+- tapOn: 'Back'
 # Remove her: the key rotates at once (no "must be rotated" banner).
 - tapOn:
     id: 'team-member-Julie Tremblay'
@@ -186,6 +231,25 @@ appId: com.inukshuk.app
       id: 'team-map-chip'
     timeout: 10000
 - takeScreenshot: team-map
+# A pin: + → Pin a team message, its card with the thread.
+- tapOn: 'Map actions'
+- tapOn: 'Pin a team message'
+- extendedWaitUntil:
+    visible:
+      id: 'team-pin-composer'
+    timeout: 5000
+- tapOn:
+    id: 'team-pin-input'
+- inputText: 'Fallen tree here'
+# Return sends (the keyboard would cover the button).
+- pressKey: Enter
+- extendedWaitUntil:
+    visible:
+      id: 'team-pin-card'
+    timeout: 5000
+- assertVisible: '.*Fallen tree here.*'
+- takeScreenshot: team-pin
+- tapOn: 'Close'
 # Leave the team (deletes it from this phone).
 - tapOn:
     id: 'team-map-chip'
