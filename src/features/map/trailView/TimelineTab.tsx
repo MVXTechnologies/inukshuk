@@ -163,19 +163,22 @@ export function TimelineTab({
                 </View>
                 {!last && <View style={[styles.line, { backgroundColor: t.outlineVariant }]} />}
               </View>
-              <View style={styles.body}>
-                <View style={styles.head}>
-                  {time !== null && (
-                    <Text style={[styles.time, { color: t.inkMuted }]}>{time}</Text>
-                  )}
-                  <Text style={[styles.title, { color: t.ink }]} numberOfLines={2}>
-                    {title}
+              {/* A compact row (thumb at the side): a hike has dozens of photos. */}
+              <View style={[styles.body, styles.photoRow]}>
+                <View style={styles.photoText}>
+                  <View style={styles.head}>
+                    {time !== null && (
+                      <Text style={[styles.time, { color: t.inkMuted }]}>{time}</Text>
+                    )}
+                    <Text style={[styles.title, { color: t.ink }]} numberOfLines={2}>
+                      {title}
+                    </Text>
+                  </View>
+                  <Text style={[styles.sub, { color: t.inkVariant }]}>
+                    {formatDistance(row.at.distanceM)}
                   </Text>
                 </View>
-                <Text style={[styles.sub, { color: t.inkVariant }]}>
-                  {formatDistance(row.at.distanceM)}
-                </Text>
-                <Image source={{ uri: photoFileUri(photo.thumb) }} style={styles.photo} />
+                <Image source={{ uri: photoFileUri(photo.thumb) }} style={styles.photoThumb} />
               </View>
             </Pressable>
           );
@@ -279,4 +282,7 @@ const styles = StyleSheet.create({
   title: { flex: 1, fontSize: 16, fontWeight: '800' },
   sub: { fontSize: 13.5 },
   photo: { width: 150, height: 90, borderRadius: 10, marginTop: 4 },
+  photoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  photoText: { flex: 1 },
+  photoThumb: { width: 52, height: 52, borderRadius: 8 },
 });

@@ -84,6 +84,12 @@ export function PhotoViewerScreen({ trackId, photoId }: { trackId: string; photo
     photos.findIndex((p) => p.id === currentId),
   );
   const photo: TrackPhoto | undefined = photos[index];
+  // Keep the current photo's thumbnail in view, near the middle of the strip.
+  const strip = useRef<ScrollView>(null);
+  useEffect(() => {
+    const step = THUMB + 4 + 6; // thumb + its 2 px border each side + the gap
+    strip.current?.scrollTo({ x: Math.max(0, index * step - width / 2 + step), animated: true });
+  }, [index, width]);
   const editable = photosEditable(status) && photo !== undefined && !isNotePhoto(photo);
   const notice = photoListNotice(status);
 
@@ -344,6 +350,7 @@ export function PhotoViewerScreen({ trackId, photoId }: { trackId: string; photo
           )}
 
           <ScrollView
+            ref={strip}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.strip}
