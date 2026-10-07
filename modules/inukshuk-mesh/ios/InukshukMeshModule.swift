@@ -52,7 +52,7 @@ public final class InukshukMeshModule: Module, MeshEngineDelegate {
     }
 
     Function("stopAdvertising") {
-      self.current()?.stopAdvertising()
+      if let e = self.current() { e.stopAdvertising() }
     }
 
     AsyncFunction("startBrowsing") { (tag: String?) throws in
@@ -63,7 +63,7 @@ public final class InukshukMeshModule: Module, MeshEngineDelegate {
     }
 
     Function("stopBrowsing") {
-      self.current()?.stopBrowsing()
+      if let e = self.current() { e.stopBrowsing() }
     }
 
     Function("connect") { (host: String, port: Int, reconnect: Bool) throws -> String in
@@ -79,7 +79,7 @@ public final class InukshukMeshModule: Module, MeshEngineDelegate {
     }
 
     Function("disconnect") { (id: String) in
-      self.current()?.disconnect(id)
+      if let e = self.current() { e.disconnect(id) }
     }
 
     Function("send") { (peerId: String, data: Data) throws -> Double in
@@ -93,7 +93,7 @@ public final class InukshukMeshModule: Module, MeshEngineDelegate {
 
     Function("ban") { (peerId: String, durationMs: Double) in
       let ms = durationMs.isFinite ? Int64(Swift.min(Swift.max(durationMs, 0), Double(MeshConfig.maxBanMs))) : MeshConfig.maxBanMs
-      self.current()?.ban(peerId, durationMs: ms)
+      if let e = self.current() { e.ban(peerId, durationMs: ms) }
     }
 
     Function("getStats") { () -> [String: Any] in
