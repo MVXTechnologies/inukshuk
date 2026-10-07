@@ -190,8 +190,10 @@ A single hidden offscreen `react-native-webview` is the rendering engine. The
 provider mounts it once at a 1×1, fully-transparent, off-screen position so its
 JavaScript runs without painting anything visible or affecting layout.
 
-1. On mount, the provider reads the two **bundled** pdf.js files from app assets
-   and inlines them into a self-contained HTML string (`buildHtml`).
+1. On mount, the provider reads the **bundled** pdf.js files from app assets
+   (`./pdfjsAssets`) and inlines them into a self-contained HTML string
+   (`buildHtml`): the pdf.js main module, the worker module (as a string), the
+   JPEG 2000 / JBIG2 wasm decoders (base64) and a Content-Security-Policy.
 2. **Served mode (normal, #269).** The provider takes a lease on the app's
    shared loopback server (`@data/localServer` — root = the document
    directory), writes the HTML to `Documents/.rasterizer/index.html` (rewritten
@@ -202,9 +204,10 @@ JavaScript runs without painting anything visible or affecting layout.
    **Inline mode (fallback).** If the server cannot start — or the served page
    fails to load — the same HTML is loaded via `source={{ html }}` and the PDF
    crosses the bridge as base64, as it did before #269.
-3. The pdf.js main bundle runs inside its own `<script>` tag and exposes
-   `window.pdfjsLib`. When ready, the page posts `{ id: "__ready__", ok: true }`
-   back to RN.
+3. The pdf.js main build runs as an inline `<script type="module">`, which is
+   deferred: the page script starts on `DOMContentLoaded`, when the module has
+   set `window.pdfjsLib` (or failed: the page then reports not ready). When
+   ready, the page posts `{ id: "__ready__", ok: true }` back to RN.
 4. To render, RN injects JavaScript over the bridge:
    - served: `window.__pdfRender(id, pageIndex, targetWidthPx, url)` — four
      small values. The page calls
@@ -272,12 +275,19 @@ with the file.
 
 ## Asset bundling (the offline guarantee)
 
-The pdf.js **legacy UMD** builds are copied into `assets/pdfjs/`:
+The pdf.js **legacy** builds and decoders are copied from `pdfjs-dist` into
+`assets/pdfjs/` by `node scripts/pdfjs/sync-assets.mjs` (the list is
+`scripts/pdfjs/assets.mjs`; `npm run test:scripts` fails while they differ
+from the installed package):
 
-| Asset file (in repo)             | Source (node_modules)                       |
-| -------------------------------- | ------------------------------------------- |
-| `pdf.legacy.min.js.pdfjs`        | `pdfjs-dist/legacy/build/pdf.min.js`        |
-| `pdf.worker.legacy.min.js.pdfjs` | `pdfjs-dist/legacy/build/pdf.worker.min.js` |
+| Asset file (in repo)                | Source (`pdfjs-dist/`)             | Used as                          |
+| ----------------------------------- | ---------------------------------- | -------------------------------- |
+| `pdf.legacy.min.mjs.pdfjs`          | `legacy/build/pdf.min.mjs`         | inline module                    |
+| `pdf.worker.legacy.min.mjs.pdfjs`   | `legacy/build/pdf.worker.min.mjs`  | Blob module worker / page module |
+| `openjpeg.wasm.pdfjs`               | `wasm/openjpeg.wasm`               | JPEG 2000 decoder (base64)       |
+| `jbig2.wasm.pdfjs`                  | `wasm/jbig2.wasm`                  | JBIG2 decoder (base64)           |
+| `openjpeg_nowasm_fallback.js.pdfjs` | `wasm/openjpeg_nowasm_fallback.js` | served, no-WebAssembly fallback  |
+| `jbig2_nowasm_fallback.js.pdfjs`    | `wasm/jbig2_nowasm_fallback.js`    | served, no-WebAssembly fallback  |
 
 The files use a custom **`.pdfjs`** extension, registered as a Metro **asset**
 extension in `metro.config.js`:
@@ -286,90 +296,109 @@ extension in `metro.config.js`:
 config.resolver.assetExts = [...config.resolver.assetExts, 'pdfjs'];
 ```
 
-That makes `require('../../../assets/pdfjs/pdf.legacy.min.js.pdfjs')` return a
-Metro asset module id (instead of Metro trying to parse a 370 KB minified UMD
-bundle as source). At runtime:
+That makes `require('../../../assets/pdfjs/pdf.legacy.min.mjs.pdfjs')` return a
+Metro asset module id (instead of Metro parsing a 520 KB minified module as
+source). At runtime `./pdfjsAssets` materializes each bundled asset with
+`Asset.fromModule(id).downloadAsync()` and reads it with the expo-file-system
+`File` API (`text()`, or `base64()` for the wasm). In a release build the
+assets already ship inside the app; nothing is downloaded.
 
-```ts
-const asset = await Asset.fromModule(PDFJS_MAIN_ASSET).downloadAsync();
-const source = await new File(asset.localUri ?? asset.uri).text(); // expo-file-system File API
-```
-
-`downloadAsync()` here just materializes the **bundled** asset onto the local
-filesystem (in dev it may copy from the Metro dev server; in a release build the
-asset already ships inside the app). The text is then inlined into the HTML.
-
-`app.config.ts` sets `assetBundlePatterns: ['**/*']`, so the `.pdfjs` assets are
-packaged into the standalone app.
+`app.config.ts` sets `assetBundlePatterns: ['**/*']`, so the `.pdfjs` assets
+are packaged into the standalone app, and an OTA update carries new ones.
 
 **Offline guarantee:** the rendered HTML document references nothing remote — no
-CDN, no `<script src="https://...">`. pdf.js, its worker and the canvas all live
-inside the WebView; the only thing it ever fetches is the PDF, from the app's
-own loopback server on `127.0.0.1` (served mode) or from the bridge (inline
-mode). The WebView is configured with `allowFileAccess={false}`. The server
-itself only exposes the allowlisted folders `maps/`, `offline-styles/` and
-`.rasterizer/` (`@core/storage/servedPaths`); the rest of the document
-directory — the library index, trails, photos — is denied by lighttpd's
-`mod_access`, so nothing else on the device can read it through that port.
+CDN, no `<script src="https://...">`. pdf.js, its worker, its decoders and the
+canvas all live inside the WebView; the only things it ever fetches are the
+PDF and (without WebAssembly only) the fallback decoders, from the app's own
+loopback server on `127.0.0.1` (served mode), or nothing at all (inline mode).
+The WebView is configured with `allowFileAccess={false}`, and the page's CSP
+keeps fetches on its own origin. The server itself only exposes the
+allowlisted folders `maps/`, `offline-styles/` and `.rasterizer/`
+(`@core/storage/servedPaths`); the rest of the document directory — the
+library index, trails, photos — is denied by lighttpd's `mod_access`, so
+nothing else on the device can read it through that port.
 
 ## Worker mode
 
-pdf.js parses PDFs in a Web Worker by default. To stay offline, the inlined
-script builds a **same-origin Blob-URL worker** from the bundled worker source:
+pdf.js parses PDFs in a Web Worker by default. To stay offline, the page builds
+a **same-origin Blob-URL module worker** from the bundled worker source (with
+the polyfills and the layer filter prepended):
 
 ```js
-const blob = new Blob([WORKER_SOURCE], { type: 'application/javascript' });
-pdfjsLib.GlobalWorkerOptions.workerPort = new Worker(URL.createObjectURL(blob));
+const blob = new Blob([WORKER_SOURCE], { type: 'text/javascript' });
+pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob); // started as { type: "module" }
 ```
-
-Blob URLs are same-origin and require no network, so this works offline on both
-iOS (WKWebView) and Android (System WebView).
 
 **Main-thread fallback (#554).** pdf.js's "fake worker" is not self-contained:
 it runs the worker's `WorkerMessageHandler` on the page's thread, taken from
-`window.pdfjsWorker` or else loaded with `<script src=workerSrc>`, and it
-caches a failure for the page's lifetime. So the page never relies on loading
-the worker by URL: `useMainThreadWorker()` evaluates the bundled worker source
-into the page, which defines `window.pdfjsWorker`, and pdf.js then uses it for
-every later document. This happens
+`window.pdfjsWorker` or else imported from `workerSrc`, and it caches a
+failure for the page's lifetime. So the page never relies on loading the
+worker by URL: `useMainThreadWorker()` inserts the bundled worker module as an
+inline `<script type="module">` (no URL at all), which defines
+`window.pdfjsWorker`, and resolves once it has run (or fails after 10 s).
+pdf.js then uses it for every later document. This happens
 
 - at startup in **inline mode**, whose `about:blank` page has an opaque origin.
-  There pdf.js would wrap the blob URL in a second blob that `importScripts()`
-  it, and one Android 11 WebView failed every render with
-  `Setting up fake worker failed: "…"`;
+  There pdf.js would wrap the blob URL in a second blob that imports it, and
+  one Android 11 WebView failed every render with
+  `Setting up fake worker failed: "…"`. Renders wait for the module;
 - when the Blob worker cannot be created;
-- on the load watchdog's retry. The retry used to clear `workerSrc`, which
-  makes pdf.js throw `No "GlobalWorkerOptions.workerSrc" specified` before it
-  starts, so the request hung until the 45 s timeout.
+- on the load watchdog's retry. pdf.js 6's `loadingTask.destroy()` first waits
+  for the worker to finish setting up, which a wedged worker never does, so
+  the retry waits for the stalled attempt's teardown at most 1 s.
 
 Rendering on the main thread is fine because the WebView is hidden and
 offscreen. `PdfRasterizer.fakeWorker.test.tsx` runs the page with the real
-pdf.js bundles, with no usable Worker and no script loading by URL.
+shipped pdf.js, with no usable Worker and no script loading by URL, including
+a wedged worker and a JPEG 2000 page.
+
+### JPEG 2000 and JBIG2 (wasm)
+
+pdf.js 6 decodes JPX and JBIG2 with wasm modules it normally fetches from
+`wasmUrl`. The page instead passes `useWorkerFetch: false` and its own
+`BinaryDataFactory`, which hands pdf.js the bundled decoders (base64 in the
+page) when it asks. That works the same in served and inline mode, needs no
+URL, and keeps every other optional pack (standard fonts, CMaps, ICC
+profiles) off exactly as with 3.11: colours and timing do not change.
+
+Without WebAssembly (iOS Lockdown Mode), pdf.js falls back to plain-JS
+decoders it imports from `wasmUrl`: the provider copies them to
+`.rasterizer/pdfjs/` on the loopback server at every mount, and the served
+page points `wasmUrl` there. Inline mode has no URL to give, so a JPX or
+JBIG2 image without WebAssembly in inline mode is skipped (pdf.js reports the
+image, the rest of the page renders). Inline mode is the small-file fallback
+for a dead loopback server; that combination is the only gap.
 
 ## PDF layers (optional content, #477)
 
 GeoPDFs carry their content in optional-content groups. A 2024 USGS US Topo
 sheet hides its **Orthoimage** (203 JPEG strips, ~107 Mpx) and **Shaded
-Relief** (one ~105 Mpx JPEG) by default, but pdf.js 3.11 only applies layer
-visibility when _painting_: its worker still fetched and decoded every hidden
-image while building the operator list. On a 58 MB sheet that was ~80 % of the
-render.
+Relief** (one ~105 Mpx JPEG) by default, but pdf.js (3.11 and 6.x alike) only
+applies layer visibility when _painting_: its worker still fetches and decodes
+every hidden image while building the operator list. On a 58 MB sheet that was
+~80 % of the render.
 
-- **Layer plan.** After the document opens, the page reads its layer config and
-  applies `__inkPlanLayers` (`@core/geo/pdfLayers`): document defaults, plus
-  aerial/orthoimagery forced **off** (older sheets ship it on). The config is
-  passed to `page.render` as `optionalContentConfigPromise`.
+- **Layer plan.** After the document opens, the page reads its layer config
+  (pdf.js 6: the config iterates `[id, group]` pairs; 3.11's `getGroups()` is
+  gone) and applies `__inkPlanLayers` (`@core/geo/pdfLayers`): document
+  defaults, plus aerial/orthoimagery forced **off** (older sheets ship it on).
+  The config is passed to `page.render` as `optionalContentConfigPromise`.
 - **Worker filter.** The bundled worker is patched at HTML-build time
   (`@core/geo/pdfWorkerPatch`: four exact-text insertions into the minified
-  evaluator, all-or-nothing; the runtime is prepended). The page posts the final
-  visibility map to the worker on pdf.js' own port before the render asks for
-  the operator list, and the worker drops image/form XObjects, inline images and
-  shadings inside hidden sections (and images/forms whose own `/OC` is hidden)
-  before fetching or decoding them. Visibility uses pdf.js' own rules, and
-  anything unknown counts as visible, so the filter can only remove what pdf.js
-  would not have painted. If the patch doesn't apply (another pdf.js build),
-  the page logs it and renders unfiltered. `pdfWorkerPatch.test.ts` fails if
-  the shipped asset stops matching.
+  6.4.299 evaluator, all-or-nothing; the runtime is prepended). The page posts
+  the final visibility map, and pdf.js' own op codes for the operators that
+  may be dropped, to the worker on pdf.js' own port before the render asks for
+  the operator list. The worker then drops image/form XObjects, inline images
+  and shadings inside hidden sections (and images/forms whose own `/OC` is
+  hidden) before fetching or decoding them. Section nesting follows pdf.js' own
+  marked-content depth counter, per `getOperatorList` call (a form XObject's
+  content is a nested call), so an operator pdf.js ignores can never put the
+  filter out of step. Visibility uses pdf.js' own rules, and anything unknown
+  counts as visible, so the filter can only remove what pdf.js would not have
+  painted. If the patch doesn't apply (another pdf.js build), the page logs it
+  and renders unfiltered. `pdfWorkerPatch.test.ts` fails if the shipped asset
+  stops matching, and `pdfWorkerPatch.pdfjs.test.ts` runs the patched worker
+  in the real shipped pdf.js.
 - **Native handoff.** A page whose layer plan draws differently from the
   document defaults is not handed to the native renderers (they draw the
   defaults), so the overview and its detail tiles always show the same layers.
@@ -378,10 +407,11 @@ render.
   native detail tiles, as before #478.
 
 Measured on `ME_Portland_West_20240805_TM_geo.pdf` (58.6 MB), 2048 px overview,
-through this page's own script in headless Chrome with the served range path:
-6.1–6.4 s → 1.27–1.30 s, byte-identical PNG. A detail crop: 6.1 s → 1.1 s.
-A scanned historical sheet with no layers is unchanged (3.0 s both ways).
-These are desktop numbers, not device numbers.
+through this page's own script in headless Chrome with the served range path
+(pdf.js 3.11): 6.1–6.4 s → 1.27–1.30 s, byte-identical PNG. A detail crop:
+6.1 s → 1.1 s. A scanned historical sheet with no layers is unchanged (3.0 s
+both ways). These are desktop numbers, not device numbers. The pdf.js 6
+numbers are in the upgrade PR (#619).
 
 Render time barely depends on the raster width (768 px 1.13 s, 4096 px 1.53 s
 for the sheet above). The cost is per operator (~580k here), not per pixel, so
@@ -393,75 +423,70 @@ before and are not re-rendered. A sheet whose imagery is on by default keeps
 its imagery overview until it is re-imported, while new detail tiles leave the
 imagery out.
 
-## Why pdfjs-dist 3.11.174
+## pdf.js 6 (6.4.299) and the WebViews it runs on
 
-- It ships a **legacy UMD** build (`legacy/build/pdf.min.js` +
-  `pdf.worker.min.js`) — a single global `window.pdfjsLib`, no ESM/`import`,
-  Babel-lowered to broadly-supported syntax. That is exactly what loads reliably
-  inside a WebView's JS engine on both platforms.
-- pdf.js v4/v5 legacy builds still rely on newer runtime features
-  (`Promise.withResolvers`, `structuredClone`, `Array.prototype.at`, etc.) that
-  are not guaranteed in older Android System WebViews, so v3 is the safer floor
-  for an offline trail app that may run on older devices.
+The app ships pdf.js' **legacy** build (Babel-lowered, core-js polyfilled).
+Its own support table stops at Safari 18 and Chrome 125; the app runs on iOS
+16.4+ (WKWebView is that iOS's WebKit) and Android 8+ (Android System WebView,
+Play-updated: Chrome 138 on Android 8/9, current from Android 10). Measured
+on the shipped build (Babel's usage-based core-js detection for `ios 16.4` and
+`chrome 110`, minus what pdf.js polyfills itself, plus MDN compat data), the
+gaps on our paths are filled by `@core/geo/pdfjsPolyfills`, a classic script
+that runs before pdf.js on the page and is prepended to the worker:
+
+- `Promise.withResolvers` (Safari 17.4, Chrome 119): needed by every render;
+- `ArrayBuffer.prototype.transfer` / `transferToFixedLength` (Safari 17.4,
+  Chrome 114): the worker packs embedded fonts with it;
+- `ReadableStream` async iteration (Chrome 124; no Safari before iOS 27):
+  without it every Flate image is inflated twice on iOS.
+
+Syntax needs Safari 16.4 / Chrome 94 (class static blocks), which the
+supported range has. The page was rendered end to end in WebKit 16.4 and
+Chromium 112 (Playwright 1.32 builds) as well as current WebKit and Chromium,
+served and inline. `pdfjsPolyfills.test.ts` runs each polyfill in a realm
+where the native method was removed.
+
+**JPEG 2000 on iOS.** pdf.js 6's `openjpeg.wasm` uses two relaxed-SIMD
+instructions, which no WKWebView supports (iOS 26.3 simulator: "relaxed simd
+instructions not supported"), so every iPhone fell back to the plain-JS
+decoder: about 2× slower than 3.11's own JPX decoder. The shipped decoder is
+rewritten by `scripts/pdfjs/openjpeg-no-relaxed-simd.mjs` to plain SIMD (iOS
+16.4+), choosing behaviours the relaxed-SIMD spec already allows (unfused
+multiply-add, saturating truncation); its output is pixel-identical to the
+upstream module in Chromium. Source and result are pinned in
+`scripts/pdfjs/assets.mjs`.
 
 ### Security: CVE-2024-4367 (GHSA-wgrm-67xf-hhpq)
 
-pdf.js up to 4.1.392 can run JavaScript embedded in a malicious PDF: a font's
-`FontMatrix` reaches glyph-drawing code that pdf.js compiles with
-`new Function`. In 3.11.174 that compile only happens when `isEvalSupported` is
-true, which is pdf.js' default. The same flag also gates the worker's
-PostScript (Type 4) function compiler, the build's only other eval sink.
+pdf.js up to 4.1.392 could run JavaScript embedded in a malicious PDF: a font's
+`FontMatrix` reached glyph-drawing code that pdf.js compiled with
+`new Function`. Fixed in 4.2.67; pdf.js 6 has no `new Function` or `eval` at
+all. `scripts/pdfjs/assets.test.mjs` fails if the shipped pdf.js is older than
+4.2.67, differs from the locked `pdfjs-dist`, or contains a string-compiling
+sink, and the nightly `npm audit` gate no longer flags `pdfjs-dist`.
 
-**Mitigation (in place).** Every `getDocument` call on the page passes
-`isEvalSupported: false`: served, inline, and the watchdog's retry of each.
-pdf.js then draws glyphs through a plain command loop and never evaluates
-PDF-derived text. `PdfRasterizer.security.test.tsx` checks the option on all
-four calls. It also checks that the shipped asset's eval sinks are still the
-gated ones, so replacing the asset fails the test until someone re-reviews it.
-There is no scripting surface: pdf.js 3.11's `getDocument` has no
-`enableScripting`, and the page never loads `pdf.sandbox` or an annotation
-layer.
+Defence in depth stays on the page:
 
-If script did run, it would run in the hidden WebView. It could
-post forged results to RN and read the loopback allowlist (`maps/`,
-`offline-styles/`, `.rasterizer/`). It has no file access
-(`allowFileAccess={false}`). There is no page CSP and no navigation filter, so
-the network is not blocked.
+- every `getDocument` passes `isEvalSupported: false` (a no-op in 6.x; a guard
+  if a later build brings an eval path back), `useWorkerFetch: false` and no
+  scripting; `PdfRasterizer.security.test.tsx` checks all four opens (served,
+  inline, and the watchdog retry of each);
+- the page's Content-Security-Policy (`RASTERIZER_PAGE_CSP`) has no
+  `'unsafe-eval'`, so the engine itself refuses to compile a string as
+  JavaScript, on the page and in its worker; `connect-src 'self'` keeps
+  fetches on the loopback origin, so a script that did run could not send
+  data off the device. There is no scripting surface: the page never loads
+  `pdf.sandbox` or an annotation layer.
 
-**Real fix: upgrade.** There is no patched 3.x (3.11.174 is the last). The
-first fixed release is 4.2.67 and the current one is 6.4.299, which has no
-`new Function` at all. The audit gate stays red on this advisory until the
-upgrade ships; it is deliberately not allowlisted. The upgrade is a migration,
-not a bump:
+The WebView keeps `allowFileAccess={false}`.
 
-- **ESM only since v4.** `legacy/build/pdf.min.mjs` (524 KB) and
-  `pdf.worker.min.mjs` (1.3 MB). The page must load pdf.js as an inline
-  `<script type="module">`, which still sets `globalThis.pdfjsLib`. Module
-  scripts run deferred, so the page script must wait for it. pdf.js creates
-  the Blob worker as `{type: "module"}`. The main-thread fallback (#554/#560)
-  must define `globalThis.pdfjsWorker` from the worker module.
-- **Layers.** `OptionalContentConfig.getGroups()` is gone (6.x has
-  `getGroup(id)` and iteration), so `prepareLayers` would silently return "no
-  layers" and US Topo orthoimage would be painted again.
-- **Worker patch.** The four exact-text insertions (`pdfWorkerPatch`) target
-  the 3.11 minified evaluator. They will not match 6.x. The page then renders
-  unfiltered (about 5× slower on US Topo, #478) until the patch is redone, or
-  until 6.x is shown to skip hidden content on its own.
-- **JPEG 2000 / JBIG2.** In 6.x these decoders are wasm modules
-  (`openjpeg`, `jbig2`, plus `*_nowasm_fallback.js`) loaded from `wasmUrl`. They
-  must be bundled and served from the loopback server. Inline mode
-  (`about:blank`) has nowhere to load them from.
-- **Runtime APIs.** 6.x uses `Promise.withResolvers`, `structuredClone`,
-  `Uint8Array.fromBase64` and `Map.prototype.getOrInsertComputed`. Check the
-  legacy build's polyfills against iOS 16.4 WKWebView and the oldest Android
-  System WebView we support.
-- **Tests.** `orientation.pdfjs.test.ts` and `pdfWorkerPatch.pdfjs.test.ts`
-  load `pdfjs-dist/legacy/build/pdf.js` (CJS) in Jest. 6.x has no CJS entry and
-  needs Node ≥ 22.13.
+### Tests against the shipped build
 
-All of it ships OTA: pdf.js is a Metro asset (below) and the page is built at
-runtime. It still needs on-device validation on both platforms before it can
-go out.
+Jest runs CommonJS, so `@core/geo/pdfjsRealm.testUtils` evaluates the shipped
+modules in a fresh `vm` realm as strict function bodies, rewriting only the
+single trailing `export {…}` and `import.meta.url` (it throws on any other
+module syntax). `orientation.pdfjs.test.ts`, `pdfWorkerPatch.pdfjs.test.ts`
+and `PdfRasterizer.fakeWorker.test.tsx` use it.
 
 ## Limitations
 
