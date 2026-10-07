@@ -201,6 +201,9 @@ import { MarinePackBanner } from './marine/MarinePackBanner';
 import { DepthPointLine } from './marine/DepthPointLine';
 import { MarineLegend } from './marine/MarineLegend';
 import { marineChartSource, useMarineChart } from './marine/useMarineChart';
+import { MainMapPhotoChip, MainMapPhotoLayers, useMainMapPhotos } from '../photos/MainMapPhotos';
+import { photoViewerHref } from '../photos/photoUri';
+import { PHOTO_TAP_FRESH_MS } from '@core/photos/mapStyle';
 import { MapPointChip, MapPointLine, hitMapPointChip } from './components/MapPointChip';
 import { ForecastCard } from './weather/ForecastCard';
 import { WindParticleLayer } from './weather/wind/WindParticleLayer';
@@ -410,6 +413,26 @@ export function MapScreen() {
     [heatOn, tracks, drawnTrackIds],
   );
   const router = useRouter();
+
+  // Trail photos (#587): the shown trails' photos from z12 (the setting),
+  // and their chip. A photo tap reaches the map's own press handler, which
+  // runs it only when no waypoint pin or chip has priority there.
+  const mainPhotos = useMainMapPhotos(drawnTrackIds, tracks);
+  const photoTapRef = useRef<{ at: number; run: () => void } | null>(null);
+  const deferPhotoPress = useCallback((run: () => void) => {
+    photoTapRef.current = { at: Date.now(), run };
+  }, []);
+  const getMapZoom = useCallback(
+    () => mapRef.current?.getZoom() ?? Promise.reject(new Error('no map')),
+    [],
+  );
+  const zoomMapTo = useCallback((center: [number, number], zoom: number) => {
+    cameraRef.current?.easeTo({ center, zoom, duration: 400 });
+  }, []);
+  const openPhoto = useCallback(
+    (trackId: string, photoId: string) => router.push(photoViewerHref(trackId, photoId) as never),
+    [router],
+  );
   // Tap-selected heat spot (set by onMapPress's hit-test below when a tap
   // lands on a "hot" spot with 2+ trails underneath it): drives the
   // HeatPointCarousel and which trail the heat layers highlight/dim. Null
@@ -1805,6 +1828,10 @@ export function MapScreen() {
   // the bubble or any pin was on screen (2026-09-28).
   const handleMapPress = useCallback(
     async ({ point, lngLat: lngLatArr }: MapPress) => {
+      // A photo circle under this tap (#587) handed its action over just
+      // before this press bubbled here; taken now so a later tap never runs it.
+      const photoTap = photoTapRef.current;
+      photoTapRef.current = null;
       const map = mapRef.current;
       if (!map) return;
       // #232 — the chip's action row already took this touch (see
@@ -1921,6 +1948,13 @@ export function MapScreen() {
             : { source: pin.source, id: pin.id },
         );
         setExtensionHit(null);
+        return;
+      }
+
+      // Trail photos (#587): under the waypoint pins and the chip, above
+      // everything else (the map extensions, trails, heat).
+      if (photoTap !== null && Date.now() - photoTap.at < PHOTO_TAP_FRESH_MS) {
+        photoTap.run();
         return;
       }
 
@@ -2743,6 +2777,15 @@ export function MapScreen() {
               </GeoJSONSource>
             )}
 
+            {/* Trail photos (#587): above the shown trails, under the live line. */}
+            <MainMapPhotoLayers
+              state={mainPhotos}
+              onOpenPhoto={openPhoto}
+              deferPress={deferPhotoPress}
+              getZoom={getMapZoom}
+              zoomTo={zoomMapTo}
+            />
+
             {trailFeature && (
               <GeoJSONSource id="trail" data={trailFeature}>
                 {LIVE_TRAIL_LAYERS}
@@ -3089,6 +3132,19 @@ export function MapScreen() {
           {/* Pages still in the rasterizer, one dismissible row each (#269).
             First in the column so they stack above the scale bar. */}
           <RenderingToasts />
+          {/* The trail-photo chip (#587): legend and hide/show switch, while
+            the circles can be on screen. */}
+          {!selecting &&
+            makeMapState === null &&
+            mainPhotos.label !== null &&
+            mainPhotos.minZoom !== null &&
+            (scaleAt?.zoom ?? 0) >= mainPhotos.minZoom && (
+              <MainMapPhotoChip
+                label={mainPhotos.label}
+                hidden={mainPhotos.hidden}
+                onToggle={mainPhotos.toggleHidden}
+              />
+            )}
           {/* Scale bar, bottom-left (owner call, 2026-09-08 — #97 had docked it
             under the compass). It is the FIRST child of the bottom chrome
             COLUMN rather than absolutely positioned in the corner, so it

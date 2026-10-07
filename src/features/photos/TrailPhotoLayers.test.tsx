@@ -179,6 +179,27 @@ it('opens a stack that only splits past z18, its photos in time order', async ()
   expect(onPhotoPress).toHaveBeenCalledWith(['a', 'b']);
 });
 
+it('can leave the tap to the map and hand over its action', async () => {
+  const onPhotoPress = jest.fn();
+  let run: (() => void) | null = null;
+  await render(
+    <TrailPhotoLayers
+      id="t"
+      photos={PHOTOS}
+      onPhotoPress={onPhotoPress}
+      deferPress={(r) => {
+        run = r;
+      }}
+    />,
+  );
+  const stop = press('t-photos', { properties: { id: 'b', order: 1 } });
+  expect(stop).not.toHaveBeenCalled();
+  expect(onPhotoPress).not.toHaveBeenCalled();
+  run!();
+  await flush();
+  expect(onPhotoPress).toHaveBeenCalledWith(['b']);
+});
+
 it('ignores a press on nothing it knows', async () => {
   const onPhotoPress = jest.fn();
   await render(<TrailPhotoLayers id="t" photos={PHOTOS} onPhotoPress={onPhotoPress} />);

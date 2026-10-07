@@ -6,6 +6,7 @@ import {
   countLayout,
   initialSprites,
   leafIds,
+  mainMapPhotoChipLabel,
   mapPhotos,
   MAX_SPRITES,
   orderOfSprite,
@@ -113,6 +114,28 @@ describe('sprite LRU', () => {
   it('starts with the first ranks', () => {
     expect(initialSprites('p-', 3)).toEqual(['p-0', 'p-1', 'p-2']);
     expect(initialSprites('p-', 1000)).toHaveLength(MAX_SPRITES);
+  });
+});
+
+describe('main map chip', () => {
+  it('names one trail, counts several', () => {
+    expect(mainMapPhotoChipLabel([{ name: 'Lac des Cygnes', count: 33 }])).toBe(
+      'Lac des Cygnes · 33 photos',
+    );
+    expect(
+      mainMapPhotoChipLabel([
+        { name: 'A', count: 1 },
+        { name: 'B', count: 0 },
+      ]),
+    ).toBe('A · 1 photo');
+    expect(
+      mainMapPhotoChipLabel([
+        { name: 'A', count: 30 },
+        { name: 'B', count: 15 },
+      ]),
+    ).toBe('45 photos on 2 trails');
+    expect(mainMapPhotoChipLabel([{ name: 'A', count: 0 }])).toBeNull();
+    expect(mainMapPhotoChipLabel([])).toBeNull();
   });
 });
 

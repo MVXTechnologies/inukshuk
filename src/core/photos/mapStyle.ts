@@ -209,6 +209,25 @@ export function stackTapAction(
   };
 }
 
+/** How long the main map's own press handler may still claim a photo tap (ms). */
+export const PHOTO_TAP_FRESH_MS = 1000;
+
+/**
+ * The main map's photo chip (mockups 1–2), legend and switch in one: one
+ * trail reads "<name> · 33 photos"; several, "45 photos on 3 trails".
+ * Null when nothing is drawn.
+ */
+export function mainMapPhotoChipLabel(
+  trails: readonly { name: string; count: number }[],
+): string | null {
+  const withPhotos = trails.filter((t) => t.count > 0);
+  const total = withPhotos.reduce((n, t) => n + t.count, 0);
+  if (total === 0) return null;
+  const photos = total === 1 ? '1 photo' : `${total} photos`;
+  if (withPhotos.length === 1) return `${withPhotos[0]!.name} · ${photos}`;
+  return `${photos} on ${withPhotos.length} trails`;
+}
+
 /** A stack's photo ids in time order, from its leaves' properties. */
 export function leafIds(
   leaves: readonly { properties?: Record<string, unknown> | null }[],

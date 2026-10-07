@@ -169,9 +169,7 @@ describe('trail photos (#587)', () => {
   it('blocks the trim before any change when the photo list cannot be rewritten', async () => {
     sidecars.readWritableSidecar.mockRejectedValueOnce(new Error('newer version'));
     const commit = jest.fn();
-    await expect(overwriteWithTrim(summary, points, 1, 2, commit)).rejects.toThrow(
-      'newer version',
-    );
+    await expect(overwriteWithTrim(summary, points, 1, 2, commit)).rejects.toThrow('newer version');
     expect(storage.writeTrackGpx).not.toHaveBeenCalled();
     expect(commit).not.toHaveBeenCalled();
   });

@@ -65,6 +65,12 @@ export interface TrailPhotoLayersProps {
   /** The map's zoom now, and a camera move: a stack tap zooms to where it splits. */
   getZoom?: () => Promise<number>;
   zoomTo?: (center: [number, number], zoom: number) => void;
+  /**
+   * Instead of taking the tap, let it reach the map's own press handler and
+   * hand it this tap's photo action to run if nothing with priority claims
+   * it first (the main map's waypoint pins and point chip).
+   */
+  deferPress?: (run: () => void) => void;
 }
 
 type PressEvent = NativeSyntheticEvent<{
@@ -86,6 +92,7 @@ export function TrailPhotoLayers({
   pressGuard,
   getZoom,
   zoomTo,
+  deferPress,
 }: TrailPhotoLayersProps) {
   const drawn = useMemo(() => mapPhotos(photos), [photos]);
   const prefix = useMemo(() => spritePrefix(id, photoSetKey(drawn)), [id, drawn]);
@@ -153,12 +160,11 @@ export function TrailPhotoLayers({
   const onPress = useCallback(
     (e: PressEvent) => {
       // Read everything now: React Native recycles the event once we await.
-      e.stopPropagation();
       const feature = e.nativeEvent.features[0];
       const point = e.nativeEvent.point;
       const press = feature ? readPhotoPress(feature as never) : null;
       if (!press) return;
-      void (async () => {
+      const run = async () => {
         if (point && pressGuard && (await pressGuard(point))) return;
         if (press.kind === 'photo') {
           onPhotoPress?.([press.id]);
@@ -178,9 +184,15 @@ export function TrailPhotoLayers({
         const leaves = await source?.getClusterLeaves(press.clusterId, 500, 0).catch(() => []);
         const ids = leafIds(leaves ?? []);
         if (ids.length > 0) onPhotoPress?.(ids);
-      })();
+      };
+      if (deferPress) {
+        deferPress(() => void run());
+        return;
+      }
+      e.stopPropagation();
+      void run();
     },
-    [pressGuard, onPhotoPress, getZoom, zoomTo],
+    [pressGuard, onPhotoPress, getZoom, zoomTo, deferPress],
   );
 
   if (drawn.length === 0) return null;
