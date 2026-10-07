@@ -50,7 +50,7 @@ bbox touches it; pieces never overlap.
    take `tiles.mvxtechnologies.com`.
 5. **Deploy the Worker** (from `infra/tiles/worker/`):
    ```sh
-   npm install
+   npm ci   # exactly the committed package-lock.json, never a fresh resolve
    npx wrangler login
    # uncomment the `routes` line in wrangler.toml once the zone is on Cloudflare
    npx wrangler deploy
@@ -448,7 +448,7 @@ decodes a tile instead of 5, but half the detail — CDEM has real 20 m data at 
 
 ```sh
 cd infra/tiles/worker
-npm install            # drops maplibre-contour, no longer used
+npm ci                 # the committed lockfile; `npm install` would re-resolve ^ranges
 npx tsc --noEmit
 npx wrangler deploy
 ```
@@ -495,7 +495,7 @@ No Cloudflare needed: cut a small extract and serve it with the Worker itself.
 ```sh
 pmtiles extract https://build.protomaps.com/<YYYYMMDD>.pmtiles quebec-dev.pmtiles \
   --bbox=-71.65,46.65,-70.75,47.40
-cd infra/tiles/worker && npm install
+cd infra/tiles/worker && npm ci
 npx wrangler r2 object put inukshuk-tiles/quebec-dev.pmtiles --file=../../../quebec-dev.pmtiles --local
 npx wrangler dev --port 8787
 # build the app with VECTOR_TILES_URL='http://127.0.0.1:8787/quebec-dev/{z}/{x}/{y}.mvt'
