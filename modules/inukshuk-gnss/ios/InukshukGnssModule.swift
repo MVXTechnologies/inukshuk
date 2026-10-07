@@ -1,0 +1,243 @@
+import ExpoModulesCore
+import Foundation
+
+struct GattProfileRecord: Record {
+  @Field var name: String = ""
+  @Field var service: String = ""
+  @Field var notify: String = ""
+  @Field var write: String?
+}
+
+struct FakeDeviceRecord: Record {
+  /// Base64 frames (e.g. one NMEA epoch each), replayed in order.
+  @Field var frames: [String] = []
+  @Field var intervalMs: Double = 1000
+  @Field var loop: Bool = true
+}
+
+struct ConnectOptions: Record {
+  @Field var deviceId: String = ""
+  @Field var transport: String = ""
+  @Field var profiles: [GattProfileRecord] = []
+  @Field var autoReconnect: Bool = true
+  /// Android only: iOS negotiates the ATT MTU itself.
+  @Field var mtu: Double = 517
+  @Field var fake: FakeDeviceRecord?
+}
+
+struct ScanOptions: Record {
+  @Field var durationMs: Double = 15_000
+}
+
+struct TcpOptions: Record {
+  @Field var host: String = ""
+  @Field var port: Int = 0
+  @Field var tls: Bool = false
+}
+
+struct KnownDevicesOptions: Record {
+  @Field var serviceUuids: [String] = []
+}
+
+/// JS surface of the GNSS receiver transport (contract in
+/// src/lib/gnss/nativeGnss.ts). Thin: validation and handing off to the
+/// process-wide `GnssLink`.
+public final class InukshukGnssModule: Module, GnssEventSink {
+  private static let maxTcp = 4
+  /// NTRIP sockets of this React instance (closed with it); `tcpQueue` only.
+  private let tcpQueue = DispatchQueue(label: "app.inukshuk.gnss.tcp")
+  private var tcp: [String: GnssTcpPipe] = [:]
+  private var tcpListening = false
+
+  public func definition() -> ModuleDefinition {
+    Name("InukshukGnss")
+
+    Events(
+      "onBytes", "onState", "onDevice", "onScanState", "onRssi", "onError", "onAvailability",
+      "onTcpData", "onTcpClose")
+
+    OnCreate {
+      GnssLink.shared.attach(self)
+    }
+
+    OnDestroy {
+      // The link outlives this React instance on purpose; a scan does not.
+      GnssLink.shared.detach(self)
+      GnssLink.shared.stopScan(reason: nil)
+      tcpQueue.sync {
+        tcp.values.forEach { $0.close() }
+        tcp.removeAll()
+      }
+    }
+
+    OnStartObserving("onTcpData") {
+      tcpQueue.async {
+        self.tcpListening = true
+        self.tcp.values.forEach { $0.setListening(true) }
+      }
+    }
+
+    OnStopObserving("onTcpData") {
+      tcpQueue.async {
+        self.tcpListening = false
+        self.tcp.values.forEach { $0.setListening(false) }
+      }
+    }
+
+    // Raw TCP / TLS for NTRIP casters (contract: src/data/gnss/ntripSocket.ts).
+    // Resolves with the socket id once connected; rejects E_TCP_CONNECT.
+    AsyncFunction("openTcp") { (options: TcpOptions, promise: Promise) in
+      let host = options.host.trimmingCharacters(in: .whitespaces)
+      guard !host.isEmpty, (1...65_535).contains(options.port) else {
+        return promise.reject("E_TCP_BAD_ARGUMENT", "A host and a port (1-65535) are required")
+      }
+      tcpQueue.async {
+        guard self.tcp.count < Self.maxTcp else {
+          return promise.reject("E_TCP_LIMIT", "Too many open caster connections")
+        }
+        let id = UUID().uuidString
+        let pipe = GnssTcpPipe(
+          host: host, port: UInt16(options.port), tls: options.tls, queue: self.tcpQueue,
+          onData: { [weak self] data in
+            self?.sendEvent("onTcpData", ["id": id, "data": data.base64EncodedString()])
+          },
+          onClose: { [weak self] error in
+            guard let self else { return }
+            self.tcp[id] = nil
+            self.sendEvent("onTcpClose", ["id": id, "error": error])
+          })
+        pipe.setListening(self.tcpListening)
+        self.tcp[id] = pipe
+        pipe.open { error in
+          if let error {
+            self.tcp[id] = nil
+            promise.reject("E_TCP_CONNECT", error)
+          } else {
+            promise.resolve(id)
+          }
+        }
+      }
+    }
+
+    AsyncFunction("writeTcp") { (id: String, data: Data, promise: Promise) in
+      tcpQueue.async {
+        guard let pipe = self.tcp[id] else {
+          return promise.reject("E_TCP_CLOSED", "The caster connection is closed")
+        }
+        pipe.write(data) { error in
+          if let error { promise.reject("E_TCP_WRITE", error) } else { promise.resolve(nil) }
+        }
+      }
+    }
+
+    AsyncFunction("closeTcp") { (id: String, promise: Promise) in
+      tcpQueue.async {
+        self.tcp.removeValue(forKey: id)?.close()
+        promise.resolve(nil)
+      }
+    }
+
+    OnStartObserving("onBytes") {
+      GnssLink.shared.setListening(self, true)
+    }
+
+    OnStopObserving("onBytes") {
+      GnssLink.shared.setListening(self, false)
+    }
+
+    AsyncFunction("getAvailability") { (promise: Promise) in
+      GnssLink.shared.availability { promise.resolve($0) }
+    }
+
+    AsyncFunction("getPermissionsAsync") { () -> [String: Any] in
+      GnssLink.permissionResponse()
+    }
+
+    AsyncFunction("requestPermissionsAsync") { (promise: Promise) in
+      GnssLink.shared.requestPermission { promise.resolve($0) }
+    }
+
+    AsyncFunction("startScan") { (options: ScanOptions, promise: Promise) in
+      GnssLink.shared.startScan(durationMs: Int64(options.durationMs)) { error in
+        if let error { promise.reject(error.code, error.message) } else { promise.resolve(nil) }
+      }
+    }
+
+    AsyncFunction("stopScan") { (promise: Promise) in
+      GnssLink.shared.stopScan(reason: "stopped") { promise.resolve(nil) }
+    }
+
+    AsyncFunction("getKnownDevices") { (options: KnownDevicesOptions, promise: Promise) in
+      GnssLink.shared.knownDevices(serviceUuids: options.serviceUuids) { devices, error in
+        if let error { promise.reject(error.code, error.message) } else { promise.resolve(devices) }
+      }
+    }
+
+    AsyncFunction("connect") { (options: ConnectOptions, promise: Promise) in
+      let target: GnssTarget
+      switch Self.parseTarget(options) {
+      case .success(let t): target = t
+      case .failure(let e): return promise.reject(e.code, e.message)
+      }
+      GnssLink.shared.connect(target) { error in
+        if let error { promise.reject(error.code, error.message) } else { promise.resolve(nil) }
+      }
+    }
+
+    AsyncFunction("disconnect") { (promise: Promise) in
+      GnssLink.shared.disconnect { promise.resolve(nil) }
+    }
+
+    AsyncFunction("write") { (data: Data, promise: Promise) in
+      GnssLink.shared.write(data) { error in
+        if let error { promise.reject(error.code, error.message) } else { promise.resolve(nil) }
+      }
+    }
+
+    Function("getState") { () -> [String: Any?] in
+      GnssLink.shared.snapshot()
+    }
+  }
+
+  func emit(_ name: String, _ body: [String: Any?]) {
+    sendEvent(name, body)
+  }
+
+  private static func parseTarget(_ o: ConnectOptions) -> Result<GnssTarget, GnssError> {
+    func bad(_ message: String) -> Result<GnssTarget, GnssError> {
+      .failure(GnssError(code: "E_GNSS_BAD_ARGUMENT", message: message, fatal: true))
+    }
+    if o.deviceId.trimmingCharacters(in: .whitespaces).isEmpty { return bad("deviceId is required") }
+    switch o.transport {
+    case "ble":
+      var profiles: [GnssGattProfile] = []
+      for r in o.profiles {
+        guard let p = GnssGattProfile(name: r.name, service: r.service, notify: r.notify, write: r.write) else {
+          return bad("Invalid GATT profile '\(r.name)'")
+        }
+        profiles.append(p)
+      }
+      if profiles.isEmpty { return bad("A BLE connection needs at least one GATT profile") }
+      return .success(GnssTarget(deviceId: o.deviceId, transport: "ble", profiles: profiles, autoReconnect: o.autoReconnect))
+    case "fake":
+      guard let f = o.fake else { return bad("The simulated receiver needs its frames") }
+      var frames: [Data] = []
+      for s in f.frames {
+        guard let d = Data(base64Encoded: s) else { return bad("A simulated frame is not base64") }
+        frames.append(d)
+      }
+      if frames.isEmpty { return bad("The simulated receiver needs at least one frame") }
+      var t = GnssTarget(deviceId: o.deviceId, transport: "fake", profiles: [], autoReconnect: o.autoReconnect)
+      t.fakeFrames = frames
+      t.fakeIntervalMs = Int64(min(max(f.intervalMs, 20), 60_000))
+      t.fakeLoop = f.loop
+      return .success(t)
+    case "spp":
+      // No public Bluetooth Classic API on iOS (MFi External Accessory only).
+      return .failure(GnssError(code: "E_GNSS_UNSUPPORTED_TRANSPORT", message: "Bluetooth Classic is not available on iOS", fatal: true))
+    default:
+      // "ea" (External Accessory, P3) and "tcp" are reserved names.
+      return .failure(GnssError(code: "E_GNSS_UNSUPPORTED_TRANSPORT", message: "Unsupported transport '\(o.transport)'", fatal: true))
+    }
+  }
+}

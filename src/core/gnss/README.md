@@ -37,6 +37,7 @@ caster bytes ──► NtripResponseParser (ntrip.ts) ──► RTCM bytes ─�
 | `casters.ts`      | correction profiles' frame + epoch, caster presets, RTCM 1021 → information-only hint                              |
 | `datum.ts`        | the frame a fix is in, the plan into the project datum (via Convert), engine run, offset cache                     |
 | `datumVectors.ts` | the official-tool validation vectors' shared types and planner hook                                                |
+| `bleProfiles.ts`  | serial-over-BLE GATT profiles sent to the native transport on connect; device ranking for pickers                  |
 
 ## Contracts for the later stages
 
