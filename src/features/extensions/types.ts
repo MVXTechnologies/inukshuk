@@ -15,6 +15,8 @@ import type { ImageRequireSource } from 'react-native';
 export interface ExtensionPanelEntryProps {
   /** Open the geodetic filter in the sheet (the one sub-page an entry has today). */
   onOpenGeodeticFilter: () => void;
+  /** Close the overlays sheet (an entry opening its own sheet, e.g. the receiver). */
+  onClose: () => void;
 }
 
 /** What the map hands an extension's bottom card: the slot's state and its actions. */
