@@ -34,7 +34,6 @@ appId: com.inukshuk.app
 - assertVisible: 'Placed on the trail.*'
 # Page to the second photo.
 - swipe:
-    direction: LEFT
     start: 80%,35%
     end: 10%,35%
 - extendedWaitUntil:
