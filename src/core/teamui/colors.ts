@@ -27,9 +27,11 @@ export function memberColor(index: number): string {
 
 /** One or two capital initials for an avatar ("Julie Tremblay" → "JT"). */
 export function initials(name: string): string {
+  // Words that start with a letter or digit once punctuation is trimmed
+  // ("Alex (Guide)" → "AG", not "A(").
   const words = name
     .split(/[\s·._-]+/)
-    .map((w) => w.trim())
+    .map((w) => w.replace(/^[^\p{L}\p{N}]+/u, ''))
     .filter((w) => w.length > 0);
   const first = [...(words[0] ?? '?')][0] ?? '?';
   const second = words.length > 1 ? ([...(words[words.length - 1] ?? '')][0] ?? '') : '';

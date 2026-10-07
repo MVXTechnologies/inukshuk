@@ -44,6 +44,7 @@ describe('colours and initials', () => {
     expect(memberColor(-1)).toBe(MEMBER_COLORS[MEMBER_COLORS.length - 1]);
     expect(initials('Julie Tremblay')).toBe('JT');
     expect(initials('Luc')).toBe('L');
+    expect(initials('Alex (Guide)')).toBe('AG');
     expect(initials('élodie de la Rive')).toBe('ÉR');
     expect(initials('')).toBe('?');
   });
