@@ -85,7 +85,7 @@ export function TeamHubScreen() {
   const connected = new Set(openPeers(peers).map((p) => p.memberId));
   const active = view.members.filter((m) => m.active);
   const recentJoins = notices.filter((n) => now - n.at < JOIN_NOTICE_MS);
-  const leavers = view.isAdmin ? active.filter((m) => m.left) : [];
+  const leavers = active.filter((m) => m.left && m.actions.remove);
   const denied = mesh?.localNetwork === 'denied';
 
   const leave = () =>
