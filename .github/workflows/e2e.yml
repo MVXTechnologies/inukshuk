@@ -288,6 +288,22 @@ jobs:
             adb install -r e2e-apk/app-release.apk
             bash .github/scripts/e2e-attempts.sh "$SHARD"
 
+      # Review screenshots: flows save `takeScreenshot: review-<name>` for UI a
+      # PR needs to show (light + dark) without a local device. Uploaded on
+      # green runs too; where the file lands depends on the Maestro CLI
+      # version (see scripts/e2e/find-screenshot.sh), so look in all three.
+      - name: Upload review screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: review-screenshots-${{ matrix.shard }}
+          path: |
+            ~/.maestro/tests/**/review-*.png
+            .maestro/**/review-*.png
+            review-*.png
+          if-no-files-found: ignore
+          retention-days: 14
+
       # Maestro writes screenshots + the UI hierarchy on failure; without this
       # upload every red run is a black box. Also uploaded for a green shard
       # that needed a retry (its first failure's logcat is the flake evidence).

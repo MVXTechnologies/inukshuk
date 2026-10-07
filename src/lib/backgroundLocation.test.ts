@@ -8,13 +8,16 @@ import {
 } from '@state/recorderStore';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
+import { Platform } from 'react-native';
 import {
   isBackgroundFeedConfirmed,
   cleanupBackgroundLocationAtLaunch,
+  ensureBackgroundLocationPermission,
   mergeJournaledBackgroundPoints,
   resetBackgroundLocationForTests,
   startBackgroundLocationUpdates,
   stopBackgroundLocationUpdates,
+  suppressBackgroundRationaleThisSession,
 } from './backgroundLocation';
 
 jest.mock('expo-task-manager', () => ({ defineTask: jest.fn() }));
@@ -352,5 +355,58 @@ describe('feeder handoff — isBackgroundFeedConfirmed', () => {
     await deliver([1_002_000]);
     expect(useRecorderStore.getState().points).toHaveLength(1);
     expect(isBackgroundFeedConfirmed()).toBe(true);
+  });
+});
+
+describe('ensureBackgroundLocationPermission', () => {
+  const originalOS = Platform.OS;
+  const setOS = (os: string) =>
+    Object.defineProperty(Platform, 'OS', { value: os, configurable: true });
+  const perm = (granted: boolean, canAskAgain = true) => ({
+    granted,
+    canAskAgain,
+    status: granted ? 'granted' : 'denied',
+    expires: 'never',
+  });
+
+  beforeEach(() => {
+    resetBackgroundLocationForTests();
+    jest.mocked(Location.getForegroundPermissionsAsync).mockResolvedValue(perm(true) as never);
+    jest.mocked(Location.getBackgroundPermissionsAsync).mockResolvedValue(perm(false) as never);
+    jest.mocked(Location.requestBackgroundPermissionsAsync).mockResolvedValue(perm(true) as never);
+    jest.mocked(Location.requestBackgroundPermissionsAsync).mockClear();
+  });
+  afterEach(() => setOS(originalOS));
+
+  it('iOS: "While Using" is enough — never asks for "Always", never shows the rationale', async () => {
+    setOS('ios');
+    const askRationale = jest.fn(async () => true);
+    await expect(ensureBackgroundLocationPermission(askRationale)).resolves.toBe('granted');
+    expect(askRationale).not.toHaveBeenCalled();
+    expect(Location.requestBackgroundPermissionsAsync).not.toHaveBeenCalled();
+  });
+
+  it('iOS: a refused foreground permission is still reported', async () => {
+    setOS('ios');
+    jest.mocked(Location.getForegroundPermissionsAsync).mockResolvedValue(perm(false) as never);
+    jest.mocked(Location.requestForegroundPermissionsAsync).mockResolvedValue(perm(false) as never);
+    await expect(ensureBackgroundLocationPermission(async () => true)).resolves.toBe('denied');
+  });
+
+  it('Android: explains, then asks for "Allow all the time"', async () => {
+    setOS('android');
+    const askRationale = jest.fn(async () => true);
+    await expect(ensureBackgroundLocationPermission(askRationale)).resolves.toBe('granted');
+    expect(askRationale).toHaveBeenCalledTimes(1);
+    expect(Location.requestBackgroundPermissionsAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('Android: after the Recording check, the rationale is not repeated this session', async () => {
+    setOS('android');
+    suppressBackgroundRationaleThisSession();
+    const askRationale = jest.fn(async () => true);
+    await expect(ensureBackgroundLocationPermission(askRationale)).resolves.toBe('denied');
+    expect(askRationale).not.toHaveBeenCalled();
+    expect(Location.requestBackgroundPermissionsAsync).not.toHaveBeenCalled();
   });
 });

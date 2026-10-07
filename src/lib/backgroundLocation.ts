@@ -7,6 +7,7 @@ import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import * as Updates from 'expo-updates';
+import { Platform } from 'react-native';
 
 /**
  * Background trail recording.
@@ -19,9 +20,14 @@ import * as Updates from 'expo-updates';
  *   fixes flowing with the screen off using while-in-use permission alone;
  *   "Allow all the time" (requested separately, with a rationale dialog) lets
  *   tracking survive tighter OEM battery management.
- * - **iOS**: `UIBackgroundModes: [location]` + the Always permission keep the
- *   task alive in the background (`pausesUpdatesAutomatically: false` so the
- *   OS never silently stops a slow hike; `activityType: Fitness` for hiking).
+ * - **iOS**: `UIBackgroundModes: [location]` keeps the task alive in the
+ *   background. expo-location's task consumer sets
+ *   `allowsBackgroundLocationUpdates`, and the task is started while the app
+ *   is in front, so "While Using the App" is enough — iOS keeps delivering
+ *   with the screen locked and shows the blue location pill. We therefore
+ *   never ask for "Always" (see ensureBackgroundLocationPermission).
+ *   `pausesUpdatesAutomatically: false` so the OS never silently stops a slow
+ *   hike; `activityType: Fitness` for hiking.
  *
  * This module is imported for its side effect from `app/_layout.tsx` so the
  * task is defined at module scope — a headless launch (Android killed and
@@ -305,6 +311,12 @@ let rationaleDeclinedThisSession = false;
  * all the time") as a separate request. `askRationale` shows the explanation UI
  * and resolves with whether the user wants to proceed to the system prompt.
  *
+ * iOS stops after the foreground permission and reports 'granted': a task
+ * started in the foreground keeps recording with the screen locked under
+ * "While Using the App" (see the module doc). Asking for "Always" there buys
+ * nothing for a user-started recording and costs an alarming prompt plus App
+ * Review scrutiny — the 2.5.0 decision, documented in docs/ARCHITECTURE.md.
+ *
  * Denial is not fatal: on Android the foreground-service task still records
  * with while-in-use permission; callers decide what to warn about.
  */
@@ -320,6 +332,7 @@ export async function ensureBackgroundLocationPermission(
       const req = await Location.requestForegroundPermissionsAsync();
       if (!req.granted) return 'denied';
     }
+    if (Platform.OS === 'ios') return 'granted';
     const bg = await Location.getBackgroundPermissionsAsync();
     if (bg.granted) return 'granted';
     if (!bg.canAskAgain || rationaleDeclinedThisSession) return 'denied';
@@ -333,6 +346,15 @@ export async function ensureBackgroundLocationPermission(
     // e.g. ACCESS_BACKGROUND_LOCATION absent from an older binary's manifest.
     return 'denied';
   }
+}
+
+/**
+ * The user already answered the background question this session (the
+ * Recording check, shown before the first recording, explains and offers it):
+ * don't follow up with the rationale card on the same start.
+ */
+export function suppressBackgroundRationaleThisSession(): void {
+  rationaleDeclinedThisSession = true;
 }
 
 /**
