@@ -1,5 +1,6 @@
 import type { PauseInterval } from '@core/geo/track/segments';
 import type { TrackPoint } from '@core/models';
+import { sanitizePendingPhotos, type PendingPhoto } from '@core/photos/capture';
 import { File, Paths } from 'expo-file-system';
 import * as storage from './storage';
 
@@ -61,6 +62,14 @@ export interface RecorderCheckpoint {
     note?: string;
     photoUri?: string;
   }[];
+  /**
+   * Photos taken with the Photo button (#587): their copies already sit in
+   * `photos/<photoSessionId>/` (document-relative paths, nothing to rebase),
+   * and the session id becomes the saved trail's id. Absent on older
+   * checkpoints and on sessions without photos.
+   */
+  photoSessionId?: string;
+  photos?: PendingPhoto[];
 }
 
 let pointsSinceWrite = 0;
@@ -110,6 +119,20 @@ export function maybeWriteCheckpoint(cp: RecorderCheckpoint): void {
   }
 }
 
+/**
+ * The capture photos of a checkpoint read back (#587), validated: junk
+ * entries are dropped, and a session id that is not a safe folder name drops
+ * them all (a hand-edited id must never lead a delete outside `photos/`).
+ */
+function withPhotos(cp: RecorderCheckpoint): RecorderCheckpoint {
+  const { photoSessionId, photos, ...rest } = cp;
+  if (typeof photoSessionId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(photoSessionId)) {
+    return rest;
+  }
+  const kept = sanitizePendingPhotos(photos);
+  return { ...rest, photoSessionId, photos: kept };
+}
+
 /** Read the persisted checkpoint, or null if none/corrupt. */
 export async function readCheckpoint(): Promise<RecorderCheckpoint | null> {
   try {
@@ -119,7 +142,7 @@ export async function readCheckpoint(): Promise<RecorderCheckpoint | null> {
     // checkpoint written by an older build in absolute form, and one whose
     // container has rotated underneath it.
     return mapCheckpointPaths(
-      { ...cp, waypoints: Array.isArray(cp.waypoints) ? cp.waypoints : [] },
+      withPhotos({ ...cp, waypoints: Array.isArray(cp.waypoints) ? cp.waypoints : [] }),
       // Relativise first, so an absolute path left by an older build (or by a
       // container that has since rotated) is healed rather than passed through.
       (path) => storage.resolveDocumentPath(storage.toDocumentPath(path)),

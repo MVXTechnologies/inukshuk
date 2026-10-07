@@ -130,6 +130,42 @@ describe('failure handling', () => {
     expect(storage.readJson).toHaveBeenCalledWith('recorder-checkpoint.json');
   });
 
+  it('round-trips capture photos and drops junk ones (#587)', async () => {
+    const photo = {
+      id: 'p1',
+      takenAt: 5,
+      lngLat: [-71, 47],
+      distanceM: 120,
+      file: 'photos/sess/p1.jpg',
+      thumb: 'photos/sess/p1.sq.jpg',
+      sprite: 'photos/sess/p1.map.png',
+      width: 2048,
+      height: 1536,
+      bytes: 9,
+    };
+    (storage.readJson as jest.Mock).mockResolvedValue({
+      ...cp,
+      photoSessionId: 'sess',
+      photos: [photo, { id: 'junk' }],
+    });
+    await expect(readCheckpoint()).resolves.toEqual({
+      ...cp,
+      photoSessionId: 'sess',
+      photos: [photo],
+    });
+  });
+
+  it('drops capture photos whose session id is not a safe folder name', async () => {
+    (storage.readJson as jest.Mock).mockResolvedValue({
+      ...cp,
+      photoSessionId: '../library',
+      photos: [],
+    });
+    const read = await readCheckpoint();
+    expect(read).not.toHaveProperty('photoSessionId');
+    expect(read).not.toHaveProperty('photos');
+  });
+
   it('readCheckpoint returns null when the read throws', async () => {
     (storage.readJson as jest.Mock).mockRejectedValue(new Error('unreadable'));
     await expect(readCheckpoint()).resolves.toBeNull();

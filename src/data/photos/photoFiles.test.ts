@@ -1,20 +1,17 @@
 import { StorageFullError } from '@data/storage';
 
 import {
-  clearPhotoInbox,
   deleteAllTrailPhotos,
   deletePhotoFiles,
   deleteTrailPhotos,
-  extensionOf,
   listTrailPhotoFiles,
   photoStorageUsage,
-  stageForResize,
   sweepTrailOrphans,
   trailsWithPhotos,
-  unstage,
   writeFullSizeCopies,
   writePhotoCopies,
 } from './photoFiles';
+import { clearPhotoInbox, extensionOf, stageForResize, unstage } from './inbox';
 import { fakeFs } from './testUtils/testFileSystem';
 
 jest.mock('expo-file-system', () =>

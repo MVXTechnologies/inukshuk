@@ -12,6 +12,7 @@ import {
   type HeroField,
   type PanelState,
 } from '@core/recording/panel';
+import { photoButtonLabel } from '@core/photos/capture';
 import { sparklinePoints } from '@core/recording/sparkline';
 import { msUntilSunset } from '@core/sun/sunTimes';
 import {
@@ -50,6 +51,15 @@ interface Props {
   onResume: () => void;
   onStop: () => void;
   onMark: () => void;
+  /**
+   * The Photo button (#587, mockup 4a), between Mark and Stop; absent = no
+   * button. Works while paused too (the summit photo at the lunch stop).
+   */
+  onPhoto?: () => void;
+  /** Photos taken so far this recording (the button's badge). */
+  photoCount?: number;
+  /** A shot is being copied: the button waits. */
+  photoBusy?: boolean;
   /** Glove lock: every control but the long-press unlock is off (map gestures too, in MapScreen). */
   gloveLocked: boolean;
   onGloveLockChange: (locked: boolean) => void;
@@ -95,10 +105,15 @@ export function RecordingPanel(props: Props) {
     onResume,
     onStop,
     onMark,
+    onPhoto,
+    photoCount = 0,
+    photoBusy = false,
     gloveLocked,
     onGloveLockChange,
     onHeightChange,
   } = props;
+  // Four controls on one row: Pause, Mark and Photo share the width.
+  const compact = onPhoto !== undefined;
   const theme = useTheme();
   const tokens = useSchemeTokens();
   // Sunlight (decision 4): hero values one step up, 32 → 40.
@@ -486,12 +501,24 @@ export function RecordingPanel(props: Props) {
               accessibilityLabel={paused ? 'Resume' : 'Pause'}
               style={[
                 styles.primary,
+                compact && styles.compactButton,
                 { backgroundColor: theme.colors.primary },
                 paused && { borderWidth: 3, borderColor: palette.paper },
               ]}
             >
-              <Icon source={paused ? 'play' : 'pause'} size={22} color={theme.colors.onPrimary} />
-              <Text style={[styles.buttonText, { color: theme.colors.onPrimary }]}>
+              <Icon
+                source={paused ? 'play' : 'pause'}
+                size={compact ? 20 : 22}
+                color={theme.colors.onPrimary}
+              />
+              <Text
+                style={[
+                  styles.buttonText,
+                  compact && styles.compactText,
+                  { color: theme.colors.onPrimary },
+                ]}
+                numberOfLines={1}
+              >
                 {paused ? 'Resume' : 'Pause'}
               </Text>
             </Pressable>
@@ -503,6 +530,7 @@ export function RecordingPanel(props: Props) {
               accessibilityState={{ disabled: paused }}
               style={[
                 styles.mark,
+                compact && styles.compactButton,
                 {
                   backgroundColor: theme.colors.elevation.level3,
                   borderColor: tokens.outlineVariant,
@@ -510,9 +538,62 @@ export function RecordingPanel(props: Props) {
                 paused && styles.disabled,
               ]}
             >
-              <InukshukGlyph size={22} frame="square" tone="mono" color={ink} />
-              <Text style={[styles.buttonText, { color: ink }]}>Mark</Text>
+              <InukshukGlyph size={compact ? 20 : 22} frame="square" tone="mono" color={ink} />
+              <Text
+                style={[styles.buttonText, compact && styles.compactText, { color: ink }]}
+                numberOfLines={1}
+              >
+                Mark
+              </Text>
             </Pressable>
+            {onPhoto && (
+              <Pressable
+                onPress={onPhoto}
+                disabled={photoBusy}
+                accessibilityRole="button"
+                accessibilityLabel={photoButtonLabel(photoCount)}
+                accessibilityState={{ disabled: photoBusy, busy: photoBusy }}
+                testID="recording-photo-button"
+                style={[
+                  styles.mark,
+                  styles.compactButton,
+                  {
+                    backgroundColor: theme.colors.secondaryContainer,
+                    borderColor: theme.colors.secondaryContainer,
+                  },
+                  photoBusy && styles.disabled,
+                ]}
+              >
+                <Icon source="camera-outline" size={20} color={theme.colors.onSecondaryContainer} />
+                <Text
+                  style={[
+                    styles.buttonText,
+                    styles.compactText,
+                    { color: theme.colors.onSecondaryContainer },
+                  ]}
+                  numberOfLines={1}
+                >
+                  Photo
+                </Text>
+                {photoCount > 0 && (
+                  <View
+                    style={[
+                      styles.badge,
+                      {
+                        backgroundColor: theme.colors.onSurface,
+                        borderColor: theme.colors.surface,
+                      },
+                    ]}
+                    importantForAccessibility="no-hide-descendants"
+                    accessibilityElementsHidden
+                  >
+                    <Text style={[styles.badgeText, { color: theme.colors.surface }]}>
+                      {photoCount > 99 ? '99+' : photoCount}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+            )}
             <HoldButton
               size={56}
               onConfirm={onStop}
@@ -693,6 +774,29 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   disabled: { opacity: 0.5 },
+  // Four controls (Photo shown): the three pills share the row.
+  compactButton: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    width: 'auto',
+    paddingHorizontal: 8,
+    gap: 6,
+  },
+  compactText: { fontSize: 16 },
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -4,
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: { fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'] },
   buttonText: { fontSize: 17, fontWeight: '700' },
   stopSquare: { width: 18, height: 18, borderRadius: 4 },
   lockText: { flex: 1, fontSize: 16, fontWeight: '700' },

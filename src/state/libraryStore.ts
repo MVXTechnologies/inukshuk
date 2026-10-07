@@ -29,6 +29,7 @@ import {
   readInterruptedPdfRender,
   recordPdfRenderInterruption,
 } from '@data/pdfRenderRecovery';
+import { deleteTrailPhotoFolder } from '@data/photos/trailFolder';
 import { reportError } from '@lib/errorReporting';
 import { create } from 'zustand';
 
@@ -129,6 +130,11 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   addTracks: (items: readonly ImportedTrack[]) => void;
   /** Patch a saved trail, including switching its file URI to a committed revision. */
   updateTrack: (id: string, patch: Partial<Omit<TrackSummary, 'id'>>) => void;
+  /**
+   * Settings → "Delete all photo copies" (#587): drop every trail's cached
+   * photo count and cover in ONE index write (no write when none had any).
+   */
+  clearTrackPhotoSummaries: () => void;
   /**
    * Rename a saved trail (the user-facing title of an activity). A blank or
    * whitespace-only name is rejected — the trail keeps its current one, the
@@ -293,6 +299,7 @@ function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolea
 function persistAndDelete(
   state: LibraryState,
   orphanedUris: readonly (string | undefined)[],
+  deletedTrackIds: readonly string[] = [],
 ): void {
   // Nothing was committed: the files are still referenced by the index on disk.
   if (!persist(state)) return;
@@ -302,6 +309,14 @@ function persistAndDelete(
       storage.deleteFileAt(uri);
     } catch {
       // Metadata is committed: keep memory consistent even if an orphan remains.
+    }
+  }
+  // A deleted trail's photos (#587) go with it: copies and sidecar.
+  for (const id of deletedTrackIds) {
+    try {
+      deleteTrailPhotoFolder(id);
+    } catch {
+      // Same as above: an orphan folder must not undo a committed delete.
     }
   }
 }
@@ -613,6 +628,23 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       return next;
     }),
 
+  clearTrackPhotoSummaries: () =>
+    set((s) => {
+      if (!s.tracks.some((t) => t.photoCount !== undefined || t.coverPhotoId !== undefined)) {
+        return s;
+      }
+      const next = {
+        ...s,
+        tracks: s.tracks.map((t) => {
+          if (t.photoCount === undefined && t.coverPhotoId === undefined) return t;
+          const { photoCount: _count, coverPhotoId: _cover, ...rest } = t;
+          return rest;
+        }),
+      };
+      persist(next);
+      return next;
+    }),
+
   updateTrack: (id, patch) =>
     set((s) => {
       const next = { ...s, tracks: s.tracks.map((t) => (t.id === id ? { ...t, ...patch } : t)) };
@@ -639,7 +671,11 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         // A deleted trail must not linger as (or come back as) a map overlay.
         activeTrackIds: s.activeTrackIds.filter((x) => x !== id),
       };
-      persistAndDelete(next, [t?.fileUri, ...(t?.notes?.map((n) => n.photoUri) ?? [])]);
+      persistAndDelete(
+        next,
+        [t?.fileUri, ...(t?.notes?.map((n) => n.photoUri) ?? [])],
+        t ? [t.id] : [],
+      );
       return next;
     }),
 
@@ -656,6 +692,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       persistAndDelete(
         next,
         removed.flatMap((t) => [t.fileUri, ...(t.notes?.map((n) => n.photoUri) ?? [])]),
+        removed.map((t) => t.id),
       );
       return next;
     }),

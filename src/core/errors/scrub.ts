@@ -57,6 +57,13 @@ const ABSOLUTE_PATH = new RegExp(
   `(^|[\\s=:(\\[{,'"\`])(\\/(?:${SEGMENT}\\/)+${LAST_SEGMENT})`,
   'g',
 );
+// Document-relative photo paths (#587): `photos/<trackId>/<id>.jpg` and the
+// resize inbox, as data-layer errors quote them. Ids are random, but a photo
+// path says which trail a report is about; it goes like any other path.
+const PHOTO_PATH = new RegExp(
+  `(^|[\\s=:(\\[{,'"\`])(\\.photo-inbox\\/${LAST_SEGMENT}|photos\\/(?:${SEGMENT}\\/)+${LAST_SEGMENT}|photos\\/${SEGMENT}\\.[A-Za-z0-9]{1,8}(?=$|[${STOP}:]))`,
+  'g',
+);
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
 const TYPOGRAPHIC = /“[^”\n]*”|‘[^’\n]*’|«[^»\n]*»|`[^`\n]*`/g;
 const DOUBLE_QUOTED = /"(?:[^"\\\n]|\\.)*"/g;
@@ -77,6 +84,7 @@ export function scrubText(text: string): string {
         : `${scheme}://${host}/${placeholderFor(path)}`,
     )
     .replace(ABSOLUTE_PATH, (_m, lead: string, path: string) => `${lead}${placeholderFor(path)}`)
+    .replace(PHOTO_PATH, (_m, lead: string, path: string) => `${lead}${placeholderFor(path)}`)
     .replace(UUID, '<uuid>')
     .replace(TYPOGRAPHIC, '<str>')
     .replace(DOUBLE_QUOTED, (quoted: string, offset: number, whole: string) =>

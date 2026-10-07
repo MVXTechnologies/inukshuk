@@ -247,6 +247,46 @@ describe('commitPhotoImport', () => {
     expect(again.duplicates).toBe(2);
   });
 
+  it('keeps two different photos taken in the same second (no asset id: Android)', async () => {
+    // A burst: same camera, same second, same size; different images.
+    fs.seed('/cache/burst1.jpg', new Uint8Array([0xff, 0xd8, 1, 2, 3, 0xff, 0xd9]));
+    fs.seed('/cache/burst2.jpg', new Uint8Array([0xff, 0xd8, 1, 2, 4, 0xff, 0xd9]));
+    const exif = { ...exifAt(500), Make: 'samsung', Model: 'SM-S911W' };
+    const burst: PickedPhoto[] = [
+      { uri: 'file:///cache/burst1.jpg', exif, width: 4000, height: 3000 },
+      { uri: 'file:///cache/burst2.jpg', exif, width: 4000, height: 3000 },
+    ];
+    const first = await preparePhotoImport({
+      trackId: 't1',
+      points,
+      picked: burst,
+      zoneOffsetAt: EDT,
+    });
+    expect(first.duplicates).toBe(0);
+    const result = await commitPhotoImport({
+      prepared: first,
+      selected: defaultSelection(first),
+      resizer: fakeResizer(),
+      newId,
+    });
+    expect(result.added).toHaveLength(2);
+    // Picked again later: both recognised; the same file twice in one pick: once.
+    const again = await preparePhotoImport({
+      trackId: 't1',
+      points,
+      picked: [...burst, burst[0]!],
+      zoneOffsetAt: EDT,
+    });
+    expect(again.duplicates).toBe(3);
+    const twice = await preparePhotoImport({
+      trackId: 't2',
+      points,
+      picked: [burst[0]!, burst[0]!],
+      zoneOffsetAt: EDT,
+    });
+    expect(twice.duplicates).toBe(1);
+  });
+
   it('places a ticked outsider at the cursor and records the clock correction', async () => {
     const skewed = [
       ...picks

@@ -18,6 +18,12 @@ import { shouldAcceptFix } from '@core/geo/track/gpsFilter';
 import { mergeTrackPoints } from '@core/geo/track/mergePoints';
 import { APPROXIMATE_ACCURACY_M } from '@core/geo/track/recordingHealth';
 import { findCategory } from '@core/library/categories';
+import { materializePendingPhotos, type PendingPhoto } from '@core/photos/capture';
+import {
+  deleteCapturedPhoto,
+  discardCapturedPhotos,
+  saveCapturedPhotos,
+} from '@data/photos/capturedPhotos';
 import * as checkpoint from '@data/recorderCheckpoint';
 import * as storage from '@data/storage';
 import { primeTrailStats } from '@data/trailStatsStore';
@@ -111,6 +117,13 @@ interface RecorderState {
    * end-of-recording integrations never have to touch the stop path itself.
    */
   lastSavedTrackId: string | null;
+  /**
+   * Photos taken with the Photo button (#587). Their copies sit in
+   * `photos/<photoSessionId>/`; the session id becomes the saved trail's id,
+   * so stop only writes the sidecar. Null until the first photo.
+   */
+  photoSessionId: string | null;
+  photos: PendingPhoto[];
 
   start: (name?: string, category?: string) => void;
   addPoint: (point: TrackPoint) => void;
@@ -131,6 +144,16 @@ interface RecorderState {
   updateWaypoint: (id: string, patch: { label?: string; note?: string; photoUri?: string }) => void;
   /** Remove a live waypoint and any photo it owns. */
   removeWaypoint: (id: string) => void;
+  /** The folder id the next photo's copies go into (created on first use). Null while idle. */
+  photoSessionFor: () => string | null;
+  /**
+   * Record a captured photo whose copies are written. Returns its number.
+   * Throws when the crash checkpoint could not be written (the caller deletes
+   * the copies), or when no recording is up.
+   */
+  addPhoto: (photo: PendingPhoto) => number;
+  /** Undo a capture: the entry and its files go. */
+  removePhoto: (id: string) => void;
   pause: () => void;
   resume: () => void;
   /**
@@ -218,6 +241,9 @@ function checkpointOf(s: RecorderState): checkpoint.RecorderCheckpoint | null {
     savedAt: Date.now(),
     points: s.points,
     waypoints: s.waypoints,
+    ...(s.photoSessionId !== null && s.photos.length > 0
+      ? { photoSessionId: s.photoSessionId, photos: s.photos }
+      : {}),
   };
 }
 
@@ -310,6 +336,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   lastAccuracyM: null,
   approximateFixes: 0,
   lastSavedTrackId: null,
+  photoSessionId: null,
+  photos: [],
 
   start: (name, category) => {
     sessionGeneration += 1;
@@ -332,6 +360,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       lastFixAt: null,
       lastAccuracyM: null,
       approximateFixes: 0,
+      photoSessionId: null,
+      photos: [],
     });
   },
 
@@ -471,6 +501,44 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     deleteUnusedWaypointPhoto(oldPhoto, get().waypoints);
   },
 
+  photoSessionFor: () => {
+    const { status, photoSessionId } = get();
+    if (status === 'idle') return null;
+    if (photoSessionId !== null) return photoSessionId;
+    const id = storage.newId();
+    set({ photoSessionId: id });
+    return id;
+  },
+
+  addPhoto: (photo) => {
+    const s = get();
+    if (s.status === 'idle' || s.photoSessionId === null) {
+      throw new Error('No recording to add the photo to.');
+    }
+    const next = { ...s, photos: [...s.photos, photo] };
+    const cp = checkpointOf(next);
+    if (cp === null || !checkpoint.writeCheckpoint(cp)) {
+      throw new Error('Could not save the photo. Free some storage and try again.');
+    }
+    set({ photos: next.photos });
+    return next.photos.length;
+  },
+
+  removePhoto: (id) => {
+    const s = get();
+    const photo = s.photos.find((p) => p.id === id);
+    if (!photo) return;
+    const photos = s.photos.filter((p) => p.id !== id);
+    set({ photos });
+    const cp = checkpointOf(get());
+    if (cp) checkpoint.writeCheckpoint(cp);
+    try {
+      deleteCapturedPhoto(photo);
+    } catch {
+      // The entry is gone; an orphan copy is swept with the trail's tidy.
+    }
+  },
+
   pause: () => {
     const { status, lastFixAt } = get();
     if (status !== 'recording') return;
@@ -520,7 +588,11 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       if (generation !== sessionGeneration) return null;
     }
     const { points, segmentStarts, name, category, startedAt, status, waypoints } = get();
+    const { photoSessionId, photos } = get();
     if (status === 'idle' || startedAt === null) return null;
+    // Captured photos (#587) are already in photos/<session>/: the trail takes
+    // the session's id, so the folder is its own.
+    const keepsPhotos = photoSessionId !== null && photos.length > 0 && points.length > 0;
 
     // Last checkpoint before finalizing: a crash during the GPX write below
     // still leaves a complete journal to recover from.
@@ -536,7 +608,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       robustClimb: true,
     });
     const track: Track = {
-      id: storage.newId(),
+      id: keepsPhotos && photoSessionId !== null ? photoSessionId : storage.newId(),
       name,
       startedAt,
       endedAt,
@@ -586,6 +658,18 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       }
       // Logbook statistics from the points in hand (never re-read from the GPX).
       primeTrailStats(track, points, segmentStarts);
+      // The photos taken during the outing, placed by their capture time. A
+      // failure keeps the trail: the copies stay, the tidy sweeps them.
+      if (keepsPhotos) {
+        try {
+          await saveCapturedPhotos(
+            track.id,
+            materializePendingPhotos(photos, track.id, points, Date.now()),
+          );
+        } catch (err) {
+          reportError(err, 'recording-photos-save');
+        }
+      }
       // Auto-named recording → try for a friendlier region title, async.
       const first = points[0];
       if (first && name === defaultName(startedAt)) {
@@ -595,6 +679,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       // Nothing saved — drop any waypoint photos so they don't orphan.
       for (const wp of waypoints) if (wp.photoUri) storage.deleteFileAt(wp.photoUri);
     }
+    if (!keepsPhotos && photoSessionId !== null) discardCapturedPhotos(photoSessionId);
 
     // The recording is safely persisted — GPX written AND indexed — or
     // intentionally empty: the crash journal is now stale and must not
@@ -614,6 +699,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       stats: EMPTY_STATS,
       elevationAcc: EMPTY_ELEVATION_ACC,
       waypoints: [],
+      photoSessionId: null,
+      photos: [],
       // Signal observers (Strava push prompt) that a trail was just saved.
       lastSavedTrackId: points.length > 0 ? track.id : null,
     });
@@ -625,6 +712,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   discard: () => {
     sessionGeneration += 1;
     for (const wp of get().waypoints) if (wp.photoUri) storage.deleteFileAt(wp.photoUri);
+    const sessionPhotos = get().photoSessionId;
+    if (sessionPhotos !== null) discardCapturedPhotos(sessionPhotos);
     checkpoint.clearCheckpoint();
     set({
       status: 'idle',
@@ -641,6 +730,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       waypoints: [],
       lastFixAt: null,
       lastAccuracyM: null,
+      photoSessionId: null,
+      photos: [],
     });
   },
 }));
@@ -749,6 +840,8 @@ export async function initRecorderRecovery(): Promise<boolean> {
       // resume — same reasoning as mergeBackgroundPoints.
       ...segmentedState(points, pauses),
       waypoints: cp.waypoints ?? [],
+      photoSessionId: cp.photoSessionId ?? null,
+      photos: cp.photos ?? [],
       lastFixAt: points[points.length - 1]?.time ?? null,
       lastAccuracyM: points[points.length - 1]?.accuracy ?? null,
     });

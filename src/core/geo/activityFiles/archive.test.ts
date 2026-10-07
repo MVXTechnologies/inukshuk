@@ -2,6 +2,7 @@ import { gzipSync, strToU8, zipSync, type Zippable } from 'fflate';
 
 import { memoryArchiveHost, walkActivityArchive } from './archive';
 import type { DecodedActivity } from './decode';
+import { ByteBudget } from './limits';
 import { GPX, TCX, fitBytes } from './testFixtures';
 
 async function walk(
@@ -26,6 +27,13 @@ const STRAVA_CSV = [
 ].join('\n');
 
 describe('walkActivityArchive', () => {
+  it('charges a caller-supplied budget (shared with a later photo pass, #587)', async () => {
+    const budget = new ByteBudget(Number.MAX_SAFE_INTEGER);
+    const zip = zipSync({ 'activities/2.gpx': strToU8(GPX) });
+    await walk(zip, { budget });
+    expect(budget.used).toBe(strToU8(GPX).length);
+  });
+
   it('imports a Strava bulk export, naming from activities.csv', async () => {
     const zip = zipSync({
       'activities.csv': strToU8(STRAVA_CSV),

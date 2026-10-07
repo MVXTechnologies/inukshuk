@@ -33,7 +33,7 @@ export interface ArchiveEntry {
   /** App-storage uri to read the bytes from. */
   sourceUri: string;
   /** What the entry is — lets the caller report accurate counts. */
-  kind: 'map' | 'gpx' | 'photo';
+  kind: 'map' | 'gpx' | 'photo' | 'photo-list';
   /**
    * Whether the entry should be deflated. GPX is text and compresses well;
    * maps (PDF) and photos are already-compressed formats, so they are stored
@@ -111,6 +111,20 @@ export interface DataArchiveInput {
   waypoints: readonly Waypoint[];
   /** Drawn areas (#503): photos under `areas/photos/`, shapes in `areas.geojson`. */
   areas?: readonly Area[];
+  /**
+   * Trail photos (#587), by trail id: each trail's display copies, and its
+   * photo list (`photos.json`: captions, times, places) so the backup keeps
+   * what the copies alone cannot. Packed under `photos/<trail name>/` beside
+   * the trail's GPX.
+   */
+  trailPhotos?: ReadonlyMap<string, TrailPhotoFiles>;
+}
+
+/** One trail's photo files for the archive (app-storage uris). */
+export interface TrailPhotoFiles {
+  photos: readonly { id: string; file: string }[];
+  /** The trail's photo list (sidecar), when it has one. */
+  listUri?: string;
 }
 
 /**
@@ -180,6 +194,31 @@ export function planDataArchive(input: DataArchiveInput): ArchivePlan {
       trackCount++;
     }
     for (const note of track.notes ?? []) addPhoto(note.photoUri, dir);
+    const trailPhotos = input.trailPhotos?.get(track.id);
+    if (trailPhotos && trailPhotos.photos.length > 0) {
+      // One folder per trail: photo ids are unique, but two trails' folders must not merge.
+      const photoDir = `${uniquePath(takenDirs, `${dir}photos/${sanitizeDisplayName(track.name)}`)}/`;
+      for (const photo of trailPhotos.photos) {
+        if (seenSources.has(photo.file)) continue;
+        seenSources.add(photo.file);
+        entries.push({
+          zipPath: uniquePath(takenPaths, `${photoDir}${entryFileName(photo.id, 'jpg')}`),
+          sourceUri: photo.file,
+          kind: 'photo',
+          deflate: false,
+        });
+        photoCount++;
+      }
+      if (trailPhotos.listUri && !seenSources.has(trailPhotos.listUri)) {
+        seenSources.add(trailPhotos.listUri);
+        entries.push({
+          zipPath: uniquePath(takenPaths, `${photoDir}photos.json`),
+          sourceUri: trailPhotos.listUri,
+          kind: 'photo-list',
+          deflate: true,
+        });
+      }
+    }
   };
 
   for (const group of groups) {
