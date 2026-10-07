@@ -518,13 +518,30 @@ class Simulation {
       }
     }
     // Photos: my new trail photos get a comment now and then; my comments get answers.
-    for (const ph of s.photos()) {
-      if (!this.fresh(`${b.spec.key}:photo:${ph.owner}:${ph.id}`)) continue;
-      any = true;
-      if (lead && ph.owner === human && rnd() < 0.25) {
-        const who = pick(rnd, this.bots);
-        this.later(between(15_000, 40_000), () => {
-          who.session.commentOnPhoto(ph.id, pick(rnd, PHOTO_LINES));
+    const newMine = s
+      .photos()
+      .filter((ph) => this.fresh(`${b.spec.key}:photo:${ph.owner}:${ph.id}`))
+      .filter((ph) => ph.owner === human);
+    if (newMine.length > 0) any = true;
+    if (lead && newMine.length > 0) {
+      // A trail shared with photos: the guide looks and comments on its summit
+      // photo (else the middle one); now and then someone else on another.
+      const summit =
+        newMine.find((ph) => /sommet|summit|top/i.test(ph.caption ?? '')) ??
+        newMine[Math.floor(newMine.length / 2)]!;
+      this.later(between(12_000, 25_000), () => {
+        b.session.commentOnPhoto(summit.id, 'Superbe vue au sommet ! On repart à 14 h?');
+        this.note(`${b.spec.name} commented on the summit photo`);
+      });
+      const other = newMine.find((ph) => ph !== summit);
+      if (other && rnd() < 0.5) {
+        const who =
+          pick(
+            rnd,
+            this.bots.filter((x) => x !== b),
+          ) ?? b;
+        this.later(between(30_000, 60_000), () => {
+          who.session.commentOnPhoto(other.id, pick(rnd, PHOTO_LINES));
           this.note(`${who.spec.name} commented on a photo`);
         });
       }
@@ -598,10 +615,14 @@ class Simulation {
   }
 
   /** Now and then: a pin off the trail, a photo comment, or a waypoint. */
+  private ambientCount = 0;
+
   private ambient(): void {
     if (this.bots.length === 0) return;
-    const b = pick(rnd, this.bots);
-    const roll = rnd();
+    // The first one is the guide's pin off the trail (the demo's story).
+    const first = this.ambientCount++ === 0;
+    const b = first ? this.bots[0]! : pick(rnd, this.bots);
+    const roll = first ? 0 : rnd();
     const photos = b.session.photos();
     this.run(() => {
       if (roll < 0.5 || (roll < 0.8 && photos.length === 0)) {
