@@ -249,6 +249,46 @@ describe('planDataArchive', () => {
   });
 });
 
+describe('planDataArchive — trail photos (#587)', () => {
+  it('packs each trail’s photo copies and photo list under photos/<trail name>/', () => {
+    const plan = planDataArchive({
+      folders: [folder('f1', 'Hikes')],
+      maps: [],
+      tracks: [
+        track({ id: 't1', name: 'Lac des Cygnes', fileUri: 'tracks/t1.gpx', folderId: 'f1' }),
+        track({ id: 't2', name: 'Lac des Cygnes', fileUri: 'tracks/t2.gpx', folderId: 'f1' }),
+        track({ id: 't3', name: 'No photos', fileUri: 'tracks/t3.gpx' }),
+      ],
+      waypoints: [],
+      trailPhotos: new Map([
+        [
+          't1',
+          {
+            photos: [
+              { id: 'p1', file: 'photos/t1/p1.jpg' },
+              { id: 'p2', file: 'photos/t1/p2.jpg' },
+            ],
+            listUri: 'photos/t1/photos.json',
+          },
+        ],
+        ['t2', { photos: [{ id: 'p9', file: 'photos/t2/p9.jpg' }] }],
+        ['t3', { photos: [] }],
+      ]),
+    });
+    expect(plan.entries.map((e) => [e.zipPath, e.kind, e.deflate])).toEqual([
+      ['Hikes/Lac_des_Cygnes.gpx', 'gpx', true],
+      ['Hikes/photos/Lac_des_Cygnes/p1.jpg', 'photo', false],
+      ['Hikes/photos/Lac_des_Cygnes/p2.jpg', 'photo', false],
+      ['Hikes/photos/Lac_des_Cygnes/photos.json', 'photo-list', true],
+      ['Hikes/Lac_des_Cygnes-2.gpx', 'gpx', true],
+      // Two trails with one name: their photo folders stay apart.
+      ['Hikes/photos/Lac_des_Cygnes-2/p9.jpg', 'photo', false],
+      ['No_photos.gpx', 'gpx', true],
+    ]);
+    expect(plan.photoCount).toBe(3);
+  });
+});
+
 describe('planDataArchive — standalone waypoints (#288)', () => {
   it('packs waypoint photos under photos/ for a waypoint-only library', () => {
     const plan = planDataArchive({

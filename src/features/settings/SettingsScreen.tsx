@@ -1,5 +1,10 @@
 import { HeaderContours } from '@ui/components/ContourTexture';
-import { describeDataArchive, planDataArchive } from '@core/export/archivePlan';
+import {
+  describeDataArchive,
+  planDataArchive,
+  type TrailPhotoFiles,
+} from '@core/export/archivePlan';
+import { trailPhotoFilesForArchive } from '@data/photos/archiveFiles';
 import { MARINE_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
 import { setOfflineOnly } from '@data/offline';
@@ -10,6 +15,7 @@ import {
   type FlushResult,
   flushErrorQueue,
   getErrorQueueStatus,
+  reportError,
 } from '@lib/errorReporting';
 import { formatBytes } from '@core/format';
 import { useLibraryStore } from '@state/libraryStore';
@@ -23,7 +29,7 @@ import * as Updates from 'expo-updates';
 import { describeRunningUpdate } from '@core/app/updateInfo';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
-import { Image, Keyboard, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, InteractionManager, Keyboard, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Appbar,
@@ -196,9 +202,25 @@ export function SettingsScreen() {
       });
   };
 
+  // Trail photos (#587) live in per-trail folders, not the index: listed off
+  // the render path, and again whenever the trails change.
+  const [trailPhotos, setTrailPhotos] = useState<ReadonlyMap<string, TrailPhotoFiles>>(
+    () => new Map(),
+  );
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      try {
+        setTrailPhotos(trailPhotoFilesForArchive(new Set(tracks.map((t) => t.id))));
+      } catch (err) {
+        reportError(err, 'export-trail-photos');
+      }
+    });
+    return () => task.cancel();
+  }, [tracks]);
+
   const exportPlan = useMemo(
-    () => planDataArchive({ folders, maps, tracks, waypoints, areas }),
-    [folders, maps, tracks, waypoints, areas],
+    () => planDataArchive({ folders, maps, tracks, waypoints, areas, trailPhotos }),
+    [folders, maps, tracks, waypoints, areas, trailPhotos],
   );
   // Uncompressed total of every planned file — a good upper-bound estimate for
   // the zip (maps/photos are stored, only the small GPX/JSON parts deflate).
