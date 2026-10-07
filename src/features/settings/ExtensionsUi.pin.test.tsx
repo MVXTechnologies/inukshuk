@@ -4,7 +4,8 @@
  * dark: the extension registry refactor (architecture review P1-3) must leave
  * them element-for-element, prop-for-prop identical. Each snapshot is the
  * SHA-256 of the rendered tree's JSON (the full trees are ~1 MB), with every
- * `style` prop flattened: `[a, false, b]` and `[a, b]` draw the same pixels.
+ * `style` prop flattened (`[a, false, b]` and `[a, b]` draw the same pixels)
+ * and image paths cut to `assets/…` (they are relative to the checkout).
  * To see what moved, snapshot the normalized tree itself on both sides and
  * compare.
  */
@@ -33,13 +34,16 @@ jest.mock('@data/offline', () => ({
 /** The tree with every `style` prop flattened (what is drawn, not how it was spelled). */
 function normalize(node: unknown): unknown {
   if (Array.isArray(node)) return node.map(normalize);
+  // Bundled images resolve to a path relative to the checkout (`testUri`):
+  // keep it from `assets/` on, so the hash is the same on every machine.
+  if (typeof node === 'string') return node.replace(/^.*?\/(?=assets\/)/, '');
   if (node === null || typeof node !== 'object') return node;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(node)) {
     if (k === 'props' && v !== null && typeof v === 'object') {
       const props: Record<string, unknown> = { ...(v as Record<string, unknown>) };
       if ('style' in props) props.style = StyleSheet.flatten(props.style as never);
-      out[k] = props;
+      out[k] = normalize(props);
     } else {
       out[k] = normalize(v);
     }
