@@ -4,26 +4,26 @@ Stage 1: the pure protocol core in `src/core/team/`. Read this before you
 touch team code, the mesh transport (`modules/inukshuk-mesh`), the Nostr
 transport, or the paid hosted relay (#590).
 
-**Status (2026-10-07):** stage 1 is merged as pure TypeScript with tests.
-Nothing is wired: there is no transport, no persistence, no UI and no crypto
-library yet. Research and owner decisions are in
+**Status (2026-10-07):** stage 1 is pure TypeScript with tests, including the
+noble crypto implementation. Nothing is wired: there is no transport, no
+persistence, no UI and no native CSPRNG binding yet (§4.3). Research and owner decisions are in
 `~/Documents/inukshuk-saved/research-gnss-team/` (`TEAM.md`,
 `OWNER-ANSWERS-2026-10-06.md`) and on #589.
 
 ## 1. What is built and what is not
 
-| In stage 1 (`src/core/team/`)                                         | Later                                                     |
-| --------------------------------------------------------------------- | --------------------------------------------------------- |
-| Crypto interface + test double (`crypto.ts`, `testing/nodeCrypto.ts`) | The noble-based implementation (needs a dependency, §4.3) |
-| Identities, team ids, op ids (`ids.ts`)                               | Key storage in `expo-secure-store` (`src/data/team`)      |
-| Signed, encrypted op envelope (`envelope.ts`)                         | Blob transfer: photos, track files (§11.3)                |
-| Membership log and its validation (`membership.ts`)                   | `modules/inukshuk-mesh`: LAN/hotspot TCP, mDNS (§12)      |
-| Team-key epochs, wraps, rotation (`keys.ts`, `actions.ts`)            | Nostr relay transport (§13)                               |
-| Invites for SMS, link and QR (`invite.ts`)                            | UI, notifications, map layer                              |
-| CRDTs and the data view (`crdt.ts`, `data.ts`, `photos.ts`)           | Compaction and snapshots                                  |
-| Notification routing (`notify.ts`)                                    |                                                           |
-| Op log and version vectors (`log.ts`), replica (`replica.ts`)         |                                                           |
-| Sync session state machine, rate limits (`sync.ts`, `ratelimit.ts`)   |                                                           |
+| In stage 1 (`src/core/team/`)                                                                                     | Later                                                |
+| ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Crypto interface, noble implementation, Node test double (`crypto.ts`, `nobleCrypto.ts`, `testing/nodeCrypto.ts`) | The native CSPRNG binding via `expo-crypto` (§4.3)   |
+| Identities, team ids, op ids (`ids.ts`)                                                                           | Key storage in `expo-secure-store` (`src/data/team`) |
+| Signed, encrypted op envelope (`envelope.ts`)                                                                     | Blob transfer: photos, track files (§11.3)           |
+| Membership log and its validation (`membership.ts`)                                                               | `modules/inukshuk-mesh`: LAN/hotspot TCP, mDNS (§12) |
+| Team-key epochs, wraps, rotation (`keys.ts`, `actions.ts`)                                                        | Nostr relay transport (§13)                          |
+| Invites for SMS, link and QR (`invite.ts`)                                                                        | UI, notifications, map layer                         |
+| CRDTs and the data view (`crdt.ts`, `data.ts`, `photos.ts`)                                                       | Compaction and snapshots                             |
+| Notification routing (`notify.ts`)                                                                                |                                                      |
+| Op log and version vectors (`log.ts`), replica (`replica.ts`)                                                     |                                                      |
+| Sync session state machine, rate limits (`sync.ts`, `ratelimit.ts`)                                               |                                                      |
 
 Every module is pure: no React Native, Expo, timers, sockets or clocks.
 `now` and the crypto implementation are passed in. Everything that reads
@@ -99,26 +99,58 @@ from one context is never valid in another.
 - The phone number is never an identity (owner B7). It stays on the inviting
   device as a contact label.
 
-### 4.3 Library recommendation (dependency not added — owner/lead to approve)
+### 4.3 Implementation: noble (PM decision 2026-10-07, owner to confirm)
 
-`@noble/curves` (ed25519, x25519), `@noble/hashes` (sha256, hmac, hkdf) and
-`@noble/ciphers` (xchacha20poly1305):
+`nobleCrypto.ts` implements `TeamCrypto` with three libraries, pinned exactly
+in package.json:
 
-- They are pure JavaScript and safe on Hermes, with no native module and
-  no store release.
+| Package          | Version | Used for           |
+| ---------------- | ------- | ------------------ |
+| `@noble/curves`  | 2.4.0   | ed25519, x25519    |
+| `@noble/hashes`  | 2.4.0   | sha256, hmac, hkdf |
+| `@noble/ciphers` | 2.4.0   | xchacha20poly1305  |
+
+- They are pure JavaScript and safe on Hermes, with no native module. **The
+  runtime fingerprint is unchanged**: iOS `97bbf630…` and Android `6a193496…`
+  were computed with and without the dependencies on 2026-10-07. No store
+  release is needed for them.
 - They are synchronous, which suits the `TeamCrypto` interface.
 - They have been audited: Cure53 (2024) and Trail of Bits (2023; 2026 for
   curves).
-- Use `ed25519.verify(sig, msg, pub, { zip215: false })` (strict RFC 8032).
-- Random bytes come from `expo-crypto` `getRandomBytes` or noble's `randomBytes`
-  with the `crypto.getRandomValues` polyfill.
-- `expo-crypto` alone is not enough: it has no Ed25519 or X25519.
+- Verification is strict RFC 8032 (`zip215: false`). A test checks that a
+  malleated `S + L` signature is refused by both implementations.
+- They are ESM-only, so Jest transforms `@noble/*` (`jest.config.js`). Metro
+  resolves their `exports`.
 - Speed upgrade if profiling asks for it: `react-native-quick-crypto` (JSI).
 
-The test double (`testing/nodeCrypto.ts`) is Node's OpenSSL plus a pure-JS
-HChaCha20. `nodeCrypto.test.ts` pins it to the RFC 8032, RFC 7748, RFC 5869
-and draft-irtf-cfrg-xchacha vectors. A noble implementation must pass the
-same file.
+**Randomness.**
+
+- Hermes has no `crypto.getRandomValues`, and Expo SDK 56's runtime does not
+  install one (its winter runtime adds fetch, URL and TextDecoder, but no
+  crypto). expo-modules-core's uuid helper is not a byte source either.
+- The app has no CSPRNG today: `nanoid` is imported as `nanoid/non-secure`.
+- So `createNobleCrypto(fillRandom)` takes the CSPRNG as a parameter, and every
+  key, nonce, invite seed and ephemeral key comes from it. noble's own
+  `randomBytes` is never called. If someone reached for it, it would throw on
+  Hermes (fail closed) rather than fall back to `Math.random`.
+- The platform binding (stage 2, in the same store release as
+  `modules/inukshuk-mesh`): add `expo-crypto` (`npx expo install expo-crypto`;
+  it is a native module, so it changes the fingerprint) and pass
+  `(buf) => Crypto.getRandomValues(buf)`. That uses the native CSPRNG
+  (`SecRandomCopyBytes` / `SecureRandom`).
+- Use `getRandomValues`, not `getRandomBytes`: per the SDK 56 docs,
+  `getRandomBytes` can fall back to `Math.random` in development.
+- Never install a JS `getRandomValues` polyfill.
+
+**Tests.**
+
+- `crypto.vectors.test.ts` runs the RFC 8032, RFC 7748, RFC 5869, RFC 4231,
+  FIPS 180-2 and draft-irtf-cfrg-xchacha vectors against **both** noble and
+  the Node test double. It also checks that the two interoperate in both
+  directions.
+- `nobleCrypto.test.ts` runs the whole protocol (create, invite, join over a
+  session, messages) with noble on one or both sides.
+- The other suites use the Node double for speed.
 
 ## 5. Wire format
 
@@ -542,17 +574,18 @@ nothing.
   - MLS's ordering service if we move to MLS.
 - **Serverless stays free** (owner B11). The relay only adds availability.
 
-## 15. Open questions for the owner
+## 15. Decisions (PM decision 2026-10-07, owner to confirm)
 
-Listed in the stage-1 PR. They are tap-answerable choices, with the
-recommended default marked. The code ships the defaults below.
+The owner was away. The PM took the recommended default for each open
+question, and the code implements them.
 
-| Question                             | Code default                                                                                          |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| SMS invite default lifetime and uses | 48 h, single use (UI default; the protocol allows ≤ 30 d, ≤ 1000 uses)                                |
-| Who may admit with an invite         | Any member. Admin-only is per invite (`ap:'admin'`)                                                   |
-| Do new members read team history?    | Yes, they receive the current epoch key. History before the last rotation needs an explicit `k.share` |
-| Removed or demoted admins            | Never re-promoted. Rejoin with a new device                                                           |
-| Ownership transfer                   | Not in v1 (the owner key is permanent)                                                                |
-| Large-team notification threshold    | 30                                                                                                    |
-| Guests                               | Read, positions and messages; no shared-record edits                                                  |
+| #   | Question                          | Decision                                                                                                  |
+| --- | --------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| 1   | SMS invite default                | **48 h, single use.** This is the UI default; the protocol allows ≤ 30 days and ≤ 1000 uses               |
+| 2   | Who may admit a joiner            | **Any member**, with an admin-signed invite. Admin-only is a per-invite option (`ap:'admin'`)             |
+| 3   | Do new members see team history?  | **Yes.** They receive the current epoch key. History before the last rotation needs an explicit `k.share` |
+| 4   | Removed or demoted admins         | **No re-promotion.** They rejoin with a new device                                                        |
+| 5   | Ownership transfer                | **Not in v1.** The owner key is permanent                                                                 |
+| 6   | Large-team notification threshold | **30**                                                                                                    |
+| 7   | Guests                            | **Read, share their position and post messages.** No edits to shared records                              |
+| —   | Crypto library                    | **noble** (`@noble/curves`, `@noble/hashes`, `@noble/ciphers` 2.4.0, pinned exactly), §4.3                |

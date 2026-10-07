@@ -3,11 +3,11 @@ import { concatBytes, isAllZero, utf8 } from './bytes';
 /**
  * Crypto boundary of the team protocol (#589).
  *
- * `src/core` never ships an implementation: the platform layer provides one
- * (recommended: `@noble/curves` ed25519/x25519 + `@noble/hashes` sha256/hmac/
- * hkdf + `@noble/ciphers` xchacha20poly1305 — pure JS, audited, Hermes-safe).
- * Tests use `testing/nodeCrypto.ts` (Node's OpenSSL + a pure-JS HChaCha20),
- * checked against the RFC test vectors.
+ * The shipped implementation is `nobleCrypto.ts` (`@noble/curves`,
+ * `@noble/hashes`, `@noble/ciphers`: pure JS, audited, Hermes-safe). It takes
+ * the platform CSPRNG as a parameter. Most tests use `testing/nodeCrypto.ts`
+ * (Node's OpenSSL + a pure-JS HChaCha20) for speed. Both are pinned to the
+ * same RFC vectors in `crypto.vectors.test.ts`.
  *
  * The interface is synchronous on purpose: the sync state machine verifies a
  * batch of ops inline, and the noble libraries are synchronous.
