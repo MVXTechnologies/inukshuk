@@ -1,4 +1,4 @@
-import { mapNameFromUri } from '@core/import/openedFile';
+import { FALLBACK_MAP_NAME, mapNameFromUri } from '@core/import/openedFile';
 import { NO_GEOREFERENCE_NOTICE } from '@core/library/overlayPages';
 import { findDuplicateTrack } from '@features/share/findDuplicateTrack';
 import { importGpxFromUri } from '@features/library/importGpx';
@@ -103,13 +103,12 @@ export async function redirectSystemPath({
 async function importOpenedMap(uri: string, name: string): Promise<string> {
   const doc = await importMapFromUri(uri, name);
   useLibraryStore.getState().addMap(doc);
+  // A nameless uri (most Android content uris) gets FALLBACK_MAP_NAME, which
+  // would read "Imported Imported map".
+  const imported = name === FALLBACK_MAP_NAME ? 'Map imported' : `Imported ${doc.name}`;
   useImportFeedbackStore
     .getState()
-    .show(
-      doc.georeferences.length > 0
-        ? `Imported ${doc.name}`
-        : `Imported ${doc.name}. ${NO_GEOREFERENCE_NOTICE}`,
-    );
+    .show(doc.georeferences.length > 0 ? imported : `${imported}. ${NO_GEOREFERENCE_NOTICE}`);
   return '/(tabs)/library';
 }
 

@@ -96,6 +96,8 @@ it('recognizes a PDF by content behind an opaque content:// uri', async () => {
     '/(tabs)/library',
   );
   expect(addMap).toHaveBeenCalledWith(expect.objectContaining({ name: 'Imported map' }));
+  // A nameless uri gets the fallback name; the snackbar must not read "Imported Imported map".
+  expect(mockShow).toHaveBeenLastCalledWith('Map imported');
   expect(importGpxFromUri).not.toHaveBeenCalled();
 });
 

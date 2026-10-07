@@ -34,6 +34,9 @@ export function sniffOpenedFile(bytes: Uint8Array, name?: string): OpenedFileFor
   return /\.pdf$/i.test(name ?? '') ? 'pdf' : 'unknown';
 }
 
+/** The name a map gets when its uri names no PDF file (most Android content uris). */
+export const FALLBACK_MAP_NAME = 'Imported map';
+
 /**
  * A map name from an opened uri: its last path segment, decoded, without a
  * `.pdf` extension (`…/Inbox/Mont%20Tremblant.pdf` → "Mont Tremblant"; an
@@ -41,7 +44,7 @@ export function sniffOpenedFile(bytes: Uint8Array, name?: string): OpenedFileFor
  * that names no PDF file (`content://media/external/downloads/1000000094`)
  * gets `fallback`.
  */
-export function mapNameFromUri(uri: string, fallback = 'Imported map'): string {
+export function mapNameFromUri(uri: string, fallback = FALLBACK_MAP_NAME): string {
   const path = uri.split(/[?#]/)[0] ?? '';
   let segment = path.slice(path.lastIndexOf('/') + 1);
   try {
