@@ -182,6 +182,50 @@ quietly imports "since last import" on launch/foreground at most every
   available" placeholder tiles past its data, so without the cap MapLibre
   renders grey placeholders instead of overscaling real tiles.
 
+## Map extensions (Settings → Extensions)
+
+Layers the user installs on purpose (Geodetic points, Tide stations, …) are
+one registry, not hand-wired screens (architecture review P1-3):
+
+- **Pure half**, `src/core/extensions/`: `keys.ts` (every key, in draw
+  order), one `ExtensionDescriptor` per extension in `descriptors/` (label,
+  dataset, default switches, style builder, offline-pack policy, credit
+  line), `registry.ts`, `state.ts` (installed / shown / pack rules) and
+  `prefs.ts` (the persisted `extensions` entry of settings.json and its
+  migration from the pre-registry flat keys).
+- **Platform half**, `src/features/extensions/`, one registry per surface
+  so each loads only what it shows: `settingsModules.ts` (the Settings entry
+  in the shared `ExtensionSettingsShell`, and the install / remove / offline
+  hooks), `panelEntries.ts` (its row in Map overlays › Extensions) and
+  `mapModules.ts` (style extras, symbol images, tap → card; MapScreen's
+  `mapHost` iterates it). `actions.ts` is the one Get / Remove / Offline
+  lifecycle; `companions.ts` the companion packs for regions downloaded
+  before an install.
+- Tile data: the descriptor names a `DatasetId`; `data/datasets.ts` maps it
+  to its tile template (still the frozen constants of `data/basemapTiles.ts`,
+  pinned by `tileUrls.contract.test.ts`) and its TileJSON.
+- `buildOsmStyle`, offline pack styles, credits, Settings, the overlays panel
+  and the map's tap / card host all iterate the registry.
+- Persistence: `settings.extensions[key] = { installedAt, show, offline }`.
+  Geodetic and tides also keep writing their old flat keys
+  (`legacySettings`), so a build from before the registry reads the same
+  state after an OTA rollback.
+
+### Adding an extension
+
+1. Add its key to `EXTENSION_KEYS` (`core/extensions/keys.ts`) at its draw
+   position, and its archive to `DatasetId` + `data/datasets.ts`.
+2. Write `core/extensions/descriptors/<key>.ts` (its style builder goes in
+   `core/map/<key>Style.ts` with its tests) and register it in
+   `core/extensions/registry.ts`. No `legacySettings`: its state lives in
+   `extensions[key]`, migrated for free.
+3. Write its components under `features/extensions/<key>/` — a Settings body
+   in `ExtensionSettingsShell`, a panel row and, if it has a map card, a map
+   module — and add one line to each surface registry it uses.
+4. Pick its offline policy (`'installed'` for a few kB a region, `'opt-in'`
+   with companion packs for more), then run `extensionStyles.pin.test.ts`:
+   the existing extensions' hashes must not move.
+
 ## Long-distance trails (Explore)
 
 Explore's "Long-distance trails near you" (#467) comes from OpenStreetMap
