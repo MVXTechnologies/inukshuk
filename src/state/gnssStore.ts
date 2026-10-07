@@ -56,6 +56,11 @@ interface GnssState {
   map: { lat: number; lon: number; result: PositionResult } | null;
   /** The fix in the project datum. */
   project: PositionResult | null;
+  /**
+   * While `project` waits for a grid download: the fix in the same frame
+   * with ellipsoidal heights (`@core/gnss/output` fallbackDatum), else null.
+   */
+  projectFallback: PositionResult | null;
   ntrip: NtripState;
   /** The receiver detail sheet is up (map). */
   sheetOpen: boolean;
@@ -86,6 +91,7 @@ const LIVE = {
   phoneAccuracyM: null,
   map: null,
   project: null,
+  projectFallback: null,
   ntrip: NTRIP_OFF,
 };
 

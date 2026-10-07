@@ -156,7 +156,12 @@ export function GnssCorrectionsScreen() {
           ? `${draft.host.trim()} · ${draft.mountpoint.trim()}`
           : draft.label,
     };
-    await gnssSecrets.set(profile.id, password);
+    try {
+      await gnssSecrets.set(profile.id, password);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+      return;
+    }
     upsert(profile);
     update({ activeProfileId: profile.id });
     router.back();

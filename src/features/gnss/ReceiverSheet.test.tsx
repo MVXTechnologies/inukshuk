@@ -5,6 +5,9 @@ import { FixOutputs } from '@core/gnss/output';
 import { projectDatumOption } from '@core/gnss/projectDatum';
 import { fixOf } from '@core/gnss/testUtils';
 import { defaultExtensionPrefs } from '@core/extensions/prefs';
+import type { Engine } from '@core/convert/run';
+import { installPack, packIndex } from '@data/projGrids';
+import { useConvertStore } from '@state/convertStore';
 import { useGnssStore } from '@state/gnssStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
@@ -22,7 +25,12 @@ jest.mock('@data/storage', () => ({
   writeJson: jest.fn(),
   readJson: jest.fn(async () => null),
 }));
-jest.mock('@lib/nativeProj', () => ({ nativeEngine: () => null, initNativeProj: jest.fn() }));
+jest.mock('@lib/nativeProj', () => ({
+  nativeEngine: () => null,
+  initNativeProj: jest.fn(),
+  nativeProjInfo: () => null,
+}));
+jest.mock('@data/projGrids', () => ({ packIndex: jest.fn(), installPack: jest.fn() }));
 
 const NOW = Date.UTC(2026, 9, 7, 12);
 
@@ -123,6 +131,93 @@ describe('the receiver on the map', () => {
   it('nothing at all while no receiver is in use', async () => {
     await render(wrap(<ReceiverMapOverlay top={0} showChip />));
     expect(screen.queryByTestId('gnss-receiver-chip')).toBeNull();
+  });
+});
+
+/** Native PROJ's stand-in: a fixed small shift (the real values are gated in core/gnss). */
+const shifting: Engine = {
+  kind: 'native',
+  transform: (req) => ({
+    ok: true,
+    coords: req.coords.slice(0, req.dim).map((v, i) => v + ([0.00001, 0.00001, -0.3][i] ?? 0)),
+  }),
+};
+
+describe('a project datum waiting for a grid (CGVD2013 heights)', () => {
+  const MRNF = { frame: 'csrs' as const, epoch: 1997 };
+
+  function waitingForGrid(): string[] {
+    liveRtk('csrs-2010-cgvd2013');
+    const fix = fixOf('rtk-fixed', { timeMs: NOW });
+    const out = new FixOutputs(shifting);
+    const datum = projectDatumOption('csrs-2010-cgvd2013').datum;
+    const project = out.inProject(fix, MRNF, datum, NOW);
+    useGnssStore.setState({
+      config: {
+        ...useGnssStore.getState().config,
+        profiles: [{ ...newProfile('p', null), label: 'MRNF', mountpoint: 'LEVI', frame: MRNF }],
+      },
+      project,
+      projectFallback: out.inFallback(fix, MRNF, datum, NOW),
+      sheetOpen: true,
+    });
+    return project.ok ? [] : (project.refusal.grids ?? []);
+  }
+
+  it('amber "needs a download", one tap to Convert’s pack with progress, and meanwhile the ellipsoidal position', async () => {
+    const grids = waitingForGrid();
+    expect(grids.length).toBeGreaterThan(0);
+    const pack = {
+      id: 'qc-geoid',
+      name: 'Québec heights',
+      bbox: [-80, 44, -57, 63] as [number, number, number, number],
+      bytes: 12_400_000,
+      files: grids.map((name) => ({
+        name,
+        bytes: 12_400_000,
+        md5: '',
+        sha256: '',
+        crop: null,
+        source: 'PROJ-data 1.24',
+        licence: 'OGL-Canada',
+      })),
+    };
+    jest.mocked(packIndex).mockResolvedValue({ version: 1, generated: '', packs: [pack] });
+    let finish: () => void = () => undefined;
+    jest.mocked(installPack).mockImplementation(async (_p, progress) => {
+      progress?.(6_200_000, 12_400_000);
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    });
+    await render(wrap(<ReceiverMapOverlay top={0} showChip={false} />));
+    expect(screen.getByText(/^Not yet in NAD83\(CSRS\) epoch 2010\.0/)).toBeTruthy();
+    expect(screen.queryByText(/^Not converted/)).toBeNull();
+    expect(screen.getByText(/Needs the .* grid on this device/)).toBeTruthy();
+    expect(
+      screen.getByText('Meanwhile, in NAD83(CSRS) 2010.0 with ellipsoidal heights:'),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/^Method: NAD83\(CSRS\) 1997\.0 → NAD83\(CSRS\) 2010\.0$/),
+    ).toBeTruthy();
+    const button = await screen.findByText('Download Québec heights (12 MB)');
+    const before = useConvertStore.getState().gridsVersion;
+    await fireEvent.press(button);
+    expect(screen.getByText(/Downloading… 6\.2 MB of 12 MB/)).toBeTruthy();
+    await act(async () => finish());
+    expect(installPack).toHaveBeenCalledWith(pack, expect.any(Function));
+    expect(useConvertStore.getState().gridsVersion).toBe(before + 1);
+  });
+
+  it('offline, or a failed download, says so', async () => {
+    waitingForGrid();
+    jest.mocked(packIndex).mockResolvedValue(null);
+    const { unmount } = await render(wrap(<ReceiverMapOverlay top={0} showChip={false} />, true));
+    expect(await screen.findByText(/Connect to the internet to download it/)).toBeTruthy();
+    await unmount();
+    jest.mocked(packIndex).mockResolvedValue({ version: 1, generated: '', packs: [] });
+    await render(wrap(<ReceiverMapOverlay top={0} showChip={false} />));
+    expect(await screen.findByText(/No download covers this area/)).toBeTruthy();
   });
 });
 

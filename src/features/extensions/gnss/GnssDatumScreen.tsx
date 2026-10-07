@@ -1,6 +1,12 @@
 import { formatAccuracy } from '@core/gnss/chip';
 import { correctionsOf } from '@core/gnss/config';
 import { planFixOutput, receiverFrame, type OutputPlanResult } from '@core/gnss/datum';
+import { gridsMissingFor } from '@core/gnss/output';
+import { liteEngine } from '@core/convert/lite';
+import { installedGrids } from '@data/projGrids';
+import { GridDownload } from '@features/gnss/GridDownload';
+import { nativeProjInfo } from '@lib/nativeProj';
+import { useConvertStore } from '@state/convertStore';
 import { PROJECT_DATUM_OPTIONS, type ProjectDatumOption } from '@core/gnss/projectDatum';
 import { useGnssStore } from '@state/gnssStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -10,15 +16,25 @@ import { Icon, RadioButton, Text } from 'react-native-paper';
 
 import { GnssScreenFrame } from './GnssScreenFrame';
 
-/** One line on whether Convert can take the current fix to `o`, and how well. */
-export function routeLine(r: OutputPlanResult | null): { ok: boolean; text: string } | null {
+export type RouteLine =
+  | { kind: 'ok'; text: string }
+  /** A validated route whose grid isn't on the device yet (amber, one-tap download). */
+  | { kind: 'download'; text: string; grids: string[] }
+  /** No validated route from here (red). */
+  | { kind: 'refused'; text: string };
+
+/** One line on whether Convert can take the current fix to an option, and how well. */
+export function routeLine(
+  r: OutputPlanResult | null,
+  missing: readonly string[] = [],
+): RouteLine | null {
   if (r === null) return null;
-  if (!r.ok) return { ok: false, text: `Not from here: ${r.refusal.message}` };
+  if (!r.ok) return { kind: 'refused', text: `Not from here: ${r.refusal.message}` };
   const acc = r.out.datumAccuracyM;
-  return {
-    ok: true,
-    text: `${r.out.method}${acc === null ? '' : acc === 0 ? ' · no conversion' : ` · conversion ${formatAccuracy(acc)}`}`,
-  };
+  const text = `${r.out.method}${acc === null ? '' : acc === 0 ? ' · no conversion' : ` · conversion ${formatAccuracy(acc)}`}`;
+  return missing.length > 0
+    ? { kind: 'download', text, grids: [...missing] }
+    : { kind: 'ok', text };
 }
 
 /**
@@ -36,22 +52,31 @@ export function GnssDatumScreen() {
   const fixAt = useGnssStore((s) => s.fix?.timeMs ?? s.status?.lastFixAtMs ?? null);
   const fixKey = fix ? `${fix.kind}|${fix.lat.toFixed(3)}|${fix.lon.toFixed(3)}` : '';
 
+  const gridsVersion = useConvertStore((s) => s.gridsVersion);
   const routes = useMemo(() => {
-    const out: Record<string, OutputPlanResult | null> = {};
+    const out: Record<string, RouteLine | null> = {};
+    const bundledDir = nativeProjInfo()?.bundledGridDir;
+    const env = { installed: installedGrids(), ...(bundledDir ? { bundledDir } : {}) };
     for (const o of PROJECT_DATUM_OPTIONS) {
-      out[o.id] =
-        fix === null
-          ? null
-          : planFixOutput(
-              { lat: fix.lat, lon: fix.lon, hEll: fix.hEll, timeMs: fixAt ?? 0 },
-              receiverFrame(fix.kind, correctionsOf(config)),
-              o.datum,
-            );
+      if (fix === null) {
+        out[o.id] = null;
+        continue;
+      }
+      const r: OutputPlanResult = planFixOutput(
+        { lat: fix.lat, lon: fix.lon, hEll: fix.hEll, timeMs: fixAt ?? 0 },
+        receiverFrame(fix.kind, correctionsOf(config)),
+        o.datum,
+      );
+      // Planning only: the engine is never called here.
+      out[o.id] = routeLine(
+        r,
+        r.ok ? gridsMissingFor(r.out, fix.lon, fix.lat, env, liteEngine) : [],
+      );
     }
     return out;
-    // Re-plan when the fix moves ~100 m or changes kind, not on every epoch.
+    // Re-plan when the fix moves ~100 m or changes kind (not every epoch), or a grid arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fixKey, config.activeProfileId, config.profiles]);
+  }, [fixKey, config.activeProfileId, config.profiles, gridsVersion]);
 
   const pick = (o: ProjectDatumOption) => update({ projectDatumId: o.id });
 
@@ -63,7 +88,7 @@ export function GnssDatumScreen() {
       </Text>
       <RadioButton.Group value={config.projectDatumId} onValueChange={() => undefined}>
         {PROJECT_DATUM_OPTIONS.map((o) => {
-          const line = routeLine(routes[o.id] ?? null);
+          const line = routes[o.id] ?? null;
           const selected = o.id === config.projectDatumId;
           return (
             <Pressable
@@ -83,17 +108,23 @@ export function GnssDatumScreen() {
                 {line !== null && (
                   <View style={styles.routeRow}>
                     <Icon
-                      source={line.ok ? 'check-circle-outline' : 'alert-outline'}
+                      source={line.kind === 'refused' ? 'alert-outline' : 'check-circle-outline'}
                       size={14}
-                      color={line.ok ? t.inkMuted : t.status.gpsWeak}
+                      color={line.kind === 'refused' ? t.status.gpsLostInk : t.inkMuted}
                     />
                     <Text
                       variant="bodySmall"
-                      style={[styles.flex, { color: line.ok ? t.inkMuted : t.status.gpsWeak }]}
+                      style={[
+                        styles.flex,
+                        { color: line.kind === 'refused' ? t.status.gpsLostInk : t.inkMuted },
+                      ]}
                     >
                       {line.text}
                     </Text>
                   </View>
+                )}
+                {line?.kind === 'download' && fix !== null && (
+                  <GridDownload grids={line.grids} lon={fix.lon} lat={fix.lat} />
                 )}
               </View>
             </Pressable>

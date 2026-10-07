@@ -10,7 +10,7 @@ import {
 } from '@core/gnss/chip';
 import { activeProfile, correctionsOf, profileLine } from '@core/gnss/config';
 import { receiverFrame, receiverFrameLabel } from '@core/gnss/datum';
-import type { PositionResult } from '@core/gnss/output';
+import { missingGrids, type PositionResult } from '@core/gnss/output';
 import { projectDatumOption } from '@core/gnss/projectDatum';
 import { usesCorrections } from '@core/gnss/quality';
 import { BASELINE_WARN_KM } from '@core/gnss/sourcetable';
@@ -23,6 +23,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GridDownload } from './GridDownload';
 import { ReceiverChipView } from './ReceiverChipView';
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -75,6 +76,7 @@ export function ReceiverSheet({ chip }: { chip: ReceiverChip }) {
   const sky = useGnssStore((s) => s.sky);
   const map = useGnssStore((s) => s.map);
   const project = useGnssStore((s) => s.project);
+  const projectFallback = useGnssStore((s) => s.projectFallback);
   const ntrip = useGnssStore((s) => s.ntrip);
   const use = useGnssStore((s) => s.use);
   const phone = useGnssStore((s) => s.phone);
@@ -179,9 +181,12 @@ export function ReceiverSheet({ chip }: { chip: ReceiverChip }) {
             ) : (
               <PositionBlock
                 result={project}
+                fallback={projectFallback}
                 receiverAccM={acc?.h95 ?? null}
                 receiverVAccM={acc?.v95 ?? null}
                 label={option.label}
+                lon={fix.lon}
+                lat={fix.lat}
               />
             )}
             {frame !== null && frame.frameUnknown && (
@@ -250,19 +255,53 @@ function correctionLine(
   return parts.join(' · ');
 }
 
+/**
+ * The fix in the project datum. Three cases, three colours:
+ * - converted: the coordinates, method, stated accuracy, validation;
+ * - waiting for a grid (amber, "needs a download"): the one-tap download and,
+ *   meanwhile, the fix in the best datum that needs no download;
+ * - refused, no validated route (red): Convert's reason. Never a guess.
+ */
 function PositionBlock({
   result,
+  fallback,
   receiverAccM,
   receiverVAccM,
   label,
+  lon,
+  lat,
 }: {
   result: PositionResult | null;
+  fallback: PositionResult | null;
   receiverAccM: number | null;
   receiverVAccM: number | null;
   label: string;
+  lon: number;
+  lat: number;
 }) {
   const t = useSchemeTokens();
   if (result === null) return null;
+  const waiting = missingGrids(result);
+  if (waiting.length > 0) {
+    return (
+      <>
+        <Text style={[styles.body, { color: t.status.gpsWeak }]}>Not yet in {label}</Text>
+        <GridDownload grids={waiting} lon={lon} lat={lat} testID="gnss-grid-download" />
+        {fallback?.ok && (
+          <View style={styles.fallback}>
+            <Text style={[styles.small, { color: t.inkVariant }]}>
+              Meanwhile, in {fallback.plan.outputLabel} with ellipsoidal heights:
+            </Text>
+            <Coordinates
+              result={fallback}
+              receiverAccM={receiverAccM}
+              receiverVAccM={receiverVAccM}
+            />
+          </View>
+        )}
+      </>
+    );
+  }
   if (!result.ok) {
     return (
       <>
@@ -271,6 +310,19 @@ function PositionBlock({
       </>
     );
   }
+  return <Coordinates result={result} receiverAccM={receiverAccM} receiverVAccM={receiverVAccM} />;
+}
+
+function Coordinates({
+  result,
+  receiverAccM,
+  receiverVAccM,
+}: {
+  result: Extract<PositionResult, { ok: true }>;
+  receiverAccM: number | null;
+  receiverVAccM: number | null;
+}) {
+  const t = useSchemeTokens();
   const { plan, value } = result;
   const total = totalAccuracy(receiverAccM, plan.datumAccuracyM);
   const hName = plan.height === null ? null : (heightSystem(plan.height)?.name ?? plan.height);
@@ -356,6 +408,7 @@ function Tile({ label, value, tint }: { label: string; value: string; tint: bool
 const styles = StyleSheet.create({
   // Above the map's controls rail and the recording panel.
   layer: { zIndex: 50, elevation: 50 },
+  fallback: { gap: 2, marginTop: 6 },
   warnRow: { flexDirection: 'row', gap: 6, alignItems: 'flex-start', marginTop: 2 },
   scrim: { backgroundColor: 'rgba(0,0,0,0.25)' },
   sheet: {

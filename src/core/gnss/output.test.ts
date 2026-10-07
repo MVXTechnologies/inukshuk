@@ -1,6 +1,15 @@
 import { liteEngine } from '../convert/lite';
 import type { Engine } from '../convert/run';
-import { drawnPosition, FixOutputs, MAP_DATUM, REPLAN_KM } from './output';
+import {
+  drawnPosition,
+  fallbackDatum,
+  FixOutputs,
+  gridsMissingFor,
+  MAP_DATUM,
+  missingGrids,
+  NO_GRIDS,
+  REPLAN_KM,
+} from './output';
 import { projectDatumOption } from './projectDatum';
 import { fixOf } from './testUtils';
 
@@ -119,5 +128,72 @@ describe('FixOutputs', () => {
     expect(r.plan.datumAccuracyM).toBe(0);
     expect(r.value.h).toBe(20);
     expect(MAP_DATUM).toEqual({ frame: 'wgs84', height: null });
+  });
+});
+
+describe('grids: needs a download, not a refusal', () => {
+  const datum = projectDatumOption('csrs-2010-cgvd2013').datum;
+  const fix = fixOf('rtk-fixed', { timeMs: NOW });
+
+  it('a validated route whose geoid grid is not on the device: missing-grid, with its plan', () => {
+    const o = new FixOutputs(counting());
+    const r = o.inProject(fix, MRNF, datum, NOW);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusal.code).toBe('missing-grid');
+    expect(r.plan?.method).toContain('CGVD2013');
+    const grids = missingGrids(r);
+    expect(grids.length).toBeGreaterThan(0);
+    expect(r.plan && gridsMissingFor(r.plan, fix.lon, fix.lat, NO_GRIDS, liteEngine)).toEqual(
+      grids,
+    );
+    // Meanwhile: the same frame and epoch, ellipsoidal heights, no grid needed.
+    const f = o.inFallback(fix, MRNF, datum, NOW);
+    expect(f?.ok).toBe(true);
+    if (!f?.ok) return;
+    expect(f.plan.outputLabel).toBe('NAD83(CSRS) 2010.0');
+    expect(f.plan.height).toBe('ell');
+  });
+
+  it('once installed, the engine runs the pipeline with this device’s grid paths', () => {
+    const probe = new FixOutputs(liteEngine).inProject(fix, MRNF, datum, NOW);
+    const grids = missingGrids(probe);
+    const engine = counting();
+    const seen: string[] = [];
+    const spy: Engine = {
+      kind: 'native',
+      transform: (req) => {
+        seen.push(req.pipeline);
+        return engine.transform(req);
+      },
+    };
+    const env = {
+      installed: grids.map((name) => ({ pack: 'qc', name, path: `/grids/${name}`, crop: null })),
+    };
+    const r = new FixOutputs(spy, env).inProject(fix, MRNF, datum, NOW);
+    expect(r.ok).toBe(true);
+    for (const g of grids) expect(seen[0]).toContain(`/grids/${g}`);
+    expect(missingGrids(r)).toEqual([]);
+  });
+
+  it('fallbacks exist only for datums with a geoid step', () => {
+    expect(fallbackDatum({ frame: 'wgs84', height: 'ell' })).toBeNull();
+    expect(fallbackDatum({ frame: 'wgs84', height: null })).toBeNull();
+    expect(fallbackDatum({ frame: 'csrs', epoch: 2010, height: 'cgvd2013a' })).toEqual({
+      frame: 'csrs',
+      epoch: 2010,
+      height: 'ell',
+    });
+    expect(new FixOutputs(liteEngine).inFallback(fix, MRNF, MAP_DATUM, NOW)).toBeNull();
+    const asIs = new FixOutputs(liteEngine).onMap(
+      fixOf('autonomous', { timeMs: NOW }),
+      'none',
+      NOW,
+    );
+    expect(asIs.ok && gridsMissingFor(asIs.plan, 0, 0, NO_GRIDS, liteEngine)).toEqual([]);
+    expect(missingGrids(null)).toEqual([]);
+    expect(
+      missingGrids({ ok: false, refusal: { code: 'missing-grid', message: '' }, plan: null }),
+    ).toEqual([]);
   });
 });

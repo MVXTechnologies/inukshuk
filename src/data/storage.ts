@@ -775,6 +775,17 @@ export function writeJson(name: string, value: unknown): void {
   staged.moveSync(file);
 }
 
+/**
+ * Delete a JSON document at the document root with its `.tmp` stage and
+ * `.corrupt` evidence: a secret moved to secure storage leaves no plain copy.
+ */
+export function deleteJson(name: string): void {
+  for (const n of [name, `${name}.tmp`, `${name}.corrupt`]) {
+    const f = new File(Paths.document, n);
+    if (f.exists) f.delete();
+  }
+}
+
 /** Read the persisted library index, or null if it has never been written. */
 export function readIndex<T>(): Promise<T | null> {
   return readJson<T>(INDEX_FILE);

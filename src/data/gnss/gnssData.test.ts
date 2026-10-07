@@ -1,4 +1,4 @@
-import * as storage from '@data/storage';
+import { resetSecureStoreForTests } from '@data/secureStore';
 import { requireOptionalNativeModule } from 'expo';
 
 import { gnssSecrets } from './credentials';
@@ -11,31 +11,48 @@ import {
 import { ntripSocketFactory, resetNtripSocketForTests } from './ntripSocket';
 import { SimulatedLink, simulatedFrames, simulatedLink } from './simulatedLink';
 
-jest.mock('@data/storage', () => ({
-  writeJson: jest.fn(),
-  readJson: jest.fn(async () => ({ version: 1, secrets: { old: 'pw', junk: 3 } })),
-}));
 jest.mock('expo', () => ({ requireOptionalNativeModule: jest.fn(() => null) }));
 
 beforeEach(() => {
   resetGnssLinkForTests();
   resetNtripSocketForTests();
-  jest.mocked(requireOptionalNativeModule).mockReturnValue(null);
+  resetSecureStoreForTests();
+  // Only the secure-store module is in this "binary" (no GNSS module).
+  jest
+    .mocked(requireOptionalNativeModule)
+    .mockImplementation((name: string) => (name === 'ExpoSecureStore' ? {} : null));
 });
 
+/** The in-memory keychain (jest.setup.ts). */
+const keychain = () => (globalThis as { __secureStore?: Map<string, string> }).__secureStore;
+
 describe('caster passwords', () => {
-  it('live apart from gnss.json; junk entries are dropped; remove and clear', async () => {
-    expect(await gnssSecrets.get('old')).toBe('pw');
-    expect(await gnssSecrets.get('junk')).toBeNull();
+  it('live in secure storage, one key each, listed for clear(); never in a file', async () => {
     await gnssSecrets.set('p1', 's3cret');
-    expect(jest.mocked(storage.writeJson)).toHaveBeenLastCalledWith('gnss-credentials.json', {
-      version: 1,
-      secrets: { old: 'pw', p1: 's3cret' },
-    });
-    await gnssSecrets.remove('old');
-    expect(await gnssSecrets.get('old')).toBeNull();
-    await gnssSecrets.clear();
+    await gnssSecrets.set('p2', 'other');
+    await gnssSecrets.set('p1', 'changed');
+    expect(await gnssSecrets.get('p1')).toBe('changed');
+    expect(keychain()?.get('inukshuk.ntrip.pw.p1')).toBe('changed');
+    expect(keychain()?.get('inukshuk.ntrip.index')).toBe('["p1","p2"]');
+    await gnssSecrets.remove('p1');
     expect(await gnssSecrets.get('p1')).toBeNull();
+    expect(keychain()?.get('inukshuk.ntrip.index')).toBe('["p2"]');
+    await gnssSecrets.clear();
+    expect(await gnssSecrets.get('p2')).toBeNull();
+    expect(keychain()?.size).toBe(0);
+  });
+
+  it('a junk index reads as empty; without secure storage, saving fails loudly', async () => {
+    keychain()?.set('inukshuk.ntrip.index', '{nope');
+    await gnssSecrets.clear();
+    keychain()?.set('inukshuk.ntrip.index', '{"a":1}');
+    await gnssSecrets.set('p', 'x');
+    expect(keychain()?.get('inukshuk.ntrip.index')).toBe('["p"]');
+    resetSecureStoreForTests();
+    jest.mocked(requireOptionalNativeModule).mockReturnValue(null);
+    await expect(gnssSecrets.set('p', 'x')).rejects.toThrow(/securely/);
+    expect(await gnssSecrets.get('p')).toBeNull();
+    await gnssSecrets.remove('p');
   });
 });
 

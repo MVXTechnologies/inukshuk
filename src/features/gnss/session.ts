@@ -17,7 +17,7 @@ import { liteEngine } from '@core/convert/lite';
 import type { Engine } from '@core/convert/run';
 import { activeProfile, correctionsOf, type PairedReceiver } from '@core/gnss/config';
 import type { GnssFix } from '@core/gnss/fix';
-import { drawnPosition, FixOutputs } from '@core/gnss/output';
+import { drawnPosition, FixOutputs, missingGrids, type GridEnv } from '@core/gnss/output';
 import { projectDatumOption } from '@core/gnss/projectDatum';
 import {
   arbitrate,
@@ -32,7 +32,9 @@ import { gnssSecrets } from '@data/gnss/credentials';
 import { gnssLink, type GnssLink, type LinkDevice, type LinkSubscription } from '@data/gnss/link';
 import { ntripSocketFactory } from '@data/gnss/ntripSocket';
 import { SIMULATED_INTERVAL_MS, simulatedFrames } from '@data/gnss/simulatedLink';
-import { initNativeProj, nativeEngine } from '@lib/nativeProj';
+import { installedGrids } from '@data/projGrids';
+import { initNativeProj, nativeEngine, nativeProjInfo } from '@lib/nativeProj';
+import { useConvertStore } from '@state/convertStore';
 import { reportError } from '@lib/errorReporting';
 import { useGnssStore } from '@state/gnssStore';
 import { useRecorderStore } from '@state/recorderStore';
@@ -56,6 +58,12 @@ function base64Bytes(b64: string): Uint8Array | null {
   } catch {
     return null;
   }
+}
+
+/** The grids on this device, as Convert finds them (installed packs + the bundled directory). */
+function gridEnv(): GridEnv {
+  const bundledDir = nativeProjInfo()?.bundledGridDir;
+  return { installed: installedGrids(), ...(bundledDir ? { bundledDir } : {}) };
 }
 
 function engine(): Engine {
@@ -98,6 +106,7 @@ export class GnssSession {
   private receiver: PairedReceiver | null = null;
   private connected = false;
   private ntripKey = '';
+  private unsubGrids: () => void = () => undefined;
 
   constructor(
     private readonly link: GnssLink,
@@ -108,6 +117,12 @@ export class GnssSession {
       toReceiver: (bytes) => this.link.write(bytes),
       publish: (ntrip) => useGnssStore.getState().publish({ ntrip }),
       now: this.now,
+    });
+    // A grid pack installed (Convert, or the sheet's download): re-plan with it.
+    this.unsubGrids = useConvertStore.subscribe((st, prev) => {
+      if (st.gridsVersion !== prev.gridsVersion && this.outputs !== null) {
+        this.outputs = new FixOutputs(engine(), gridEnv());
+      }
     });
     this.subs.push(
       link.addListener('onDevice', (d) => this.onDevice(d)),
@@ -165,7 +180,7 @@ export class GnssSession {
     this.stop();
     this.receiver = receiver;
     this.pipeline = new ReceiverPipeline();
-    this.outputs = new FixOutputs(engine());
+    this.outputs = new FixOutputs(engine(), gridEnv());
     this.source = INITIAL_SOURCE;
     this.lastFed = null;
     this.connSubs.push(
@@ -190,6 +205,14 @@ export class GnssSession {
           error: linkErrorMessage(codeOf(e), 'Couldn’t connect to the receiver'),
         });
       });
+  }
+
+  /** Release everything (tests; the app keeps one session for its life). */
+  dispose(): void {
+    this.stop();
+    this.unsubGrids();
+    for (const s of this.subs) s.remove();
+    this.subs = [];
   }
 
   /** Disconnect and hand the location back to the phone. */
@@ -276,12 +299,17 @@ export class GnssSession {
     if (nowMs - this.lastPublishMs < PUBLISH_MS && !outcome.decision.switched) return;
     this.lastPublishMs = nowMs;
     const datum = projectDatumOption(config.projectDatumId).datum;
+    const project = outputs.inProject(fix, corrections, datum, nowMs);
     useGnssStore.getState().publish({
       fix,
       status,
       sky: this.pipeline.sky,
       map: { lat: pos.lat, lon: pos.lon, result: onMap },
-      project: outputs.inProject(fix, corrections, datum, nowMs),
+      project,
+      projectFallback:
+        missingGrids(project).length > 0
+          ? outputs.inFallback(fix, corrections, datum, nowMs)
+          : null,
       use: outcome.use,
       phone: outcome.phone,
     });
@@ -331,6 +359,6 @@ export function gnssSession(): GnssSession | null {
 
 /** Test-only. */
 export function resetGnssSessionForTests(): void {
-  session?.stop();
+  session?.dispose();
   session = undefined;
 }

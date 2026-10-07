@@ -28,7 +28,16 @@ jest.mock('@data/offline', () => ({
   deleteCompanionPacks: jest.fn(async () => undefined),
   createRegionPack: jest.fn(async () => undefined),
 }));
-jest.mock('@lib/nativeProj', () => ({ nativeEngine: () => null, initNativeProj: jest.fn() }));
+jest.mock('@lib/nativeProj', () => ({
+  nativeEngine: () => null,
+  initNativeProj: jest.fn(),
+  nativeProjInfo: () => null,
+}));
+jest.mock('@data/projGrids', () => ({
+  installedGrids: () => [],
+  packIndex: jest.fn(async () => null),
+  installPack: jest.fn(),
+}));
 
 function wrap(children: ReactNode, dark = false) {
   return <PaperProvider theme={dark ? MD3DarkTheme : MD3LightTheme}>{children}</PaperProvider>;
@@ -131,6 +140,9 @@ describe('the receiver sub-screens', () => {
         /^Not from here: No validated conversion between ITRF2020 and NAD83\(2011\)/,
       ),
     ).toBeTruthy();
+    // CGVD2013 heights: a validated route waiting for its geoid grid (amber, download).
+    expect(screen.getAllByText(/Needs the .* grid on this device/)).toHaveLength(1);
+    expect(await screen.findByText(/Connect to the internet to download it/)).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('NAD83(CSRS) epoch 1997.0'));
     expect(useGnssStore.getState().config.projectDatumId).toBe('csrs-1997');
   });

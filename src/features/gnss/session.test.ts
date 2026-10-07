@@ -21,7 +21,16 @@ jest.mock('@data/recorderCheckpoint', () => ({
   clearCheckpoint: jest.fn(),
   maybeWriteCheckpoint: jest.fn(),
 }));
-jest.mock('@lib/nativeProj', () => ({ nativeEngine: () => null, initNativeProj: jest.fn() }));
+jest.mock('@lib/nativeProj', () => ({
+  nativeEngine: () => null,
+  initNativeProj: jest.fn(),
+  nativeProjInfo: () => null,
+}));
+jest.mock('@data/projGrids', () => ({
+  installedGrids: () => [],
+  packIndex: jest.fn(async () => null),
+  installPack: jest.fn(),
+}));
 jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));
 
 const RECEIVER = {
