@@ -163,11 +163,11 @@ export function Trail2DView({
   // proved unreliable across devices too. The tap's pixel point is compared
   // against each pin projected through the real camera.
   const NOTE_HIT_PX = 48;
-  const onMapPress = useCallback(
-    async (e: { nativeEvent?: { point?: [number, number] } }) => {
-      const point = e.nativeEvent?.point;
+  /** The note pin under a screen point, if any (null mid-teardown too). */
+  const noteAt = useCallback(
+    async (point: [number, number]): Promise<string | null> => {
       const map = mapRef.current;
-      if (!onNotePress || !point || !map || numberedNotes.length === 0) return;
+      if (!map || numberedNotes.length === 0) return null;
       const [px, py] = point;
       let bestId: string | null = null;
       let bestD = NOTE_HIT_PX;
@@ -185,11 +185,44 @@ export function Trail2DView({
           }
         }
       } catch {
-        return; // projection unavailable mid-teardown — ignore the tap
+        return null; // projection unavailable mid-teardown — ignore the tap
       }
-      if (bestId) onNotePress(bestId);
+      return bestId;
     },
-    [numberedNotes, onNotePress],
+    [numberedNotes],
+  );
+  const onMapPress = useCallback(
+    async (e: { nativeEvent?: { point?: [number, number] } }) => {
+      const point = e.nativeEvent?.point;
+      if (!onNotePress || !point) return;
+      const id = await noteAt(point);
+      if (id) onNotePress(id);
+    },
+    [noteAt, onNotePress],
+  );
+  // Tap priority (#587): a note pin over a photo circle wins the tap.
+  const photoPressGuard = useCallback(
+    async (point: [number, number]) => {
+      if (!onNotePress) return false;
+      const id = await noteAt(point);
+      if (id) onNotePress(id);
+      return id !== null;
+    },
+    [noteAt, onNotePress],
+  );
+  const getZoom = useCallback(
+    () => mapRef.current?.getZoom() ?? Promise.reject(new Error('no map')),
+    [],
+  );
+  const zoomTo = useCallback((center: [number, number], zoom: number) => {
+    cameraRef.current?.easeTo({ center, zoom, duration: 400 });
+  }, []);
+  const onPhotosPress = useCallback(
+    (ids: string[]) => {
+      const first = ids[0];
+      if (first) onPhotoPress?.(first);
+    },
+    [onPhotoPress],
   );
 
   return (
@@ -247,10 +280,10 @@ export function Trail2DView({
           id="trail-2d"
           photos={photos}
           selectedId={selectedPhotoId ?? null}
-          onPhotoPress={(ids) => {
-            const first = ids[0];
-            if (first) onPhotoPress?.(first);
-          }}
+          onPhotoPress={onPhotosPress}
+          pressGuard={photoPressGuard}
+          getZoom={getZoom}
+          zoomTo={zoomTo}
         />
       )}
 
