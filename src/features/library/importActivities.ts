@@ -13,7 +13,18 @@ import {
 } from '@core/geo/activityFiles';
 import { buildImportedTrack, snapWaypointsToNotes } from '@core/geo/track';
 import { sniffOpenedFile, type OpenedFileFormat } from '@core/import/openedFile';
-import type { TrackSummary } from '@core/models';
+import { ByteBudget } from '@core/geo/activityFiles/limits';
+import { listZipEntries } from '@core/geo/activityFiles/zip';
+import type { TrackPoint, TrackSummary } from '@core/models';
+import { photoCountLabel } from '@core/photos/summary';
+import {
+  planZipPhotoAttach,
+  waypointsForNotes,
+  type ZipEntryInfo,
+  type ZipPhotoAttach,
+} from '@core/photos/zipImport';
+import { attachZipPhotos } from '@features/photos/attachZipPhotos';
+import { photoResizer } from '@features/photos/photoResizer';
 import * as storage from '@data/storage';
 import { primeTrackGeometry } from '@data/trackGeometry';
 import { primeTrailStats } from '@data/trailStatsStore';
@@ -45,6 +56,10 @@ export interface ActivityImportSummary {
   failed: number;
   /** A size/entry cap stopped an archive early. */
   limitReached: boolean;
+  /** Photos re-attached from "Trail + photos" zips (#587). */
+  photos: number;
+  /** Photos in such zips that could not be attached (too big, too many, unreadable). */
+  photosFailed: number;
 }
 
 export type BulkActivityImportResult =
@@ -109,6 +124,16 @@ class ImportSession {
   duplicates = 0;
   failed = 0;
   limitReached = false;
+  /** Trail photos re-attached from "Trail + photos" zips (#587), and those that failed. */
+  photos = 0;
+  photosFailed = 0;
+  /**
+   * While a zip is walked: its top-level entries, so a GPX in it whose photo
+   * waypoints link to `photos/…` entries gets those photos back.
+   */
+  zipEntries: ZipEntryInfo[] | null = null;
+  readonly pendingPhotos: { trackId: string; points: TrackPoint[]; attach: ZipPhotoAttach[] }[] =
+    [];
   private readonly index: DuplicateIndex;
   readonly yieldToUi = createYielder();
 
@@ -151,9 +176,22 @@ class ImportSession {
     else if (!timed) track.category = 'navigation';
 
     const fileUri = storage.writeTrackGpx(id, activityGpxText(activity, track.name));
+    let waypoints = activity.waypoints ?? [];
+    // A "Trail + photos" zip (#587): its photo waypoints are photos, not notes.
+    if (
+      activity.format === 'gpx' &&
+      this.zipEntries?.some((e) => e.name === activity.sourceName) === true
+    ) {
+      const photoPlan = planZipPhotoAttach(waypoints, this.zipEntries);
+      waypoints = waypointsForNotes(waypoints, photoPlan.photoWaypoints);
+      this.photosFailed += photoPlan.tooBig + photoPlan.overCount;
+      if (photoPlan.attach.length > 0) {
+        this.pendingPhotos.push({ trackId: id, points: activity.points, attach: photoPlan.attach });
+      }
+    }
     const notes =
       activity.format === 'gpx' && activity.hasTrackOrRoutePoints
-        ? snapWaypointsToNotes(activity.points, activity.waypoints ?? [], activity.segmentStarts)
+        ? snapWaypointsToNotes(activity.points, waypoints, activity.segmentStarts)
         : [];
     // Draw it from the points in hand: the map and Library never have to
     // parse this GPX back (#465).
@@ -168,7 +206,41 @@ class ImportSession {
       duplicates: this.duplicates,
       failed: this.failed,
       limitReached: this.limitReached,
+      photos: this.photos,
+      photosFailed: this.photosFailed,
     };
+  }
+}
+
+/**
+ * Re-attach the photos of "Trail + photos" zips (#587) to the trails just
+ * imported from them, while the archive is still open. A failure costs only
+ * the photos: the trails are already imported.
+ */
+async function attachPendingPhotos(
+  session: ImportSession,
+  zipRef: string,
+  host: ArchiveHost,
+  budget: ByteBudget,
+): Promise<void> {
+  for (const pending of session.pendingPhotos) {
+    try {
+      const result = await attachZipPhotos({
+        trackId: pending.trackId,
+        points: pending.points,
+        attach: pending.attach,
+        zipRef,
+        host,
+        budget,
+        resizer: photoResizer,
+        newId: storage.newId,
+      });
+      session.photos += result.added;
+      session.photosFailed += result.failed;
+    } catch (err) {
+      reportError(err, 'zip-photo-import');
+      session.photosFailed += pending.attach.length;
+    }
   }
 }
 
@@ -185,17 +257,29 @@ async function importFile(
   const head = storage.readFileHead(uri, 4096);
   const format = sniffActivityFormat(head, displayName);
   if (format === 'zip') {
-    const result = await walkActivityArchive(
-      uri,
-      fileHost(session.yieldToUi),
-      (activity) => session.add(activity),
-      {
+    const host = fileHost(session.yieldToUi);
+    // One decompression budget for the walk AND the photos read afterwards.
+    const budget = new ByteBudget(DEFAULT_IMPORT_LIMITS.maxTotalBytes);
+    try {
+      session.zipEntries = host
+        .open(uri, (src) => listZipEntries(src))
+        .map((e) => ({ name: e.name, uncompressedSize: e.uncompressedSize }));
+    } catch {
+      session.zipEntries = null; // the walk below reports an unreadable archive
+    }
+    try {
+      const result = await walkActivityArchive(uri, host, (activity) => session.add(activity), {
         onProgress: onProgress && ((p) => onProgress(p.processed, p.discovered)),
         onEntryError: (err, entry) => reportError(err, `activity-import:${entry}`),
-      },
-    );
-    session.failed += result.failed;
-    session.limitReached ||= result.limitReached;
+        budget,
+      });
+      session.failed += result.failed;
+      session.limitReached ||= result.limitReached;
+      await attachPendingPhotos(session, uri, host, budget);
+    } finally {
+      session.zipEntries = null;
+      session.pendingPhotos.length = 0;
+    }
     return;
   }
   if (storage.fileSizeAt(uri) > DEFAULT_IMPORT_LIMITS.maxEntryBytes) {
@@ -315,11 +399,18 @@ export async function importActivitiesFromUri(
 /** "Imported 214 trails · 3 duplicates skipped · 1 failed". */
 export function activityImportMessage(summary: ActivityImportSummary): string {
   const n = summary.items.length;
-  const parts = [`Imported ${n} trail${n === 1 ? '' : 's'}`];
+  const parts = [
+    `Imported ${n} trail${n === 1 ? '' : 's'}${
+      summary.photos > 0 ? ` with ${photoCountLabel(summary.photos)}` : ''
+    }`,
+  ];
   if (summary.duplicates > 0) {
     parts.push(`${summary.duplicates} duplicate${summary.duplicates === 1 ? '' : 's'} skipped`);
   }
   if (summary.failed > 0) parts.push(`${summary.failed} failed`);
+  if (summary.photosFailed > 0) {
+    parts.push(`${photoCountLabel(summary.photosFailed)} not added`);
+  }
   if (summary.limitReached) parts.push('stopped at the size limit');
   return parts.join(' · ');
 }

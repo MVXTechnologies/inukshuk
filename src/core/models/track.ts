@@ -177,4 +177,12 @@ export interface TrackSummary {
    * vertices "Edit route" reopens the drawing tool with.
    */
   plan?: RoutePlan;
+  /**
+   * Trail photos (#587): how many, and the id of the cover (the first in
+   * time). A cache of the trail's photo sidecar (`photos/<id>/photos.json`),
+   * so the Library can show them without reading every sidecar. Absent = no
+   * photos (or not counted yet); never a migration.
+   */
+  photoCount?: number;
+  coverPhotoId?: string;
 }

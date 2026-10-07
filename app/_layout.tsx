@@ -34,10 +34,19 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { installTileHostAlias } from '@data/tileHostAlias';
+import { clearPhotoInbox } from '@data/photos/inbox';
+import { PhotoResizeHost } from '@features/photos/PhotoResizeHost';
+import { AddPhotosAfterSavePrompt } from '@features/photos/AddPhotosAfterSavePrompt';
 
 // Before any map mounts: MapLibre's requests for the frozen tile-template host
 // go to wherever the Worker lives (a no-op until it moves; P1-2).
 installTileHostAlias();
+
+// Before anything mounts (#587): the photo resize inbox is served over
+// loopback and holds full-resolution picks WITH their EXIF/GPS; anything left
+// there by a crash or a kill mid-import goes now, before the resize host
+// writes its page there and before any import can start.
+clearPhotoInbox();
 
 export default function RootLayout() {
   const osScheme = useColorScheme();
@@ -129,6 +138,11 @@ export default function RootLayout() {
                 >
                   <Stack.Screen name="(tabs)" />
                   <Stack.Screen name="trail3d/[id]" />
+                  {/* Trail photos (#587): the full-screen viewer, always on black. */}
+                  <Stack.Screen
+                    name="photo/[trackId]/[photoId]"
+                    options={{ contentStyle: { backgroundColor: 'black' }, animation: 'fade' }}
+                  />
                   <Stack.Screen name="settings" />
                   {/* Logbook statistics: Statistics, Personal records, Year in review. */}
                   <Stack.Screen name="logbook/stats" />
@@ -169,7 +183,13 @@ export default function RootLayout() {
                 <ImportFeedbackSnackbar />
                 <PdfRecoverySnackbar />
                 <PdfPrerenderWorker />
+                <PhotoResizeHost />
                 <MapReparseWorker />
+                {/* Before StravaPushPrompt, on purpose: both subscribe to the
+                    recorder's lastSavedTrackId, and the Strava prompt consumes
+                    it synchronously inside its listener — a listener registered
+                    after it then only ever sees null (device QA, #587). */}
+                <AddPhotosAfterSavePrompt />
                 <StravaPushPrompt />
                 <GnssHost />
                 <TeamHost />

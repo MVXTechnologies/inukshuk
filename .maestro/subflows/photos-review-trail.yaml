@@ -1,0 +1,74 @@
+# Subflow of photos-review.yaml: the newest trail's photo screens, shot as
+# review-photos-*-${THEME}.png. Starts and ends on a tab screen.
+appId: com.inukshuk.app
+---
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Recorded trails.*'
+    timeout: 15000
+- tapOn: '.* — open trail view, long-press to select'
+- extendedWaitUntil:
+    visible: 'Trail layers'
+    timeout: 30000
+- tapOn: 'Overview'
+# Let the map load its photo sprites (no UI sentinel for GL symbols: a
+# bounded optional wait).
+- extendedWaitUntil:
+    visible: 'never-shown-sentinel'
+    timeout: 6000
+    optional: true
+- takeScreenshot: review-photos-trail-${THEME}
+- scrollUntilVisible:
+    element: 'Photo 1 of [0-9]+.*'
+    direction: DOWN
+    timeout: 15000
+- takeScreenshot: review-photos-strip-${THEME}
+
+# Charts: the photo lane over the elevation profile.
+- tapOn: 'Charts'
+- extendedWaitUntil:
+    visible: 'Elevation'
+    timeout: 15000
+- takeScreenshot: review-photos-lane-${THEME}
+
+# Timeline: photo rows.
+- tapOn: 'Timeline'
+- extendedWaitUntil:
+    visible: 'Add photos'
+    timeout: 15000
+- takeScreenshot: review-photos-timeline-${THEME}
+
+# The viewer (the stage is always black; the info sheet follows the theme).
+- tapOn: 'Overview'
+- scrollUntilVisible:
+    element: 'Photo 1 of [0-9]+.*'
+    direction: DOWN
+    timeout: 15000
+- tapOn: 'Photo 1 of [0-9]+.*'
+- extendedWaitUntil:
+    visible: 'Show on map'
+    timeout: 15000
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: review-photos-viewer-${THEME}
+- tapOn: 'Close'
+- extendedWaitUntil:
+    visible: 'Trail layers'
+    timeout: 15000
+
+# Share: the GPX / Trail + photos choice.
+- tapOn: 'Share'
+- extendedWaitUntil:
+    visible: '.*GPX file only.*'
+    timeout: 10000
+- takeScreenshot: review-photos-share-${THEME}
+- pressKey: back
+- extendedWaitUntil:
+    visible: 'Trail layers'
+    timeout: 15000
+- tapOn: 'Back'
+- extendedWaitUntil:
+    visible: 'Recorded trails.*'
+    timeout: 15000

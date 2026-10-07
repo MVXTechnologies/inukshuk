@@ -2,11 +2,12 @@ import { strToU8, Zip, ZipDeflate, ZipPassThrough } from 'fflate';
 
 import { gpxWithPhotoWaypoints, planTrailPhotoZip } from '@core/photos/gpxZip';
 import type { TrackPhoto } from '@core/photos/model';
+import { shareableJpeg } from '@core/photos/shareable';
 import {
   createCacheFileWriter,
   deleteFileAt,
   fileExists,
-  readFileChunks,
+  readFileBytes,
   readFileText,
   type CacheFileWriter,
 } from '@data/storage';
@@ -14,18 +15,24 @@ import {
 /**
  * Build the "Trail + photos" zip (#587, owner Q8) in the cache, ready for the
  * share sheet: the trail's GPX with a photo waypoint per photo, plus the
- * display copies (canvas re-encodes, or stripped "Full size" originals; see
- * `@core/photos/gpxZip`) under `photos/`. Trail-note photos are never included. Streamed like "Download your
- * data" — one 1 MB slice in memory at a time — and the copies are stored, not
- * deflated (JPEG doesn't compress). The caller shares `uri` and then deletes it.
+ * display copies under `photos/`. Trail-note photos are never included (see
+ * `@core/photos/gpxZip`). The copies are stored, not deflated (JPEG doesn't
+ * compress), one photo in memory at a time. The caller shares `uri` and then
+ * deletes it.
+ *
+ * Every copy is checked on the way out (`shareableJpeg`): one that still
+ * carries metadata is stripped in the archive, and one that cannot be parsed
+ * is left out along with its waypoint — a file whose metadata cannot be
+ * checked never leaves the phone.
  */
-
-const CHUNK_BYTES = 1024 * 1024;
 
 export interface TrailZip {
   uri: string;
   name: string;
+  /** Photos in the archive. */
   photos: number;
+  /** Copies left out: deleted since planning, or not a JPEG that could be checked. */
+  skipped: number;
 }
 
 export async function writeTrailPhotoZip(args: {
@@ -34,8 +41,18 @@ export async function writeTrailPhotoZip(args: {
   gpxUri: string;
   photos: readonly TrackPhoto[];
 }): Promise<TrailZip> {
-  const plan = planTrailPhotoZip(args.trackName, args.photos);
-  const gpx = gpxWithPhotoWaypoints(await readFileText(args.gpxUri), args.photos);
+  const planned = planTrailPhotoZip(args.trackName, args.photos);
+  // First pass: which copies can go (exists, and is a JPEG whose metadata we can check).
+  const shareable = new Set<string>();
+  for (const entry of planned.entries) {
+    if (!fileExists(entry.sourcePath)) continue;
+    if (shareableJpeg(await readFileBytes(entry.sourcePath)).kind !== 'unreadable') {
+      shareable.add(entry.photoId);
+    }
+  }
+  const kept = args.photos.filter((p) => shareable.has(p.id));
+  const plan = planTrailPhotoZip(args.trackName, kept);
+  const gpx = gpxWithPhotoWaypoints(await readFileText(args.gpxUri), kept);
   let writer: CacheFileWriter | null = null;
   try {
     writer = createCacheFileWriter(plan.zipName);
@@ -57,18 +74,25 @@ export async function writeTrailPhotoZip(args: {
     check();
     let photos = 0;
     for (const entry of plan.entries) {
-      // A copy deleted since planning: skip it before writing a header.
-      if (!fileExists(entry.sourcePath)) continue;
+      const bytes = await readFileBytes(entry.sourcePath);
+      const checked = shareableJpeg(bytes);
+      // Checked in the first pass; a file swapped since then is not trusted.
+      if (checked.kind === 'unreadable') throw new Error('a photo changed while zipping');
       const stream = new ZipPassThrough(entry.zipPath);
       zip.add(stream);
-      readFileChunks(entry.sourcePath, CHUNK_BYTES, (chunk, final) => stream.push(chunk, final));
+      stream.push(checked.kind === 'stripped' ? checked.bytes : bytes, true);
       check();
       photos++;
     }
     zip.end();
     check();
     writer.close();
-    return { uri: writer.uri, name: plan.zipName, photos };
+    return {
+      uri: writer.uri,
+      name: plan.zipName,
+      photos,
+      skipped: planned.entries.length - photos,
+    };
   } catch (err) {
     if (writer) {
       try {

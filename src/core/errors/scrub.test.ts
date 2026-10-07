@@ -64,6 +64,27 @@ describe('scrubText — paths and URIs', () => {
   });
 });
 
+describe('scrubText — trail photos (#587)', () => {
+  it('replaces document-relative photo and inbox paths', () => {
+    expect(scrubText('cannot serve .photo-inbox/1b4e28ba-2fa1-11d2-883f-0016d3cca427.jpg')).toBe(
+      'cannot serve <path>.jpg',
+    );
+    expect(scrubText('copy failed: photos/aB3_x9/Q7zP.sq.jpg missing')).toBe(
+      'copy failed: <path>.jpg missing',
+    );
+    expect(scrubText('write photos/aB3_x9/photos.json.tmp')).toBe('write <path>.tmp');
+    // A flat note photo too.
+    expect(scrubText('read photos/k2LmQ9.jpeg failed')).toBe('read <path>.jpeg failed');
+  });
+
+  it('scrubs a quoted caption and leaves the word "photos" alone', () => {
+    expect(scrubText('Could not save caption "Lac des Cygnes appears"')).toBe(
+      'Could not save caption <str>',
+    );
+    expect(scrubText('Added 33 photos/minute')).toBe('Added 33 photos/minute');
+  });
+});
+
 describe('scrubText — quoted user strings', () => {
   it('scrubs double, typographic and backtick quotes', () => {
     expect(scrubText('re-parse of "Lac Blanc 1:50k" failed')).toBe('re-parse of <str> failed');

@@ -38,6 +38,8 @@ const summary = (over: Partial<ActivityImportSummary>): ActivityImportSummary =>
   duplicates: 0,
   failed: 0,
   limitReached: false,
+  photos: 0,
+  photosFailed: 0,
   ...over,
 });
 
@@ -68,6 +70,14 @@ it('opens a single imported activity in its trail view', async () => {
   expect(mockShow).toHaveBeenLastCalledWith('Imported Trail a');
   expect(dispose).toHaveBeenCalled();
   expect(importGpxFromUri).not.toHaveBeenCalled();
+});
+
+it('says how many photos came back with a "Trail + photos" zip (#587)', async () => {
+  jest
+    .mocked(importActivitiesFromUri)
+    .mockResolvedValue(summary({ items: [item('a')], photos: 12 }));
+  await expect(open()).resolves.toBe('/trail3d/a');
+  expect(mockShow).toHaveBeenLastCalledWith('Imported Trail a with 12 photos');
 });
 
 it('lands an archive on the Library with a summary, reporting progress', async () => {

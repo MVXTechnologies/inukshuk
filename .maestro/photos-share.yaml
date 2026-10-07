@@ -1,0 +1,40 @@
+# Trail photos e2e (#587): Share on a trail with photos offers the GPX alone
+# or "Trail + photos (zip)"; the zip is built and handed to the system share
+# sheet.
+#
+# Portability notes:
+# - Runs after photos-add.yaml (the newest trail has photos, so Share opens
+#   the choice sheet instead of sharing the GPX directly).
+# - The system share sheet differs per OS image; the flow only checks that
+#   the app handed off (its own sheet closed, no error message) and comes
+#   back with Back.
+appId: com.inukshuk.app
+---
+- launchApp
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- assertVisible: 'Recorded trails.*'
+- tapOn: '.* — open trail view, long-press to select'
+- extendedWaitUntil:
+    visible: 'Trail layers'
+    timeout: 30000
+- tapOn: 'Share'
+- extendedWaitUntil:
+    visible: '.*GPX file only.*'
+    timeout: 10000
+- assertVisible: '.*Trail \+ photos \(zip\).*'
+- assertVisible: 'Photos are shared without location data.*'
+- tapOn: '.*Trail \+ photos \(zip\).*'
+# The zip is written, then the system share sheet takes over.
+- extendedWaitUntil:
+    notVisible: '.*GPX file only.*'
+    timeout: 30000
+- assertNotVisible: 'Could not.*'
+- pressKey: back
+- extendedWaitUntil:
+    visible: 'Trail layers'
+    timeout: 15000

@@ -2,8 +2,10 @@ import { gzipSync, strToU8, zipSync } from 'fflate';
 
 import { GPX, T0, TCX, fitBytes } from '@core/geo/activityFiles/testFixtures';
 import { memoryByteSource } from '@core/geo/geopdf/pdfReader';
-import { parseGpx } from '@core/geo/gpx';
+import { buildGpx, parseGpx } from '@core/geo/gpx';
 import type { TrackSummary } from '@core/models';
+import { lineTrack } from '@core/photos/__fixtures__/tracks';
+import { attachZipPhotos } from '@features/photos/attachZipPhotos';
 import * as storage from '@data/storage';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -31,6 +33,7 @@ jest.mock('@data/storage', () => ({
   isCacheUri: jest.fn(),
 }));
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
+jest.mock('@features/photos/attachZipPhotos', () => ({ attachZipPhotos: jest.fn() }));
 jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));
 
 const lookup = (uri: string): Uint8Array => {
@@ -199,6 +202,65 @@ describe('opened uris', () => {
       });
     const neither = await openImportedUri('content://x/1');
     expect(neither).toMatchObject({ uri: 'content://x/1', format: 'unknown' });
+  });
+
+  describe('"Trail + photos" zips (#587)', () => {
+    const points = lineTrack({ lengthM: 500 });
+    const gpx = buildGpx({
+      points,
+      metadata: { name: 'Lac des Cygnes' },
+      waypoints: [
+        { ...points[10]!, name: 'Water' },
+        {
+          ...points[20]!,
+          name: 'Lac des Cygnes appears',
+          time: points[20]!.time,
+          type: 'photo',
+          link: { href: 'photos/a.jpg', mimeType: 'image/jpeg' },
+        },
+      ],
+    });
+
+    it('imports the trail, keeps photo waypoints out of the notes, and attaches the photos', async () => {
+      files.set(
+        'file:///t.zip',
+        zipSync({
+          'Lac des Cygnes.gpx': strToU8(gpx),
+          'photos/a.jpg': new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+        }),
+      );
+      jest.mocked(attachZipPhotos).mockResolvedValueOnce({ added: 1, failed: 0 });
+      const res = await importActivitiesFromUri('file:///t.zip', 'Imported activity', []);
+      expect(res.items).toHaveLength(1);
+      expect(res.items[0]!.notes?.map((n) => n.text)).toEqual(['Water']);
+      const call = jest.mocked(attachZipPhotos).mock.calls[0]![0];
+      expect(call.trackId).toBe(res.items[0]!.track.id);
+      expect(call.zipRef).toBe('file:///t.zip');
+      expect(call.attach.map((a) => a.entryName)).toEqual(['photos/a.jpg']);
+      expect(call.budget.used).toBeGreaterThan(0); // the walk charged the shared budget
+      expect(res).toMatchObject({ photos: 1, photosFailed: 0 });
+      expect(activityImportMessage(res)).toBe('Imported 1 trail with 1 photo');
+    });
+
+    it('keeps the trail when its photos fail', async () => {
+      files.set(
+        'file:///t.zip',
+        zipSync({ 'L.gpx': strToU8(gpx), 'photos/a.jpg': new Uint8Array([1]) }),
+      );
+      jest.mocked(attachZipPhotos).mockRejectedValueOnce(new Error('resizer'));
+      const res = await importActivitiesFromUri('file:///t.zip', 'Imported activity', []);
+      expect(res.items).toHaveLength(1);
+      expect(res).toMatchObject({ photos: 0, photosFailed: 1 });
+      expect(activityImportMessage(res)).toBe('Imported 1 trail · 1 photo not added');
+    });
+
+    it('treats a GPX without its photo files like any GPX', async () => {
+      files.set('file:///t.zip', zipSync({ 'L.gpx': strToU8(gpx) }));
+      const res = await importActivitiesFromUri('file:///t.zip', 'Imported activity', []);
+      expect(attachZipPhotos).not.toHaveBeenCalled();
+      // The dangling photo waypoint is an ordinary waypoint, as before.
+      expect(res.items[0]!.notes).toHaveLength(2);
+    });
   });
 
   it('imports every activity in an opened archive', async () => {

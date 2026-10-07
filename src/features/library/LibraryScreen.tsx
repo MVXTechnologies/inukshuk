@@ -87,7 +87,7 @@ import { SupportNudgeCard } from '../support/SupportNudgeCard';
 import { ImportSheet } from '../import/ImportSheet';
 import { activityImportMessage, pickAndImportActivityFiles } from './importActivities';
 import { pickAndImportMaps } from './importMap';
-import { mergeLibraryTracks } from './mergeTracks';
+import { copyMergedTrailPhotos, mergeLibraryTracks } from './mergeTracks';
 import { NameDialog } from './NameDialog';
 import { DragGhost } from './DragGhost';
 import { useDragToFolder, type DragItem } from './useDragToFolder';
@@ -548,7 +548,16 @@ export function LibraryScreen() {
       const { track, fileUri, notes } = await mergeLibraryTracks(chosen);
       addTrack(track, fileUri, notes);
       setSelectedTrackIds([]);
-      showSnack(`Merged ${chosen.length} trails into "${track.name}"`);
+      // The sources' trail photos (#587) are copied onto the merged trail.
+      const photos = await copyMergedTrailPhotos(
+        chosen.map((t) => t.id),
+        track,
+      );
+      showSnack(
+        photos.skippedTrails > 0
+          ? `Merged ${chosen.length} trails into "${track.name}". Photos from ${photos.skippedTrails} of them could not be copied (saved by a newer version of Inukshuk).`
+          : `Merged ${chosen.length} trails into "${track.name}"`,
+      );
     } catch (err) {
       showSnack(`Merge failed: ${err instanceof Error ? err.message : 'could not read a trail'}`);
     } finally {

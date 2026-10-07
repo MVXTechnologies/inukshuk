@@ -2,7 +2,42 @@ import { buildGpx, parseGpx } from '@core/geo/gpx';
 import type { TrackPoint, TrackSummary } from '@core/models';
 import * as storage from '@data/storage';
 
-import { mergeLibraryTracks } from './mergeTracks';
+import { copyMergedTrailPhotos, mergeLibraryTracks } from './mergeTracks';
+
+jest.mock('@data/photos/trailPhotos', () => ({ onTrailsMerged: jest.fn() }));
+jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));
+const mockRefresh = jest.fn();
+jest.mock('@state/trailPhotosStore', () => ({
+  useTrailPhotosStore: { getState: () => ({ refresh: mockRefresh }) },
+}));
+const photoData = jest.requireMock('@data/photos/trailPhotos') as { onTrailsMerged: jest.Mock };
+
+describe('copyMergedTrailPhotos (#587)', () => {
+  const merged = { id: 'merged', points: [] as TrackPoint[] };
+
+  it('copies the sources’ photos onto the merged trail and refreshes it', async () => {
+    photoData.onTrailsMerged.mockResolvedValueOnce({ copied: 3, skippedTrails: ['b'] });
+    await expect(copyMergedTrailPhotos(['a', 'b'], merged)).resolves.toEqual({
+      copied: 3,
+      skippedTrails: 1,
+    });
+    expect(photoData.onTrailsMerged).toHaveBeenCalledWith(
+      ['a', 'b'],
+      'merged',
+      merged.points,
+      storage.newId,
+    );
+    expect(mockRefresh).toHaveBeenCalledWith('merged');
+  });
+
+  it('never fails the merge: a photo error counts every source as skipped', async () => {
+    photoData.onTrailsMerged.mockRejectedValueOnce(new Error('io'));
+    await expect(copyMergedTrailPhotos(['a', 'b'], merged)).resolves.toEqual({
+      copied: 0,
+      skippedTrails: 2,
+    });
+  });
+});
 
 jest.mock('@data/storage', () => {
   const files = new Map<string, string>();

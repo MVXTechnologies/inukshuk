@@ -2,7 +2,11 @@ import { buildGpx, parseGpx } from '@core/geo/gpx';
 import { retargetNotesAfterTrim, sliceTrack } from '@core/geo/gpx/edit';
 import { buildImportedTrack } from '@core/geo/track';
 import type { Track, TrackPoint, TrackSummary } from '@core/models';
+import { indexTrack } from '@core/photos/trackIndex';
+import { readWritableSidecar } from '@data/photos/sidecarStore';
+import { onTrailTrimmed } from '@data/photos/trailPhotos';
 import * as storage from '@data/storage';
+import { reportError } from '@lib/errorReporting';
 
 /**
  * Persistence half of the trim tool. The pure math (slice, stats, note
@@ -73,6 +77,21 @@ export async function saveTrimmedCopy(
 /** The library-summary patch produced by an overwrite trim. */
 export interface TrimOverwriteResult {
   patch: Pick<TrackSummary, 'fileUri' | 'startedAt' | 'endedAt' | 'stats' | 'notes'>;
+  /** Trail photos (#587) that sat on the cut ends and were removed with them. */
+  photosRemoved: number;
+}
+
+/**
+ * Where a point window starts and ends along the trail, in the photo anchors'
+ * metres (`@core/photos/trackIndex`: every step counted, pauses included).
+ */
+export function photoTrimRange(
+  points: readonly TrackPoint[],
+  startIdx: number,
+  endIdx: number,
+): { keptStartM: number; keptEndM: number } {
+  const { cumM } = indexTrack(points);
+  return { keptStartM: cumM[startIdx] ?? 0, keptEndM: cumM[endIdx] ?? 0 };
 }
 
 /**
@@ -95,6 +114,10 @@ export async function overwriteWithTrim(
     segmentStarts,
   );
   if (kept.length < 2) throw new Error('Trim leaves fewer than 2 points');
+  // The trail's photos must move with it (#587). A photo list that cannot be
+  // rewritten (corrupt, or from a newer app version) blocks the trim BEFORE
+  // anything changes: SidecarUnavailableError reaches the caller.
+  await readWritableSidecar(summary.id);
   // An unreadable source must not silently discard its standalone waypoints.
   const waypoints = parseGpx(await storage.readFileText(summary.fileUri)).waypoints;
   const xml = buildGpx({
@@ -137,5 +160,15 @@ export async function overwriteWithTrim(
       // The new revision is committed; an orphan must not turn success into failure.
     }
   }
-  return { patch };
+  // Photos on the cut ends go (files and all); the rest shift to the new start.
+  let photosRemoved = 0;
+  try {
+    const { keptStartM, keptEndM } = photoTrimRange(points, startIdx, endIdx);
+    photosRemoved = await onTrailTrimmed(summary.id, keptStartM, keptEndM, kept);
+  } catch (err) {
+    // The trim is committed. The photos keep their old anchors (positions are
+    // cached on each), and the next trim or tidy tries again.
+    reportError(err, 'trim-photos');
+  }
+  return { patch, photosRemoved };
 }

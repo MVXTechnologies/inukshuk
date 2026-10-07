@@ -1,0 +1,73 @@
+# Trail photos e2e (#587): open a trail photo in the full-screen viewer, page
+# to the next one, caption it, and close.
+#
+# Portability notes:
+# - Runs after photos-add.yaml (the newest trail has at least two photos).
+# - The strip's cards are "Photo N of M: <caption or time>"; the viewer's
+#   header is "N of M" and its controls carry a11y labels ("Close", "Show on
+#   map", "Caption", "Share photo", "More photo actions").
+# - The caption dialog is user-initiated (a Paper Dialog is fine there).
+appId: com.inukshuk.app
+---
+- launchApp
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- assertVisible: 'Recorded trails.*'
+- tapOn: '.* — open trail view, long-press to select'
+- extendedWaitUntil:
+    visible: 'Trail layers'
+    timeout: 30000
+- tapOn: 'Overview'
+- scrollUntilVisible:
+    element: 'Photo 1 of [0-9]+.*'
+    direction: DOWN
+    timeout: 15000
+- tapOn: 'Photo 1 of [0-9]+.*'
+- extendedWaitUntil:
+    visible: '1 of [0-9]+'
+    timeout: 15000
+- assertVisible: 'Show on map'
+# How it was placed (by time, location, by hand…): the CI fixtures, ticked
+# from "Not from this outing", are placed by hand at the cursor.
+- assertVisible: '(Placed|Taken|From) .*'
+# Page to the second photo, when there is one (the CI fixtures can land as
+# one photo or two, depending on what the picker hands over).
+- runFlow:
+    when:
+      visible: '1 of ([2-9]|[1-9][0-9]+)'
+    commands:
+      # A swipe that lands while the pager is settling can be taken as a pan.
+      - retry:
+          maxRetries: 3
+          commands:
+            - runFlow:
+                when:
+                  notVisible: '2 of [0-9]+'
+                commands:
+                  - swipe:
+                      start: 85%,35%
+                      end: 5%,35%
+                      duration: 300
+            - extendedWaitUntil:
+                visible: '2 of [0-9]+'
+                timeout: 5000
+# Caption it.
+- tapOn: 'Caption'
+- extendedWaitUntil:
+    visible: 'Save'
+    timeout: 10000
+- tapOn: 'What is in this photo\?'
+- inputText: 'Lichen glade'
+- hideKeyboard
+- tapOn: 'Save'
+- extendedWaitUntil:
+    visible: 'Lichen glade'
+    timeout: 10000
+- tapOn: 'Close'
+- extendedWaitUntil:
+    visible: 'Trail layers'
+    timeout: 15000

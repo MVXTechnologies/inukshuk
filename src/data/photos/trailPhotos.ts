@@ -1,7 +1,12 @@
 import { Directory, File } from 'expo-file-system';
 
 import type { TrackPoint } from '@core/models';
-import { livePhotos, sidecarWritable, type TrackPhoto } from '@core/photos/model';
+import {
+  livePhotos,
+  sidecarWritable,
+  type SidecarStatus,
+  type TrackPhoto,
+} from '@core/photos/model';
 import { photoFilePaths, trailPhotoDir } from '@core/photos/paths';
 import { reanchorAfterTrim, reanchorOnTrail } from '@core/photos/reanchor';
 import { editPhoto, tombstone } from '@core/photos/record';
@@ -16,6 +21,18 @@ import { readSidecar, readWritableSidecar, updateSidecar, writeSidecar } from '.
  * A trail's photos, day to day (#587): load, edit, remove, and keep them on
  * the trail when the trail is trimmed, merged or deleted.
  */
+
+/**
+ * The trail's live photos in time order, with what the read found: the UI
+ * blocks edits (and says "made by a newer version") unless the status is
+ * `ok` or `missing`.
+ */
+export async function readTrailPhotos(
+  trackId: string,
+): Promise<{ status: SidecarStatus; photos: TrackPhoto[] }> {
+  const { status, sidecar } = await readSidecar(trackId);
+  return { status, photos: orderPhotos(livePhotos(sidecar.photos)) };
+}
 
 /** The trail's live photos in time order (the viewer's order). */
 export async function loadTrailPhotos(trackId: string): Promise<TrackPhoto[]> {
@@ -96,51 +113,76 @@ export async function onTrailTrimmed(
   return removed.length;
 }
 
+export interface MergeCopyResult {
+  /** Photos copied onto the merged trail. */
+  copied: number;
+  /** Source trails whose photo list could not be read (left out, untouched). */
+  skippedTrails: string[];
+}
+
 /**
- * Several trails were merged into `targetId` (with `mergedPoints`): their
- * photos move into the target's folder and are re-placed on the merged trail
- * (by time, then GPS, then their old distance). The sources' folders are
- * removed afterwards. Returns how many photos moved.
+ * Several trails were merged into a NEW trail `targetId` (with
+ * `mergedPoints`). The Library keeps the originals, so their photos are
+ * COPIED, under fresh ids (ids are global for team mode, #589), and re-placed
+ * on the merged trail (by time, then GPS, then their old distance). Like the
+ * merge's note photos (#304), the merged trail owns its copies outright:
+ * deleting either it or a source never strands the other.
+ *
+ * A source whose sidecar cannot be read safely (corrupt, or from a newer app)
+ * is left out and reported, never half-copied. Copies made before a failure
+ * are removed again.
  */
 export async function onTrailsMerged(
   sourceIds: readonly string[],
   targetId: string,
   mergedPoints: readonly TrackPoint[],
+  newId: () => string,
   now: number = Date.now(),
-): Promise<number> {
+): Promise<MergeCopyResult> {
   const index = indexTrack(mergedPoints);
-  // Every sidecar involved must be readable BEFORE a single file moves: a
-  // source we cannot read would have its folder deleted below with its photos
-  // still in it, and a target we cannot write would strand the moved copies.
   await readWritableSidecar(targetId);
-  const sources: TrackPhoto[][] = [];
-  for (const sourceId of sourceIds) {
-    if (sourceId === targetId) continue;
-    sources.push(livePhotos((await readWritableSidecar(sourceId)).sidecar.photos));
+  const result: MergeCopyResult = { copied: 0, skippedTrails: [] };
+  const copies: TrackPhoto[] = [];
+  try {
+    for (const sourceId of sourceIds) {
+      if (sourceId === targetId) continue;
+      const { status, sidecar } = await readSidecar(sourceId);
+      if (!sidecarWritable(status)) {
+        result.skippedTrails.push(sourceId);
+        continue;
+      }
+      for (const p of livePhotos(sidecar.photos))
+        copies.push(await copyFiles(p, targetId, newId()));
+    }
+    if (copies.length === 0) return result;
+    await updateSidecar(targetId, (sidecar) => ({
+      ...sidecar,
+      photos: [...sidecar.photos, ...reanchorOnTrail(copies, index, targetId, now)],
+    }));
+  } catch (err) {
+    for (const p of copies) deletePhotoFiles(p);
+    throw err;
   }
-  const moving: TrackPhoto[] = [];
-  for (const photos of sources) for (const p of photos) moving.push(moveFiles(p, targetId));
-  await updateSidecar(targetId, (sidecar) => ({
-    ...sidecar,
-    photos: [
-      ...reanchorOnTrail(sidecar.photos, index, targetId, now),
-      ...reanchorOnTrail(moving, index, targetId, now),
-    ],
-  }));
-  for (const sourceId of sourceIds) if (sourceId !== targetId) deleteTrailPhotos(sourceId);
-  return moving.length;
+  result.copied = copies.length;
+  return result;
 }
 
-/** Move one photo's copies into another trail's folder; returns it with the new paths. */
-function moveFiles(photo: TrackPhoto, targetId: string): TrackPhoto {
-  const dest = photoFilePaths(targetId, photo.id);
+/** Copy one photo's files into another trail's folder under a new id. */
+async function copyFiles(photo: TrackPhoto, targetId: string, id: string): Promise<TrackPhoto> {
+  const dest = photoFilePaths(targetId, id);
   const dir = new Directory(resolveDocumentPath(trailPhotoDir(targetId)));
   if (!dir.exists) dir.create({ intermediates: true });
-  for (const key of ['file', 'thumb', 'sprite'] as const) {
-    const from = new File(resolveDocumentPath(photo[key]));
-    if (from.exists) from.moveSync(new File(resolveDocumentPath(dest[key])), { overwrite: true });
+  const copied: TrackPhoto = { ...photo, ...dest, id, trackId: targetId };
+  try {
+    for (const key of ['file', 'thumb', 'sprite'] as const) {
+      const from = new File(resolveDocumentPath(photo[key]));
+      if (from.exists) await from.copy(new File(resolveDocumentPath(dest[key])));
+    }
+  } catch (err) {
+    deletePhotoFiles(copied);
+    throw err;
   }
-  return { ...photo, ...dest, trackId: targetId };
+  return copied;
 }
 
 /**

@@ -83,10 +83,16 @@ export async function walkActivityArchive(
     limits?: Partial<ImportLimits>;
     onProgress?: (p: WalkProgress) => void;
     onEntryError?: (err: unknown, entryName: string) => void;
+    /**
+     * The import's decompression budget, when the caller reads more from the
+     * same archive afterwards (a "Trail + photos" zip's photos, #587) and
+     * both must count against one total.
+     */
+    budget?: ByteBudget;
   } = {},
 ): Promise<WalkResult> {
   const limits: ImportLimits = { ...DEFAULT_IMPORT_LIMITS, ...opts.limits };
-  const budget = new ByteBudget(limits.maxTotalBytes);
+  const budget = opts.budget ?? new ByteBudget(limits.maxTotalBytes);
   const progress: WalkProgress = { processed: 0, discovered: 0 };
   const result: WalkResult = { failed: 0, limitReached: false };
   let seen = 0;

@@ -2,9 +2,7 @@ import { Directory, File } from 'expo-file-system';
 
 import { stripJpegMetadata } from '@core/photos/jpegStrip';
 import {
-  inboxPath,
   orphanFiles,
-  PHOTO_INBOX,
   PHOTOS_ROOT,
   photoFilePaths,
   photoIdOfFile,
@@ -12,8 +10,9 @@ import {
   type PhotoFilePaths,
 } from '@core/photos/paths';
 import { isOutOfSpaceMessage } from '@core/storage/diskBudget';
-import { copyToServed } from '@data/localServer';
 import { resolveDocumentPath, StorageFullError } from '@data/storage';
+
+import { deleteTrailPhotoFolder } from './trailFolder';
 
 /**
  * Trail photo files (#587): the three copies per photo under
@@ -158,12 +157,7 @@ export function deletePhotoFiles(paths: Pick<PhotoFilePaths, 'file' | 'thumb' | 
 
 /** Delete a trail's whole photo folder (the trail itself was deleted). */
 export function deleteTrailPhotos(trackId: string): void {
-  try {
-    const dir = dirAt(trailPhotoDir(trackId));
-    if (dir.exists) dir.delete();
-  } catch {
-    // Nothing to delete, or already gone.
-  }
+  deleteTrailPhotoFolder(trackId);
 }
 
 /** File names in a trail's photo folder. */
@@ -227,39 +221,4 @@ export function deleteAllTrailPhotos(): number {
   const trails = trailsWithPhotos();
   for (const trackId of trails) deleteTrailPhotos(trackId);
   return trails.length;
-}
-
-/** Lower-case extension of a picked file, for the inbox name. */
-export function extensionOf(uri: string): string {
-  const m = /\.([A-Za-z0-9]{1,5})(?:[?#].*)?$/.exec(uri);
-  return m ? m[1]!.toLowerCase() : 'jpg';
-}
-
-/** Copy a picked photo into the served inbox for the resize worker; returns its document path. */
-export async function stageForResize(sourceUri: string, jobId: string): Promise<string> {
-  const path = inboxPath(jobId, extensionOf(sourceUri));
-  await copyToServed(sourceUri, path);
-  return path;
-}
-
-export function unstage(documentPath: string): void {
-  quietDelete(documentPath);
-}
-
-/**
- * Empty the inbox (at launch: anything there is left from a crash, and it is
- * full-resolution photos WITH their EXIF/GPS, in a folder the loopback server
- * serves).
- *
- * TODO(#587 stage 2): call this from the app's launch path before any import
- * can start. `inbox.guard.test.ts` fails once app code uses the resizer
- * without a call to it.
- */
-export function clearPhotoInbox(): void {
-  try {
-    const dir = dirAt(PHOTO_INBOX);
-    if (dir.exists) dir.delete();
-  } catch {
-    // best effort
-  }
 }
