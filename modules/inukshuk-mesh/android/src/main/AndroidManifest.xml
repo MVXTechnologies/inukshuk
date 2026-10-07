@@ -1,0 +1,10 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Team mesh (#589): LAN / hotspot TCP + DNS-SD. All four are normal
+       (install-time) permissions: no runtime prompt. NEARBY_WIFI_DEVICES is
+       deliberately absent: NsdManager and plain sockets do not need it; only
+       Wi-Fi Direct / Aware / LocalOnlyHotspot would (docs/design/team-mesh.md). -->
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+  <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+</manifest>

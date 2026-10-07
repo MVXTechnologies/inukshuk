@@ -116,6 +116,11 @@ jobs:
       - name: Verify GNSS transport core (Kotlin)
         run: sh modules/inukshuk-gnss/android/tests/run.sh
 
+      # Team mesh (#589): framing fuzz, limits and the NIO engine over real
+      # 127.0.0.1 sockets (plain JVM; kotlinc ships on the Ubuntu runners).
+      - name: Verify team mesh transport (Kotlin host tests)
+        run: sh modules/inukshuk-mesh/scripts/test-android.sh
+
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
       # Gradle's dependency caches live in ~/.gradle regardless of the
@@ -244,6 +249,11 @@ jobs:
 
       - name: Verify GNSS transport core (Swift)
         run: sh modules/inukshuk-gnss/ios/Tests/run.sh
+
+      # Team mesh (#589): framing fuzz, limits and the Network.framework
+      # engine over real 127.0.0.1 sockets (macOS host).
+      - name: Verify team mesh transport (Swift host tests)
+        run: sh modules/inukshuk-mesh/ios/Tests/run.sh
 
       - name: Cache PROJ build (Convert)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

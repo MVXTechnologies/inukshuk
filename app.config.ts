@@ -273,6 +273,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // bluetooth-central background mode. GNSS_FAKE_DEVICE=1 (E2E builds only)
     // enables the simulated receiver in a release build.
     ['./plugins/withGnss', { fakeDevice: process.env.GNSS_FAKE_DEVICE === '1' }],
+    // Team mesh (#589, modules/inukshuk-mesh): Local Network purpose string +
+    // NSBonjourServices on iOS, normal Wi-Fi/network permissions on Android.
+    './plugins/withTeamMesh',
     // iOS 27 SDK enforces the UIScene lifecycle (launch crash without it):
     // scene manifest + SceneDelegate. SDK 56 port of Expo 57's scene support;
     // delete on the SDK 57/58 upgrade.
