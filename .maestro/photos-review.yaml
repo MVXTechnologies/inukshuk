@@ -1,0 +1,41 @@
+# Trail photos review screenshots (#587): the photo screens in the light and
+# the dark theme, for the owner's review without a device. Files named
+# review-*.png are uploaded by e2e.yml.
+#
+# Portability notes:
+# - Runs after photos-add.yaml (the newest trail has photos) and after
+#   photos-viewer.yaml (one has a caption).
+# - The theme is switched in Settings → App settings → Theme (as
+#   recording-check.yaml does) and put back to System at the end, so later
+#   flows see the default look.
+# - Screenshots only: every shot waits for a sentinel first, and nothing here
+#   asserts the look itself. The steps live in subflows/ (not flows of their
+#   own, so the shard plan does not list them).
+appId: com.inukshuk.app
+---
+- launchApp
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+
+# Light: the trail screens, then Settings → Photos, then switch to Dark.
+- runFlow:
+    file: subflows/photos-review-trail.yaml
+    env:
+      THEME: light
+- runFlow:
+    file: subflows/photos-review-settings.yaml
+    env:
+      THEME: light
+      NEXT: Dark
+
+# Dark: the same, then back to System.
+- runFlow:
+    file: subflows/photos-review-trail.yaml
+    env:
+      THEME: dark
+- runFlow:
+    file: subflows/photos-review-settings.yaml
+    env:
+      THEME: dark
+      NEXT: System

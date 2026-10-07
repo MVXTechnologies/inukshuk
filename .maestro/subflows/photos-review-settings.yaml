@@ -1,0 +1,52 @@
+# Subflow of photos-review.yaml: Settings → Photos shot as
+# review-photos-settings-${THEME}.png, then the app theme set to ${NEXT}
+# (Settings → App settings → Theme). Starts and ends on the Library tab.
+appId: com.inukshuk.app
+---
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- tapOn: 'Settings'
+- extendedWaitUntil:
+    visible: 'App settings.*'
+    timeout: 15000
+# The Photos section (guarded: accordions animate).
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Show photos on the main map.*'
+          commands:
+            - scrollUntilVisible:
+                element: 'Photos.*On the map, storage and privacy.*'
+                direction: DOWN
+                timeout: 10000
+            - tapOn: 'Photos.*On the map, storage and privacy.*'
+      - extendedWaitUntil:
+          visible: 'Show photos on the main map.*'
+          timeout: 5000
+- takeScreenshot: review-photos-settings-${THEME}
+# The theme lives in App settings.
+- scrollUntilVisible:
+    element: 'App settings.*'
+    direction: UP
+    timeout: 10000
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Theme.*'
+          commands:
+            - tapOn: 'App settings.*'
+      - scrollUntilVisible:
+          element:
+            text: 'Theme.*'
+          direction: DOWN
+          timeout: 5000
+- tapOn: ${NEXT}
+- pressKey: back
+- extendedWaitUntil:
+    visible: 'Recorded trails.*'
+    timeout: 15000

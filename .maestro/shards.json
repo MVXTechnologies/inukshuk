@@ -16,6 +16,7 @@
       "photos-add.yaml",
       "photos-viewer.yaml",
       "photos-share.yaml",
+      "photos-review.yaml",
       "dashboard.yaml",
       "folders.yaml",
       "record.yaml"
@@ -44,7 +45,8 @@
     "folders.yaml": ["category-record.yaml", "library-filter.yaml", "trail-view.yaml"],
     "photos-add.yaml": ["category-record.yaml"],
     "photos-viewer.yaml": ["category-record.yaml", "photos-add.yaml"],
-    "photos-share.yaml": ["category-record.yaml", "photos-add.yaml"]
+    "photos-share.yaml": ["category-record.yaml", "photos-add.yaml"],
+    "photos-review.yaml": ["category-record.yaml", "photos-add.yaml", "photos-viewer.yaml"]
   },
   "last": {
     "record.yaml": "its save-vs-discard outcome is indeterminate, so nothing after it may count trails"
