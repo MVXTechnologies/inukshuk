@@ -609,17 +609,16 @@ export function Trail3DGLScreen({ trackId }: Props) {
   }
 
   const s = profileStats ?? track.stats;
-  const subtitle = [
-    trailSubtitle(
-      findCategory(track.category, customCategories)?.name ?? null,
-      track.startedAt,
-      track.endedAt,
-      timed,
-    ),
-    ownPhotoCount > 0 ? photoCountLabel(ownPhotoCount) : '',
-  ]
-    .filter((part) => part !== '')
-    .join(' · ');
+  const categoryName = findCategory(track.category, customCategories)?.name ?? null;
+  // "Hike · 35 photos · Sunday, September 27 · 9:12 AM → 12:54 PM": the
+  // count goes early so a long date/time line truncates the times, not it.
+  const subtitleParts = trailSubtitle(categoryName, track.startedAt, track.endedAt, timed)
+    .split(' · ')
+    .filter((part) => part !== '');
+  if (ownPhotoCount > 0) {
+    subtitleParts.splice(categoryName ? 1 : 0, 0, photoCountLabel(ownPhotoCount));
+  }
+  const subtitle = subtitleParts.join(' · ');
   const viewedNote = numberedNotes.find((n) => n.note.id === viewingNoteId) ?? null;
   // The cursor badge on the map: "2.73 km · 800 m · +4 %" (or "· summit").
   const highM = analysis?.extremes ? analysis.axis.cumM[analysis.extremes.highIndex] : undefined;
