@@ -4,6 +4,8 @@ import { MIN_SWITCH_MS, STREAM_LOST_MS, type ExternalStatus } from './quality';
 import {
   arbitrate,
   INITIAL_SOURCE,
+  isUbloxKit,
+  kitSetupFrames,
   ReceiverPipeline,
   shortDistanceM,
   shouldRecord,
@@ -11,6 +13,7 @@ import {
 } from './receiver';
 import { nmeaEpoch, quebecRtkSession } from './sim';
 import { encodeRtcm3 } from './rtcm3';
+import { encodeUbx, LAYER } from './ubx';
 import { fixOf, navPvtFrame } from './testUtils';
 
 const T0 = 1_800_000_000_000;
@@ -34,7 +37,7 @@ describe('ReceiverPipeline: the scripted Québec City RTK session', () => {
     // Corrections stopped at epoch 80: still "fixed" (aging), then the receiver drops to float.
     expect(states[100]).toBe('fixed');
     expect(states[130]).toBe('float');
-    expect(p.counters).toEqual({ nmea: epochs.length * 3, ubx: 0, rtcm: 0 });
+    expect(p.counters).toEqual({ nmea: epochs.length * 3, ubx: 0, rtcm: 0, cfgAck: 0, cfgNak: 0 });
     // A disconnect closes the open epoch.
     const last = p.discontinuity(T0 + epochs.length * 1000);
     expect(last).toHaveLength(1);
@@ -186,5 +189,35 @@ describe('recording an external fix', () => {
     expect(shouldRecord(a, { lat: 46.800005, lon: -71.2 }, 0)).toBe(false);
     expect(shouldRecord(a, { lat: 46.80001, lon: -71.2 }, 0)).toBe(true);
     expect(shouldRecord(a, { lat: 46.80001, lon: -71.2 }, 5)).toBe(false);
+  });
+});
+
+describe('the u-blox kit setup', () => {
+  it('only for u-blox kits: by name, or a receiver already speaking UBX', () => {
+    for (const n of ['SparkFun RTK Facet', 'RTK Express 4F2A', 'simpleRTK2B BLE', 'ZED-F9P bridge'])
+      expect(isUbloxKit(n, { ubx: 0 })).toBe(true);
+    for (const n of ['Bad Elf GPS Pro+', 'Garmin GLO 2', 'Reach RX', null])
+      expect(isUbloxKit(n, { ubx: 0 })).toBe(false);
+    expect(isUbloxKit('ESP32-BT', { ubx: 3 })).toBe(true);
+  });
+
+  it('CFG-VALSET frames, RAM only (the saved receiver setup is never overwritten)', () => {
+    const frames = kitSetupFrames();
+    expect(frames.length).toBeGreaterThan(0);
+    for (const f of frames) {
+      expect([f[0], f[1], f[2], f[3]]).toEqual([0xb5, 0x62, 0x06, 0x8a]);
+      // payload byte 1 = layers: RAM (1) only.
+      expect(f[7]).toBe(LAYER.RAM);
+    }
+  });
+
+  it('counts the receiver’s ACK-ACK / ACK-NAK to CFG messages', () => {
+    const p = new ReceiverPipeline();
+    p.push(encodeUbx(0x05, 0x01, new Uint8Array([0x06, 0x8a])), T0);
+    p.push(encodeUbx(0x05, 0x00, new Uint8Array([0x06, 0x8a])), T0);
+    p.push(encodeUbx(0x05, 0x01, new Uint8Array([0x01, 0x07])), T0);
+    expect(p.counters).toMatchObject({ cfgAck: 1, cfgNak: 1, ubx: 3 });
+    // A flush with nothing in progress closes nothing.
+    expect(p.flush(T0)).toEqual([]);
   });
 });

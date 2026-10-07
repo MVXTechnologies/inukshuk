@@ -165,7 +165,7 @@ export class NtripClient {
     this.set({ ...this.state, phase: 'connecting', message: null }, true);
     this.parser = new NtripResponseParser();
     this.lastGgaMs = null;
-    const socket = this.deps.sockets.open(p.host.trim(), p.port, false, {
+    const socket = this.deps.sockets.open(p.host.trim(), p.port, p.port === 443, {
       onData: (bytes) => this.onData(socket, bytes),
       onClose: (err) => this.onClose(socket, err),
     });
@@ -267,7 +267,7 @@ export function fetchSourcetable(
       else resolve(table);
     };
     const timer = setTimeout(() => finish('The caster did not answer'), SOURCETABLE_TIMEOUT_MS);
-    const socket = sockets.open(p.host.trim(), p.port, false, {
+    const socket = sockets.open(p.host.trim(), p.port, p.port === 443, {
       onData: (bytes) => {
         const chunk = parser.push(bytes);
         const head = parser.head;

@@ -1,113 +1,50 @@
 /**
- * The receiver link the GNSS session drives: the part of the native module's
- * JS API (`modules/inukshuk-gnss`, `@lib/gnss/nativeGnss` on feat/gnss-native)
- * the UI needs — scan, known devices, connect / disconnect / write, and the
- * byte, state, device and error events.
+ * The receiver link the GNSS session drives: the native module
+ * (`modules/inukshuk-gnss`, typed in `@lib/gnss/nativeGnss`) — scan, known
+ * devices, connect / disconnect / write and its events — or, where a binary
+ * has no module (Jest, web, a dev client without it), the JS simulated
+ * receiver (`./simulatedLink`) in debug and `EXPO_PUBLIC_GNSS_FAKE=1` builds.
  *
- * Structural on purpose, like that branch's `receiverStream.ts` is against
- * the core: the native module satisfies it as is, so this builds and is
- * tested before the module lands, and the module plugs in without a change
- * here. Until then (and in tests, Maestro and screenshots) the simulated
- * receiver (`./simulatedLink`) stands in, in debug and E2E builds only.
+ * Builds with the module and `GNSS_FAKE_DEVICE=1` (E2E) use the module's own
+ * simulated receiver instead: same native threads and events as Bluetooth.
  */
-import { requireOptionalNativeModule } from 'expo';
-import { Platform } from 'react-native';
+import {
+  getNativeGnss,
+  type GnssAvailability,
+  type GnssDevice,
+  type GnssLinkState,
+  type GnssLinkStateName,
+  type NativeGnssModule,
+  type Subscription,
+} from '@lib/gnss/nativeGnss';
 
 import { simulatedLink } from './simulatedLink';
 
-export type LinkTransport = 'ble' | 'spp' | 'fake';
+/** What the session uses of the native module (the TCP half is `./ntripSocket`'s). */
+export type GnssLink = Pick<
+  NativeGnssModule,
+  | 'getAvailability'
+  | 'getPermissionsAsync'
+  | 'requestPermissionsAsync'
+  | 'startScan'
+  | 'stopScan'
+  | 'getKnownDevices'
+  | 'connect'
+  | 'disconnect'
+  | 'write'
+  | 'getState'
+  | 'addListener'
+>;
 
-export type LinkStateName = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
-
-export interface LinkAvailability {
-  supported: boolean;
-  ble: boolean;
-  classic: boolean;
-  poweredOn: boolean | null;
-  transports: LinkTransport[];
-  fakeDevice: boolean;
-}
-
-export interface LinkDevice {
-  id: string;
-  name: string | null;
-  transport: LinkTransport;
-  rssi: number | null;
-  serviceUuids: string[];
-  bonded: boolean;
-}
-
-export interface LinkState {
-  state: LinkStateName;
-  deviceId: string | null;
-  transport: LinkTransport | null;
-  writable: boolean;
-  attempt: number;
-  reason: string | null;
-  retryInMs: number | null;
-}
-
-export interface LinkBytesEvent {
-  deviceId: string | null;
-  /** Base64 of the received bytes. */
-  data: string;
-  length: number;
-  /** Bytes the native buffer dropped before this chunk: the stream is not continuous. */
-  dropped: number;
-}
-
-export interface LinkErrorEvent {
-  code: string;
-  message: string;
-  deviceId: string | null;
-  fatal: boolean;
-}
-
-export interface LinkEvents {
-  onBytes: (e: LinkBytesEvent) => void;
-  onState: (e: LinkState) => void;
-  onDevice: (e: LinkDevice) => void;
-  onScanState: (e: { scanning: boolean; reason: string | null }) => void;
-  onError: (e: LinkErrorEvent) => void;
-}
-
-export interface LinkSubscription {
-  remove(): void;
-}
-
-export interface LinkPermission {
-  granted: boolean;
-  canAskAgain: boolean;
-}
-
-export interface LinkConnectOptions {
-  deviceId: string;
-  transport: LinkTransport;
-  autoReconnect: boolean;
-  /** The native module's simulated receiver (`fake` transport): what it replays. */
-  fake?: { frames: string[]; intervalMs: number; loop: boolean };
-}
-
-/** What the session needs from the receiver link (the native module's shape). */
-export interface GnssLink {
-  getAvailability(): Promise<LinkAvailability>;
-  getPermissionsAsync(): Promise<LinkPermission>;
-  requestPermissionsAsync(): Promise<LinkPermission>;
-  startScan(options: { durationMs: number }): Promise<void>;
-  stopScan(): Promise<void>;
-  getKnownDevices(options: { serviceUuids: string[] }): Promise<LinkDevice[]>;
-  connect(options: LinkConnectOptions): Promise<void>;
-  disconnect(): Promise<void>;
-  write(data: Uint8Array): Promise<void>;
-  getState(): LinkState;
-  addListener<K extends keyof LinkEvents>(event: K, listener: LinkEvents[K]): LinkSubscription;
-}
+export type LinkDevice = GnssDevice;
+export type LinkState = GnssLinkState;
+export type LinkStateName = GnssLinkStateName;
+export type LinkAvailability = GnssAvailability;
+export type LinkSubscription = Subscription;
 
 /**
- * The simulated receiver is offered in debug builds and in builds made with
- * `EXPO_PUBLIC_GNSS_FAKE=1` (E2E, screenshots) — never in a store build.
- * The native module's own `fake` transport (GNSS_FAKE_DEVICE=1) is the same
- * idea one layer down; either one enables the Maestro flow.
+ * The JS simulated receiver stands in where the module is missing: debug
+ * builds, and builds made with `EXPO_PUBLIC_GNSS_FAKE=1` — never a store build.
  */
 export function simulatedReceiverEnabled(): boolean {
   return __DEV__ || process.env.EXPO_PUBLIC_GNSS_FAKE === '1';
@@ -122,11 +59,7 @@ let cached: GnssLink | null | undefined;
  */
 export function gnssLink(): GnssLink | null {
   if (cached !== undefined) return cached;
-  const native =
-    Platform.OS === 'android' || Platform.OS === 'ios'
-      ? requireOptionalNativeModule<GnssLink>('InukshukGnss')
-      : null;
-  cached = native ?? (simulatedReceiverEnabled() ? simulatedLink() : null);
+  cached = getNativeGnss() ?? (simulatedReceiverEnabled() ? simulatedLink() : null);
   return cached;
 }
 

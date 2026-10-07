@@ -4,7 +4,7 @@ import { useGnssStore } from '@state/gnssStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Linking, Platform, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Icon, Text } from 'react-native-paper';
 
 import { GnssScreenFrame, SectionLabel } from './GnssScreenFrame';
@@ -85,6 +85,7 @@ export function GnssPairScreen() {
   const receiver = useGnssStore((s) => s.config.receiver);
   const link = useGnssStore((s) => s.link);
   const error = useGnssStore((s) => s.error);
+  const permissionBlocked = useGnssStore((s) => s.permissionBlocked);
   const update = useGnssStore((s) => s.updateConfig);
 
   useEffect(() => {
@@ -155,6 +156,16 @@ export function GnssPairScreen() {
           {error}
         </Text>
       )}
+      {permissionBlocked && (
+        <Button
+          mode="outlined"
+          icon="cog-outline"
+          style={styles.settingsButton}
+          onPress={() => void Linking.openSettings()}
+        >
+          Open settings
+        </Button>
+      )}
 
       {ble.length > 0 && <SectionLabel>Nearby · Bluetooth LE</SectionLabel>}
       {ble.map((d) => (
@@ -198,4 +209,5 @@ const styles = StyleSheet.create({
   bars: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: 16 },
   bar: { width: 4, borderRadius: 1 },
   note: { marginTop: 8 },
+  settingsButton: { alignSelf: 'flex-start' },
 });

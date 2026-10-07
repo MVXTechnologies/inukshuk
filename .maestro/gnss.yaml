@@ -1,7 +1,9 @@
-# External GNSS receiver e2e (#588), on the simulated receiver (the scripted
-# Québec City RTK session: autonomous → RTK float → RTK fixed, 1 Hz). Needs a
-# build with the simulated receiver: debug, or EXPO_PUBLIC_GNSS_FAKE=1 (the
-# E2E APK sets it in .github/workflows/e2e.yml); store builds never offer it.
+# External GNSS receiver e2e (#588), on the GNSS module's simulated receiver
+# ("Simulated receiver (test)"), fed the core's scripted Québec City RTK
+# session (autonomous → RTK float → RTK fixed, 1 Hz) through the same native
+# threads and events as Bluetooth. Needs a build made with GNSS_FAKE_DEVICE=1
+# (the E2E APK sets it in .github/workflows/e2e.yml) or a debug build; store
+# builds never list it.
 #
 # Settings → Extensions → "Get External GNSS receiver" → Receiver → connect
 # the simulated receiver → the map's receiver chip goes to "RTK fixed" → its
@@ -19,6 +21,7 @@ appId: com.inukshuk.app
       - launchApp:
           permissions:
             location: allow
+            bluetooth: allow
 - runFlow:
     when:
       platform: iOS
@@ -75,15 +78,22 @@ appId: com.inukshuk.app
     timeout: 10000
 - tapOn:
     id: 'gnss-receiver-row'
+# The scan asks for Bluetooth (Android 12+: Nearby devices) unless launchApp
+# already granted it.
+- runFlow:
+    when:
+      visible: '(Allow|OK|While using the app)'
+    commands:
+      - tapOn: '(Allow|OK|While using the app)'
 # Pairing: the scan finds the simulated receiver within a second.
 - extendedWaitUntil:
-    visible: 'Connect Simulated RTK receiver'
+    visible: 'Connect Simulated.*'
     timeout: 15000
 - takeScreenshot: gnss-pair
-- tapOn: 'Connect Simulated RTK receiver'
+- tapOn: 'Connect Simulated.*'
 # Back on Settings, connected.
 - extendedWaitUntil:
-    visible: '.*Simulated RTK receiver · (connected|connecting).*'
+    visible: '.*Simulated .* · (connected|connecting).*'
     timeout: 10000
 - takeScreenshot: gnss-settings
 - tapOn: 'Back'
@@ -105,7 +115,7 @@ appId: com.inukshuk.app
     visible:
       id: 'gnss-receiver-sheet'
     timeout: 5000
-- assertVisible: '.*Simulated RTK receiver.*'
+- assertVisible: '.*Simulated .*receiver.*'
 - assertVisible: '.*Frame unknown.*'
 - assertVisible: '.*Your location · phone GPS in standby.*'
 - takeScreenshot: gnss-sheet

@@ -40,6 +40,8 @@ interface GnssState {
   /** The last receiver error worth showing (permission, Bluetooth off…). */
   error: string | null;
   scanning: boolean;
+  /** The Bluetooth (or, Android 8–11, location) permission was denied for good. */
+  permissionBlocked: boolean;
   /** Receivers found by the current / last scan, nearest-signal first. */
   devices: LinkDevice[];
 
@@ -62,6 +64,8 @@ interface GnssState {
    */
   projectFallback: PositionResult | null;
   ntrip: NtripState;
+  /** The u-blox kit setup: written, acknowledged, or refused by the receiver; null: not a kit. */
+  kitSetup: 'sent' | 'ok' | 'refused' | null;
   /** The receiver detail sheet is up (map). */
   sheetOpen: boolean;
 
@@ -82,6 +86,7 @@ const LIVE = {
   linkReason: null,
   error: null,
   scanning: false,
+  permissionBlocked: false,
   devices: [],
   fix: null,
   status: null,
@@ -93,6 +98,7 @@ const LIVE = {
   project: null,
   projectFallback: null,
   ntrip: NTRIP_OFF,
+  kitSetup: null as 'sent' | 'ok' | 'refused' | null,
 };
 
 function persist(config: GnssConfig): void {

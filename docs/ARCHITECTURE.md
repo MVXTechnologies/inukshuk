@@ -362,10 +362,14 @@ Field operators rely on it, so **PROJ never chooses an operation**:
   (Settings → Extensions, `features/extensions/gnss`: pairing, NTRIP profile
   editor with the sourcetable browser, project datum, phone-GPS policy;
   routes `app/gnss/*`). `features/gnss/session.ts` is the one place the
-  receiver is driven: link events (`data/gnss/link.ts`, the native module's
-  shape; `simulatedLink.ts` replays the core's Québec RTK session in debug /
-  `EXPO_PUBLIC_GNSS_FAKE=1` builds) → `core/gnss/receiver.ts` (pipeline,
-  `arbitrate` = `decideSource` + "no fallback") → `state/gnssStore.ts`.
+  receiver is driven: the native module (`data/gnss/link.ts`; connects through
+  `connectOptions()`, devices ordered by `rankDevices()`) → `receiverStream`
+  into the pipeline's demuxer (a discontinuity flushes the assembler; a 1 s
+  tick runs `nextStatus`) → `core/gnss/receiver.ts` (pipeline, `arbitrate` =
+  `decideSource` + "no fallback", the RAM-only u-blox kit setup written after
+  connecting a kit) → `state/gnssStore.ts`. The module's simulated receiver
+  (`GNSS_FAKE_DEVICE=1`, E2E) is fed the core's Québec RTK session;
+  `simulatedLink.ts` stands in where there is no module (Jest, web).
   While the receiver is the source: `useLocationTracking` returns its fix
   (≤ 1 Hz) and idles the phone watch (`Accuracy.Low`, or none), the puck is
   drawn on it (`UserPuck`, MapLibre's own listener unmounted) and followed by
@@ -376,8 +380,10 @@ Field operators rely on it, so **PROJ never chooses an operation**:
   `<sat>`, `<hdop>`, `<ageofdgpsdata>` and `inukshuk:gnss`. The map dot is the
   fix moved to WGS 84 by `core/gnss/output.ts` (Convert's validated plans;
   refused → drawn as received, the sheet says why). NTRIP: `features/gnss/
-ntripClient.ts` over `data/gnss/ntripSocket.ts`, the native TCP seam (not
-  implemented natively yet). Passwords: `data/gnss/credentials.ts`.
+ntripClient.ts` over `data/gnss/ntripSocket.ts` (the module's `openTcp` /
+  `writeTcp` / `closeTcp`; RTCM to the receiver with `write`). Passwords and
+  Strava tokens: `data/secureStore.ts` (Keychain / Keystore). A project datum
+  whose grid isn't installed offers Convert's pack download (`GridDownload`).
 
 ## Error reporting ("no silent fails")
 

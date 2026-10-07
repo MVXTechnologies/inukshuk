@@ -20,12 +20,16 @@ import {
   type SourceDecision,
 } from './quality';
 import { GnssDemuxer, type StreamEvent } from './stream';
+import { LAYER, minimalKitConfig } from './ubx';
 
-/** How many RTCM frames went through, for the corrections line. */
+/** Frames seen this connection, and the receiver's answers to CFG-VALSET. */
 export interface StreamCounters {
   nmea: number;
   ubx: number;
   rtcm: number;
+  /** ACK-ACK / ACK-NAK to a CFG-VALSET (the u-blox kit setup, `kitSetupFrames`). */
+  cfgAck: number;
+  cfgNak: number;
 }
 
 /**
@@ -35,11 +39,16 @@ export interface StreamCounters {
  * drop, other device, native overflow) — per the core's transport contract.
  */
 export class ReceiverPipeline {
-  private demux = new GnssDemuxer();
+  /**
+   * The connection's demuxer: the native adapter (`@data/gnss/receiverStream`)
+   * pushes every chunk into it and resets it on a discontinuity, then hands
+   * the frames to `events`.
+   */
+  readonly demuxer = new GnssDemuxer();
   private asm = new FixAssembler();
   status: ExternalStatus = INITIAL_STATUS;
   fix: GnssFix | null = null;
-  readonly counters: StreamCounters = { nmea: 0, ubx: 0, rtcm: 0 };
+  readonly counters: StreamCounters = { nmea: 0, ubx: 0, rtcm: 0, cfgAck: 0, cfgNak: 0 };
 
   /** The latest sky view (GSV / NAV-SAT). */
   get sky(): SatInView[] {
@@ -48,7 +57,7 @@ export class ReceiverPipeline {
 
   /** Feed one received chunk; returns the fixes it completed (oldest first). */
   push(chunk: Uint8Array, nowMs: number): GnssFix[] {
-    return this.events(this.demux.push(chunk), nowMs);
+    return this.events(this.demuxer.push(chunk), nowMs);
   }
 
   /** Feed already-demuxed frames (the native adapter's `onFrames`). */
@@ -56,6 +65,9 @@ export class ReceiverPipeline {
     const out: GnssFix[] = [];
     for (const ev of evs) {
       this.counters[ev.kind === 'rtcm3' ? 'rtcm' : ev.kind] += 1;
+      if (ev.kind === 'ubx' && ev.msg !== null && 'cls' in ev.msg && ev.msg.cls === 0x06) {
+        this.counters[ev.msg.kind === 'ACK-ACK' ? 'cfgAck' : 'cfgNak'] += 1;
+      }
       for (const f of this.asm.push(ev, nowMs)) out.push(this.accept(f, nowMs));
     }
     return out;
@@ -69,7 +81,12 @@ export class ReceiverPipeline {
 
   /** The stream broke: close the epoch in progress and drop any partial frame. */
   discontinuity(nowMs: number): GnssFix[] {
-    this.demux.reset();
+    this.demuxer.reset();
+    return this.flush(nowMs);
+  }
+
+  /** Close the epoch in progress (the adapter already reset the demuxer). */
+  flush(nowMs: number): GnssFix[] {
     return this.asm.flush(nowMs).map((f) => this.accept(f, nowMs));
   }
 
@@ -82,6 +99,35 @@ export class ReceiverPipeline {
     );
     return f;
   }
+}
+
+// ---- u-blox kit setup -----------------------------------------------------------------------
+
+/**
+ * Receivers that are u-blox kits by name (SparkFun RTK, ArduSimple
+ * simpleRTK, ZED-F9P boards): the app may configure them for its needs.
+ */
+const UBLOX_KIT_NAME =
+  /sparkfun|rtk ?(facet|express|surveyor|torch|postcard)|ardusimple|simplertk|u-?blox|zed-?f9|\bf9p\b/i;
+
+/**
+ * Whether to write the minimal kit setup (`minimalKitConfig`) after
+ * connecting: a u-blox kit by name, or a receiver that already speaks UBX on
+ * this link. Never for a commercial receiver (Bad Elf, Garmin, Emlid), whose
+ * configuration is its maker's business.
+ */
+export function isUbloxKit(name: string | null, counters: Pick<StreamCounters, 'ubx'>): boolean {
+  return counters.ubx > 0 || (name !== null && UBLOX_KIT_NAME.test(name));
+}
+
+/**
+ * The CFG-VALSET frames for a kit behind a BLE/SPP bridge: UART1 (where
+ * SparkFun's ESP32 and ArduSimple's XBee-socket bridges sit), RTCM3 in, UBX
+ * NAV + NMEA (GGA for NTRIP) out, 1 Hz, RAM only — the user's saved receiver
+ * configuration is never overwritten.
+ */
+export function kitSetupFrames(): Uint8Array[] {
+  return minimalKitConfig({ port: 'UART1', rateHz: 1, nmea: true, layers: LAYER.RAM });
 }
 
 // ---- position source -----------------------------------------------------------------------

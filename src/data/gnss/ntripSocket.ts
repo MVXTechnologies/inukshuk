@@ -1,24 +1,18 @@
 /**
- * The NTRIP connection's socket — THE MISSING NATIVE PIECE.
+ * The NTRIP connection's socket: raw TCP (optionally TLS) from the native
+ * module (`openTcp` / `writeTcp` / `closeTcp` + `onTcpData` / `onTcpClose`,
+ * #622). NTRIP 1.0 isn't valid HTTP (`ICY 200 OK`) and both versions stream
+ * for hours, so neither `fetch` nor WebSocket can carry it.
  *
- * NTRIP 1.0 isn't valid HTTP (`ICY 200 OK`), and both versions stream for
- * hours, so neither `fetch` nor WebSocket can carry it: it needs a raw TCP
- * (optionally TLS) socket. The app has none today (no `react-native-tcp-socket`,
- * and `modules/inukshuk-gnss` reserves a `tcp` transport but doesn't
- * implement it). This file is the seam:
- *
- * - `NtripSocketFactory.open(host, port, tls)` → a byte pipe with data /
- *   close / error callbacks; the protocol (request bytes, response parsing,
- *   GGA upload, forwarding RTCM to the receiver) stays in `@core/gnss/ntrip`
- *   and `@features/gnss/ntripClient`, so the native side only moves bytes;
- * - the native module plugs in by exposing `openTcp` / `writeTcp` /
- *   `closeTcp` + `onTcpData` / `onTcpClose` events (see `nativeTcp` below);
- * - until then a store build reports "corrections need an app update", and
- *   debug / E2E builds get a simulated caster (sourcetable + a correction
- *   stream) so the profile editor and the sourcetable browser work end to end.
+ * Only bytes cross here: the protocol (request, response parsing, GGA upload,
+ * RTCM to the receiver) is `@core/gnss/ntrip` + `@features/gnss/ntripClient`.
+ * Binaries without the module get null ("corrections need an app update");
+ * debug / E2E builds without it get a simulated caster (sourcetable + a
+ * correction stream) so the editor and the sourcetable browser work.
  */
 import { asciiToBytes } from '@core/gnss/bytes';
-import { requireOptionalNativeModule } from 'expo';
+import { base64ToBytes } from '@core/encoding/base64';
+import { getNativeGnss, type NativeGnssModule } from '@lib/gnss/nativeGnss';
 
 import { simulatedReceiverEnabled } from './link';
 
@@ -41,22 +35,7 @@ export interface NtripSocketFactory {
 
 // ---- native (when the module provides it) ----------------------------------------------------
 
-interface NativeTcp {
-  openTcp(options: { host: string; port: number; tls: boolean }): Promise<string>;
-  writeTcp(id: string, data: Uint8Array): Promise<void>;
-  closeTcp(id: string): Promise<void>;
-  addListener(
-    event: 'onTcpData' | 'onTcpClose',
-    listener: (e: { id: string; data?: string; error?: string | null }) => void,
-  ): { remove(): void };
-}
-
-function base64Bytes(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
+type NativeTcp = Pick<NativeGnssModule, 'openTcp' | 'writeTcp' | 'closeTcp' | 'addListener'>;
 
 function nativeFactory(mod: NativeTcp): NtripSocketFactory {
   return {
@@ -66,7 +45,9 @@ function nativeFactory(mod: NativeTcp): NtripSocketFactory {
       let closed = false;
       const subs = [
         mod.addListener('onTcpData', (e) => {
-          if (e.id === id && e.data) h.onData(base64Bytes(e.data));
+          if (e.id !== id) return;
+          const bytes = base64ToBytes(e.data);
+          if (bytes !== null) h.onData(bytes);
         }),
         mod.addListener('onTcpClose', (e) => {
           if (e.id !== id || closed) return;
@@ -171,8 +152,8 @@ let cached: NtripSocketFactory | null | undefined;
  */
 export function ntripSocketFactory(): NtripSocketFactory | null {
   if (cached !== undefined) return cached;
-  const mod = requireOptionalNativeModule<Partial<NativeTcp>>('InukshukGnss');
-  if (mod && typeof mod.openTcp === 'function') cached = nativeFactory(mod as NativeTcp);
+  const mod = getNativeGnss();
+  if (mod !== null) cached = nativeFactory(mod);
   else cached = simulatedReceiverEnabled() ? simulatedFactory() : null;
   return cached;
 }

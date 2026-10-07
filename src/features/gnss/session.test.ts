@@ -9,7 +9,7 @@ import { phoneFeedsRecorder, useGnssStore } from '@state/gnssStore';
 import { useRecorderStore } from '@state/recorderStore';
 import { act } from '@testing-library/react-native';
 
-import { GnssSession, linkErrorMessage } from './session';
+import { GnssSession, linkErrorMessage, permissionMessage } from './session';
 
 jest.mock('@data/storage', () => ({
   newId: () => 'id',
@@ -170,10 +170,62 @@ describe('the receiver session on the simulated Québec City RTK session', () =>
 describe('linkErrorMessage', () => {
   it('says what to do', () => {
     expect(linkErrorMessage('E_GNSS_BLUETOOTH_OFF', '')).toMatch(/Bluetooth is off/);
-    expect(linkErrorMessage('E_GNSS_PERMISSION', '')).toMatch(/permission/);
+    expect(linkErrorMessage('E_GNSS_PERMISSION', '')).toMatch(/Bluetooth access/);
+    expect(permissionMessage('android', 30)).toMatch(/precise-location/);
+    expect(permissionMessage('android', 34)).toMatch(/Nearby devices/);
+    expect(permissionMessage('ios', '27.0')).toMatch(/Bluetooth access/);
     expect(linkErrorMessage('E_GNSS_NOT_BONDED', '')).toMatch(/Pair the receiver/);
     expect(linkErrorMessage('E_GNSS_CONNECT_TIMEOUT', '')).toMatch(/close by/);
     expect(linkErrorMessage('E_GNSS_NO_SERIAL_SERVICE', '')).toMatch(/data stream/);
     expect(linkErrorMessage('E_OTHER', 'fallback')).toBe('fallback');
+  });
+});
+
+describe('a real receiver through the native module’s API', () => {
+  it('BLE connects carry the GATT profiles and MTU; a u-blox kit gets its setup, once', async () => {
+    const native = new SimulatedLink(true);
+    const s = new GnssSession(native);
+    const kit = { id: 'AA:BB:CC', name: 'SparkFun RTK Facet', transport: 'ble' as const };
+    s.start(kit);
+    await advance(10);
+    expect(native.connects[0]).toMatchObject({ deviceId: 'AA:BB:CC', transport: 'ble', mtu: 517 });
+    expect(native.connects[0]?.profiles.length).toBeGreaterThan(0);
+    await advance(400);
+    await advance(10);
+    const cfg = native.writes.filter((w) => w[2] === 0x06 && w[3] === 0x8a);
+    expect(cfg.length).toBeGreaterThan(0);
+    await advance(5000);
+    expect(native.writes.filter((w) => w[2] === 0x06 && w[3] === 0x8a)).toHaveLength(cfg.length);
+    expect(useGnssStore.getState().kitSetup).toBe('sent');
+    s.dispose();
+  });
+
+  it('a commercial receiver is left as its maker set it up', async () => {
+    const native = new SimulatedLink(true);
+    const s = new GnssSession(native);
+    s.start({ id: 'EL', name: 'Bad Elf GPS Pro+', transport: 'spp' });
+    await advance(6000);
+    expect(native.connects[0]?.profiles).toEqual([]);
+    expect(native.writes).toHaveLength(0);
+    s.dispose();
+  });
+
+  it('a permission denied for good says where to grant it', async () => {
+    const native = new SimulatedLink(true);
+    const denied = {
+      status: 'denied' as never,
+      granted: false,
+      canAskAgain: false,
+      expires: 'never' as const,
+    };
+    native.getPermissionsAsync = async () => denied;
+    native.requestPermissionsAsync = async () => denied;
+    const s = new GnssSession(native);
+    await act(async () => {
+      await s.scan();
+    });
+    expect(useGnssStore.getState().permissionBlocked).toBe(true);
+    expect(useGnssStore.getState().error).toMatch(/Bluetooth access/);
+    s.dispose();
   });
 });

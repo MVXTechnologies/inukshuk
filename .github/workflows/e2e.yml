@@ -135,9 +135,9 @@ jobs:
           # Point the map store at the loopback fixture catalog served by
           # e2e-attempts.sh (adb reverse tcp:8787) — CI must never hit NRCan.
           CATALOG_MANIFEST_URL: http://127.0.0.1:8787/index.json
-          # The simulated GNSS receiver (#588) for .maestro/gnss.yaml: E2E builds only,
-          # never a store build (src/data/gnss/link.ts).
-          EXPO_PUBLIC_GNSS_FAKE: '1'
+          # The GNSS module's simulated receiver (#588) for .maestro/gnss.yaml:
+          # E2E builds only (plugins/withGnss.js), never a store build.
+          GNSS_FAKE_DEVICE: '1'
 
       - name: Save Gradle dependencies (main only)
         if: steps.gradle-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
