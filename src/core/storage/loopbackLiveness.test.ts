@@ -10,6 +10,7 @@ import {
   REVERIFY_AFTER_MS,
   startedHealth,
   type LoopbackHealth,
+  isExpectedServerDeath,
 } from './loopbackLiveness';
 
 describe('loopback liveness', () => {
@@ -66,6 +67,19 @@ describe('loopback liveness', () => {
 
   it('keeps the probe short enough to hide behind a resume', () => {
     expect(PROBE_TIMEOUT_MS).toBeLessThanOrEqual(2_000);
+  });
+});
+
+describe('isExpectedServerDeath (#582)', () => {
+  it('is the iOS resume reclaim only', () => {
+    expect(isExpectedServerDeath('resume', 'ios')).toBe(true);
+  });
+
+  it('keeps every other death reportable', () => {
+    expect(isExpectedServerDeath('resume', 'android')).toBe(false);
+    for (const reason of ['idle', 'transport', 'page-load'] as const) {
+      expect(isExpectedServerDeath(reason, 'ios')).toBe(false);
+    }
   });
 });
 

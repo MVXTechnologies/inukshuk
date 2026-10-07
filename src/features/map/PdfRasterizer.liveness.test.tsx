@@ -12,9 +12,9 @@
  * only when the server cannot be brought back.
  */
 import React from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
+import { AppState, Platform, type AppStateStatus } from 'react-native';
 import { act, renderHook } from '@testing-library/react-native';
-import { reportError } from '@lib/errorReporting';
+import { addBreadcrumb, reportError } from '@lib/errorReporting';
 import { PdfRasterizerProvider, usePdfRasterizer, usePdfRasterizerServer } from './PdfRasterizer';
 import { PdfLoopbackUnavailableError, PdfRenderNotStartedError } from './pdfRenderFailure';
 
@@ -77,7 +77,7 @@ jest.mock('@data/localServer', () => ({
   restartLocalServer: (origin: string) => mockRestart(origin),
   writeServedText: jest.fn(),
 }));
-jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));
+jest.mock('@lib/errorReporting', () => ({ addBreadcrumb: jest.fn(), reportError: jest.fn() }));
 
 /** The field report's exact wording for a refused first request. */
 const REFUSED =
@@ -246,6 +246,46 @@ describe('a served request refused by the server', () => {
 });
 
 describe('return from the background', () => {
+  // #582: on iOS a listener found dead on resume is the documented socket
+  // reclaim (TN2277), recovered without the user noticing: no report.
+  it('restarts a listener iOS reclaimed while suspended without filing a report', async () => {
+    const os = jest.replaceProperty(Platform, 'OS', 'ios');
+    const view = await renderHook(useBoth, { wrapper });
+    await ready();
+    mockProbe.mockResolvedValueOnce(false);
+    await goBackgroundAndReturn();
+    expect(mockRestart).toHaveBeenCalledWith(ORIGIN);
+    expect(reportError).not.toHaveBeenCalledWith(
+      expect.anything(),
+      'pdf-rasterizer-server-restart',
+    );
+    expect(addBreadcrumb).toHaveBeenCalledWith(
+      'Loopback server was unreachable (resume); restarted on the same port',
+    );
+    await ready();
+    const rendered = view.result.current.rasterize(served());
+    await succeed('req-1');
+    await expect(rendered).resolves.toMatchObject({ widthPx: 10 });
+    await view.unmount();
+    os.restore();
+  });
+
+  it('still reports a listener found dead on resume on Android, where it is unexplained', async () => {
+    const os = jest.replaceProperty(Platform, 'OS', 'android');
+    const view = await renderHook(useBoth, { wrapper });
+    await ready();
+    mockProbe.mockResolvedValueOnce(false);
+    await goBackgroundAndReturn();
+    expect(reportError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Loopback server was unreachable (resume); restarted on the same port',
+      }),
+      'pdf-rasterizer-server-restart',
+    );
+    await view.unmount();
+    os.restore();
+  });
+
   it('holds served work while it checks the server, and restarts a dead one', async () => {
     const view = await renderHook(useBoth, { wrapper });
     await ready();
