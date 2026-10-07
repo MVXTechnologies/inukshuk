@@ -608,6 +608,7 @@ class Simulation {
       const arrived = b.target === null || metres(b.pos, b.target) < 40;
       if (b.target && !arrived) b.pos = b.target; // close enough for a demo
       s.setTaskDone(t.owner, t.id, true);
+      s.setMyStatus('ok');
       say(pick(rnd, DONE_TASK));
       b.target = null;
       this.note(`${b.spec.name} finished “${t.title}”`);
@@ -624,6 +625,15 @@ class Simulation {
     const b = first ? this.bots[0]! : pick(rnd, this.bots);
     const roll = first ? 0 : rnd();
     const photos = b.session.photos();
+    // A third of the time: a quick status instead (shown on the map).
+    if (!first && rnd() < 0.35) {
+      const id = pick(rnd, ['ok', 'arrived', 'regroup', 'stop10'] as const);
+      this.run(() => {
+        b.session.setMyStatus(id);
+        this.note(`${b.spec.name} is ${id}`);
+      });
+      return;
+    }
     this.run(() => {
       if (roll < 0.5 || (roll < 0.8 && photos.length === 0)) {
         const off = between(60, 150) / 111_320;
