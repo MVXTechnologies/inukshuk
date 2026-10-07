@@ -50,12 +50,12 @@ function pair() {
 
 describe('positions', () => {
   it('bands ages and formats them', () => {
-    expect([0, 2 * MIN, 2 * MIN + 1, 15 * MIN, 16 * MIN].map(ageBand)).toEqual([
+    expect([0, 5 * MIN, 5 * MIN + 1, 15 * MIN, 16 * MIN].map(ageBand)).toEqual([
       'fresh',
       'fresh',
-      'recent',
-      'recent',
       'stale',
+      'stale',
+      'lost',
     ]);
     expect([0, 59_000, 4 * MIN, 120 * MIN, 50 * 60 * MIN].map(shortAge)).toEqual([
       'now',
@@ -92,14 +92,17 @@ describe('positions', () => {
       labels: () => undefined,
     });
     const list = teammatePositions(data.positions, view.members, now);
-    expect(list.map((p) => [p.name, p.band, p.accuracy])).toEqual([['Julie', 'stale', 5]]);
+    expect(list.map((p) => [p.name, p.band, p.accuracy])).toEqual([['Julie', 'lost', 5]]);
     const fc = teammatesGeoJson(list);
     expect(fc.features[0]!.properties).toMatchObject({
       member: other.id,
       initials: 'J',
       ring: 'member',
-      band: 'stale',
-      label: 'Julie · 19 min',
+      band: 'lost',
+      label: 'Julie · lost · 19 min',
+    });
+    expect(teammatesGeoJson(list, () => 'Arrived').features[0]!.properties).toMatchObject({
+      label: 'Julie · lost · 19 min · Arrived',
     });
     expect(fc.features[0]!.geometry).toEqual({ type: 'Point', coordinates: [-70.91, 47.08] });
   });

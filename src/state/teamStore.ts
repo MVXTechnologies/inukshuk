@@ -8,6 +8,7 @@ import type { TeamAlert } from '@core/teamui/alerts';
 import type { TeamPhoto } from '@core/teamui/comments';
 import type { Said } from '@core/teamui/mapMarks';
 import type { TeamPin } from '@core/teamui/pins';
+import type { MemberStatus } from '@core/teamui/system';
 import type { TeamTask } from '@core/team/tasks';
 import type { TeammatePosition } from '@core/teamui/positions';
 import type { TeamShares } from '@core/teamui/shares';
@@ -44,6 +45,8 @@ export interface TeamSnapshot {
   pins: TeamPin[];
   /** Every live task. */
   tasks: TeamTask[];
+  /** Each member's newest quick status. */
+  statuses: ReadonlyMap<string, MemberStatus>;
   /** Who commented on each shared photo, and when. */
   photoThreads: ReadonlyMap<string, readonly Said[]>;
   /** Changes whenever team data changes (screens reading the session directly). */
@@ -67,6 +70,7 @@ let loadedFlag = false;
 
 const EMPTY_SHARES: TeamShares = { waypoints: [], tracks: [] };
 const NO_THREADS: ReadonlyMap<string, readonly Said[]> = new Map();
+const NO_STATUSES: ReadonlyMap<string, MemberStatus> = new Map();
 
 function snapshot(service: TeamService | null): Omit<TeamSnapshot, 'banner'> {
   const s: TeamSession | null = service?.active ?? null;
@@ -83,6 +87,7 @@ function snapshot(service: TeamService | null): Omit<TeamSnapshot, 'banner'> {
     photos: s?.photos() ?? [],
     pins: s?.pins() ?? [],
     tasks: s?.tasks() ?? [],
+    statuses: s?.statuses() ?? NO_STATUSES,
     photoThreads: s?.photoThreads() ?? NO_THREADS,
     dataVersion: s?.dataVersion ?? '',
     peers: s?.peers() ?? [],

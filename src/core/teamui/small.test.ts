@@ -1,9 +1,19 @@
 /** System messages, colours, invites and lifetime: the small pure helpers of the team UI. */
 import { encodeInvite } from '@core/team/invite';
-import { c, newWorld, T0 } from '@core/team/testing/fixtures';
+import {
+  addMember,
+  c,
+  device,
+  exchange,
+  joinReplica,
+  MIN,
+  newWorld,
+  T0,
+} from '@core/team/testing/fixtures';
 import { createInvite } from '@core/team/actions';
 
 import { initials, memberColor, MEMBER_COLORS } from './colors';
+import { memberStatuses, parseStatusText, STATUS_LABEL, statusText, SYS_STATUS , cleanName, isSystemThread, MAX_NAME_CHARS, nameText, parseNameText } from './system';
 import {
   DEFAULT_INVITE,
   inviteExpiresAt,
@@ -15,7 +25,6 @@ import {
   webJoinLink,
 } from './invites';
 import { DEFAULT_LIFETIME, expiryLine, extendedExpiry, lifetimeMs } from './lifetime';
-import { cleanName, isSystemThread, MAX_NAME_CHARS, nameText, parseNameText } from './system';
 
 const DAY = 86_400_000;
 
@@ -119,5 +128,27 @@ describe('lifetime', () => {
     expect(expiryLine(T0 - 1000, T0, false)).toBe('Ended today · read-only');
     expect(expiryLine(T0 - 2.5 * DAY, T0, false)).toBe('Ended 2 days ago · read-only');
     expect(expiryLine(T0 + DAY * 3, T0, true)).toBe('Closed by an admin · read-only');
+  });
+});
+
+describe('status signals', () => {
+  it('parse only known statuses, newest per member wins, old ones expire', () => {
+    expect(parseStatusText(statusText('arrived'))).toBe('arrived');
+    for (const bad of ['{"s":"party"}', 'nope', '{"s":1}', 42, '[]', 'x'.repeat(200)]) {
+      expect(parseStatusText(bad)).toBeNull();
+    }
+    const w = newWorld();
+    const d = device();
+    addMember(w.root, d, 'guest', T0 + 1);
+    const g = joinReplica(w, d, w.root, T0 + 2);
+    g.write(T0 + MIN, 'msg', { id: 's1', th: SYS_STATUS, tx: statusText('ok') });
+    g.write(T0 + 2 * MIN, 'msg', { id: 's2', th: SYS_STATUS, tx: statusText('help') });
+    w.root.write(T0 + MIN, 'msg', { id: 's3', th: SYS_STATUS, tx: '{"s":"bogus"}' });
+    exchange(w.root, g, T0 + 3 * MIN);
+    const now = T0 + 3 * MIN;
+    const st = memberStatuses(w.root.data(now), now);
+    expect([...st]).toEqual([[d.id, { id: 'help', at: T0 + 2 * MIN }]]);
+    expect(memberStatuses(w.root.data(now), now + 7 * 3_600_000).size).toBe(0);
+    expect(STATUS_LABEL.stop10).toBe('Stopping 10 min');
   });
 });

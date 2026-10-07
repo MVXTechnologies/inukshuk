@@ -54,6 +54,11 @@ import {
   SYS_PROFILE,
   SYS_TEAM,
   systemMessage,
+  memberStatuses,
+  statusText,
+  SYS_STATUS,
+  type MemberStatus,
+  type StatusId,
 } from '@core/teamui/system';
 import { buildTeamView, TEAM_THREAD, unreadCount, type TeamView } from '@core/teamui/view';
 import { isPrivateIPv4, parseIPv4 } from '@core/mesh/hotspot';
@@ -269,6 +274,28 @@ export class TeamSession {
     if (this.threadsCache?.key !== this.dataVersion)
       this.threadsCache = { key: this.dataVersion, threads: commentsByPhoto(data) };
     return this.threadsCache.threads;
+  }
+
+  private statusCache: { key: string; at: number; map: Map<string, MemberStatus> } | null = null;
+
+  /** Each member's newest quick status (OK, Arrived, Need help…). */
+  statuses(): Map<string, MemberStatus> {
+    const now = this.deps.now();
+    if (this.statusCache?.key !== this.dataVersion || now - this.statusCache.at > 60_000) {
+      this.statusCache = {
+        key: this.dataVersion,
+        at: now,
+        map: memberStatuses(this.replica.data(now), now),
+      };
+    }
+    return this.statusCache.map;
+  }
+
+  /** Post my quick status (guests too: a `sys:status` message). */
+  setMyStatus(id: StatusId): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    return this.writeMsg(systemMessage(this.deps.newId(), SYS_STATUS, statusText(id)));
   }
 
   private tasksCache: { key: string; tasks: TeamTask[] } | null = null;

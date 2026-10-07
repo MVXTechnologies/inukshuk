@@ -17,17 +17,17 @@ import type { Role } from '@core/team/roles';
 
 import type { MemberRow } from './view';
 
-/** ≤ 2 min: live. */
-export const FRESH_MS = 2 * 60_000;
-/** ≤ 15 min: recent. Older: stale (drawn faded, labelled with its age). */
-export const RECENT_MS = 15 * 60_000;
+/** ≤ 5 min: fresh (drawn full). */
+export const FRESH_MS = 5 * 60_000;
+/** ≤ 15 min: stale (drawn faded). Older: lost (hollow, "lost · 34 min"). */
+export const STALE_MS = 15 * 60_000;
 
-export type AgeBand = 'fresh' | 'recent' | 'stale';
+export type AgeBand = 'fresh' | 'stale' | 'lost';
 
 export function ageBand(ageMs: number): AgeBand {
   if (ageMs <= FRESH_MS) return 'fresh';
-  if (ageMs <= RECENT_MS) return 'recent';
-  return 'stale';
+  if (ageMs <= STALE_MS) return 'stale';
+  return 'lost';
 }
 
 /** "now", "4 min", "2 h", "3 d" — compact, for map labels and rows. */
@@ -96,8 +96,19 @@ export function roleRing(role: Role): 'lead' | 'member' | 'guest' {
   return role === 'owner' || role === 'admin' ? 'lead' : role === 'guest' ? 'guest' : 'member';
 }
 
+/** A teammate's map label: name, the position's age, their status ("Julie · 2 min · Arrived"). */
+export function teammateLabel(p: TeammatePosition, status?: string | null): string {
+  const age = shortAge(p.ageMs);
+  const parts = [p.name, p.band === 'lost' ? `lost · ${age}` : age];
+  if (status) parts.push(status);
+  return parts.join(' · ');
+}
+
 /** The FeatureCollection the team layers draw (`TeamMapLayers`). */
-export function teammatesGeoJson(list: readonly TeammatePosition[]): FeatureCollection {
+export function teammatesGeoJson(
+  list: readonly TeammatePosition[],
+  statusOf: (memberId: string) => string | null = () => null,
+): FeatureCollection {
   return {
     type: 'FeatureCollection',
     features: list.map((p) => ({
@@ -110,7 +121,7 @@ export function teammatesGeoJson(list: readonly TeammatePosition[]): FeatureColl
         color: p.color,
         ring: roleRing(p.role),
         band: p.band,
-        label: p.band === 'fresh' ? p.name : `${p.name} · ${shortAge(p.ageMs)}`,
+        label: teammateLabel(p, statusOf(p.id)),
       },
     })),
   };

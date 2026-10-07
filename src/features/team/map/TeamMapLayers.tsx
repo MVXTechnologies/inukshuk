@@ -19,6 +19,7 @@ import { overlayAnchor } from '@core/map/layerSlots';
 import { STONE_FONTS_ATKINSON, STONE_FONTS_NOTO } from '@core/map/stoneStyle';
 import { MEMBER_COLORS, memberColor } from '@core/teamui/colors';
 import { teammatesGeoJson } from '@core/teamui/positions';
+import { STATUS_LABEL } from '@core/teamui/system';
 import type { TeamShares } from '@core/teamui/shares';
 import type { MemberRow } from '@core/teamui/view';
 import { useExtensionPrefs } from '@features/extensions/prefs';
@@ -80,12 +81,18 @@ export function TeamMapLayers({
   const { installedAt, show } = useExtensionPrefs('team');
   const view = useTeamStore((s) => s.view);
   const positions = useTeamStore((s) => s.positions);
+  const statuses = useTeamStore((s) => s.statuses);
   const shares = useTeamStore((s) => s.shares);
   const members = view?.members;
   // Keep the same object while nothing drawn changed: every new `data` makes
   // MapLibre re-place the symbols, and labels fading in again on each store
   // refresh never reach full opacity. Ages only show to the minute.
-  const peopleJson = JSON.stringify(teammatesGeoJson(positions));
+  const peopleJson = JSON.stringify(
+    teammatesGeoJson(positions, (id) => {
+      const st = statuses.get(id);
+      return st ? STATUS_LABEL[st.id] : null;
+    }),
+  );
   const people = useMemo(() => JSON.parse(peopleJson) as FeatureCollection, [peopleJson]);
   const tracks = useMemo(() => tracksGeoJson(shares, members ?? []), [shares, members]);
   const points = useMemo(() => waypointsGeoJson(shares), [shares]);
@@ -117,10 +124,23 @@ export function TeamMapLayers({
         type="circle"
         paint={{
           'circle-radius': 9,
-          'circle-color': ['get', 'color'],
-          'circle-opacity': ['match', ['get', 'band'], 'fresh', 1, 'recent', 0.9, 0.55],
-          'circle-stroke-width': ['match', ['get', 'ring'], 'lead', 3, 2],
-          'circle-stroke-color': ['match', ['get', 'ring'], 'lead', leadRing, paper],
+          // Lost (> 15 min): hollow, the member's colour as the ring.
+          'circle-color': ['match', ['get', 'band'], 'lost', paper, ['get', 'color']],
+          'circle-opacity': ['match', ['get', 'band'], 'fresh', 1, 'stale', 0.55, 0.85],
+          'circle-stroke-width': [
+            'match',
+            ['get', 'band'],
+            'lost',
+            3,
+            ['match', ['get', 'ring'], 'lead', 3, 2],
+          ],
+          'circle-stroke-color': [
+            'match',
+            ['get', 'band'],
+            'lost',
+            ['get', 'color'],
+            ['match', ['get', 'ring'], 'lead', leadRing, paper],
+          ],
           'circle-stroke-opacity': ['match', ['get', 'band'], 'stale', 0.6, 1],
           'circle-pitch-alignment': 'map',
         }}
@@ -160,7 +180,7 @@ export function TeamMapLayers({
                 'text-color': ink,
                 'text-halo-color': halo,
                 'text-halo-width': 2,
-                'text-opacity': ['match', ['get', 'band'], 'stale', 0.7, 1],
+                'text-opacity': ['match', ['get', 'band'], 'fresh', 1, 0.75],
               }}
             />,
           ]
