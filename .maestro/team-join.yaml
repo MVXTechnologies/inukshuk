@@ -48,21 +48,25 @@ appId: com.inukshuk.app
           element: '.*Team mode.*'
           direction: DOWN
           timeout: 5000
+# Compact list (#633): a one-line row, Get before the install and its switch
+# after; the team rows are in its details, opened by tapping the row (only
+# when they are closed: a second tap would close them again).
 - scrollUntilVisible:
-    element: '(Get Team mode|Remove Team mode extension)'
+    element:
+      id: 'extension-row-team'
     direction: DOWN
 - runFlow:
     when:
       visible: 'Get Team mode'
     commands:
       - tapOn: 'Get Team mode'
-# Compact list (#633): the row opens on tap.
 - runFlow:
     when:
       notVisible:
-        id: 'team-join-row'
+        id: 'extension-details-team'
     commands:
-      - tapOn: 'Team mode.*'
+      - tapOn:
+          id: 'extension-row-team'
 - scrollUntilVisible:
     element:
       id: 'team-join-row'
