@@ -105,10 +105,33 @@ adb reverse tcp:8787 tcp:8787 || true
 
 trap 'kill $GEO_PID $CATALOG_PID 2>/dev/null; rm -f "$GEO_RUN"' EXIT
 
+# Stop the app and wait until WindowManager has removed its windows before
+# the next flow launches it. Maestro's launchApp force-stops and restarts in
+# one go; when the old window was still EXITING, the new task's
+# "starting_reveal" transition never completed on the CI emulator (runs
+# 37616199722 and 37671698583: "Timed out waiting for animations to complete
+# ... starting_reveal" every 5 s, UiAutomator "Could not detect idle state" ~200
+# times), so every Maestro step waited for an idle that never came and
+# store.yaml timed out twice. Event-driven: poll until no window of the app is
+# left, bounded; a timeout is reported, not hidden.
+app_stop_settled() {
+  adb shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
+  local waited=0
+  while adb shell dumpsys window windows 2>/dev/null | grep -qE "Window\{[^}]* $APP_ID"; do
+    if [ "$waited" -ge 30 ]; then
+      echo "::warning title=E2E ($SHARD): app windows still present 30 s after force-stop::before $1; the next launch may stall"
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+}
+
 # One flow attempt, with the feed on only while Maestro runs it.
 run_flow() {
   local flow=$1 own_location=$2
   geo_pause
+  app_stop_settled "$flow"
   [ "$own_location" = 1 ] || touch "$GEO_RUN"
   maestro test "$flow"
   local rc=$?

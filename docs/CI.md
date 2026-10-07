@@ -196,6 +196,14 @@ restarted`** as its own error annotation, uploads
 shard's remaining flows NOT RUN. Results from a rebooted emulator prove
 nothing either way.
 
+Before each flow attempt the runner also force-stops the app and waits (up to
+30 s, with a warning if that runs out) until WindowManager has no window of it
+left. Maestro's `launchApp` stops and restarts in one go. When the old window
+was still exiting, the new launch's `starting_reveal` transition never
+finished on the CI emulator, so UiAutomator never saw an idle UI ("Could not
+detect idle state" ~200 times). Every step then waited out its timeout, and
+`store.yaml` failed twice (runs 37616199722 and 37671698583).
+
 ## Release path (`release-path.yml`)
 
 The 2.3.0 store builds failed only on EAS, in the `eas-build-pre-install` hook
