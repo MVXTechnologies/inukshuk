@@ -29,6 +29,8 @@ module.exports = {
     // Test-only fixture helpers.
     '!src/core/geo/geopdf/testUtils.ts',
     '!src/core/terrain3d/testUtils.ts',
+    // Team protocol test doubles (Node crypto, PRNG, fixtures) — never shipped.
+    '!src/core/team/testing/**',
   ],
   coverageThreshold: {
     // Pure logic in src/core is the safety-critical part — hold it to a high bar.
