@@ -142,6 +142,7 @@ import { usePinDraft } from '@features/team/map/TeamPinComposer';
 import { TeamTrailPhotos } from '@features/team/map/TeamTrailPhotos';
 import { useTeamSheet, useTeamSignalMode } from '@features/team/map/teamMode';
 import { TeamPickOverlay, useTeamPick } from '@features/team/map/TeamPick';
+import { useTeamFieldLayers } from '@features/team/map/TeamFieldLayers';
 import { useTrailPhotosStore } from '@state/trailPhotosStore';
 import { PhotoBottomCard, usePhotoCard } from '../photos/PhotoBottomCard';
 import { useTeamStore } from '@state/teamStore';
@@ -993,6 +994,7 @@ export function MapScreen() {
     extensionStyle,
   ]);
   const teamMarks = useTeamMapMarks(style.glyphs);
+  const teamField = useTeamFieldLayers(style.glyphs);
 
   // Native 3D terrain (docs/plans/native-terrain.md): with "3D relief" on and
   // a binary that ships the module, tilting past ~25° grows real relief out of
@@ -3155,6 +3157,7 @@ export function MapScreen() {
               deferPress={deferPhotoPress}
             />
             {teamMarks}
+            {teamField}
             {/* Revamp puck, replacing MapLibre's default one (children do):
               halo, ring and dot in the scheme's puck tokens, plus the amber
               uncertainty ring on a weak signal while recording. */}
@@ -3644,6 +3647,7 @@ export function MapScreen() {
         {makeMapState === null && (
           <TeamMapOverlay
             fabBottom={(recordingPanelUp ? panelHeight : 0) + 72}
+            sosTop={insets.top + 8}
             onPointActions={(p, what) => {
               const at = { longitude: p[0], latitude: p[1] };
               if (what === 'navigate') void openGoToCoordinates(at);

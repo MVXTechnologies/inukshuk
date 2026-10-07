@@ -12,10 +12,12 @@ import { StyleSheet, View } from 'react-native';
 import { Button, Icon, Text } from 'react-native-paper';
 import { create } from 'zustand';
 
+import { teamService, useTeamStore } from '@state/teamStore';
+
 import { usePinDraft } from './TeamPinComposer';
 import { useTeamSheet } from './teamMode';
 
-export type PickPurpose = 'task' | 'notify' | 'pin';
+export type PickPurpose = 'task' | 'notify' | 'pin' | 'rally';
 
 export interface Picked {
   anchor: TaskAnchor;
@@ -51,6 +53,7 @@ const WHAT: Record<PickPurpose, string> = {
   task: 'Attach the task',
   notify: 'Notify about a place',
   pin: 'Pin a message',
+  rally: 'Set the rally point',
 };
 
 /** Where a finished pick goes. */
@@ -72,6 +75,9 @@ export function usePickDone(): (p: Picked | null) => void {
       useTeamSheet.getState().open({ kind: 'notify', at: p ? p.at : null });
     } else if (purpose === 'pin' && p) {
       usePinDraft.getState().open(p.at[0], p.at[1]);
+    } else if (purpose === 'rally' && p) {
+      teamService()?.active?.setRally(p.at[0], p.at[1]);
+      useTeamStore.getState().refresh();
     }
   };
 }
@@ -147,7 +153,7 @@ export function TeamPickOverlay({ top, cardStyle }: { top: number; cardStyle: ob
               <Text variant="bodyMedium" style={[styles.flex, { color: t.inkVariant }]}>
                 Nothing picked yet
               </Text>
-              {purpose !== 'pin' && (
+              {(purpose === 'task' || purpose === 'notify') && (
                 <Button mode="text" onPress={() => done(null)} testID="team-pick-none">
                   No location
                 </Button>

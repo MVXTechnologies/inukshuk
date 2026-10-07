@@ -19,6 +19,7 @@ import type { Audience, GroupLink, Priority, Role } from '@core/team/roles';
 import { SyncSession, type SessionEvent } from '@core/team/sync';
 import { alertContext, alertFor, TaskAlertThrottle, type TeamAlert } from '@core/teamui/alerts';
 import { commentsByPhoto, type Said } from '@core/teamui/mapMarks';
+import { teamRally, teamSos, type TeamRally, type TeamSos } from '@core/teamui/field';
 import { pinThread, resolvedMessages, teamPins, type TeamPin } from '@core/teamui/pins';
 import {
   statusFields,
@@ -327,6 +328,88 @@ export class TeamSession {
     if (owner !== this.me) body['o'] = owner;
     const op = this.run(() => this.replica.write(now, 'e.set', body));
     return op === undefined ? 'rotation-pending' : null;
+  }
+
+  private fieldCache: { key: string; sos: TeamSos[]; rally: TeamRally | null } | null = null;
+
+  private field(): { sos: TeamSos[]; rally: TeamRally | null } {
+    if (this.fieldCache?.key !== this.dataVersion) {
+      const data = this.replica.data(this.deps.now());
+      this.fieldCache = { key: this.dataVersion, sos: teamSos(data), rally: teamRally(data) };
+    }
+    return this.fieldCache;
+  }
+
+  /** Every live SOS, open ones first. */
+  soses(): TeamSos[] {
+    return this.field().sos;
+  }
+
+  /** The team's rally point (the newest), or null. */
+  rally(): TeamRally | null {
+    return this.field().rally;
+  }
+
+  /** Raise an SOS at my position (anyone, guests too; one open at a time). */
+  raiseSos(lng: number, lat: number, text = ''): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    if (this.soses().some((s) => s.owner === this.me && !s.resolved)) return 'invalid';
+    const f: Record<string, Json> = { la: lat, lo: lng };
+    if (text.trim()) f['tx'] = text.trim().slice(0, 200);
+    const op = this.run(() =>
+      this.replica.write(this.deps.now(), 'e.set', { k: 'sos', id: this.deps.newId(), f }),
+    );
+    if (op === undefined) return 'rotation-pending';
+    return this.accepted(op.id) ? null : 'not-allowed';
+  }
+
+  /** Move my open SOS with me (silent: no new alarm). */
+  moveSos(id: string, lng: number, lat: number): void {
+    if (this.guardWrite()) return;
+    this.run(() =>
+      this.replica.write(this.deps.now(), 'e.set', { k: 'sos', id, f: { la: lat, lo: lng } }),
+    );
+  }
+
+  /** Resolve an SOS (its raiser or an admin). */
+  resolveSos(owner: string, id: string): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const now = this.deps.now();
+    const body: Record<string, Json> = { k: 'sos', id, f: { res: true, rby: this.me, rat: now } };
+    if (owner !== this.me) body['o'] = owner;
+    const op = this.run(() => this.replica.write(now, 'e.set', body));
+    if (op === undefined) return 'rotation-pending';
+    return this.accepted(op.id) ? null : 'not-allowed';
+  }
+
+  /** Set the team's rally point (members); my previous one goes. */
+  setRally(lng: number, lat: number, text = '', when: number | null = null): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    if (!this.canEditShared()) return 'not-allowed';
+    const mine = this.rally();
+    const now = this.deps.now();
+    const f: Record<string, Json> = { la: lat, lo: lng, r: 60, at: when };
+    if (text.trim()) f['tx'] = text.trim().slice(0, 80);
+    const op = this.run(() => {
+      if (mine && mine.owner === this.me)
+        this.replica.write(now, 'e.del', { k: 'rly', id: mine.id });
+      return this.replica.write(now, 'e.set', { k: 'rly', id: this.deps.newId(), f });
+    });
+    return op === undefined ? 'rotation-pending' : null;
+  }
+
+  /** Clear the rally point (its creator or an admin). */
+  clearRally(owner: string, id: string): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const op = this.run(() =>
+      this.replica.write(this.deps.now(), 'e.del', { k: 'rly', id, o: owner }),
+    );
+    if (op === undefined) return 'rotation-pending';
+    return this.accepted(op.id) ? null : 'not-allowed';
   }
 
   private tasksCache: { key: string; tasks: TeamTask[] } | null = null;

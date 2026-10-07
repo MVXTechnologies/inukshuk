@@ -25,6 +25,7 @@ import { Round, TeamFab, TeamSheetCard } from './TeamCards';
 import { useTeamMapFocus } from './teamMapFocus';
 import { useTeamSheet, useTeamSignalMode } from './teamMode';
 import { usePhotoCard } from '@features/photos/PhotoBottomCard';
+import { RallyPill, SosBanner } from './TeamField';
 import { TeamPinCard } from './TeamPinCard';
 import { useTeamPick } from './TeamPick';
 import { TeamPinComposer, usePinDraft } from './TeamPinComposer';
@@ -81,6 +82,7 @@ export function TeamMapOverlay({
   cardStyle,
   cardSlotFree,
   fabBottom,
+  sosTop,
   onNavigate,
   onPointActions,
 }: {
@@ -90,6 +92,8 @@ export function TeamMapOverlay({
   cardSlotFree: boolean;
   /** Where the team button sits (above the bottom chrome). */
   fabBottom: number;
+  /** Where the SOS banner sits (under the status bar). */
+  sosTop: number;
   onNavigate: (latitude: number, longitude: number) => void;
   /** Long-press menu's secondary row: Navigate here / Coordinates / Convert. */
   onPointActions: (at: [number, number], what: 'navigate' | 'coordinates' | 'convert') => void;
@@ -127,6 +131,17 @@ export function TeamMapOverlay({
 
   return (
     <>
+      {/* An open SOS is pinned at the top for everyone, signal mode or not. */}
+      <SosBanner top={sosTop} here={here} onNavigate={onNavigate} />
+      {/* The rally point's pill: signal mode, no card up. */}
+      {signal &&
+        !picking &&
+        draft === null &&
+        hit === null &&
+        photoCard === null &&
+        (sheet === null || sheet.kind === 'menu') && (
+          <RallyPill bottom={fabBottom} here={here} onNavigate={onNavigate} />
+        )}
       {/* The team button never covers a card: any card, sheet or popup hides it. */}
       {signal &&
         !picking &&
@@ -142,7 +157,7 @@ export function TeamMapOverlay({
       )}
       {draft === null && card && sheet !== null && (
         <View style={[cardStyle, styles.leaveFab]} pointerEvents="box-none" testID="team-card-dock">
-          <TeamSheetCard sheet={sheet} onPointActions={onPointActions} />
+          <TeamSheetCard sheet={sheet} here={here} onPointActions={onPointActions} />
         </View>
       )}
       {draft === null && !card && cardSlotFree && pin && (

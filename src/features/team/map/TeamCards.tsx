@@ -21,6 +21,7 @@ import { photoHere } from '../photoHere';
 import type { TeamMarkHit } from './TeamMapMarks';
 import { useTeamMapSelection } from './TeamMapOverlay';
 import { usePinDraft } from './TeamPinComposer';
+import { SosHoldCard } from './TeamField';
 import { useTeamPick } from './TeamPick';
 import { useTeamSheet, type TeamSheet } from './teamMode';
 
@@ -427,6 +428,18 @@ function PressCard({
             }}
           />
         )}
+        {!guest && (
+          <Round
+            icon="flag-variant"
+            label="Meet here"
+            testID="team-press-rally"
+            onPress={() => {
+              onClose();
+              teamService()?.active?.setRally(at[0], at[1]);
+              useTeamStore.getState().refresh();
+            }}
+          />
+        )}
       </View>
       <View style={[styles.secondary, { borderTopColor: t.outlineVariant }]}>
         {(
@@ -511,9 +524,11 @@ function ListCard({ items, onClose }: { items: TeamMarkHit[]; onClose: () => voi
 
 export function TeamSheetCard({
   sheet,
+  here,
   onPointActions,
 }: {
   sheet: TeamSheet;
+  here: { latitude: number; longitude: number } | null;
   onPointActions: (at: [number, number], what: 'navigate' | 'coordinates' | 'convert') => void;
 }) {
   const close = useTeamSheet((s) => s.close);
@@ -533,6 +548,8 @@ export function TeamSheetCard({
       );
     case 'press':
       return <PressCard at={sheet.at} onClose={close} onPointActions={onPointActions} />;
+    case 'sos':
+      return <SosHoldCard here={here} onClose={close} />;
     case 'list':
       return <ListCard items={sheet.items} onClose={close} />;
     default:
@@ -553,7 +570,8 @@ export function TeamFab({ bottom }: { bottom: number }) {
   const guest = useTeamStore((s) => s.view?.members.find((m) => m.isMe)?.role === 'guest');
   const menuOpen = sheet?.kind === 'menu';
   const resolvedCount = useTeamStore((s) => s.resolved.size);
-  const items: [string, string, () => void, string][] = [
+  const items: [string, string, () => void, string, string?][] = [
+    ['hand-back-left', 'SOS · hold', () => open({ kind: 'sos' }), 'team-fab-sos', t.team.sos],
     [
       'check-circle-outline',
       myStatus ? `My status · ${STATUS_LABEL[myStatus]}` : 'My status',
@@ -569,6 +587,19 @@ export function TeamFab({ bottom }: { bottom: number }) {
       },
       'team-fab-notify',
     ],
+    ...(guest
+      ? []
+      : ([
+          [
+            'flag-variant',
+            'Rally point',
+            () => {
+              close();
+              useTeamPick.getState().start('rally');
+            },
+            'team-fab-rally',
+          ],
+        ] as [string, string, () => void, string][])),
     [
       'map-marker-account-outline',
       'Message pin',
@@ -623,7 +654,7 @@ export function TeamFab({ bottom }: { bottom: number }) {
     <>
       {menuOpen && (
         <View style={[styles.menu, { bottom: bottom + 72 }]} pointerEvents="box-none">
-          {items.map(([icon, label, run, id]) => (
+          {items.map(([icon, label, run, id, tint]) => (
             <Pressable
               key={id}
               onPress={run}
@@ -645,10 +676,10 @@ export function TeamFab({ bottom }: { bottom: number }) {
               <View
                 style={[
                   styles.menuBtn,
-                  { backgroundColor: t.elevation.level2, shadowColor: palette.shadow },
+                  { backgroundColor: tint ?? t.elevation.level2, shadowColor: palette.shadow },
                 ]}
               >
-                <Icon source={icon} size={24} color={t.ink} />
+                <Icon source={icon} size={24} color={tint ? palette.white : t.ink} />
               </View>
             </Pressable>
           ))}

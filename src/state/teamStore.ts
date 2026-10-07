@@ -7,6 +7,7 @@
 import type { TeamAlert } from '@core/teamui/alerts';
 import type { TeamPhoto } from '@core/teamui/comments';
 import type { Said } from '@core/teamui/mapMarks';
+import type { TeamRally, TeamSos } from '@core/teamui/field';
 import type { TeamPin } from '@core/teamui/pins';
 import type { MemberStatus } from '@core/teamui/system';
 import type { TeamTask } from '@core/team/tasks';
@@ -45,6 +46,10 @@ export interface TeamSnapshot {
   pins: TeamPin[];
   /** Every live task. */
   tasks: TeamTask[];
+  /** Every live SOS, open ones first. */
+  soses: TeamSos[];
+  /** The team's rally point. */
+  rally: TeamRally | null;
   /** `owner:id` of resolved messages (pins, notifies). */
   resolved: ReadonlySet<string>;
   /** Each member's newest quick status. */
@@ -92,6 +97,8 @@ function snapshot(service: TeamService | null): Omit<TeamSnapshot, 'banner'> {
     tasks: s?.tasks() ?? [],
     statuses: s?.statuses() ?? NO_STATUSES,
     resolved: s?.resolved() ?? NO_RESOLVED,
+    soses: s?.soses() ?? [],
+    rally: s?.rally() ?? null,
     photoThreads: s?.photoThreads() ?? NO_THREADS,
     dataVersion: s?.dataVersion ?? '',
     peers: s?.peers() ?? [],
@@ -138,13 +145,15 @@ export function wireTeamStore(): TeamService | null {
     if (alert.level === 'alert') {
       void notifyTeam({
         title:
-          alert.kind === 'task'
-            ? `${authorName} · tasks · ${teamName}`
-            : alert.kind === 'comment'
-              ? `${authorName} commented · ${teamName}`
-              : alert.priority === 2
-                ? `Urgent · ${authorName} · ${teamName}`
-                : `${authorName} · ${teamName}`,
+          alert.kind === 'sos'
+            ? `SOS · ${authorName} · ${teamName}`
+            : alert.kind === 'task'
+              ? `${authorName} · tasks · ${teamName}`
+              : alert.kind === 'comment'
+                ? `${authorName} commented · ${teamName}`
+                : alert.priority === 2
+                  ? `Urgent · ${authorName} · ${teamName}`
+                  : `${authorName} · ${teamName}`,
         body: alert.text,
         url: alert.url,
       });

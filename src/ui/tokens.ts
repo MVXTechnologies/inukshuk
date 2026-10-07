@@ -261,6 +261,9 @@ export interface SchemeTokens {
     bubbleNewInk: string;
     /** A highlighted `+task @name` in a comment. */
     taskCommand: string;
+    /** SOS: the banner, the hold button and the map marker; its ink. */
+    sos: string;
+    sosInk: string;
   };
   /** Logbook statistics (Statistics, Personal records, Year in review). */
   stats: {
@@ -436,6 +439,8 @@ export const lightScheme: SchemeTokens = {
     bubbleNew: '#E07B39',
     bubbleNewInk: palette.white,
     taskCommand: '#2F6F8F',
+    sos: '#C62828',
+    sosInk: palette.white,
   },
   stats: {
     flame: '#C2410C',
@@ -611,6 +616,8 @@ export const darkScheme: SchemeTokens = {
     bubbleNew: '#F08A4B',
     bubbleNewInk: palette.black,
     taskCommand: '#7FC4E3',
+    sos: '#C62828',
+    sosInk: palette.white,
   },
   stats: {
     flame: '#F07A45',
@@ -779,6 +786,8 @@ export const sunlightScheme: SchemeTokens = {
     bubbleNew: palette.black,
     bubbleNewInk: palette.white,
     taskCommand: palette.black,
+    sos: '#C62828',
+    sosInk: palette.white,
   },
   stats: {
     flame: '#B02222',
@@ -952,6 +961,8 @@ export const nightScheme: SchemeTokens = {
     bubbleNew: NIGHT_INK,
     bubbleNewInk: palette.black,
     taskCommand: NIGHT_INK,
+    sos: '#C62828',
+    sosInk: palette.white,
   },
   stats: {
     flame: '#FF5C5C',

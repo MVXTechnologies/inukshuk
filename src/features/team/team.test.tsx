@@ -237,6 +237,7 @@ describe('the map card', () => {
           cardSlotFree
           cardStyle={{}}
           fabBottom={72}
+          sosTop={0}
           onNavigate={jest.fn()}
           onPointActions={jest.fn()}
         />,

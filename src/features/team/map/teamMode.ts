@@ -21,6 +21,7 @@ export function useTeamSignalMode(): boolean {
 export type TeamSheet =
   | { kind: 'menu' }
   | { kind: 'status' }
+  | { kind: 'sos' }
   | { kind: 'notify'; at: [number, number] | null }
   | { kind: 'spot'; at: [number, number]; trail: string; trackId?: string }
   | { kind: 'press'; at: [number, number] }
