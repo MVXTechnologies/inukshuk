@@ -410,8 +410,10 @@ Measured on `ME_Portland_West_20240805_TM_geo.pdf` (58.6 MB), 2048 px overview,
 through this page's own script in headless Chrome with the served range path
 (pdf.js 3.11): 6.1–6.4 s → 1.27–1.30 s, byte-identical PNG. A detail crop:
 6.1 s → 1.1 s. A scanned historical sheet with no layers is unchanged (3.0 s
-both ways). These are desktop numbers, not device numbers. The pdf.js 6
-numbers are in the upgrade PR (#619).
+both ways). These are desktop numbers, not device numbers. With pdf.js 6
+(#619, headless Chrome, same sheets as served): 2048 px overview without the
+filter 4.6 s (Beau Lake), 5.4 s (Portland West), 4.2 s (Mount Rainier East);
+with it 0.7 s, 1.3 s and 1.1 s, pixel-identical.
 
 Render time barely depends on the raster width (768 px 1.13 s, 4096 px 1.53 s
 for the sheet above). The cost is per operator (~580k here), not per pixel, so
@@ -441,10 +443,18 @@ that runs before pdf.js on the page and is prepended to the worker:
   without it every Flate image is inflated twice on iOS.
 
 Syntax needs Safari 16.4 / Chrome 94 (class static blocks), which the
-supported range has. The page was rendered end to end in WebKit 16.4 and
-Chromium 112 (Playwright 1.32 builds) as well as current WebKit and Chromium,
-served and inline. `pdfjsPolyfills.test.ts` runs each polyfill in a realm
-where the native method was removed.
+supported range has. The page was rendered end to end in WebKit 16.4
+(Playwright 1.32), Chromium 115 and current WebKit and Chromium, served and
+inline, and on the iOS 27 simulator. `pdfjsPolyfills.test.ts` runs each
+polyfill in a realm where the native method was removed.
+
+**Known gap: Chromium ≤ 112/113.** V8 in those versions aborts the
+worker (renderer crash, in pdf.js' `_simpleFontToUnicode`) on the fonts of
+2024 US Topo sheets; other sheets render. Chromium 115 is fine. Android
+System WebView updates through the Play Store (Android 8/9 get up to 138), so
+this only reaches devices whose WebView never updates, such as the stock
+WebView 113 of the API 34 emulator image. pdf.js 3.11 rendered those sheets
+there.
 
 **JPEG 2000 on iOS.** pdf.js 6's `openjpeg.wasm` uses two relaxed-SIMD
 instructions, which no WKWebView supports (iOS 26.3 simulator: "relaxed simd
