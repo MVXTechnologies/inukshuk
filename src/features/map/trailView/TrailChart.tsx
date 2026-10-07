@@ -1,5 +1,5 @@
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   PanResponder,
   StyleSheet,
@@ -8,7 +8,7 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import { Text } from 'react-native-paper';
-import Svg, { Line, Path, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 
 export interface ChartBand {
   from: number;
@@ -38,9 +38,21 @@ interface Props {
   marks?: readonly { distanceM: number; label: string }[];
   footnote?: string;
   testID?: string;
+  /** Small ticks along the top of the plot (photo spots on the compact chart, #587). */
+  dots?: readonly number[];
+  /**
+   * Thin leader lines from the top of the plot down to the line at these
+   * distances (the photo lane's circles, #587); `strong` ones are the caught photo.
+   */
+  guides?: readonly { distanceM: number; fromX?: number; strong?: boolean }[];
+  /** Drawn between the title row and the plot, as wide as the plot (the photo lane). */
+  above?: ReactNode;
+  /** The plot's width, once laid out. */
+  onWidth?: (width: number) => void;
 }
 
 const PAD_Y = 6;
+const NONE: readonly never[] = [];
 
 /**
  * One chart of the trail view (#511, board C2): a line over the trail's
@@ -64,10 +76,17 @@ export function TrailChart({
   marks = [],
   footnote,
   testID,
+  dots = NONE,
+  guides = NONE,
+  above,
+  onWidth,
 }: Props) {
   const t = useSchemeTokens();
   const [width, setWidth] = useState(0);
-  const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
+  const onLayout = (e: LayoutChangeEvent) => {
+    setWidth(e.nativeEvent.layout.width);
+    onWidth?.(e.nativeEvent.layout.width);
+  };
 
   const { lo, hi } = useMemo(() => {
     let min = Infinity;
@@ -149,6 +168,14 @@ export function TrailChart({
 
   const cx = cursorDistanceM !== null && width > 0 ? xFor(cursorDistanceM) : null;
 
+  // Where each leader line meets the line: the value of the nearest sample.
+  const valueNear = (d: number): number | null => {
+    const n = distances.length;
+    if (n === 0 || totalM <= 0) return null;
+    const i = Math.min(n - 1, Math.max(0, Math.round((d / totalM) * (n - 1))));
+    return values[i] ?? null;
+  };
+
   // Stop labels: right of their line (left of it near the right edge), and a
   // row lower when they would overlap the label before (~5.6 px per glyph).
   const placed: { x0: number; x1: number; row: number }[] = [];
@@ -175,6 +202,7 @@ export function TrailChart({
           {valueText}
         </Text>
       </View>
+      {above}
       <View
         style={{ height: plotHeight }}
         onLayout={onLayout}
@@ -197,6 +225,22 @@ export function TrailChart({
                 opacity={b.opacity}
               />
             ))}
+            {guides.map((g, k) => {
+              const v = valueNear(g.distanceM);
+              const x = xFor(g.distanceM);
+              return (
+                <Line
+                  key={`g${k}`}
+                  x1={g.fromX ?? x}
+                  y1={0}
+                  x2={x}
+                  y2={v === null ? plotHeight : yFor(v)}
+                  stroke={g.strong ? t.ink : t.outline}
+                  strokeWidth={g.strong ? 1.5 : 0.75}
+                  opacity={g.strong ? 0.9 : 0.6}
+                />
+              );
+            })}
             {area && paths.fill !== '' && <Path d={paths.fill} fill={color} opacity={0.18} />}
             {paths.line !== '' && (
               <Path d={paths.line} stroke={color} strokeWidth={2} fill="none" />
@@ -222,6 +266,16 @@ export function TrailChart({
                   {m.label}
                 </SvgText>
               </Fragment>
+            ))}
+            {dots.map((d, k) => (
+              <Circle
+                key={`d${k}`}
+                cx={xFor(d)}
+                cy={3}
+                r={2.5}
+                fill={t.inkVariant}
+                opacity={0.75}
+              />
             ))}
             {cx !== null && (
               <Line x1={cx} y1={0} x2={cx} y2={plotHeight} stroke={t.ink} strokeWidth={2} />

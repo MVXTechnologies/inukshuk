@@ -88,6 +88,7 @@ import { visiblePhotos } from '@core/photos/stack';
 import { photoCountLabel } from '@core/photos/summary';
 import { indexTrack } from '@core/photos/trackIndex';
 import { photosEditable, useTrailPhotos, useTrailPhotosStore } from '@state/trailPhotosStore';
+import { usePhotoFocusStore } from '@state/photoFocusStore';
 import { AddPhotosSheet } from '../photos/AddPhotosSheet';
 import { photoViewerHref } from '../photos/photoUri';
 import { ShareTrailSheet } from '../photos/ShareTrailSheet';
@@ -499,6 +500,33 @@ export function Trail3DGLScreen({ trackId }: Props) {
     },
     [analysis, profilePoints, segmentStarts],
   );
+  // The viewer's "Show on map" (#587): ring the photo and centre the map on it.
+  const applyPhotoFocus = useCallback(() => {
+    const request = usePhotoFocusStore.getState().request;
+    if (!request || request.trackId !== trackId) return;
+    const hit = photosAlong.find((p) => p.photo.id === request.photoId);
+    if (!hit) return;
+    usePhotoFocusStore.getState().consume(trackId);
+    setSelectedPhotoId(hit.photo.id);
+    jumpTo(hit.distanceM);
+  }, [trackId, photosAlong, jumpTo]);
+  useEffect(() => {
+    const timer = setTimeout(applyPhotoFocus, 0);
+    const unsubscribe = usePhotoFocusStore.subscribe(applyPhotoFocus);
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [applyPhotoFocus]);
+  // The Overview strip also lists hidden photos (dimmed), so they can be shown again.
+  const stripPhotosAlong = useMemo(() => {
+    if (!photoIndex || !analysis) return [];
+    const all = combineTrailPhotos(
+      trailPhotos.photos,
+      notePhotosOnTrail(notes, trackId, photoIndex),
+    );
+    return photosOnAxis(all, photoIndex.cumM, analysis.axis.cumM);
+  }, [photoIndex, analysis, trailPhotos.photos, notes, trackId]);
   const onTimelineSelect = (e: TimelineEvent) => jumpTo(e.at.distanceM);
   // A note opened from its map pin or the photo strip: the cursor moves to it
   // and the waypoint card shows it.
@@ -814,7 +842,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
                     onJump={jumpTo}
                     notes={ordered}
                     onOpenNote={openNote}
-                    photos={photosAlong}
+                    photos={stripPhotosAlong}
                     onOpenPhoto={openPhoto}
                     {...(canEditPhotos ? { onAddPhotos: openAddPhotos } : {})}
                     photoNotice={photoNotice}
