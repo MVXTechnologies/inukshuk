@@ -13,6 +13,7 @@ import { MESH_LOOPBACK } from '@data/team';
 import { JOIN_SEARCH_HINT_MS } from '@data/team/teamJoin';
 import { installExtension } from '@features/extensions/actions';
 import { setExtensionPrefs, useExtensionPrefs } from '@features/extensions/prefs';
+import { ensureTeamNotifications } from '@data/team/teamNotifications';
 import { reportError } from '@lib/errorReporting';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { space } from '@ui/tokens';
@@ -88,7 +89,10 @@ export function JoinScreen() {
     const r = await service.confirmJoin();
     useTeamStore.getState().refresh();
     if (typeof r === 'string') Alert.alert('Not joined', 'The team did not admit this phone.');
-    else router.replace('/team');
+    else {
+      void ensureTeamNotifications();
+      router.replace('/team');
+    }
   };
   const mismatch = () =>
     Alert.alert(

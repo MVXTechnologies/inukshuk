@@ -19,6 +19,8 @@ import { teamService, useTeamStore, wireTeamStore } from '@state/teamStore';
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
 import { AppState, Vibration, type AppStateStatus } from 'react-native';
+import { onTeamNotificationTap } from '@data/team/teamNotifications';
+import { useRouter } from 'expo-router';
 
 export function TeamHost() {
   const { installedAt, show } = useExtensionPrefs('team');
@@ -61,6 +63,13 @@ export function TeamHost() {
   useEffect(() => {
     if (foreground) teamService()?.active?.tick();
   }, [foreground]);
+
+  // Tapping a team notification opens what it is about.
+  const router = useRouter();
+  useEffect(() => {
+    if (installedAt === 0) return;
+    return onTeamNotificationTap((url) => router.push(url as never));
+  }, [installedAt, router]);
 
   usePositionSharing(wantMesh, recording, foreground);
   useAlertBuzz();

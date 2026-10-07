@@ -11,7 +11,8 @@ import { teamService, useTeamStore } from '@state/teamStore';
 import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { Button, IconButton, List, Text } from 'react-native-paper';
 
 import { ChoiceRow, Note, SectionLabel, TeamScreenFrame } from './components';
@@ -23,6 +24,9 @@ export function ShareScreen() {
   const t = useSchemeTokens();
   const view = useTeamStore((s) => s.view);
   const shares = useTeamStore((s) => s.shares);
+  const teamPhotos = useTeamStore((s) => s.photos);
+  const router = useRouter();
+  const photoCount = (trackId: string) => teamPhotos.filter((p) => p.trackId === trackId).length;
   const tracks = useLibraryStore((s) => s.tracks);
   const waypoints = useLibraryStore((s) => s.waypoints);
   const [picking, setPicking] = useState<'none' | 'trail' | 'waypoint'>('none');
@@ -52,16 +56,19 @@ export function ShareScreen() {
         for (const [lng, lat] of part) points.push({ latitude: lat, longitude: lng });
       }
       done(
-        session.shareTrack({
-          name: summary.name,
-          points,
-          segmentStarts,
-          distanceM: summary.stats.distanceM,
-          ascentM: summary.stats.ascentM,
-          startedAt: summary.startedAt,
-          ...(summary.endedAt !== undefined ? { endedAt: summary.endedAt } : {}),
-          ...(summary.category !== undefined ? { category: summary.category } : {}),
-        }),
+        session.shareTrack(
+          {
+            name: summary.name,
+            points,
+            segmentStarts,
+            distanceM: summary.stats.distanceM,
+            ascentM: summary.stats.ascentM,
+            startedAt: summary.startedAt,
+            ...(summary.endedAt !== undefined ? { endedAt: summary.endedAt } : {}),
+            ...(summary.category !== undefined ? { category: summary.category } : {}),
+          },
+          summary.id,
+        ),
         'Trail',
       );
     } catch (e) {
@@ -159,14 +166,20 @@ export function ShareScreen() {
       {shares.tracks.map((tr) => (
         <View key={`${tr.owner}:${tr.id}`} style={styles.row}>
           <List.Icon icon="map-marker-path" color={t.ink} />
-          <View style={styles.flex}>
+          <Pressable
+            style={styles.flex}
+            onPress={() => router.push(`/team/trail/${tr.owner}/${tr.id}`)}
+            accessibilityRole="button"
+            testID={`team-shared-trail-${tr.name}`}
+          >
             <Text variant="titleSmall" style={{ color: t.ink }}>
               {tr.name}
             </Text>
             <Text variant="bodySmall" style={{ color: t.inkVariant }}>
               {km(tr.distanceM)} · {nameOf(tr.owner)}
+              {photoCount(tr.id) > 0 ? ` · ${photoCount(tr.id)} photos` : ''}
             </Text>
-          </View>
+          </Pressable>
           {(tr.owner === view.me || view.isAdmin) && !view.readOnly && (
             <IconButton
               icon="delete-outline"

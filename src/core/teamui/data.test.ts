@@ -9,7 +9,15 @@ import {
   T0,
 } from '@core/team/testing/fixtures';
 
-import { alertFor } from './alerts';
+import { alertFor, trailUrl, type AlertContext } from './alerts';
+import {
+  photoComments,
+  photoIndex,
+  teamPhotos,
+  trailComments,
+  trailOwners,
+  trailThread,
+} from './comments';
 import {
   ageBand,
   compassPoint,
@@ -206,6 +214,8 @@ describe('shares', () => {
 });
 
 describe('alerts', () => {
+  const noShares: AlertContext = { photo: () => undefined, trailOwner: () => undefined };
+
   it('alerts on team messages per the core routing, never on sys: threads', () => {
     const { owner, other } = pair();
     const plain = { id: 'a', th: 'team', tx: 'On arrive' };
@@ -215,16 +225,79 @@ describe('alerts', () => {
     const sysBody = { id: 'c', th: SYS_PROFILE, tx: nameText('Julie') };
     const sys = other.write(T0 + MIN, 'msg', sysBody)!;
     exchange(owner, other, T0 + MIN);
-    expect(alertFor(owner.state, op, plain, owner.id)).toMatchObject({
+    expect(alertFor(owner.state, op, plain, owner.id, noShares)).toMatchObject({
       level: 'badge',
+      kind: 'message',
       text: 'On arrive',
+      url: '/team/chat',
     });
-    expect(alertFor(owner.state, urgent, urgentBody, owner.id)).toMatchObject({
+    expect(alertFor(owner.state, urgent, urgentBody, owner.id, noShares)).toMatchObject({
       level: 'alert',
       priority: 2,
     });
-    expect(alertFor(owner.state, sys, sysBody, owner.id)).toBeNull();
-    expect(alertFor(owner.state, op, plain, other.id)).toBeNull(); // my own
-    expect(alertFor(owner.state, op, undefined, owner.id)).toBeNull();
+    expect(alertFor(owner.state, sys, sysBody, owner.id, noShares)).toBeNull();
+    expect(alertFor(owner.state, op, plain, other.id, noShares)).toBeNull(); // my own
+    expect(alertFor(owner.state, op, undefined, owner.id, noShares)).toBeNull();
+  });
+
+  it('alerts the owner of a shared photo or trail on a comment, with a link to it', () => {
+    const { owner, other } = pair();
+    owner.write(T0 + MIN, 'e.set', {
+      k: 'photo',
+      id: 'ph1',
+      f: { trackId: 'tr1', lngLat: [-71.2, 46.8], takenAt: T0, tb: 'AAAA' },
+    });
+    owner.write(T0 + MIN, 'e.set', {
+      k: 'track',
+      id: 'tr1',
+      f: trackFields({
+        name: 'Mont Wright',
+        points: [
+          { latitude: 46.8, longitude: -71.2 },
+          { latitude: 46.81, longitude: -71.21 },
+        ],
+        distanceM: 1500,
+        ascentM: 120,
+        startedAt: T0,
+      })!,
+    });
+    exchange(owner, other, T0 + 2 * MIN);
+    const cBody = {
+      k: 'comment',
+      id: 'c1',
+      f: { photoId: 'ph1', text: 'Superbe vue au sommet !' },
+    };
+    const c = other.write(T0 + 3 * MIN, 'e.set', cBody)!;
+    const tBody = { id: 't1', th: trailThread('tr1'), tx: 'Belle boucle' };
+    const t = other.write(T0 + 3 * MIN, 'msg', tBody)!;
+    exchange(owner, other, T0 + 3 * MIN);
+    const data = owner.data(T0 + 3 * MIN);
+    const photos = photoIndex(data);
+    const owners = trailOwners(data);
+    const ctx: AlertContext = { photo: (id) => photos.get(id), trailOwner: (id) => owners.get(id) };
+    expect(alertFor(owner.state, c, cBody, owner.id, ctx)).toMatchObject({
+      level: 'alert',
+      kind: 'comment',
+      text: 'Superbe vue au sommet !',
+      url: '/photo/tr1/ph1',
+    });
+    expect(alertFor(owner.state, t, tBody, owner.id, ctx)).toMatchObject({
+      level: 'alert',
+      kind: 'comment',
+      url: '/trail3d/tr1',
+    });
+    // Seen from a third member's view, the link goes to the team's trail screen.
+    expect(trailUrl(owner.id, 'tr1', 'someone', 'ph1')).toBe(
+      `/team/trail/${owner.id}/tr1?photo=ph1`,
+    );
+    // The pure readers.
+    expect(teamPhotos(data).map((p) => [p.id, p.thumbUri])).toEqual([
+      ['ph1', 'data:image/jpeg;base64,AAAA'],
+    ]);
+    expect(trailComments(data, 'tr1', new Set(['ph1'])).map((x) => [x.text, x.photoId])).toEqual([
+      ['Superbe vue au sommet !', 'ph1'],
+      ['Belle boucle', null],
+    ]);
+    expect(photoComments(data, 'ph1').map((x) => x.author)).toEqual([other.id]);
   });
 });

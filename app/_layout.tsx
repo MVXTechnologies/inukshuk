@@ -164,6 +164,7 @@ export default function RootLayout() {
                   <Stack.Screen name="team/share" />
                   <Stack.Screen name="team/teams" />
                   <Stack.Screen name="team/member/[id]" />
+                  <Stack.Screen name="team/trail/[owner]/[id]" />
                 </Stack>
                 <ImportFeedbackSnackbar />
                 <PdfRecoverySnackbar />

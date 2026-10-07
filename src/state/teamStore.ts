@@ -5,10 +5,12 @@
  * (`teamActions()`); nothing here holds protocol state of its own.
  */
 import type { TeamAlert } from '@core/teamui/alerts';
+import type { TeamPhoto } from '@core/teamui/comments';
 import type { TeammatePosition } from '@core/teamui/positions';
 import type { TeamShares } from '@core/teamui/shares';
 import type { TeamView } from '@core/teamui/view';
 import { appTeamService } from '@data/team/appTeam';
+import { notifyTeam } from '@data/team/teamNotifications';
 import type { MeshLinkStatus } from '@data/team/meshLink';
 import type { TeamRecord } from '@data/team/teamDisk';
 import type { JoinState } from '@data/team/teamJoin';
@@ -33,6 +35,10 @@ export interface TeamSnapshot {
   unread: number;
   positions: TeammatePosition[];
   shares: TeamShares;
+  /** Shared trail photos (thumbnails), all trails. */
+  photos: TeamPhoto[];
+  /** Changes whenever team data changes (screens reading the session directly). */
+  dataVersion: string;
   peers: PeerStatus[];
   mesh: MeshLinkStatus | null;
   meshRunning: boolean;
@@ -64,6 +70,8 @@ function snapshot(service: TeamService | null): Omit<TeamSnapshot, 'banner'> {
     unread: s?.unread() ?? 0,
     positions: s?.positions() ?? [],
     shares: s?.shares() ?? EMPTY_SHARES,
+    photos: s?.photos() ?? [],
+    dataVersion: s?.dataVersion ?? '',
     peers: s?.peers() ?? [],
     mesh: s?.meshStatus() ?? null,
     meshRunning: s?.meshRunning ?? false,
@@ -101,14 +109,22 @@ export function wireTeamStore(): TeamService | null {
   const offAlert = service.onAlert((alert) => {
     const view = service.active?.view();
     const author = view?.members.find((m) => m.id === alert.author);
-    useTeamStore.setState({
-      banner: {
-        ...alert,
-        teamName: view?.name ?? 'Team',
-        authorName: author?.name ?? 'A teammate',
-        at: Date.now(),
-      },
-    });
+    const authorName = author?.name ?? 'A teammate';
+    const teamName = view?.name ?? 'Team';
+    useTeamStore.setState({ banner: { ...alert, teamName, authorName, at: Date.now() } });
+    // The phone's own notification for what is addressed to me (`alert`).
+    if (alert.level === 'alert') {
+      void notifyTeam({
+        title:
+          alert.kind === 'comment'
+            ? `${authorName} commented · ${teamName}`
+            : alert.priority === 2
+              ? `Urgent · ${authorName} · ${teamName}`
+              : `${authorName} · ${teamName}`,
+        body: alert.text,
+        url: alert.url,
+      });
+    }
   });
   unwire = () => {
     offChange();

@@ -11,6 +11,7 @@ import {
 } from '@core/teamui/lifetime';
 import { cleanName } from '@core/teamui/system';
 import { setExtensionPrefs, useExtensionPrefs } from '@features/extensions/prefs';
+import { ensureTeamNotifications } from '@data/team/teamNotifications';
 import { reportError } from '@lib/errorReporting';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -41,6 +42,7 @@ export function CreateTeamScreen() {
     try {
       await service.createTeam({ name, myName, lifetimeMs: lifetimeMs(lifetime) });
       if (!show) setExtensionPrefs('team', { show: true });
+      void ensureTeamNotifications();
       useTeamStore.getState().refresh();
       router.replace('/team');
     } catch (e) {

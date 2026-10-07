@@ -17,6 +17,16 @@ import { TeamReplica } from '@core/team/replica';
 import type { Audience, GroupLink, Priority, Role } from '@core/team/roles';
 import { SyncSession, type SessionEvent } from '@core/team/sync';
 import { alertFor, type TeamAlert } from '@core/teamui/alerts';
+import {
+  photoComments,
+  photoIndex,
+  teamPhotos,
+  trailComments,
+  trailOwners,
+  trailThread,
+  type TeamComment,
+  type TeamPhoto,
+} from '@core/teamui/comments';
 import { extendedExpiry } from '@core/teamui/lifetime';
 import { inviteExpiresAt, ipv4Tuple, type InviteChoice } from '@core/teamui/invites';
 import { teammatePositions, type TeammatePosition } from '@core/teamui/positions';
@@ -210,6 +220,35 @@ export class TeamSession {
     return this.sharesCache.shares;
   }
 
+  private photosCache: { key: string; photos: TeamPhoto[] } | null = null;
+
+  /** Every shared trail photo (stable identity while no data op arrived). */
+  photos(): TeamPhoto[] {
+    const data = this.replica.data(this.deps.now());
+    const key = `${this.replica.state.data.length}:${this.replica.fullFolds}`;
+    if (this.photosCache?.key !== key) this.photosCache = { key, photos: teamPhotos(data) };
+    return this.photosCache.photos;
+  }
+
+  /** A shared trail's comments: its own thread and its photos'. */
+  trailComments(trackId: string): TeamComment[] {
+    const ids = new Set(
+      this.photos()
+        .filter((p) => p.trackId === trackId)
+        .map((p) => p.id),
+    );
+    return trailComments(this.replica.data(this.deps.now()), trackId, ids);
+  }
+
+  photoComments(photoId: string): TeamComment[] {
+    return photoComments(this.replica.data(this.deps.now()), photoId);
+  }
+
+  /** A data counter for screens that read the session directly (changes on every stored op). */
+  get dataVersion(): string {
+    return `${this.replica.state.data.length}:${this.replica.fullFolds}`;
+  }
+
   positions(): TeammatePosition[] {
     const now = this.deps.now();
     return teammatePositions(this.replica.data(now).positions, this.view().members, now);
@@ -394,9 +433,16 @@ export class TeamSession {
     if (ops.length === 0) return;
     this.dirty = true;
     this.gossip(ops, from);
-    if (from !== null) {
+    if (from !== null && ops.some((op) => op.env.t === 'msg' || op.env.t === 'e.set')) {
+      const data = this.replica.data(this.deps.now());
+      const photos = photoIndex(data);
+      const owners = trailOwners(data);
+      const ctx = {
+        photo: (id: string) => photos.get(id),
+        trailOwner: (id: string) => owners.get(id),
+      };
       for (const op of ops) {
-        const alert = alertFor(this.replica.state, op, this.replica.decode(op), this.me);
+        const alert = alertFor(this.replica.state, op, this.replica.decode(op), this.me, ctx);
         if (alert) this.deps.onAlert(alert);
       }
     }
@@ -556,15 +602,14 @@ export class TeamSession {
     return op === undefined ? 'rotation-pending' : null;
   }
 
-  shareTrack(t: ShareableTrack): ActionError | null {
+  /** Share a recorded trail; `id` = its Library id, so a re-share updates the same record. */
+  shareTrack(t: ShareableTrack, id: string = this.deps.newId()): ActionError | null {
     const blocked = this.guardWrite();
     if (blocked) return blocked;
     if (!this.canEditShared()) return 'not-allowed';
     const f = trackFields(t);
     if (f === null) return 'too-large';
-    const op = this.run(() =>
-      this.replica.write(this.deps.now(), 'e.set', { k: 'track', id: this.deps.newId(), f }),
-    );
+    const op = this.run(() => this.replica.write(this.deps.now(), 'e.set', { k: 'track', id, f }));
     return op === undefined ? 'rotation-pending' : null;
   }
 
@@ -573,6 +618,43 @@ export class TeamSession {
     if (blocked) return blocked;
     const op = this.run(() =>
       this.replica.write(this.deps.now(), 'e.del', { k: 'track', id, o: owner }),
+    );
+    return op === undefined ? 'rotation-pending' : null;
+  }
+
+  /** Comment on a whole shared trail (a message on its `trail:` thread; guests too). */
+  commentOnTrail(trackId: string, text: string, mentions: string[] = []): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const tx = text.trim();
+    if (tx.length === 0 || tx.length > 4000) return 'invalid';
+    const body: Record<string, Json> = { id: this.deps.newId(), th: trailThread(trackId), tx };
+    if (mentions.length > 0) body['mn'] = mentions;
+    return this.writeMsg(body);
+  }
+
+  /** Comment on a shared photo (the core's owned `comment` entity, `PhotoComment`). */
+  commentOnPhoto(photoId: string, text: string, mentions: string[] = []): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    if (!this.canEditShared()) return 'not-allowed';
+    const tx = text.trim();
+    if (tx.length === 0 || tx.length > 4000) return 'invalid';
+    const f: Record<string, Json> = { photoId, text: tx };
+    if (mentions.length > 0) f['mentions'] = mentions;
+    const op = this.run(() =>
+      this.replica.write(this.deps.now(), 'e.set', { k: 'comment', id: this.deps.newId(), f }),
+    );
+    return op === undefined ? 'rotation-pending' : null;
+  }
+
+  /** Raw entity write for shares built elsewhere (trail photos and their thumbnails). */
+  writeEntity(kind: 'photo', id: string, fields: Record<string, Json>): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    if (!this.canEditShared()) return 'not-allowed';
+    const op = this.run(() =>
+      this.replica.write(this.deps.now(), 'e.set', { k: kind, id, f: fields }),
     );
     return op === undefined ? 'rotation-pending' : null;
   }

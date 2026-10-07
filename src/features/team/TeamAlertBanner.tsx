@@ -1,9 +1,10 @@
 /**
- * The in-app banner for a teammate's message routed to me as `alert` or
- * `badge` (#589): over every screen, at the top, for a few seconds. A plain
+ * The in-app banner for a teammate's message or comment routed to me as
+ * `alert` or `badge` (#589): over every screen, above the tab bar (the system
+ * notification takes the top), for a few seconds. A plain
  * absolutely positioned View with its own JS timer — never a Paper Portal or
  * Snackbar on this spontaneous path (paper-portal-touch-swallow,
- * paper-snackbar-sticks-on-samsung). Tapping it opens the chat.
+ * paper-snackbar-sticks-on-samsung). Tapping it opens what it is about (the chat, the trail, the photo).
  *
  * `badge` messages show only when they are urgent enough to interrupt
  * (important or from an admin); plain chatter just counts as unread.
@@ -34,15 +35,18 @@ export function TeamAlertBanner() {
   }, [banner, dismiss]);
 
   const show =
-    banner !== null && (banner.level === 'alert' || banner.priority > 0) && path !== '/team/chat';
+    banner !== null &&
+    (banner.level === 'alert' || banner.priority > 0) &&
+    path !== '/team/chat' &&
+    !path.startsWith('/team/trail');
   if (!show || banner === null) return null;
   const urgent = banner.priority === 2;
   return (
-    <View style={[styles.wrap, { top: insets.top + 8 }]} pointerEvents="box-none">
+    <View style={[styles.wrap, { bottom: insets.bottom + 76 }]} pointerEvents="box-none">
       <Pressable
         onPress={() => {
           dismiss();
-          router.push('/team/chat');
+          router.push(banner.url as never);
         }}
         style={[
           styles.banner,
@@ -64,7 +68,9 @@ export function TeamAlertBanner() {
         <View style={styles.flex}>
           <Text variant="labelLarge" style={{ color: t.ink }} numberOfLines={1}>
             {urgent ? 'URGENT · ' : ''}
-            {banner.authorName} · {banner.teamName}
+            {banner.kind === 'comment'
+              ? `${banner.authorName} commented`
+              : banner.authorName} · {banner.teamName}
           </Text>
           <Text variant="bodyMedium" style={{ color: t.ink }} numberOfLines={2}>
             {banner.text}
