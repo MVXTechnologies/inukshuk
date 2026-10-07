@@ -1,4 +1,5 @@
 import { bytesToBase64 } from '@core/encoding/base64';
+import { asciiToBytes } from '@core/gnss/bytes';
 import type { GnssConnectOptions } from '@lib/gnss/nativeGnss';
 
 import { FAKE_RECEIVER_FRAMES, FAKE_RECEIVER_INTERVAL_MS } from './fakeReceiverRecording';
@@ -19,11 +20,7 @@ import { FAKE_RECEIVER_FRAMES, FAKE_RECEIVER_INTERVAL_MS } from './fakeReceiverR
 /** Must match FAKE_DEVICE_ID in GnssSession.kt / GnssLink.swift. */
 export const FAKE_RECEIVER_ID = 'inukshuk-fake-receiver';
 
-function asciiBase64(text: string): string {
-  const bytes = new Uint8Array(text.length);
-  for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i) & 0xff;
-  return bytesToBase64(bytes);
-}
+const asciiBase64 = (text: string) => bytesToBase64(asciiToBytes(text));
 
 let frames: string[] | null = null;
 

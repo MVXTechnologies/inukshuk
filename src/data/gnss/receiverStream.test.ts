@@ -1,4 +1,5 @@
 import { bytesToBase64 } from '@core/encoding/base64';
+import { GnssDemuxer, type StreamEvent } from '@core/gnss/stream';
 import { reportError } from '@lib/errorReporting';
 import type { GnssEvents, GnssLinkState, NativeGnssModule } from '@lib/gnss/nativeGnss';
 
@@ -254,5 +255,19 @@ describe('simulated receiver', () => {
       if (/^..GGA/.test(body)) quality.add(body.split(',')[6] ?? '');
     }
     expect([...quality].sort()).toEqual(['2', '4']);
+  });
+
+  it('feeds the real @core/gnss demuxer: every recorded sentence parses', () => {
+    const m = mockNative({ state: 'connected', deviceId: FAKE_RECEIVER_ID });
+    const events: StreamEvent[] = [];
+    const stream = startReceiverStream(m.native, new GnssDemuxer(), {
+      onFrames: (f) => events.push(...f),
+    });
+    for (const f of fakeReceiverConnectOptions().fake?.frames ?? []) {
+      m.emit('onBytes', bytesEvent(f, { deviceId: FAKE_RECEIVER_ID }));
+    }
+    const sentences = FAKE_RECEIVER_FRAMES.join('').split('\r\n').filter(Boolean).length;
+    expect(events.filter((e) => e.kind === 'nmea')).toHaveLength(sentences);
+    expect(stream.stats.corruptChunks).toBe(0);
   });
 });
