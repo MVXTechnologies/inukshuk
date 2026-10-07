@@ -279,6 +279,7 @@ export function evaluate(req: ConvertRequest, env: EvalEnv): Evaluation {
     env.engine.kind === 'native' ? measureEpochShift(plan, pt, env, paths) : undefined;
   const panel = buildPanel(plan, {
     inputPrecisionM: parsed.precisionM,
+    ...(req.approxPosition ? { approxSource: req.approxPosition } : {}),
     available: (f) => BUNDLED_GRIDS.includes(f) || !!paths[f],
     ...(epochShiftM !== undefined ? { epochShiftM } : {}),
   });

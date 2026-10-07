@@ -12,6 +12,8 @@ import {
   systemOfGrid,
   toParams,
 } from './prefill';
+import { coordSystem, FRAMES } from './systems';
+import type { FrameId } from './types';
 
 const di = (key: string) => GEODETIC_CATALOG.datums.findIndex((d) => d.key === key);
 const vi = (name: string) => GEODETIC_CATALOG.vdatums.findIndex((v) => v.name === name);
@@ -109,6 +111,18 @@ describe('datum and grid mapping', () => {
     expect(systemOfGrid('osgb36', 'British National Grid')).toBe('osgb36:bng');
     expect(systemOfGrid('amersfoort', 'RD')).toBe('amersfoort:rd');
     expect(systemOfGrid('csrs', 'SPC WA N-4601')).toBeNull();
+    // MRNF's open-data layer, old and new tile labels (field report 2.3.0).
+    expect(systemOfGrid('csrs', 'Québec Lambert (approximate)')).toBe('csrs:qclambert');
+    expect(systemOfGrid('csrs', 'Québec Lambert (bulk layer, ±2 m)')).toBe('csrs:qclambert');
+    expect(systemOfGrid('nad27-qc', 'Québec Lambert (approximate)')).toBeNull();
+    // A lettered 10 m square is not a BNG easting/northing.
+    expect(systemOfGrid('osgb36', 'British National Grid TQ (10 m)')).toBeNull();
+  });
+  it('every frame’s default target is a system Convert knows', () => {
+    for (const f of Object.keys(FRAMES) as FrameId[]) {
+      const t = defaultTarget(f, 5, 50);
+      expect([f, coordSystem(t.to)?.id]).toEqual([f, t.to]);
+    }
   });
   it('splits published geographic text', () => {
     expect(splitGeo('43 57 56.12345 (N), 073 07 00.12345 (W)')).toEqual([
@@ -231,6 +245,16 @@ describe('route params / deep link', () => {
     expect(r?.near).toEqual({ lon: -71.23, lat: 46.85 });
     expect(fromParams({ from: 'nope' })).toBeNull();
     expect(fromParams({ from: ['wgs84:geo'], a: '1', b: '2' })?.spec.to).toBe('same');
+  });
+  it('carries an approximate source position; junk never makes it more precise', () => {
+    const base = { from: 'csrs:qclambert', a: '-208379.906', b: '317906.512' };
+    expect(fromParams({ ...base, pacc: '2', pwhy: 'Approx' })?.approxPosition).toEqual({
+      accM: 2,
+      why: 'Approx',
+    });
+    expect(fromParams({ ...base, pacc: '2' })?.approxPosition?.why).toMatch(/approximate/);
+    for (const pacc of ['0', '-1', 'abc', ''])
+      expect(fromParams({ ...base, pacc })?.approxPosition).toBeUndefined();
   });
   it('opens a map point as WGS 84', () => {
     expect(prefillFromPoint(46.851168, -71.238585).spec).toEqual({

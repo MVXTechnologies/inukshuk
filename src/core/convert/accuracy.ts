@@ -92,6 +92,11 @@ export interface PanelInput {
   available: (file: string) => boolean;
   /** Horizontal displacement the velocity grid applied, metres (TRAP 7 rule). */
   epochShiftM?: number;
+  /**
+   * The source position is approximate by the agency's own account (a
+   * levelling benchmark, a 10 m grid square): metres, and why, in words.
+   */
+  approxSource?: { accM: number; why: string };
   /** Heights given by a station offset, for the label. */
   epochIn?: number;
   epochOut?: number;
@@ -137,7 +142,27 @@ export function buildPanel(plan: Plan, input: PanelInput): AccuracyPanel {
     });
   }
 
-  if (input.inputPrecisionM !== null && input.inputPrecisionM > INPUT_AMBER_M) {
+  const approx = input.approxSource;
+  if (approx) {
+    // More decimals can't fix this one: say why, and what it does and doesn't touch.
+    if (approx.accM > INPUT_AMBER_M) amber = true;
+    const heights =
+      approx.accM <= 10
+        ? 'Heights are hardly affected: the height models change by millimetres at most over that distance.'
+        : 'Converted heights may be off by a centimetre or more.';
+    lines.push({
+      icon: approx.accM > INPUT_AMBER_M ? 'warn' : 'info',
+      lead: 'Approximate position:',
+      text: `${approx.why} (${formatAccuracy(approx.accM)}), so the converted position is too. ${heights}`,
+    });
+    copy.push(`Source position: approximate, ${formatAccuracy(approx.accM)} (${approx.why})`);
+  }
+
+  if (
+    input.inputPrecisionM !== null &&
+    input.inputPrecisionM > INPUT_AMBER_M &&
+    !(approx && approx.accM >= input.inputPrecisionM)
+  ) {
     amber = true;
     lines.push({
       icon: 'warn',

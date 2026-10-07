@@ -376,6 +376,11 @@ describe('refusals (TRAPs from the validation study)', () => {
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.refusal.code).toBe('unvalidated-pair');
+    // …and says why in plain words, pointing at the precise frame that exists.
+    if (!r.ok)
+      expect(r.refusal.message).toBe(
+        'No validated conversion between NAD83(CSRS) and WGS 84: WGS 84 is only defined to about ±2 m. For GNSS-grade work pick ITRF2020 at the observation epoch',
+      );
   });
 
   it('TRAP 2: CSRS → CGVD2013 never routes through ITRF2008', () => {
