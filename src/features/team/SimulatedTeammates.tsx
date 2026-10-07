@@ -33,6 +33,18 @@ export function SimulatedTeammates() {
     }
     setBusy(false);
   };
+  const addAlex = async () => {
+    const session = teamService()?.active;
+    if (!session) return;
+    setBusy(true);
+    const inv = session.createInvite(DEFAULT_INVITE);
+    if (typeof inv !== 'string') {
+      await addSimulatedTeammate(inv, 'Alex (Guide)', center(), {
+        photoComment: 'Superbe vue au sommet ! On repart à 14 h?',
+      });
+    }
+    setBusy(false);
+  };
   return (
     <View style={[styles.box, { borderColor: t.outlineVariant }]}>
       <Text variant="labelSmall" style={{ color: t.inkMuted }}>
@@ -40,6 +52,9 @@ export function SimulatedTeammates() {
       </Text>
       <Button mode="outlined" onPress={() => void add()} loading={busy} testID="team-sim-add">
         Add a simulated teammate
+      </Button>
+      <Button mode="outlined" onPress={() => void addAlex()} loading={busy} testID="team-sim-alex">
+        Add Alex (Guide) · comments on shared photos
       </Button>
     </View>
   );

@@ -17,6 +17,7 @@ import { Button, IconButton, List, Text } from 'react-native-paper';
 
 import { ChoiceRow, Note, SectionLabel, TeamScreenFrame } from './components';
 import { actionMessage } from './messages';
+import { shareTrailPhotos } from './shareTrailPhotos';
 
 const km = (m: number) => (m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`);
 
@@ -55,22 +56,26 @@ export function ShareScreen() {
         if (points.length > 0) segmentStarts.push(points.length);
         for (const [lng, lat] of part) points.push({ latitude: lat, longitude: lng });
       }
-      done(
-        session.shareTrack(
-          {
-            name: summary.name,
-            points,
-            segmentStarts,
-            distanceM: summary.stats.distanceM,
-            ascentM: summary.stats.ascentM,
-            startedAt: summary.startedAt,
-            ...(summary.endedAt !== undefined ? { endedAt: summary.endedAt } : {}),
-            ...(summary.category !== undefined ? { category: summary.category } : {}),
-          },
-          summary.id,
-        ),
-        'Trail',
+      const trackErr = session.shareTrack(
+        {
+          name: summary.name,
+          points,
+          segmentStarts,
+          distanceM: summary.stats.distanceM,
+          ascentM: summary.stats.ascentM,
+          startedAt: summary.startedAt,
+          ...(summary.endedAt !== undefined ? { endedAt: summary.endedAt } : {}),
+          ...(summary.category !== undefined ? { category: summary.category } : {}),
+        },
+        summary.id,
       );
+      if (trackErr) {
+        done(trackErr, 'Trail');
+        return;
+      }
+      // Its photos go with it (previews; full size stays on this phone).
+      const { shared, error } = await shareTrailPhotos(session, summary.id);
+      done(error, shared > 0 ? `Trail and ${shared} photos` : 'Trail');
     } catch (e) {
       reportError(e, 'team-share-trail');
       Alert.alert('Not shared', (e as Error).message);
@@ -190,8 +195,8 @@ export function ShareScreen() {
         </View>
       ))}
       <Note>
-        Shared waypoints and trails show on every member’s map while Team mode is on. Photos stay on
-        your phone in this version.
+        Shared waypoints and trails show on every member’s map while Team mode is on. A trail’s
+        photos go with it as previews; full-size copies stay on your phone.
       </Note>
       {!canShare && view.myRole === 'guest' && (
         <Button disabled mode="text">

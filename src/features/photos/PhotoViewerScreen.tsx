@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { shareablePhotoUri, UnshareablePhotoError, type ShareablePhoto } from './sharePhoto';
 import { StatusBar } from 'expo-status-bar';
+import { PhotoTeamComments } from '@features/team/PhotoTeamComments';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
@@ -348,6 +349,8 @@ export function PhotoViewerScreen({ trackId, photoId }: { trackId: string; photo
               {notice}
             </Text>
           )}
+          {/* Team mode (#589): the team's comments when this photo is shared. */}
+          <PhotoTeamComments photoId={photo.id} />
 
           <ScrollView
             ref={strip}

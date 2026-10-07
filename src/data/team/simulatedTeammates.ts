@@ -74,6 +74,7 @@ export async function addSimulatedTeammate(
   invite: CreatedInvite | string,
   name: string,
   center: { latitude: number; longitude: number },
+  script?: { photoComment: string },
 ): Promise<boolean> {
   const token = typeof invite === 'string' ? parseAnyInvite(invite) : invite.token;
   if (token === undefined) return false;
@@ -86,7 +87,27 @@ export async function addSimulatedTeammate(
   await until(() => session.view().members.length > 1, 5_000);
   session.sendMessage(`Bonjour, ici ${name}`);
   walk(bot, center, bots.length);
+  if (script) commentOnFirstSharedTrail(bot, script.photoComment);
   return true;
+}
+
+/**
+ * The scripted guide: once a teammate's trail arrives with its photos, wait a
+ * few seconds (looking at them…) and comment on the summit photo (its caption
+ * says so), else the middle one.
+ */
+function commentOnFirstSharedTrail(bot: Bot, text: string): void {
+  const session = bot.service.active;
+  if (session === null) return;
+  const timer = setInterval(() => {
+    const theirs = session.photos().filter((p) => p.owner !== session.me && p.thumbUri !== null);
+    if (theirs.length === 0) return;
+    clearInterval(timer);
+    const pick =
+      theirs.find((p) => /sommet|summit/i.test(p.caption ?? '')) ??
+      theirs[Math.floor(theirs.length / 2)]!;
+    setTimeout(() => session.commentOnPhoto(pick.id, text), 6_000);
+  }, 1_000);
 }
 
 /**
