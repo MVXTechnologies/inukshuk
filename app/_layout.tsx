@@ -172,9 +172,13 @@ export default function RootLayout() {
                 <PdfPrerenderWorker />
                 <PhotoResizeHost />
                 <MapReparseWorker />
+                {/* Before StravaPushPrompt, on purpose: both subscribe to the
+                    recorder's lastSavedTrackId, and the Strava prompt consumes
+                    it synchronously inside its listener — a listener registered
+                    after it then only ever sees null (device QA, #587). */}
+                <AddPhotosAfterSavePrompt />
                 <StravaPushPrompt />
                 <GnssHost />
-                <AddPhotosAfterSavePrompt />
               </PdfRasterizerProvider>
             </ErrorBoundary>
           </PaperProvider>
