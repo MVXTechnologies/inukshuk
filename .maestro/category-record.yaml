@@ -94,6 +94,7 @@ appId: com.inukshuk.app
     when:
       visible: 'Continue to recording'
     commands:
+      - takeScreenshot: review-recording-check-preflight
       - tapOn: 'Continue to recording'
 # Background-permission rationale card on first record: decline (inline card).
 # Skipped entirely when background location is already granted.

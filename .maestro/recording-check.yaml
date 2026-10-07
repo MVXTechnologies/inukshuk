@@ -67,6 +67,32 @@ appId: com.inukshuk.app
           element: 'Let GPS run with the screen off.*'
           direction: DOWN
           timeout: 10000
+# Review screenshot (light). Files named review-*.png are uploaded by e2e.yml
+# so a PR can show the panel without a local device.
+- takeScreenshot: review-recording-check-light
 - tapOn: 'Close recording check'
 - assertNotVisible: 'Precise location on.*'
 - assertVisible: 'App settings.*'
+# Same panel in the dark theme (the owner's phone runs dark mode), then back
+# to System so later flows see the default look.
+- scrollUntilVisible:
+    element:
+      text: 'Theme.*'
+    direction: DOWN
+- tapOn: 'Dark'
+- scrollUntilVisible:
+    element:
+      text: 'Recording check.*'
+    direction: UP
+- tapOn: 'Recording check.*'
+- extendedWaitUntil:
+    visible: 'Location allowed.*'
+    timeout: 10000
+- takeScreenshot: review-recording-check-dark
+- tapOn: 'Close recording check'
+- scrollUntilVisible:
+    element:
+      text: 'Theme.*'
+    direction: DOWN
+- tapOn: 'System'
+- assertVisible: 'Theme.*'
