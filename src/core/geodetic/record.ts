@@ -60,7 +60,11 @@ export interface GeodeticMark {
   monumentCode?: string;
   monumentText?: string;
   lastVisit?: string;
-  /** Metres our displayed position may be off (bulk layers, scaled benchmarks). */
+  /**
+   * Metres the agency's own position for this mark may be off (an
+   * approximately positioned levelling benchmark, a scaled position, a grid
+   * square): our map dot, and anything converted from it, can't be better.
+   */
   posAccM?: number;
   /** A per-mark page (OSM `website`/`url`). */
   url?: string;
@@ -86,10 +90,21 @@ function published(v: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * Grid labels older tile builds wrote in build jargon → what the card shows.
+ * MRNF's open-data layer: every levelling benchmark there (and every mark
+ * whose datasheet has no NAD83(CSRS) coordinates) is only approximately
+ * positioned, so the layer as a whole is labelled approximate (qc.py).
+ */
+const GRID_LABELS: Readonly<Record<string, string>> = {
+  'Québec Lambert (bulk layer, ±2 m)': 'Québec Lambert (approximate)',
+};
+
 function grid(v: unknown): MarkGrid | null {
   if (typeof v !== 'string') return null;
-  const [system, e, n] = v.split(';');
-  return system && e && n ? { system, e, n } : null;
+  const [label, e, n] = v.split(';');
+  if (!label || !e || !n) return null;
+  return { system: GRID_LABELS[label] ?? label, e, n };
 }
 
 function str(v: unknown): string | undefined {

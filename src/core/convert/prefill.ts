@@ -8,9 +8,9 @@
  * position for a published coordinate.
  */
 import { datumAt, vdatumAt } from '@core/geodetic/catalog';
-import type { GeodeticMark } from '@core/geodetic/record';
+import type { GeodeticMark, MarkGrid } from '@core/geodetic/record';
 import { parseAngle } from './format';
-import type { CdStation, StationDatum } from './graph';
+import { ellipsoidalHeightOn, type CdStation, type StationDatum } from './graph';
 import { inBox, inRegion, BOX } from './regions';
 import { coordSystem } from './systems';
 import type { ConvertSpec, FrameId } from './types';
@@ -37,6 +37,13 @@ export interface ConvertRequest {
   near: { lon: number; lat: number };
   /** A reason the source couldn't be prefilled (unsupported datum…). */
   notice?: string;
+  /**
+   * The source position is only approximate (a benchmark the agency never
+   * positioned precisely, a 10 m grid square): the result can't be better
+   * than this, whatever digits the fields carry. Dropped as soon as the
+   * coordinates are edited.
+   */
+  approxPosition?: { accM: number; why: string };
 }
 
 const VDATUM_TO_HEIGHT: Record<string, string> = {
@@ -107,11 +114,59 @@ export function systemOfGrid(frame: FrameId, label: string): string | null {
     const id = `${frame}:utm${utm[1]}${(utm[2] ?? 'N').toLowerCase()}`;
     return coordSystem(id) ? id : null;
   }
+  // MRNF's open-data layer: NAD83(CSRS) / Québec Lambert, EPSG:6622 (its .prj).
+  if (/^Qu[ée]bec Lambert/i.test(label) && frame === 'csrs') return 'csrs:qclambert';
   if (/LV95/i.test(label) && frame === 'ch1903p') return 'ch1903p:lv95';
   if (/Lambert-?93/i.test(label) && frame === 'rgf93v2b') return 'rgf93v2b:l93';
-  if (/British National Grid|OSGB/i.test(label) && frame === 'osgb36') return 'osgb36:bng';
+  // Full-digit BNG only: a lettered 100 km square ref is not an E/N (gridSource).
+  if (/British National Grid|OSGB/i.test(label) && frame === 'osgb36' && !BNG_SQUARE.test(label))
+    return 'osgb36:bng';
   if (/^RD/i.test(label) && frame === 'amersfoort') return 'amersfoort:rd';
   return null;
+}
+
+/** "British National Grid TQ (10 m)": a 100 km square + E/N digits inside it. */
+const BNG_SQUARE = /^British National Grid ([A-HJ-Z]{2}) \((\d+) m\)$/i;
+const BNG_LETTERS = 'ABCDEFGHJKLMNOPQRSTUVWXYZ';
+
+/** A 100 km square's two letters → its south-west corner, metres (OS lettering, no I). */
+export function bngSquareOrigin(letters: string): { e: number; n: number } | null {
+  const up = letters.toUpperCase();
+  if (up.length !== 2) return null;
+  const l1 = BNG_LETTERS.indexOf(up[0] ?? '');
+  const l2 = BNG_LETTERS.indexOf(up[1] ?? '');
+  if (l1 < 0 || l2 < 0) return null;
+  const e = (((l1 + 3) % 5) * 5 + (l2 % 5)) * 100000;
+  const n = (19 - Math.floor(l1 / 5) * 5 - Math.floor(l2 / 5)) * 100000;
+  return e < 700000 && n >= 0 && n < 1300000 ? { e, n } : null;
+}
+
+/**
+ * A published grid coordinate as Convert reads it: the system and the E / N
+ * fields, plus how approximate the position is when the label says so. A
+ * lettered BNG square ref (OS benchmarks: "TQ 3005 8054", 10 m) is written
+ * out in full at the centre of its square — where the map draws it — and is
+ * approximate by the square's half-diagonal. Read as full digits, it put a
+ * London benchmark 600 km away, off the Scilly Isles.
+ */
+export function gridSource(
+  frame: FrameId,
+  g: MarkGrid,
+): { system: string; e: string; n: string; accM?: number } | null {
+  const sq = BNG_SQUARE.exec(g.system);
+  if (sq) {
+    const origin = frame === 'osgb36' ? bngSquareOrigin(sq[1] ?? '') : null;
+    const res = Number(sq[2]);
+    if (!origin || !(res > 0) || !/^\d{1,5}$/.test(g.e) || !/^\d{1,5}$/.test(g.n)) return null;
+    return {
+      system: 'osgb36:bng',
+      e: String(origin.e + Number(g.e) * res + res / 2),
+      n: String(origin.n + Number(g.n) * res + res / 2),
+      accM: Math.round((res / 2) * Math.SQRT2 * 10) / 10,
+    };
+  }
+  const system = systemOfGrid(frame, g.system);
+  return system ? { system, e: g.e, n: g.n } : null;
 }
 
 /** "lat, lon" published text → the two halves, or null. */
@@ -159,10 +214,23 @@ export function defaultTarget(
       return { to: `euref89-no:utm${Math.min(35, Math.max(32, utmZone))}n`, toHeight: 'nn2000' };
     case 'etrs89-nl':
       return { to: 'amersfoort:rd', toHeight: 'nap' };
-    default:
-      return { to: `${frame}:geo`, toHeight: null };
+    default: {
+      // A classical frame (no ellipsoidal heights, often no geographic
+      // system of its own): its GNSS-era counterpart, where h exists.
+      const modern = MODERN_FRAME[frame];
+      if (modern) return { to: `${modern}:geo`, toHeight: 'ell' };
+      return { to: coordSystem(`${frame}:geo`) ? `${frame}:geo` : 'wgs84:geo', toHeight: null };
+    }
   }
 }
+
+/** A classical frame → the modern one its agency publishes GNSS (h) values in. */
+const MODERN_FRAME: Partial<Record<FrameId, FrameId>> = {
+  osgb36: 'etrs89-uk',
+  ch1903p: 'etrs89-ch',
+  amersfoort: 'etrs89-nl',
+  'nad83-1986-us': 'nad83-2011',
+};
 
 /** Open Convert from a survey mark (geodetic card → Convert). */
 export function prefillFromMark(mark: GeodeticMark): ConvertRequest {
@@ -192,16 +260,18 @@ export function prefillFromMark(mark: GeodeticMark): ConvertRequest {
   let from = `${fr.frame}:geo`;
   let a = '';
   let b = '';
+  let gridAccM: number | undefined;
   const geo = mark.geo ? splitGeo(mark.geo) : null;
   if (geo && coordSystem(from)) {
     [a, b] = geo;
   } else {
     for (const g of mark.grids) {
-      const sys = systemOfGrid(fr.frame, g.system);
-      if (sys) {
-        from = sys;
-        a = g.e;
-        b = g.n;
+      const read = gridSource(fr.frame, g);
+      if (read) {
+        from = read.system;
+        a = read.e;
+        b = read.n;
+        gridAccM = read.accM;
         break;
       }
     }
@@ -217,19 +287,29 @@ export function prefillFromMark(mark: GeodeticMark): ConvertRequest {
   // The mark's own published grid as the target (the regional one first,
   // e.g. MTM before UTM in Québec), so the result can be compared with it.
   const markGrids = mark.grids
-    .map((g) => systemOfGrid(fr.frame, g.system))
+    .map((g) => gridSource(fr.frame, g)?.system)
     .filter((s): s is string => !!s && s !== from);
   const gridTarget = markGrids.find((s) => s === target.to) ?? markGrids[0];
+  let to = gridTarget ?? target.to;
+  // Never "from X to X" (a mark whose only readable value is its grid).
+  if (to === from) to = coordSystem(`${fr.frame}:geo`) ? `${fr.frame}:geo` : target.to;
   // From h: to the mark's own published system (so the two can be compared),
-  // else the region's. From an orthometric height: to h.
+  // else the region's. From an orthometric height: to h — on a classical
+  // frame (OSGB36, LV95, RD, NAD83(1986)), which has no h, the h of its
+  // GNSS-era counterpart (ETRS89, NAD83(2011)).
   let toHeight: string | null = null;
   if (src) toHeight = src.id === 'ell' ? (ortho?.heightId ?? target.toHeight) : 'ell';
-  const spec: ConvertSpec = {
-    from,
-    fromHeight: src?.id ?? null,
-    to: gridTarget ?? target.to,
-    toHeight,
-  };
+  if (src && src.id !== 'ell' && !ellipsoidalHeightOn(fr.frame)) {
+    const modern = MODERN_FRAME[fr.frame];
+    if (modern && coordSystem(`${modern}:geo`)) to = `${modern}:geo`;
+    else toHeight = null;
+  }
+  // Clamp to a system that exists: an unknown target is a refusal, not a result.
+  if (!coordSystem(to)) to = from;
+  const spec: ConvertSpec = { from, fromHeight: src?.id ?? null, to, toHeight };
+  // How approximate the published position is: the mark's own (a scaled
+  // benchmark, MRNF's open-data layer) or the grid square's, whichever is worse.
+  const accM = Math.max(mark.posAccM ?? 0, gridAccM ?? 0);
   return {
     spec,
     a,
@@ -239,12 +319,22 @@ export function prefillFromMark(mark: GeodeticMark): ConvertRequest {
     origin,
     published,
     near,
+    ...(a !== '' && accM > 0 ? { approxPosition: { accM, why: approxWhy(mark, gridAccM) } } : {}),
     ...(a === ''
       ? {
           notice: `${mark.id} has no published coordinates Convert can read; enter them from the datasheet.`,
         }
       : {}),
   };
+}
+
+/** Why a mark's published position is approximate, in the user's words. */
+function approxWhy(mark: GeodeticMark, gridAccM: number | undefined): string {
+  if (gridAccM !== undefined && gridAccM >= (mark.posAccM ?? 0))
+    return `${mark.id} is published only as a grid square`;
+  if (mark.type === 'v')
+    return `${mark.id} is a levelling benchmark: its height is precise, its position only approximate`;
+  return `${mark.id}’s published position is approximate`;
 }
 
 /**
@@ -403,6 +493,10 @@ export function toParams(req: ConvertRequest): Record<string, string> {
   if (req.published?.length) p.pub = JSON.stringify(req.published);
   if (req.stations?.length) p.st = JSON.stringify(req.stations);
   if (req.notice) p.notice = req.notice;
+  if (req.approxPosition) {
+    p.pacc = String(req.approxPosition.accM);
+    p.pwhy = req.approxPosition.why;
+  }
   return p;
 }
 
@@ -455,6 +549,14 @@ export function fromParams(params: Record<string, unknown>): ConvertRequest | nu
     };
   const notice = str(params.notice);
   if (notice) req.notice = notice;
+  // An approximate source position only ever makes the result MORE cautious;
+  // a malformed or non-positive value is dropped.
+  const pacc = Number(str(params.pacc));
+  if (Number.isFinite(pacc) && pacc > 0)
+    req.approxPosition = {
+      accM: pacc,
+      why: str(params.pwhy) ?? 'The source position is approximate',
+    };
   try {
     const pub = str(params.pub);
     if (pub)

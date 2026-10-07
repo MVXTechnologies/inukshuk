@@ -112,6 +112,26 @@ export function displayAccuracyM(mark: GeodeticMark): number {
   return Math.max(mark.posAccM ?? 0, mark.osm ? 1 : (datum?.wgsOffsetM ?? 2));
 }
 
+/**
+ * Why the display position is "±N m", in plain words, when N is metres:
+ * either the agency only gives an approximate position, or the mark's datum
+ * is not WGS 84 (the map's) — NAD83(CSRS) is fixed to North America, WGS 84
+ * to the whole Earth, so they are ~1.5–2 m apart in Canada today (TRX). The
+ * published values are unaffected either way: say so.
+ */
+export function displayAccuracyWhy(mark: GeodeticMark): string | null {
+  if (mark.osm) return null;
+  const datum = datumAt(mark.datum);
+  const offset = datum?.wgsOffsetM ?? 2;
+  if ((mark.posAccM ?? 0) >= offset) {
+    return mark.type === 'v'
+      ? 'A levelling benchmark: its height is precise, but the agency gives only an approximate position.'
+      : 'The agency gives only an approximate position for this mark.';
+  }
+  if (!datum || offset < 2 || datum.key === 'wgs84') return null;
+  return `Map dot only: ${datum.name} and WGS 84 (the map’s datum) differ by up to ${offset} m. The published values above are unaffected.`;
+}
+
 function sheetLink(mark: GeodeticMark): { url: string; label: string } | null {
   const source = sourceAt(mark.source);
   const fill = (template: string) => template.replace('{id}', encodeURIComponent(mark.id));
@@ -155,6 +175,7 @@ export function buildGeodeticCard(mark: GeodeticMark): GeodeticCardModel {
 
   const accuracy = displayAccuracyM(mark);
   const accuracyText = accuracy < 1 ? accuracy.toFixed(1) : String(Math.round(accuracy));
+  const why = displayAccuracyWhy(mark);
   rows.push({
     key: 'wgs84',
     label: '≈ WGS 84',
@@ -165,6 +186,7 @@ export function buildGeodeticCard(mark: GeodeticMark): GeodeticCardModel {
         copy: `${formatLatLng(mark.lat, mark.lng)} (≈ WGS 84, display ±${accuracyText} m)`,
         copyName: 'WGS 84 display position',
       },
+      ...(why ? [{ text: why, muted: true }] : []),
     ],
   });
 
