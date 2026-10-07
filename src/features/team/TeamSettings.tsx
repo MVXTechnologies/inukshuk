@@ -13,7 +13,7 @@ import { StyleSheet, View } from 'react-native';
 import { List, Text } from 'react-native-paper';
 
 import { Note } from './components';
-import { teamSyncLine } from './syncLine';
+import { openPeers, teamSyncLine } from './syncLine';
 
 export function TeamSettings() {
   const t = useSchemeTokens();
@@ -28,6 +28,15 @@ export function TeamSettings() {
   return (
     <ExtensionSettingsShell
       extKey="team"
+      // The collapsed row's status: the open team and who is nearby.
+      {...(view !== null
+        ? {
+            status:
+              unread > 0
+                ? `${view.name} · ${unread} unread`
+                : `${view.name} · ${openPeers(peers).length} nearby`,
+          }
+        : {})}
       badge={undefined}
       badgeIcon="account-group"
       badgeIconSize={22}

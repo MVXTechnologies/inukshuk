@@ -106,6 +106,8 @@ describe('Settings → Extensions: Team mode', () => {
       await app.createTeam({ name: 'Relevé MSA', myName: 'Marc', lifetimeMs: lifetimeMs('14d') });
       useTeamStore.getState().refresh();
     });
+    // The compact list: the row says which team, then opens on tap.
+    await fireEvent.press(screen.getByLabelText(/^Team mode, Relevé MSA/));
     expect(screen.getByText('Relevé MSA')).toBeTruthy();
     expect(screen.getByTestId('team-create-row')).toBeTruthy();
     expect(screen.getByTestId('team-join-row')).toBeTruthy();

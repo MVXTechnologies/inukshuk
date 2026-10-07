@@ -10,6 +10,7 @@ import type { DeviceExtensionDescriptor } from '../types';
 export const TEAM_EXTENSION: DeviceExtensionDescriptor = {
   label: 'Team mode',
   teaser: 'team mode',
+  summary: 'Share with your team, no server',
   // Installed = available; its switch is "Show teammates on the map".
   defaults: { show: true, offline: false },
 };

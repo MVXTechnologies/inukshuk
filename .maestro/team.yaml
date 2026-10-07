@@ -63,6 +63,13 @@ appId: com.inukshuk.app
       visible: 'Get Team mode'
     commands:
       - tapOn: 'Get Team mode'
+# Compact list (#633): the row opens on tap.
+- runFlow:
+    when:
+      notVisible:
+        id: 'team-create-row'
+    commands:
+      - tapOn: 'Team mode.*'
 - scrollUntilVisible:
     element:
       id: 'team-create-row'
