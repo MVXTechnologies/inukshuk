@@ -83,7 +83,8 @@ it. Likewise, when JS does not take frames fast enough, reading pauses
 **Bans** come from two places: transport violations (bad magic, oversize
 length, silent socket, accept-rate abuse: three strikes in 10 min ban the
 address for 10 min), and the core (`SyncSession.bannedUntil`, set by
-`PeerGuard` after 20 strikes/min: bad signatures, undecryptable frames,
+`PeerGuard` after 20 strikes/min: oversize or over-rate frames, bad
+signatures, undecryptable frames, malformed ops including `chain` rejections,
 protocol violations). `MeshSessionHost` turns the latter into
 `transport.ban(peerId, ms)`. A banned address is refused at `accept`, not
 dialled, and hidden from discovery. Bans are by IP: on a LAN that is a phone;
@@ -96,7 +97,8 @@ else.
   base32 characters, new each time advertising starts. **No device, user,
   team or member name ever goes on the air.**
 - TXT: `v=1`, `t=<tag>`. The tag is `base64url(SHA-256("inukshuk/team/v1/lan-tag" ‖ teamId))[0..16 bytes]`
-  (`src/core/mesh/tag.ts`): enough for teammates and invite holders to find
+  (`lanDiscoveryTag(teamId, teamCrypto)`, `src/core/mesh/tag.ts`, hashed with the
+  core's own SHA-256): enough for teammates and invite holders to find
   the team, nothing for a stranger beyond "an Inukshuk team is here".
 - Android resolves each service before reporting it (TXT is only available
   after resolve). Resolves are serialized (NsdManager before API 34 allows
@@ -162,9 +164,11 @@ events: peer-found · peer-lost · connected · disconnected · frame · writabl
   frame) and flushes them on `writable`.
 
 `MeshSessionHost(transport, factory, onEvent)` runs one core session per
-connection (outbound → `SyncSession.initiate`, inbound → `respond`), sends
+connection (outbound → `SyncSession.initiate(c, store, { now, handshakeTimeoutMs })`,
+inbound → `respond`; the factory gets `now`), sends
 every frame of every `Step`, disconnects a session that closed, bans one
-that banned, and ticks open sessions every 20 s. `forEachOpen(s => s.push(ops))`
+that banned, and calls `tick(now)` on every session every 10 s (re-sync when
+open; the core's hi1/hi2/hi3 handshake timeout before). `forEachOpen(s => s.push(ops))`
 gossips new local ops.
 
 ## Background (honest)

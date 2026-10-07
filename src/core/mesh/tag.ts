@@ -7,7 +7,7 @@
  *
  * `tag = base64url(SHA-256("inukshuk/team/v1/lan-tag" ‖ teamId))[0..22]`
  * (the first 16 bytes). The hash comes in as a parameter so this stays free
- * of any crypto dependency; the team core's SHA-256 is the one to pass.
+ * of any crypto dependency; pass the team core's `TeamCrypto` (or its `sha256`).
  */
 
 export const LAN_TAG_LABEL = 'inukshuk/team/v1/lan-tag';
@@ -28,9 +28,12 @@ export function base64url(bytes: Uint8Array): string {
   return out;
 }
 
-export function lanDiscoveryTag(teamId: string, sha256: (data: Uint8Array) => Uint8Array): string {
+/** Anything with a SHA-256: the team core's `TeamCrypto` (`createNobleCrypto`) qualifies. */
+export type Sha256 = ((data: Uint8Array) => Uint8Array) | { sha256(data: Uint8Array): Uint8Array };
+
+export function lanDiscoveryTag(teamId: string, hash: Sha256): string {
   const data = new TextEncoder().encode(LAN_TAG_LABEL + teamId);
-  const digest = sha256(data);
+  const digest = typeof hash === 'function' ? hash(data) : hash.sha256(data);
   if (digest.length < 16) throw new Error('sha256 returned too few bytes');
   return base64url(digest.subarray(0, 16));
 }

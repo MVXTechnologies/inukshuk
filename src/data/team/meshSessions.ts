@@ -3,11 +3,11 @@ import type { MeshPeer, MeshTransport } from './meshTransport';
 /**
  * Wires a {@link MeshTransport} to the team core's sync sessions (#589).
  *
- * The core (`src/core/team/sync.ts`, PR #616) is a pure state machine:
- * `SyncSession.initiate(...)` → `{ session, step }`, `SyncSession.respond(...)`,
- * then `receive(frame, now)`, `tick()`, `push(ops)` and `close(why)` each
- * return a `Step { send: Uint8Array[]; events }`. This host owns the
- * plumbing around it:
+ * The core (`src/core/team/sync.ts`) is a pure state machine:
+ * `SyncSession.initiate(c, store, { now, handshakeTimeoutMs })` → `{ session, step }`
+ * (the hi1 hello), `SyncSession.respond(c, store, { handshakeTimeoutMs })`, then
+ * `receive(frame, now)`, `tick(now)`, `push(ops)` and `close(why)` each return
+ * a `Step { send: Uint8Array[]; events }`. This host owns the plumbing:
  *
  * - one session per connection: outbound → initiator, inbound → responder;
  * - every frame of every step goes to `transport.send`; a frame refused for
@@ -16,10 +16,14 @@ import type { MeshPeer, MeshTransport } from './meshTransport';
  * - a session that reaches `closed` is disconnected after its last frames;
  *   one with `bannedUntil` in the future is banned at the transport too, so
  *   its address cannot reconnect (the owner's anti-DDoS rule, end to end);
- * - a periodic `tick()` (re-sync vectors) on open sessions.
+ * - a periodic `tick(now)` on every session: re-sync vectors when open, and
+ *   the core's handshake timeout (hi1/hi2/hi3 must finish in time) before;
+ * - strikes the core counts (malformed or forged ops, `chain` rejections,
+ *   decrypt failures, rate) end in `bannedUntil`, which becomes a transport
+ *   ban here.
  *
- * The types are structural so this compiles before the core is merged; the
- * core's `SyncSession` satisfies {@link FrameSession}.
+ * The types are structural: the core's `SyncSession` satisfies
+ * {@link FrameSession} (see meshSessions.core.test.ts).
  */
 
 export interface FrameStep<E> {
@@ -31,20 +35,20 @@ export interface FrameSession<E> {
   readonly phase: string;
   readonly bannedUntil: number | undefined;
   receive(frame: Uint8Array, now: number): FrameStep<E>;
-  tick(): FrameStep<E>;
+  tick(now?: number): FrameStep<E>;
   close(why?: string): FrameStep<E>;
 }
 
 export interface SessionFactory<E, S extends FrameSession<E>> {
-  /** Outbound connection: we speak first. */
-  initiate(peer: MeshPeer): { session: S; step: FrameStep<E> };
+  /** Outbound connection: we speak first (pass `now` as the core's `options.now`). */
+  initiate(peer: MeshPeer, now: number): { session: S; step: FrameStep<E> };
   /** Inbound connection: we wait for the peer's hello. */
-  respond(peer: MeshPeer): S;
+  respond(peer: MeshPeer, now: number): S;
 }
 
 export interface SessionHostOptions {
   now?: () => number;
-  /** Re-sync period for open sessions. Default 20 s; 0 disables. */
+  /** Period of `tick(now)` on every session. Default 10 s; 0 disables. */
   tickMs?: number;
   /** Bytes a peer may have waiting in JS behind backpressure. Default 8 MiB. */
   maxPendingBytes?: number;
@@ -92,7 +96,7 @@ export class MeshSessionHost<E, S extends FrameSession<E>> {
           return;
       }
     });
-    const tickMs = this.options.tickMs ?? 20_000;
+    const tickMs = this.options.tickMs ?? 10_000;
     if (tickMs > 0) this.timer = setInterval(() => this.tickAll(), tickMs);
   }
 
@@ -127,11 +131,11 @@ export class MeshSessionHost<E, S extends FrameSession<E>> {
   private onConnected(peer: MeshPeer): void {
     if (this.entries.has(peer.peerId)) return;
     if (peer.direction === 'out') {
-      const { session, step } = this.factory.initiate(peer);
+      const { session, step } = this.factory.initiate(peer, this.now());
       const entry = this.add(peer, session);
       this.apply(peer.peerId, entry, step);
     } else {
-      this.add(peer, this.factory.respond(peer));
+      this.add(peer, this.factory.respond(peer, this.now()));
     }
   }
 
@@ -231,7 +235,11 @@ export class MeshSessionHost<E, S extends FrameSession<E>> {
     }
   }
 
-  private tickAll(): void {
-    this.forEachOpen((s) => s.tick());
+  /** Ticks every session: open ones re-sync, handshaking ones time out. */
+  tickAll(): void {
+    const now = this.now();
+    for (const [peerId, entry] of [...this.entries]) {
+      if (!entry.closing) this.apply(peerId, entry, entry.session.tick(now));
+    }
   }
 }
