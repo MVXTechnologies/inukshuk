@@ -246,7 +246,9 @@ describe('the map card', () => {
     expect(screen.getByTestId('team-card-range').props.children).toBe('just now · ±5 m · 1.1 km N');
     expect(screen.getByText('Julie')).toBeTruthy();
     expect(screen.getByTestId('team-member-where')).toBeTruthy();
-    // Signal mode (the extension switch on, a team open): the team button.
+    // The team button never covers a popup: hidden while one is up, back after.
+    expect(screen.queryByTestId('team-fab')).toBeNull();
+    await act(() => useTeamMapSelection.getState().select(null));
     expect(screen.getByTestId('team-fab')).toBeTruthy();
     await session.stopMesh();
   });
