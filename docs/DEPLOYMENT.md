@@ -183,6 +183,15 @@ in the field, branch from its release tag, cherry-pick the fix, and run
 branch). If the branch's native project matches the binary, the fingerprint
 matches and the update lands on it.
 
+Pick **platform** when the branch matches only one store build. Example: 2.3.0's iOS
+build 18 predates #581 (a hashed build script), but Android vc63 does not, so
+`hotfix/2.3.x` (cut at 17cfebb) serves iOS only: `gh workflow run
+ota-update.yml --ref hotfix/2.3.x -f platform=ios`. Publishing `all` from it
+would push the hotfix bundle over main's newer update on Android. The OTA
+runtime check (`runtime-check.yml`) names the platform and branch when main
+leaves a store build behind. Compare fingerprints from a clean `npm ci`, not
+from a shared `node_modules` that local native builds have written into.
+
 ### Credentials in an update
 
 Installed apps read `extra` (Strava keys, error-report channel) from the
