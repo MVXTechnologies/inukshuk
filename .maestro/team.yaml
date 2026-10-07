@@ -162,6 +162,12 @@ appId: com.inukshuk.app
 - tapOn:
     id: 'team-chat-input'
 - inputText: 'Depart 9 h au P2'
+# Android: the keyboard covers the send button.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
 - tapOn:
     id: 'team-chat-send'
 - extendedWaitUntil:
