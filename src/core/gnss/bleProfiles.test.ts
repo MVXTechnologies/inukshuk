@@ -92,6 +92,11 @@ describe('rankDevices', () => {
     expect(ranked.map((d) => d.id)).toEqual(['a', 'a2', 'b']);
   });
 
+  it('keeps unnamed devices of equal signal in input order', () => {
+    const ranked = rankDevices([dev('u2', null, -70), dev('u1', null, -70), dev('n', 'N', -70)]);
+    expect(ranked.map((d) => d.id)).toEqual(['n', 'u2', 'u1']);
+  });
+
   it('does not mutate its input', () => {
     const input = [dev('x', null, -90), dev('y', 'Y', -10)];
     rankDevices(input);
