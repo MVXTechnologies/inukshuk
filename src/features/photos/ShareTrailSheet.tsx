@@ -7,8 +7,8 @@ import { deleteFileAt, resolveDocumentPath } from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { useSettingsStore } from '@state/settingsStore';
 import * as Sharing from 'expo-sharing';
-import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { BackHandler, Pressable, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Icon, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -42,6 +42,15 @@ function SheetContent({ track, photos, onClose, onMessage }: ShareTrailSheetProp
   const withPhotosByDefault = useSettingsStore((s) => s.includePhotosWhenSharing);
   const [busy, setBusy] = useState<Busy>(null);
   const shared = visiblePhotos(photos).filter((p) => !isNotePhoto(p));
+
+  // Android's Back closes the sheet (not the trail view behind it).
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!busy) onClose();
+      return true;
+    });
+    return () => sub.remove();
+  }, [busy, onClose]);
 
   const run = async (kind: Exclude<Busy, null>) => {
     if (busy) return;
