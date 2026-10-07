@@ -52,7 +52,7 @@ export function isTimedTrack(points: readonly TrackPoint[]): boolean {
 
 export function analyzeOuting(points: readonly TrackPoint[], opts: OutingOpts): OutingAnalysis {
   const segmentStarts = opts.segmentStarts ?? [];
-  const axis = buildTrackAxis(points);
+  const axis = buildTrackAxis(points, segmentStarts);
   const timed = isTimedTrack(points);
   const profile = movingProfileFor(opts.category);
   const steps = timed

@@ -23,11 +23,13 @@ export interface ProfileScrub {
  * The ratio is clamped to [0, 1]; a non-finite ratio, an empty profile or an
  * empty track yields null. Samples are evenly distance-spaced (see
  * buildElevationProfile), so the nearest sample is simply `round(ratio * last)`.
+ * `segmentStarts` must be the ones the profile was built with.
  */
 export function scrubProfileAtRatio(
   points: readonly TrackPoint[],
   samples: readonly ElevationSample[],
   ratio: number,
+  segmentStarts: readonly number[] = [],
 ): ProfileScrub | null {
   if (samples.length === 0 || !Number.isFinite(ratio)) return null;
   const lastIdx = samples.length - 1;
@@ -35,6 +37,6 @@ export function scrubProfileAtRatio(
   const sampleIndex = Math.min(lastIdx, Math.max(0, Math.round(clamped * lastIdx)));
   const sample = samples[sampleIndex];
   if (!sample) return null;
-  const at = interpolateTrackAtDistance(points, sample.distanceM);
+  const at = interpolateTrackAtDistance(points, sample.distanceM, segmentStarts);
   return at ? { sampleIndex, at } : null;
 }

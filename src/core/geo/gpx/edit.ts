@@ -1,17 +1,29 @@
 import type { TrackNote, TrackPoint, TrackStats } from '@core/models';
-import { computeTrackStats, haversineMeters } from '@core/geo/track';
+import {
+  buildTrackAxis,
+  computeSegmentedTrackStats,
+  haversineMeters,
+  normalizeSegmentStarts,
+} from '@core/geo/track';
 import type { GpxWaypoint } from './index';
 
 /**
  * Pure GPX editing operations: merging several tracks into one and trimming a
  * track from either end. No platform dependencies — the Library / map UI are
  * thin wrappers over these.
+ *
+ * Segments (#325): a recording is cut into segments at every pause, and a
+ * multi-`<trkseg>` import keeps its own. Both operations keep those
+ * boundaries (`segmentStarts`) and measure distance the way the trail's stats
+ * do, never across a boundary.
  */
 
 /** One source track fed into {@link mergeTracks}, in user (selection) order. */
 export interface MergeSource {
   name: string;
   points: readonly TrackPoint[];
+  /** The source's own segment boundaries (indices into `points`). */
+  segmentStarts?: readonly number[];
   /** Standalone <wpt> markers from the source GPX, carried into the merge. */
   waypoints?: readonly GpxWaypoint[];
   /**
@@ -35,7 +47,9 @@ export interface MergeResult {
    * the merge must give it its own copies (see `mergeLibraryTracks`).
    */
   notes: TrackNote[];
-  /** Stats recomputed over the merged point list. */
+  /** Segment boundaries of the merged trail: every source's own, re-indexed. */
+  segmentStarts: number[];
+  /** Stats recomputed over the merged point list, per segment. */
   stats: TrackStats;
 }
 
@@ -61,11 +75,15 @@ function startTime(points: readonly TrackPoint[]): number | undefined {
  * stats are recomputed over the merged point list. Empty sources contribute
  * nothing but keep their name out of the merged name too.
  *
+ * Segments (#325): every source keeps its own segments (its pauses). The
+ * sources themselves are joined into one continuous trail, as before: merging
+ * is the user saying these legs are one trail.
+ *
  * Notes are re-anchored: a note `d` metres into its source lands `d` metres
  * past that source's first point on the merged trail, where the merged
- * distance also counts the hop from the previous source's last point (the
- * same cumulative haversine the stats and elevation profile use). An anchor
- * past its source's own length is clamped to it.
+ * distance also counts the hop from the previous source's last point. Both
+ * are measured on the same segment-aware axis the stats and elevation profile
+ * use. An anchor past its source's own length is clamped to it.
  */
 export function mergeTracks(sources: readonly MergeSource[]): MergeResult {
   const nonEmpty = sources.filter((s) => s.points.length > 0);
@@ -83,6 +101,7 @@ export function mergeTracks(sources: readonly MergeSource[]): MergeResult {
   const points: TrackPoint[] = [];
   const waypoints: GpxWaypoint[] = [];
   const notes: TrackNote[] = [];
+  const segmentStarts: number[] = [];
   // Distance from the merged start to the last point pushed so far.
   let mergedM = 0;
   // Plain loops, not `push(...s.points)`: spreading a whole point series into
@@ -92,8 +111,11 @@ export function mergeTracks(sources: readonly MergeSource[]): MergeResult {
     const first = s.points[0];
     const last = points[points.length - 1];
     if (first && last) mergedM += haversineMeters(last, first);
+    const offset = points.length;
+    const own = normalizeSegmentStarts(s.segmentStarts ?? [], s.points.length);
+    for (const start of own) segmentStarts.push(offset + start);
     const offsetM = mergedM;
-    const lengthM = distanceToIndex(s.points, s.points.length - 1);
+    const lengthM = buildTrackAxis(s.points, own).totalM;
     for (const n of s.notes ?? []) {
       const localM = Math.min(Math.max(0, n.distanceM), lengthM);
       notes.push({ ...n, distanceM: offsetM + localM });
@@ -106,69 +128,87 @@ export function mergeTracks(sources: readonly MergeSource[]): MergeResult {
   const names = ordered.map((s) => s.name.trim()).filter((n) => n.length > 0);
   const name = names.length > 0 ? `Merged: ${names.join(' + ')}` : 'Merged trail';
 
-  return { name, points, waypoints, notes, stats: computeTrackStats(points) };
+  return {
+    name,
+    points,
+    waypoints,
+    notes,
+    segmentStarts,
+    stats: computeSegmentedTrackStats(points, segmentStarts),
+  };
 }
 
 export interface SliceResult {
   /** The kept points — `points[startIdx..endIdx]`, both ends inclusive. */
   points: TrackPoint[];
+  /** The source's segment boundaries that fall inside the kept window, re-indexed. */
+  segmentStarts: number[];
   /** Stats recomputed over the kept points (empty stats when nothing is kept). */
   stats: TrackStats;
+}
+
+/** Clamp a trim window to `[0, length - 1]`; null when nothing is kept. */
+function clampWindow(
+  length: number,
+  startIdx: number,
+  endIdx: number,
+): { start: number; end: number } | null {
+  const start = Math.max(0, Math.floor(startIdx));
+  const end = Math.min(length - 1, Math.floor(endIdx));
+  return length === 0 || start > end ? null : { start, end };
 }
 
 /**
  * Keep only `points[startIdx..endIdx]` (inclusive) of a track. Indices are
  * clamped into range; an inverted or fully out-of-range window yields an empty
  * result. Timestamps (and every other per-point field) are kept verbatim;
- * stats/distance are recomputed over the kept segment.
+ * segment boundaries inside the window are kept (#325); stats/distance are
+ * recomputed over the kept segments.
  */
 export function sliceTrack(
   points: readonly TrackPoint[],
   startIdx: number,
   endIdx: number,
+  segmentStarts: readonly number[] = [],
 ): SliceResult {
-  const last = points.length - 1;
-  const start = Math.max(0, Math.floor(startIdx));
-  const end = Math.min(last, Math.floor(endIdx));
-  if (points.length === 0 || start > end) {
-    return { points: [], stats: computeTrackStats([]) };
+  const window = clampWindow(points.length, startIdx, endIdx);
+  if (window === null) {
+    return { points: [], segmentStarts: [], stats: computeSegmentedTrackStats([], []) };
   }
+  const { start, end } = window;
   const kept = points.slice(start, end + 1);
-  return { points: kept, stats: computeTrackStats(kept) };
-}
-
-/** Cumulative haversine distance from `points[0]` to `points[idx]`, in metres. */
-function distanceToIndex(points: readonly TrackPoint[], idx: number): number {
-  let d = 0;
-  for (let i = 1; i <= idx; i++) {
-    const prev = points[i - 1];
-    const cur = points[i];
-    if (!prev || !cur) break;
-    d += haversineMeters(prev, cur);
-  }
-  return d;
+  const keptStarts = normalizeSegmentStarts(
+    segmentStarts.map((i) => i - start),
+    kept.length,
+  );
+  return {
+    points: kept,
+    segmentStarts: keptStarts,
+    stats: computeSegmentedTrackStats(kept, keptStarts),
+  };
 }
 
 /**
  * Re-anchor distance-based trail notes after a trim. Notes are anchored by
- * distance from the trail start, so cutting the head shifts every anchor left
- * by the removed distance; notes that fall outside the kept segment are
- * dropped (their return also tells the caller which photos became orphans).
+ * distance from the trail start (on the segment-aware axis, #325), so cutting
+ * the head shifts every anchor left by the removed distance; notes that fall
+ * outside the kept segment are dropped (their return also tells the caller
+ * which photos became orphans).
  */
 export function retargetNotesAfterTrim(
   notes: readonly TrackNote[],
   points: readonly TrackPoint[],
   startIdx: number,
   endIdx: number,
+  segmentStarts: readonly number[] = [],
 ): { kept: TrackNote[]; dropped: TrackNote[] } {
-  const last = points.length - 1;
-  const start = Math.max(0, Math.floor(startIdx));
-  const end = Math.min(last, Math.floor(endIdx));
-  if (points.length === 0 || start > end) {
+  const window = clampWindow(points.length, startIdx, endIdx);
+  if (window === null) {
     return { kept: [], dropped: [...notes] };
   }
-  const cutM = distanceToIndex(points, start);
-  const keptTotalM = distanceToIndex(points, end) - cutM;
+  const { cumM } = buildTrackAxis(points, segmentStarts);
+  const cutM = cumM[window.start] ?? 0;
+  const keptTotalM = (cumM[window.end] ?? 0) - cutM;
   const kept: TrackNote[] = [];
   const dropped: TrackNote[] = [];
   for (const n of notes) {

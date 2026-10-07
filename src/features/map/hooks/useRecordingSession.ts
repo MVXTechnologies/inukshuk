@@ -1,5 +1,6 @@
 import { gpsQualityLevel } from '@core/geo/track/gpsQuality';
 import { liveSpeed } from '@core/geo/track/liveSpeed';
+import { recordingElapsedS } from '@core/recording/elapsed';
 import { LibraryNotHydratedError } from '@state/libraryStore';
 import { initRecorderRecovery, useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
@@ -23,6 +24,7 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   const segmentStarts = useRecorderStore((s) => s.segmentStarts);
   const startedAt = useRecorderStore((s) => s.startedAt);
   const pausedMs = useRecorderStore((s) => s.pausedMs);
+  const pausedAt = useRecorderStore((s) => s.pausedAt);
   const lastFixAt = useRecorderStore((s) => s.lastFixAt);
   const lastAccuracyM = useRecorderStore((s) => s.lastAccuracyM);
   const start = useRecorderStore((s) => s.start);
@@ -34,7 +36,7 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   const updateWaypoint = useRecorderStore((s) => s.updateWaypoint);
   const removeWaypoint = useRecorderStore((s) => s.removeWaypoint);
 
-  const [elapsedS, setElapsedS] = useState(0);
+  const [tickedElapsedS, setElapsedS] = useState(0);
   // Wall-clock sample taken by the ticker below, so GPS staleness can be
   // DERIVED rather than stored — see gpsQuality.
   const [tickAt, setTickAt] = useState(() => Date.now());
@@ -83,13 +85,20 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
     if (status !== 'recording' || startedAt === null) return;
     const tick = () => {
       const now = Date.now();
-      setElapsedS(Math.floor((now - startedAt - pausedMs) / 1000));
+      setElapsedS(recordingElapsedS({ startedAt, pausedMs, pausedAt: null, now }));
       setTickAt(now);
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [status, startedAt, pausedMs]);
+  // While paused the clock is frozen at the pause start, derived rather than
+  // ticked: a recording recovered paused after a crash mounts straight into
+  // this state and used to read 0:00 until Resume (#325).
+  const elapsedS =
+    status === 'paused' && startedAt !== null && pausedAt !== null
+      ? recordingElapsedS({ startedAt, pausedMs, pausedAt, now: pausedAt })
+      : tickedElapsedS;
 
   // Live GPS-quality level for the HUD, derived rather than stored.
   //

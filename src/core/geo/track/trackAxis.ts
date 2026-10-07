@@ -5,8 +5,14 @@ import type { TrackPointAt } from './interpolate';
 /**
  * The distance axis of a trail, computed once: cumulative along-track
  * distance at every point. It is the SAME axis the elevation profile, the
- * scrubber and the note anchors use (full haversine arc length, segment hops
- * included), so a position found here lands exactly under the profile cursor.
+ * scrubber and the note anchors use, so a position found here lands exactly
+ * under the profile cursor.
+ *
+ * The axis never bridges a segment boundary (#325): the hop from the last fix
+ * before a pause to the first fix after it adds nothing, exactly as the
+ * trail's distance stat (`computeSegmentedTrackStats`) and the recorder's
+ * waypoint anchors count it. Bridging it ran a 391 m trail's profile to
+ * 1.39 km after a relocation pause, and drew elevation across the gap.
  *
  * `interpolateTrackAtDistance` walks the points from the start on every call
  * (O(n)); the trail view asks for positions on every chip tap, timeline tap
@@ -19,17 +25,38 @@ export interface TrackAxis {
   totalM: number;
 }
 
-export function buildTrackAxis(points: readonly TrackPoint[]): TrackAxis {
+/**
+ * Indices of `points` that open a new segment, as a set (junk dropped). A
+ * local copy of `normalizeSegmentStarts`: `segments.ts` imports the track
+ * index, which imports this module.
+ */
+export function segmentStartSet(starts: readonly number[], length: number): ReadonlySet<number> {
+  return new Set(starts.filter((i) => Number.isInteger(i) && i > 0 && i < length));
+}
+
+/**
+ * Cumulative distance along `points`, segment gaps excluded — the one
+ * primitive every distance-along-trail consumer shares (#325). With no
+ * `segmentStarts` it is the plain haversine arc length.
+ */
+export function buildTrackAxis(
+  points: readonly TrackPoint[],
+  segmentStarts: readonly number[] = [],
+): TrackAxis {
+  const starts = segmentStartSet(segmentStarts, points.length);
   const cumM = new Float64Array(points.length);
   let d = 0;
   for (let i = 1; i < points.length; i++) {
-    d += haversineMeters(points[i - 1]!, points[i]!);
+    if (!starts.has(i)) d += haversineMeters(points[i - 1]!, points[i]!);
     cumM[i] = d;
   }
   return { cumM, totalM: d };
 }
 
-/** Index of the last point at or before `distanceM` (clamped to the trail). */
+/**
+ * Index of the last point at or before `distanceM` (clamped to the trail). At
+ * a segment gap's distance that is the first point of the later segment.
+ */
 export function indexAtDistance(axis: TrackAxis, distanceM: number): number {
   const n = axis.cumM.length;
   if (n === 0) return -1;
