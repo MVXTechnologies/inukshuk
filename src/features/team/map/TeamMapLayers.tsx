@@ -70,7 +70,11 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
   const positions = useTeamStore((s) => s.positions);
   const shares = useTeamStore((s) => s.shares);
   const members = view?.members;
-  const people = useMemo(() => teammatesGeoJson(positions), [positions]);
+  // Keep the same object while nothing drawn changed: every new `data` makes
+  // MapLibre re-place the symbols, and labels fading in again on each store
+  // refresh never reach full opacity. Ages only show to the minute.
+  const peopleJson = JSON.stringify(teammatesGeoJson(positions));
+  const people = useMemo(() => JSON.parse(peopleJson) as FeatureCollection, [peopleJson]);
   const tracks = useMemo(() => tracksGeoJson(shares, members ?? []), [shares, members]);
   const points = useMemo(() => waypointsGeoJson(shares), [shares]);
   const font = teamLabelFont(glyphs);
