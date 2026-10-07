@@ -60,6 +60,10 @@ concurrency:
   group: release-path-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege: the GITHUB_TOKEN can only read the repository.
+permissions:
+  contents: read
+
 env:
   COLD: ${{ github.event_name == 'schedule' || inputs.cold == true }}
 
@@ -82,16 +86,16 @@ jobs:
       ANDROID_ABIS: ${{ matrix.abis }}
       NDK_VERSION: 27.1.12297006
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
 
       - name: Restore PROJ outputs
         id: cache
         if: env.COLD != 'true'
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             modules/inukshuk-proj/prebuilt
@@ -156,7 +160,7 @@ jobs:
 
       - name: Save PROJ outputs
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             modules/inukshuk-proj/prebuilt
@@ -168,14 +172,14 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Same Xcode choice as native-build.yml (Swift 6.2+ for a package dep).
-      - uses: maxim-lobanov/setup-xcode@v1
+      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: latest-stable
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -183,7 +187,7 @@ jobs:
       - name: Restore PROJ outputs
         id: cache
         if: env.COLD != 'true'
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             modules/inukshuk-proj/prebuilt
@@ -220,7 +224,7 @@ jobs:
 
       - name: Save PROJ outputs
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             modules/inukshuk-proj/prebuilt
@@ -230,7 +234,7 @@ jobs:
       - run: npm ci
 
       - name: Cache CocoaPods downloads
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/Library/Caches/CocoaPods
           key: pods-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
