@@ -131,7 +131,12 @@ import { RecordingPanel } from './components/RecordingPanel';
 import { ReceiverFollow } from '@features/gnss/ReceiverFollow';
 import { ReceiverMapOverlay } from '@features/gnss/ReceiverMapOverlay';
 import { TeamMapLayers } from '@features/team/map/TeamMapLayers';
-import { hitTestTeamMarks, useTeamMapMarks } from '@features/team/map/TeamMapMarks';
+import {
+  clusterExpansionZoom,
+  clusterMarks,
+  hitTestTeamMarks,
+  useTeamMapMarks,
+} from '@features/team/map/TeamMapMarks';
 import { useTeamMapFocus } from '@features/team/map/teamMapFocus';
 import { usePinDraft } from '@features/team/map/TeamPinComposer';
 import { TeamTrailPhotos } from '@features/team/map/TeamTrailPhotos';
@@ -644,7 +649,6 @@ export function MapScreen() {
   // What the trail lines and heatmap are built for (#494): the settled
   // viewport plus a margin, sticky across small moves (see useCullRegion).
   const cullRegion = useCullRegion(settledBounds, scaleAt?.zoom ?? null);
-  const teamMarks = useTeamMapMarks(scaleAt?.zoom ?? null);
   const { inspectId, inspectTrack, inspectPoints, markerAt, setMarkerAt, inspect } =
     useTrailInspection(tracks);
   // Which trail is "selected": a tap-selected heat spot (the carousel) wins,
@@ -988,6 +992,7 @@ export function MapScreen() {
     satelliteImagery,
     extensionStyle,
   ]);
+  const teamMarks = useTeamMapMarks(style.glyphs);
 
   // Native 3D terrain (docs/plans/native-terrain.md): with "3D relief" on and
   // a binary that ships the module, tilting past ~25° grows real relief out of
@@ -1954,6 +1959,11 @@ export function MapScreen() {
           return;
         }
         const markHit = await hitTestTeamMarks(map, px, py);
+        if (markHit?.kind === 'cluster') {
+          const split = await clusterExpansionZoom(markHit.id);
+          if (split !== null) zoomMapTo(markHit.lngLat, Math.min(split + 0.3, 20));
+          return;
+        }
         if (markHit?.kind === 'bubble') {
           const ph = markHit.mark.photo;
           useTeamPick.getState().choose({
@@ -2109,7 +2119,19 @@ export function MapScreen() {
         setViewWp(null);
         setForecastAt(null);
         setExtensionHit(null);
-        if (markHit.kind === 'pin') {
+        if (markHit.kind === 'cluster') {
+          // A cluster splits where it can; at the limit, its marks as a list.
+          const [split, zoom] = await Promise.all([
+            clusterExpansionZoom(markHit.id),
+            mapRef.current?.getZoom().catch(() => null) ?? null,
+          ]);
+          if (split !== null && zoom !== null && split > zoom + 0.01) {
+            zoomMapTo(markHit.lngLat, Math.min(split + 0.3, 20));
+          } else {
+            const items = await clusterMarks(markHit.id);
+            useTeamSheet.getState().open({ kind: 'list', items });
+          }
+        } else if (markHit.kind === 'pin') {
           useTeamMapSelection
             .getState()
             .select({ kind: 'pin', owner: markHit.mark.owner, id: markHit.mark.id });
@@ -2284,6 +2306,7 @@ export function MapScreen() {
     },
     [
       router,
+      zoomMapTo,
       marineActive,
       showSnack,
       tracks,

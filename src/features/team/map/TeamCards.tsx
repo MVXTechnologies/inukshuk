@@ -16,7 +16,10 @@ import { Button, Icon, IconButton, Text } from 'react-native-paper';
 
 import { MemberAvatar } from '../components';
 import { actionMessage } from '../messages';
+import { usePhotoCard } from '@features/photos/PhotoBottomCard';
 import { photoHere } from '../photoHere';
+import type { TeamMarkHit } from './TeamMapMarks';
+import { useTeamMapSelection } from './TeamMapOverlay';
 import { usePinDraft } from './TeamPinComposer';
 import { useTeamPick } from './TeamPick';
 import { useTeamSheet, type TeamSheet } from './teamMode';
@@ -453,6 +456,59 @@ function PressCard({
   );
 }
 
+/** Marks at one spot (a cluster at its limit): pick one. */
+function ListCard({ items, onClose }: { items: TeamMarkHit[]; onClose: () => void }) {
+  const t = useSchemeTokens();
+  const router = useRouter();
+  const view = useTeamStore((s) => s.view);
+  const name = (id: string) => view?.members.find((m) => m.id === id)?.name ?? 'A teammate';
+  return (
+    <Card
+      title={`${items.length} here`}
+      icon="layers-outline"
+      onClose={onClose}
+      testID="team-list-card"
+    >
+      {items.slice(0, 8).map((h, i) => {
+        const label =
+          h.kind === 'pin'
+            ? `Pin · ${name(h.mark.owner)}`
+            : h.kind === 'bubble'
+              ? `Photo · ${h.mark.count} comment${h.mark.count === 1 ? '' : 's'}`
+              : h.kind === 'task'
+                ? `Task · ${h.mark.label}`
+                : '';
+        return (
+          <Pressable
+            key={i}
+            style={[styles.listRow, { borderColor: t.outlineVariant }]}
+            accessibilityRole="button"
+            onPress={() => {
+              onClose();
+              if (h.kind === 'pin')
+                useTeamMapSelection
+                  .getState()
+                  .select({ kind: 'pin', owner: h.mark.owner, id: h.mark.id });
+              else if (h.kind === 'bubble')
+                usePhotoCard.getState().show({
+                  kind: 'team',
+                  owner: h.mark.photo.owner,
+                  trackId: h.mark.photo.trackId,
+                  photoId: h.mark.photo.id,
+                });
+              else if (h.kind === 'task') router.push('/team/tasks' as never);
+            }}
+          >
+            <Text variant="bodyMedium" style={{ color: t.ink }} numberOfLines={1}>
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </Card>
+  );
+}
+
 export function TeamSheetCard({
   sheet,
   onPointActions,
@@ -477,6 +533,8 @@ export function TeamSheetCard({
       );
     case 'press':
       return <PressCard at={sheet.at} onClose={close} onPointActions={onPointActions} />;
+    case 'list':
+      return <ListCard items={sheet.items} onClose={close} />;
     default:
       return null;
   }
@@ -655,6 +713,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     minHeight: 40,
   },
+  listRow: { borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 10 },
   secondary: {
     flexDirection: 'row',
     justifyContent: 'space-around',

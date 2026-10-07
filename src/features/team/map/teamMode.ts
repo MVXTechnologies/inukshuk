@@ -10,6 +10,8 @@ import { useExtensionPrefs } from '@features/extensions/prefs';
 import { useTeamStore } from '@state/teamStore';
 import { create } from 'zustand';
 
+import type { TeamMarkHit } from './TeamMapMarks';
+
 export function useTeamSignalMode(): boolean {
   const { installedAt, show } = useExtensionPrefs('team');
   const active = useTeamStore((s) => s.view !== null && s.view.active);
@@ -21,7 +23,9 @@ export type TeamSheet =
   | { kind: 'status' }
   | { kind: 'notify'; at: [number, number] | null }
   | { kind: 'spot'; at: [number, number]; trail: string; trackId?: string }
-  | { kind: 'press'; at: [number, number] };
+  | { kind: 'press'; at: [number, number] }
+  /** Co-located marks a cluster can't split further. */
+  | { kind: 'list'; items: TeamMarkHit[] };
 
 export const useTeamSheet = create<{
   sheet: TeamSheet | null;

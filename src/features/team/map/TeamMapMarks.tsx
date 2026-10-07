@@ -1,94 +1,115 @@
 /**
- * The team's marks on the main map (#589, mockups `a-map`, `b-map-pin`):
- * comment bubbles beside shared photos (orange with the count of new ones,
- * white with the total once seen), pins (the author's initials, with their
- * thread count), and open tasks hanging under what they are anchored to.
+ * The team's marks on the main map (#589): comment bubbles beside shared
+ * photos, pins, and open tasks under their anchors, as native MapLibre layers
+ * on one CLUSTERED GeoJSON source (owner 2026-10-07: "when zooming out, put a
+ * number"): overlapping marks become one round badge with their count, in the
+ * "new" colour when any of them is unread (`clusterProperties` sums the
+ * unread flags). Zooming in splits them. No sort keys (the symbol-sort-key
+ * cost lesson); three fixed sizes.
  *
- * MapLibre Markers, visual only (plain Views, no Pressable: the
- * MapPointChip lesson): taps are hit-tested at the map level by
- * {@link hitTestTeamMarks}, which projects each mark's anchor and checks the
- * box it is drawn in (Marker onPress doesn't fire on Android).
+ * Taps are routed by MapScreen through {@link hitTestTeamMarks}
+ * (`queryRenderedFeatures` on these layers): a mark's action, or a cluster
+ * (zoom in to where it splits; at the cluster limit, a list of its marks).
  */
 import { teamMapMarks, type BubbleMark, type PinMark, type TaskMark } from '@core/teamui/mapMarks';
 import { useExtensionPrefs } from '@features/extensions/prefs';
-import { Marker } from '@maplibre/maplibre-react-native';
+import { GeoJSONSource, type GeoJSONSourceRef, Layer } from '@maplibre/maplibre-react-native';
 import { useTeamStore } from '@state/teamStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { useEffect, useMemo, type ReactElement } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import type { FeatureCollection } from 'geojson';
+import { useEffect, useMemo, useRef, type ReactElement } from 'react';
 
 import { useAnchorLookup } from '../useAnchorLookup';
+import { teamLabelFont } from './TeamMapLayers';
 
-/** Below this zoom, only pins are drawn (bubbles and tasks crowd a wide view). */
-export const MARKS_MIN_ZOOM = 12;
-export const PINS_MIN_ZOOM = 9;
-
-/** Where each kind is drawn relative to its anchor's screen point (pt): a tap box. */
-const BUBBLE_BOX = { dx: 12, dy: -40, w: 52, h: 28 };
-const PIN_BOX = { dx: -22, dy: -60, w: 60, h: 60 };
-const TASK_W = 190;
-const TASK_H = 28;
-const taskBox = (m: TaskMark) => ({
-  dx: -14,
-  dy: (m.under === 'point' ? 6 : 26) + m.stack * (TASK_H + 4),
-  w: TASK_W,
-  h: TASK_H,
-});
+export const MARKS_SOURCE = 'team-marks';
+export const MARK_LAYERS = [
+  'team-mark-cluster',
+  'team-mark-pin',
+  'team-mark-bubble',
+  'team-mark-task',
+];
+/** Below this zoom tasks only count in clusters (their labels crowd a wide view). */
+export const TASK_LABEL_MIN_ZOOM = 12;
+export const CLUSTER_RADIUS = 45;
+export const CLUSTER_MAX_ZOOM = 17;
 
 export type TeamMarkHit =
   | { kind: 'bubble'; mark: BubbleMark }
   | { kind: 'pin'; mark: PinMark }
-  | { kind: 'task'; mark: TaskMark };
+  | { kind: 'task'; mark: TaskMark }
+  | { kind: 'cluster'; id: number; lngLat: [number, number]; count: number };
 
-interface Target {
-  lngLat: [number, number];
-  box: { dx: number; dy: number; w: number; h: number };
-  hit: TeamMarkHit;
-}
-
-/** The marks drawn last render, topmost last (the hit test walks them backwards). */
-let targets: Target[] = [];
+/** The marks drawn now, by feature key (the hit test resolves taps through it). */
+let byKey = new Map<string, TeamMarkHit>();
+let sourceRef: GeoJSONSourceRef | null = null;
 
 /** What a map tap at (px, py) hits among the team's marks, or null. */
 export async function hitTestTeamMarks(
-  map: { project: (lngLat: [number, number]) => Promise<[number, number] | number[]> },
+  map: {
+    queryRenderedFeatures: (
+      box: [[number, number], [number, number]],
+      options: { layers: string[] },
+    ) => Promise<unknown[]>;
+  },
   px: number,
   py: number,
 ): Promise<TeamMarkHit | null> {
-  for (let i = targets.length - 1; i >= 0; i--) {
-    const tg = targets[i]!;
-    try {
-      const p = await map.project(tg.lngLat);
-      const x = p[0];
-      const y = p[1];
-      if (x === undefined || y === undefined) continue;
-      const left = x + tg.box.dx;
-      const top = y + tg.box.dy;
-      if (px >= left && px <= left + tg.box.w && py >= top && py <= top + tg.box.h) return tg.hit;
-    } catch {
-      return null; // map mid-teardown
+  try {
+    const found = await map.queryRenderedFeatures(
+      [
+        [px - 18, py - 18],
+        [px + 18, py + 18],
+      ],
+      { layers: MARK_LAYERS },
+    );
+    for (const f of found) {
+      const feat = f as {
+        properties?: Record<string, unknown>;
+        geometry?: { coordinates?: unknown };
+      };
+      const p = feat.properties ?? {};
+      if (typeof p['cluster_id'] === 'number') {
+        const c = feat.geometry?.coordinates;
+        const lngLat: [number, number] =
+          Array.isArray(c) && typeof c[0] === 'number' && typeof c[1] === 'number'
+            ? [c[0], c[1]]
+            : [0, 0];
+        return {
+          kind: 'cluster',
+          id: p['cluster_id'],
+          lngLat,
+          count: typeof p['point_count'] === 'number' ? p['point_count'] : 0,
+        };
+      }
+      const hit = typeof p['key'] === 'string' ? byKey.get(p['key']) : undefined;
+      if (hit) return hit;
     }
+  } catch {
+    // The layers are absent (team off) or the map is mid-teardown.
   }
   return null;
 }
 
-function Bubble({ count, fresh }: { count: number; fresh: boolean }) {
-  const t = useSchemeTokens();
-  const bg = fresh ? t.team.bubbleNew : t.team.mapPaper;
-  const ink = fresh ? t.team.bubbleNewInk : t.team.mapInk;
-  return (
-    <View
-      style={[styles.bubble, { backgroundColor: bg, borderColor: fresh ? t.team.mapPaper : ink }]}
-    >
-      <Icon source="comment" size={12} color={ink} />
-      <Text style={[styles.bubbleText, { color: ink }]}>{count}</Text>
-    </View>
-  );
+/** Where a cluster splits, or null (then: list its marks). */
+export async function clusterExpansionZoom(id: number): Promise<number | null> {
+  return sourceRef?.getClusterExpansionZoom(id).catch(() => null) ?? null;
 }
 
-/** The marks as MapView children (an array), for the map's current zoom. */
-export function useTeamMapMarks(zoom: number | null): ReactElement[] {
+/** The marks under a cluster (its leaves), resolved to hits. */
+export async function clusterMarks(id: number): Promise<TeamMarkHit[]> {
+  const leaves = (await sourceRef?.getClusterLeaves(id, 50, 0).catch(() => [])) ?? [];
+  const out: TeamMarkHit[] = [];
+  for (const l of leaves as { properties?: Record<string, unknown> }[]) {
+    const k = l.properties?.['key'];
+    const hit = typeof k === 'string' ? byKey.get(k) : undefined;
+    if (hit) out.push(hit);
+  }
+  return out;
+}
+
+/** The marks as MapView children (an array), for the map's glyph host. */
+export function useTeamMapMarks(glyphs: string | undefined): ReactElement[] {
   const t = useSchemeTokens();
   const { installedAt, show } = useExtensionPrefs('team');
   const view = useTeamStore((s) => s.view);
@@ -96,18 +117,20 @@ export function useTeamMapMarks(zoom: number | null): ReactElement[] {
   const threads = useTeamStore((s) => s.photoThreads);
   const allPins = useTeamStore((s) => s.pins);
   const resolved = useTeamStore((s) => s.resolved);
+  const tasks = useTeamStore((s) => s.tasks);
+  const seen = useTeamStore((s) => s.record?.seen);
+  const look = useAnchorLookup();
+  const ref = useRef<GeoJSONSourceRef>(null);
+  const font = teamLabelFont(glyphs);
+
   const pins = useMemo(
     () => allPins.filter((p) => !resolved.has(`${p.owner}:${p.id}`)),
     [allPins, resolved],
   );
-  const tasks = useTeamStore((s) => s.tasks);
-  const seen = useTeamStore((s) => s.record?.seen);
-  const look = useAnchorLookup();
-
-  const marks = useMemo(() => {
+  const built = useMemo(() => {
     if (view === null) return null;
-    const byId = new Map(view.members.map((m) => [m.id, m]));
-    return teamMapMarks({
+    const members = new Map(view.members.map((m) => [m.id, m]));
+    const marks = teamMapMarks({
       photos,
       threads,
       pins,
@@ -115,153 +138,225 @@ export function useTeamMapMarks(zoom: number | null): ReactElement[] {
       me: view.me,
       seenAt: (th) => seen?.[th] ?? 0,
       look,
-      nameOf: (id) => byId.get(id)?.name ?? 'Teammate',
+      nameOf: (id) => members.get(id)?.name ?? 'Teammate',
     });
-  }, [view, photos, threads, pins, tasks, seen, look]);
-
-  const on = installedAt !== 0 && show;
-  const near = zoom === null || zoom >= MARKS_MIN_ZOOM;
-  const pinsShown = zoom === null || zoom >= PINS_MIN_ZOOM;
-  const drawn = useMemo(() => {
-    const next: Target[] = [];
-    const out: ReactElement[] = [];
-    if (on && marks !== null && view !== null) {
-      if (near) {
-        for (const b of marks.bubbles) {
-          const lngLat: [number, number] = [b.photo.lng, b.photo.lat];
-          next.push({ lngLat, box: BUBBLE_BOX, hit: { kind: 'bubble', mark: b } });
-          out.push(
-            <Marker
-              key={`tb-${b.key}`}
-              id={`team-bubble-${b.key}`}
-              lngLat={lngLat}
-              anchor="bottom-left"
-              offset={[14, -14]}
-            >
-              <View pointerEvents="none" accessibilityLabel={`${b.count} comments`}>
-                <Bubble count={b.count} fresh={b.fresh} />
-              </View>
-            </Marker>,
-          );
-        }
-      }
-      if (pinsShown) {
-        for (const p of marks.pins) {
-          const m = view.members.find((x) => x.id === p.owner);
-          const lngLat: [number, number] = [p.lng, p.lat];
-          next.push({ lngLat, box: PIN_BOX, hit: { kind: 'pin', mark: p } });
-          out.push(
-            <Marker key={`tp-${p.key}`} id={`team-pin-${p.key}`} lngLat={lngLat} anchor="bottom">
-              <View
-                style={styles.pinWrap}
-                pointerEvents="none"
-                accessibilityLabel={`Pin by ${m?.name ?? 'a teammate'}`}
-                testID="team-map-pin"
-              >
-                <View
-                  style={[
-                    styles.pinHead,
-                    { borderColor: t.team.mapPaper, backgroundColor: m?.color ?? t.inkMuted },
-                  ]}
-                >
-                  <Text style={[styles.pinText, { color: t.team.onAvatar }]}>
-                    {m?.initials ?? '?'}
-                  </Text>
-                </View>
-                <View style={[styles.pinTail, { borderTopColor: t.team.mapPaper }]} />
-                <View style={styles.pinBubble}>
-                  <Bubble count={p.count} fresh={p.fresh} />
-                </View>
-              </View>
-            </Marker>,
-          );
-        }
-      }
-      if (near) {
-        for (const k of marks.tasks) {
-          const lngLat: [number, number] = [k.lng, k.lat];
-          const box = taskBox(k);
-          next.push({ lngLat, box, hit: { kind: 'task', mark: k } });
-          out.push(
-            <Marker
-              key={`tt-${k.key}`}
-              id={`team-task-${k.key}`}
-              lngLat={lngLat}
-              anchor="top-left"
-              offset={[box.dx, box.dy]}
-            >
-              <View
-                pointerEvents="none"
-                style={[
-                  styles.task,
-                  { backgroundColor: t.team.mapPaper, borderColor: t.team.mapInk },
-                ]}
-                accessibilityLabel={`Task: ${k.label}`}
-              >
-                <Icon source="checkbox-blank-outline" size={15} color={t.team.mapInk} />
-                <Text style={[styles.taskText, { color: t.team.mapInk }]} numberOfLines={1}>
-                  {k.label}
-                </Text>
-              </View>
-            </Marker>,
-          );
-        }
-      }
+    const keys = new Map<string, TeamMarkHit>();
+    const features: FeatureCollection['features'] = [];
+    for (const b of marks.bubbles) {
+      const key = `b:${b.key}`;
+      keys.set(key, { kind: 'bubble', mark: b });
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [b.photo.lng, b.photo.lat] },
+        properties: { key, kind: 'bubble', fresh: b.fresh ? 1 : 0, label: String(b.count) },
+      });
     }
-    return { next, out };
-  }, [on, near, pinsShown, marks, view, t]);
-  useEffect(() => {
-    targets = drawn.next;
-    return () => {
-      targets = [];
-    };
-  }, [drawn]);
-  // An array, never a Fragment, as MapView children (mapLayers.tsx).
-  return drawn.out;
-}
+    for (const p of marks.pins) {
+      const key = `p:${p.key}`;
+      const m = members.get(p.owner);
+      keys.set(key, { kind: 'pin', mark: p });
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+        properties: {
+          key,
+          kind: 'pin',
+          fresh: p.fresh ? 1 : 0,
+          color: m?.color ?? t.inkMuted,
+          initials: m?.initials ?? '?',
+          label: String(p.count),
+        },
+      });
+    }
+    for (const k of marks.tasks) {
+      const key = `t:${k.key}`;
+      keys.set(key, { kind: 'task', mark: k });
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [k.lng, k.lat] },
+        properties: { key, kind: 'task', fresh: 0, label: `☐ ${k.label}` },
+      });
+    }
+    return { keys, json: JSON.stringify({ type: 'FeatureCollection', features }) };
+  }, [view, photos, threads, pins, tasks, seen, look, t.inkMuted]);
 
-const styles = StyleSheet.create({
-  bubble: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 7,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
-  },
-  bubbleText: { fontSize: 12, fontWeight: '800' },
-  pinWrap: { alignItems: 'center', width: 64, height: 58 },
-  pinHead: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 3,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-  },
-  pinText: { fontWeight: '800', fontSize: 13 },
-  pinTail: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 6,
-    borderRightWidth: 6,
-    borderTopWidth: 9,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    marginTop: -1,
-  },
-  pinBubble: { position: 'absolute', right: -6, top: 0 },
-  task: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    height: TASK_H,
-    maxWidth: TASK_W,
-    borderRadius: 8,
-    borderWidth: 1.5,
-  },
-  taskText: { fontSize: 12, fontWeight: '700', flexShrink: 1 },
-});
+  // The same object while nothing drawn changed (no symbol re-placement).
+  const json = built?.json ?? '';
+  const data = useMemo(() => (json ? (JSON.parse(json) as FeatureCollection) : null), [json]);
+  useEffect(() => {
+    byKey = built?.keys ?? new Map();
+    sourceRef = ref.current;
+  }, [built]);
+
+  const layers = useMemo(() => {
+    const isCluster = ['has', 'point_count'];
+    const notCluster = ['!', ['has', 'point_count']];
+    const ofKind = (k: string) => ['all', notCluster, ['==', ['get', 'kind'], k]];
+    const freshColor = ['case', ['==', ['get', 'fresh'], 1], t.team.bubbleNew, t.team.mapPaper];
+    const freshInk = ['case', ['==', ['get', 'fresh'], 1], t.team.bubbleNewInk, t.team.mapInk];
+    const out: ReactElement[] = [
+      <Layer
+        key="cluster"
+        id="team-mark-cluster"
+        type="circle"
+        filter={isCluster as never}
+        paint={{
+          'circle-radius': ['step', ['get', 'point_count'], 15, 10, 19, 50, 23] as never,
+          'circle-color': [
+            'case',
+            ['>', ['get', 'unread'], 0],
+            t.team.bubbleNew,
+            t.team.mapPaper,
+          ] as never,
+          'circle-stroke-width': 2,
+          'circle-stroke-color': t.team.mapInk,
+        }}
+      />,
+      <Layer
+        key="pin"
+        id="team-mark-pin"
+        type="circle"
+        filter={ofKind('pin') as never}
+        paint={{
+          'circle-radius': 14,
+          'circle-color': ['get', 'color'] as never,
+          'circle-stroke-width': 3,
+          'circle-stroke-color': t.team.mapPaper,
+        }}
+      />,
+      <Layer
+        key="pin-badge"
+        id="team-mark-pin-badge"
+        type="circle"
+        filter={ofKind('pin') as never}
+        paint={{
+          'circle-radius': 8,
+          'circle-translate': [14, -14],
+          'circle-color': freshColor as never,
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': t.team.mapInk,
+        }}
+      />,
+      <Layer
+        key="bubble"
+        id="team-mark-bubble"
+        type="circle"
+        filter={ofKind('bubble') as never}
+        paint={{
+          'circle-radius': 10,
+          'circle-translate': [18, -18],
+          'circle-color': freshColor as never,
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': t.team.mapInk,
+        }}
+      />,
+    ];
+    if (font) {
+      out.push(
+        <Layer
+          key="cluster-count"
+          id="team-mark-cluster-count"
+          type="symbol"
+          filter={isCluster as never}
+          layout={{
+            'text-field': ['get', 'point_count_abbreviated'] as never,
+            'text-font': font,
+            'text-size': 13,
+            'text-allow-overlap': true,
+            'text-ignore-placement': true,
+          }}
+          paint={{
+            'text-color': [
+              'case',
+              ['>', ['get', 'unread'], 0],
+              t.team.bubbleNewInk,
+              t.team.mapInk,
+            ] as never,
+          }}
+        />,
+        <Layer
+          key="pin-initials"
+          id="team-mark-pin-initials"
+          type="symbol"
+          filter={ofKind('pin') as never}
+          layout={{
+            'text-field': ['get', 'initials'] as never,
+            'text-font': font,
+            'text-size': 11,
+            'text-allow-overlap': true,
+            'text-ignore-placement': true,
+          }}
+          paint={{ 'text-color': t.team.onAvatar }}
+        />,
+        <Layer
+          key="pin-count"
+          id="team-mark-pin-count"
+          type="symbol"
+          filter={ofKind('pin') as never}
+          layout={{
+            'text-field': ['get', 'label'] as never,
+            'text-font': font,
+            'text-size': 10,
+            'text-offset': [1.4, -1.4],
+            'text-allow-overlap': true,
+            'text-ignore-placement': true,
+          }}
+          paint={{ 'text-color': freshInk as never }}
+        />,
+        <Layer
+          key="bubble-count"
+          id="team-mark-bubble-count"
+          type="symbol"
+          filter={ofKind('bubble') as never}
+          layout={{
+            'text-field': ['get', 'label'] as never,
+            'text-font': font,
+            'text-size': 11,
+            'text-offset': [1.8, -1.8],
+            'text-allow-overlap': true,
+            'text-ignore-placement': true,
+          }}
+          paint={{ 'text-color': freshInk as never }}
+        />,
+        <Layer
+          key="task"
+          id="team-mark-task"
+          type="symbol"
+          minzoom={TASK_LABEL_MIN_ZOOM}
+          filter={ofKind('task') as never}
+          layout={{
+            'text-field': ['get', 'label'] as never,
+            'text-font': font,
+            'text-size': 12,
+            'text-anchor': 'top',
+            'text-offset': [0, 1.6],
+            'text-optional': true,
+          }}
+          paint={{
+            'text-color': t.team.mapInk,
+            'text-halo-color': t.team.mapHalo,
+            'text-halo-width': 2,
+          }}
+        />,
+      );
+    }
+    return out;
+  }, [font, t]);
+
+  const on = installedAt !== 0 && show && data !== null && data.features.length > 0;
+  if (!on) return [];
+  return [
+    <GeoJSONSource
+      key="team-marks"
+      ref={ref}
+      id={MARKS_SOURCE}
+      data={data}
+      cluster
+      clusterRadius={CLUSTER_RADIUS}
+      clusterMaxZoom={CLUSTER_MAX_ZOOM}
+      clusterProperties={{ unread: ['+', ['get', 'fresh']] } as never}
+    >
+      {layers}
+    </GeoJSONSource>,
+  ];
+}
