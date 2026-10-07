@@ -1,4 +1,5 @@
 import { parseGpx } from '@core/geo/gpx';
+import { PhotoBottomCard, usePhotoCard } from '@features/photos/PhotoBottomCard';
 import { routeClimb } from '@core/draw/elevation';
 import {
   averageHeartRate,
@@ -90,7 +91,6 @@ import { indexTrack } from '@core/photos/trackIndex';
 import { photosEditable, useTrailPhotos, useTrailPhotosStore } from '@state/trailPhotosStore';
 import { usePhotoFocusStore } from '@state/photoFocusStore';
 import { AddPhotosSheet } from '../photos/AddPhotosSheet';
-import { photoViewerHref } from '../photos/photoUri';
 import { ShareTrailSheet } from '../photos/ShareTrailSheet';
 
 interface Props {
@@ -464,10 +464,13 @@ export function Trail3DGLScreen({ trackId }: Props) {
     () => shownPhotos.filter((p) => !isNotePhoto(p)).length,
     [shownPhotos],
   );
+  // A photo tap (map circles, the Overview strip, the profile lane, the
+  // timeline) opens the bottom card; the viewer is its full-screen state.
   const openPhoto = useCallback(
-    (photoId: string) => router.push(photoViewerHref(trackId, photoId) as never),
-    [router, trackId],
+    (photoId: string) => usePhotoCard.getState().show({ kind: 'own', trackId, photoId }),
+    [trackId],
   );
+  useEffect(() => () => usePhotoCard.getState().close(), []);
   const openAddPhotos = useCallback(() => {
     if (!canEditPhotos) {
       showSnack(photoNotice ?? 'Photos are still loading');
@@ -1093,6 +1096,9 @@ export function Trail3DGLScreen({ trackId }: Props) {
         </View>
       )}
 
+      <View style={styles.photoCardDock} pointerEvents="box-none">
+        <PhotoBottomCard />
+      </View>
       <Snackbar
         visible={snack !== null}
         onDismiss={dismissSnack}
@@ -1105,6 +1111,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
 }
 
 const styles = StyleSheet.create({
+  photoCardDock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20 },
   fill: { flex: 1 },
   pad: { paddingHorizontal: 16 },
   mapBox: { backgroundColor: '#dfe9f2' },
