@@ -9,6 +9,7 @@
  *   node scripts/ci/android-sdk.mjs cache-paths   absolute dirs worth caching (NDKs, CMake)
  *   node scripts/ci/android-sdk.mjs outputs       `paths` + `key` for $GITHUB_OUTPUT
  *   node scripts/ci/android-sdk.mjs install       install what is missing, verify all
+ *   node scripts/ci/android-sdk.mjs install <pkg…> the same for exactly these packages
  *
  * `install` retries ONLY the download, a bounded number of times
  * (RETRY_DELAYS_S), and says so with a ::warning:: annotation each time, so a
@@ -59,9 +60,8 @@ function sleep(seconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, seconds * 1000);
 }
 
-function install() {
+function install(wanted) {
   const root = sdkRoot();
-  const wanted = components();
   process.stdout.write(`Required: ${wanted.join(', ')}\n`);
   let todo = missing(root, wanted);
   for (let attempt = 0; todo.length > 0 && attempt <= RETRY_DELAYS_S.length; attempt++) {
@@ -91,7 +91,7 @@ function install() {
   process.stdout.write(`All ${wanted.length} components present under ${root}.\n`);
 }
 
-const [command] = process.argv.slice(2);
+const [command, ...rest] = process.argv.slice(2);
 try {
   if (command === 'components') {
     process.stdout.write(`${components().join('\n')}\n`);
@@ -105,9 +105,14 @@ try {
     process.stdout.write(`paths<<EOF_PATHS\n${cachePaths().join('\n')}\nEOF_PATHS\n`);
     process.stdout.write(`key=android-sdk-${os}-${digest}\n`);
   } else if (command === 'install') {
-    install();
+    // No arguments: what the Gradle build needs. With arguments: exactly those
+    // packages (e2e.yml pre-installs the emulator and its system image this
+    // way, so reactivecircus/android-emulator-runner finds them in place).
+    install(rest.length > 0 ? rest : components());
   } else {
-    process.stderr.write('usage: android-sdk.mjs components | cache-paths | install\n');
+    process.stderr.write(
+      'usage: android-sdk.mjs components | cache-paths | outputs | install [pkg…]\n',
+    );
     process.exitCode = 2;
   }
 } catch (err) {

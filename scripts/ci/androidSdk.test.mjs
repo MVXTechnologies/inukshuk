@@ -69,8 +69,17 @@ describe('componentMarker', () => {
     assert.equal(componentMarker('platforms;android-36'), 'platforms/android-36/source.properties');
   });
 
-  it('rejects a name that is not a versioned package', () => {
-    assert.throws(() => componentMarker('platform-tools'), /not an sdkmanager package/);
+  it('maps unversioned and nested packages onto their directories', () => {
+    assert.equal(componentMarker('emulator'), 'emulator/source.properties');
+    assert.equal(
+      componentMarker('system-images;android-34;google_apis;x86_64'),
+      'system-images/android-34/google_apis/x86_64/source.properties',
+    );
+  });
+
+  it('rejects a name that is not an sdkmanager package', () => {
+    assert.throws(() => componentMarker('ndk;'), /not an sdkmanager package/);
+    assert.throws(() => componentMarker('../etc;x'), /not an sdkmanager package/);
   });
 });
 
