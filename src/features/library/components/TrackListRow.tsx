@@ -1,7 +1,7 @@
 import { findCategory, type CustomCategory } from '@core/library/categories';
 import { shortDate, trailCaption, trailStatsLine } from '@core/library/libraryRows';
 import { sourceLabel } from '@core/import/origin';
-import type { Folder, TrackPoint, TrackSummary } from '@core/models';
+import type { Folder, TrackSummary } from '@core/models';
 import type { Units } from '@core/format';
 import { target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -11,6 +11,7 @@ import { Divider, Icon, IconButton, Menu } from 'react-native-paper';
 
 import { ElevationProfile } from '../../common/components/ElevationProfile';
 import type { DragItem } from '../useDragToFolder';
+import type { ElevationPreviewTrack } from '../useTrackElevationPreview';
 import { RowDivider, TrailRow } from './LibraryRows';
 import { MoveToFolderItems } from './MoveToFolderItems';
 
@@ -52,8 +53,8 @@ export interface TrackListRowProps {
   selecting: boolean;
   selected: boolean;
   menuOpen: boolean;
-  /** Elevation peek: undefined = closed, null = loading, else the points. */
-  elevation: TrackPoint[] | null | undefined;
+  /** Elevation peek: undefined = closed, null = loading, else the trail. */
+  elevation: ElevationPreviewTrack | null | undefined;
   /** Organize mode with folders: show the drag grip. */
   grip: boolean;
   stravaConnected: boolean;
@@ -209,7 +210,8 @@ export const TrackListRow = memo(function TrackListRow({
         {elevation !== undefined &&
           (elevation ? (
             <ElevationProfile
-              points={elevation}
+              points={elevation.points}
+              segmentStarts={elevation.segmentStarts}
               ascentM={t.stats.ascentM}
               descentM={t.stats.descentM}
             />

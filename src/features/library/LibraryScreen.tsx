@@ -1146,7 +1146,7 @@ export function LibraryScreen() {
             selecting={selectionMode}
             selected={selectedSet.has(t.id)}
             menuOpen={menuTrackId === t.id}
-            elevation={expanded ? (elevationPreview?.points ?? null) : undefined}
+            elevation={expanded ? (elevationPreview ?? null) : undefined}
             grip={grip}
             stravaConnected={stravaConnected}
             folders={folders}

@@ -4,8 +4,8 @@ import {
   averageHeartRate,
   buildChartSeries,
   buildOutingTimeline,
+  buildTrackAxis,
   computeSegmentedTrackStats,
-  haversineMeters,
   gradeAtDistance,
   interpolateOnAxis,
   interpolateTrackAtDistance,
@@ -248,6 +248,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
         points,
         trimRange.start,
         trimRange.end,
+        segmentStarts,
       );
       addTrack(copy, copyUri);
       showSnack(`Saved "${copy.name}" to the library`);
@@ -268,6 +269,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
         trimRange.start,
         trimRange.end,
         (next) => updateTrack(track.id, next),
+        segmentStarts,
       );
       await reloadPoints(patch.fileUri);
       showSnack(`Trimmed "${track.name}"`);
@@ -280,8 +282,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
 
   // Note→coordinate resolution (numbered as on the map's pins).
   const numberedNotes = useMemo(
-    () => numberNotesOnTrack(points ?? [], notes ?? []),
-    [points, notes],
+    () => numberNotesOnTrack(points ?? [], notes ?? [], segmentStarts),
+    [points, notes, segmentStarts],
   );
 
   // Sample the terrain (DEM) under each point so the profile reads the same
@@ -333,18 +335,11 @@ export function Trail3DGLScreen({ trackId }: Props) {
 
   // Cumulative distance at each point for the trim tool's "keeping X of Y"
   // readout — O(n) once per point-set, then a subtraction per slider move.
-  const cumM = useMemo(() => {
-    const pts = points ?? [];
-    const out = new Array<number>(pts.length);
-    let d = 0;
-    for (let i = 0; i < pts.length; i++) {
-      const prev = pts[i - 1];
-      const cur = pts[i];
-      if (i > 0 && prev && cur) d += haversineMeters(prev, cur);
-      out[i] = d;
-    }
-    return out;
-  }, [points]);
+  // Segment gaps add nothing (#325), so "Y" is the trail's distance stat.
+  const cumM = useMemo(
+    () => buildTrackAxis(points ?? [], segmentStarts).cumM,
+    [points, segmentStarts],
+  );
   const keptM = trimRange ? (cumM[trimRange.end] ?? 0) - (cumM[trimRange.start] ?? 0) : 0;
   const totalM = cumM.length > 0 ? (cumM[cumM.length - 1] ?? 0) : 0;
 
@@ -397,11 +392,11 @@ export function Trail3DGLScreen({ trackId }: Props) {
     (distanceM: number) => {
       const at = analysis
         ? interpolateOnAxis(profilePoints, analysis.axis, distanceM)
-        : interpolateTrackAtDistance(profilePoints, distanceM);
+        : interpolateTrackAtDistance(profilePoints, distanceM, segmentStarts);
       if (!at) return;
       setScrub(at);
     },
-    [analysis, profilePoints],
+    [analysis, profilePoints, segmentStarts],
   );
 
   // Move the cursor (charts + map marker) to a distance and centre the map on it.
@@ -409,12 +404,12 @@ export function Trail3DGLScreen({ trackId }: Props) {
     (distanceM: number) => {
       const at = analysis
         ? interpolateOnAxis(profilePoints, analysis.axis, distanceM)
-        : interpolateTrackAtDistance(profilePoints, distanceM);
+        : interpolateTrackAtDistance(profilePoints, distanceM, segmentStarts);
       if (!at) return;
       setScrub(at);
       setFocusAt({ latitude: at.latitude, longitude: at.longitude });
     },
-    [analysis, profilePoints],
+    [analysis, profilePoints, segmentStarts],
   );
   const onTimelineSelect = (e: TimelineEvent) => jumpTo(e.at.distanceM);
   // A note opened from its map pin or the photo strip: the cursor moves to it
@@ -424,7 +419,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
     if (n) {
       const at = analysis
         ? interpolateOnAxis(profilePoints, analysis.axis, n.distanceM)
-        : interpolateTrackAtDistance(profilePoints, n.distanceM);
+        : interpolateTrackAtDistance(profilePoints, n.distanceM, segmentStarts);
       if (at) {
         setScrub(at);
       }
@@ -476,7 +471,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
     if (!track || !points) return;
     setExporting(true);
     try {
-      await exportTrailPdf(track, points);
+      await exportTrailPdf(track, points, segmentStarts);
     } catch (e) {
       // Sharing-unavailable carries a user-appropriate message; anything else
       // stays generic.

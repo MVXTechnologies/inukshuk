@@ -153,7 +153,7 @@ class ImportSession {
     const fileUri = storage.writeTrackGpx(id, activityGpxText(activity, track.name));
     const notes =
       activity.format === 'gpx' && activity.hasTrackOrRoutePoints
-        ? snapWaypointsToNotes(activity.points, activity.waypoints ?? [])
+        ? snapWaypointsToNotes(activity.points, activity.waypoints ?? [], activity.segmentStarts)
         : [];
     // Draw it from the points in hand: the map and Library never have to
     // parse this GPX back (#465).

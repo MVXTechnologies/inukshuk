@@ -39,7 +39,7 @@ function buildFromGpxText(
   ) {
     track.category = 'navigation';
   }
-  const notes = hasTrackOrRoutePoints ? snapWaypointsToNotes(points, waypoints) : [];
+  const notes = hasTrackOrRoutePoints ? snapWaypointsToNotes(points, waypoints, segmentStarts) : [];
   // Statistics from the points in hand: the Logbook never reads this GPX back.
   primeTrailStats(track, points, segmentStarts);
   return { track, fileUri, notes };

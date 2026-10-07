@@ -4,14 +4,19 @@ import * as storage from '@data/storage';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 type Request = { track: TrackSummary | undefined };
-type Preview = { request: Request; points: TrackPoint[] };
+/** A trail's points and its segment boundaries (one per pause, #325). */
+export interface ElevationPreviewTrack {
+  points: TrackPoint[];
+  segmentStarts: number[];
+}
+type Preview = ElevationPreviewTrack & { request: Request };
 
 /** A summary replacement invalidates cached GPX even when its id/URI are reused. */
 export function useTrackElevationPreview(
   track: TrackSummary | undefined,
   onError: (error: Error) => void,
 ) {
-  const cache = useRef(new WeakMap<TrackSummary, TrackPoint[]>());
+  const cache = useRef(new WeakMap<TrackSummary, ElevationPreviewTrack>());
   const [preview, setPreview] = useState<Preview>();
   const request = useMemo(() => ({ track }), [track]);
 
@@ -21,11 +26,12 @@ export function useTrackElevationPreview(
     let cancelled = false;
     const load = async () => {
       try {
-        const points =
-          cache.current.get(track) ?? parseGpx(await storage.readFileText(track.fileUri)).points;
+        const loaded =
+          cache.current.get(track) ?? parseGpx(await storage.readFileText(track.fileUri));
         if (cancelled) return;
-        cache.current.set(track, points);
-        setPreview({ request, points });
+        const { points, segmentStarts } = loaded;
+        cache.current.set(track, { points, segmentStarts });
+        setPreview({ request, points, segmentStarts });
       } catch (error) {
         if (!cancelled) onError(error instanceof Error ? error : new Error(String(error)));
       }

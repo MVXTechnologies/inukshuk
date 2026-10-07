@@ -10,7 +10,8 @@ import * as storage from '@data/storage';
  * GPX files and prepares the library mutations.
  *
  * Waypoints in the source GPX are geographically anchored (not index-anchored),
- * so both save paths carry them over verbatim.
+ * so both save paths carry them over verbatim. The trail's segments (one per
+ * pause) inside the kept window survive as `<trkseg>`s (#325).
  */
 
 /** Kept [start, end] point-index window while trimming (inclusive both ends). */
@@ -39,18 +40,25 @@ export async function saveTrimmedCopy(
   points: readonly TrackPoint[],
   startIdx: number,
   endIdx: number,
+  segmentStarts: readonly number[] = [],
 ): Promise<{ track: Track; fileUri: string }> {
-  const { points: kept } = sliceTrack(points, startIdx, endIdx);
+  const { points: kept, segmentStarts: keptStarts } = sliceTrack(
+    points,
+    startIdx,
+    endIdx,
+    segmentStarts,
+  );
   if (kept.length < 2) throw new Error('Trim leaves fewer than 2 points');
   const name = `${summary.name} (trimmed)`;
   const waypoints = await readSourceWaypoints(summary.fileUri);
   const id = storage.newId();
-  const xml = buildGpx({ points: kept, metadata: { name }, waypoints });
+  const xml = buildGpx({ points: kept, segmentStarts: keptStarts, metadata: { name }, waypoints });
   const fileUri = storage.writeTrackGpx(id, xml);
   const track: Track = {
     ...buildImportedTrack({
       id,
       points: kept,
+      segmentStarts: keptStarts,
       name,
       fallbackName: name,
       fallbackTime: Date.now(),
@@ -78,22 +86,35 @@ export async function overwriteWithTrim(
   startIdx: number,
   endIdx: number,
   commit: (patch: TrimOverwriteResult['patch']) => void | Promise<void>,
+  segmentStarts: readonly number[] = [],
 ): Promise<TrimOverwriteResult> {
-  const { points: kept } = sliceTrack(points, startIdx, endIdx);
+  const { points: kept, segmentStarts: keptStarts } = sliceTrack(
+    points,
+    startIdx,
+    endIdx,
+    segmentStarts,
+  );
   if (kept.length < 2) throw new Error('Trim leaves fewer than 2 points');
   // An unreadable source must not silently discard its standalone waypoints.
   const waypoints = parseGpx(await storage.readFileText(summary.fileUri)).waypoints;
-  const xml = buildGpx({ points: kept, metadata: { name: summary.name }, waypoints });
+  const xml = buildGpx({
+    points: kept,
+    segmentStarts: keptStarts,
+    metadata: { name: summary.name },
+    waypoints,
+  });
   const fileUri = storage.writeTrackGpx(storage.newId(), xml);
   const { kept: notes, dropped } = retargetNotesAfterTrim(
     summary.notes ?? [],
     points,
     startIdx,
     endIdx,
+    segmentStarts,
   );
   const rebuilt = buildImportedTrack({
     id: summary.id,
     points: kept,
+    segmentStarts: keptStarts,
     name: summary.name,
     fallbackName: summary.name,
     fallbackTime: summary.startedAt,

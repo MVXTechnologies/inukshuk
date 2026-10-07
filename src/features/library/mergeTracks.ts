@@ -36,7 +36,7 @@ function discardAll(uris: readonly string[]): void {
  * merged trail owns its attachments outright. The originals are untouched.
  * Throws when a source file cannot be read or parsed, when the merge yields
  * no points, or when a photo cannot be copied — nothing this call created is
- * left behind in that case.
+ * left behind in that case. Every source keeps its own segments (#325).
  */
 export async function mergeLibraryTracks(
   summaries: readonly TrackSummary[],
@@ -44,8 +44,8 @@ export async function mergeLibraryTracks(
   const sources: MergeSource[] = [];
   for (const s of summaries) {
     const xml = await storage.readFileText(s.fileUri);
-    const { points, waypoints } = parseGpx(xml);
-    sources.push({ name: s.name, points, waypoints, notes: s.notes });
+    const { points, segmentStarts, waypoints } = parseGpx(xml);
+    sources.push({ name: s.name, points, segmentStarts, waypoints, notes: s.notes });
   }
 
   const merged = mergeTracks(sources);
@@ -72,6 +72,7 @@ export async function mergeLibraryTracks(
   const id = storage.newId();
   const xml = buildGpx({
     points: merged.points,
+    segmentStarts: merged.segmentStarts,
     metadata: { name: merged.name },
     waypoints: merged.waypoints,
   });
@@ -85,6 +86,7 @@ export async function mergeLibraryTracks(
   const track = buildImportedTrack({
     id,
     points: merged.points,
+    segmentStarts: merged.segmentStarts,
     name: merged.name,
     fallbackName: merged.name,
     fallbackTime: Date.now(),
