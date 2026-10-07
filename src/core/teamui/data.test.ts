@@ -459,4 +459,60 @@ describe('alerts', () => {
     const msg = { ...a, kind: 'message' as const };
     expect(throttle.admit(msg, T0 + 62_500)).toEqual(msg);
   });
+
+  it('an SOS alerts everyone at once, from the merged record; its resolution is a badge', () => {
+    const w = newWorld();
+    const alice = device();
+    const gus = device();
+    addMember(w.root, alice, 'member', T0 + 1);
+    addMember(w.root, gus, 'guest', T0 + 2);
+    const ra = joinReplica(w, alice, w.root, T0 + 3);
+    const rg = joinReplica(w, gus, w.root, T0 + 3);
+    const sync = (now: number) => {
+      exchange(w.root, ra, now);
+      exchange(w.root, rg, now);
+      exchange(w.root, ra, now);
+    };
+    const raise = { k: 'sos', id: 's1', f: { la: 47, lo: -71, tx: 'Twisted ankle' } };
+    const op = rg.write(T0 + MIN, 'e.set', raise)!;
+    sync(T0 + MIN);
+    const throttle = new TaskAlertThrottle();
+    const a = alertFor(ra.state, op, raise, alice.id, alertContext(ra.state, ra.data(T0 + MIN)))!;
+    expect(a).toMatchObject({
+      level: 'alert',
+      kind: 'sos',
+      priority: 2,
+      text: 'SOS · Twisted ankle',
+    });
+    expect(throttle.admit(a, T0)).toEqual(a);
+    expect(throttle.admit(a, T0 + 1)).toEqual(a); // never collapsed
+    // A forged resolution by a member raises nothing.
+    const fake = { k: 'sos', id: 's1', o: gus.id, f: { res: true, rby: alice.id, rat: T0 } };
+    const f = ra.write(T0 + 2 * MIN, 'e.set', fake)!;
+    sync(T0 + 2 * MIN);
+    expect(
+      alertFor(rg.state, f, fake, gus.id, alertContext(rg.state, rg.data(T0 + 2 * MIN))),
+    ).toBeNull();
+    // The admin resolves: a badge for the raiser and the others.
+    const res = {
+      k: 'sos',
+      id: 's1',
+      o: gus.id,
+      f: { res: true, rby: w.owner.id, rat: T0 + 3 * MIN },
+    };
+    const r = w.root.write(T0 + 3 * MIN, 'e.set', res)!;
+    sync(T0 + 3 * MIN);
+    expect(
+      alertFor(rg.state, r, res, gus.id, alertContext(rg.state, rg.data(T0 + 3 * MIN))),
+    ).toMatchObject({
+      level: 'badge',
+      text: 'Your SOS was resolved',
+    });
+    expect(
+      alertFor(ra.state, r, res, alice.id, alertContext(ra.state, ra.data(T0 + 3 * MIN))),
+    ).toMatchObject({
+      level: 'badge',
+      text: 'SOS resolved',
+    });
+  });
 });

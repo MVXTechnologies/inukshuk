@@ -14,6 +14,7 @@ import type { SignedOp } from './envelope';
 import { isMemberId, isShortId } from './ids';
 import type { TeamState } from './membership';
 import { isAdminRole, parseAudience, type Audience } from './roles';
+import { authorizeRecord, RECORD_KINDS, type RecordKind } from './records';
 import { isTaskStatusUpdate, validTaskFields } from './tasks';
 
 /**
@@ -39,11 +40,32 @@ import { isTaskStatusUpdate, validTaskFields } from './tasks';
  * Everything here is a fold in the team's total order over CRDT merges, so the
  * result is a function of the op set alone.
  */
-export const ENTITY_KINDS = ['wpt', 'point', 'task', 'track', 'photo', 'comment', 'msg'] as const;
+export const ENTITY_KINDS = [
+  'wpt',
+  'point',
+  'task',
+  'track',
+  'photo',
+  'comment',
+  'msg',
+  ...RECORD_KINDS,
+] as const;
 export type EntityKind = (typeof ENTITY_KINDS)[number];
-export const OWNED_KINDS: readonly EntityKind[] = ['task', 'track', 'photo', 'comment', 'msg'];
+export const OWNED_KINDS: readonly EntityKind[] = [
+  'task',
+  'track',
+  'photo',
+  'comment',
+  'msg',
+  'trl',
+  'sos',
+  'rly',
+  'mres',
+];
 /** Entity kinds a guest may write (their own records only). */
-export const GUEST_KINDS: readonly EntityKind[] = ['comment'];
+export const GUEST_KINDS: readonly EntityKind[] = ['comment', 'sos', 'mres'];
+/** Kinds whose `e.set` may name another member's record (`o`). */
+const O_KINDS: readonly string[] = ['task', 'trl', 'sos', 'mres'];
 
 export const MAX_FIELDS = 64;
 export const MAX_MESSAGE_CHARS = 4000;
@@ -97,7 +119,7 @@ export function parseSetBody(v: unknown): SetBody | undefined {
   if (!isRecord(v) || !only(v, ['k', 'id', 'f', 'o'])) return undefined;
   if (!isKind(v['k']) || v['k'] === 'msg' || !isShortId(v['id']) || !isRecord(v['f']))
     return undefined;
-  if (v['o'] !== undefined && (v['k'] !== 'task' || !isMemberId(v['o']))) return undefined;
+  if (v['o'] !== undefined && (!O_KINDS.includes(v['k']) || !isMemberId(v['o']))) return undefined;
   const names = Object.keys(v['f']);
   if (names.length === 0 || names.length > MAX_FIELDS || !names.every((n) => FIELD_NAME.test(n))) {
     return undefined;
@@ -234,6 +256,18 @@ export function applyDataOp(out: TeamData, state: TeamState, op: SignedOp, decod
             return forbid();
         }
         merge(key, { kind: 'task', id: b.id, owner }, setOp(b.f, stamp));
+        return;
+      }
+      if ((RECORD_KINDS as readonly string[]).includes(b.k)) {
+        const r = authorizeRecord(
+          { kind: b.k as RecordKind, id: b.id, o: b.o, f: b.f, author: env.au, role },
+          (kind, id, o) => out.entities.get(entityKey(kind as EntityKind, id, o)),
+        );
+        if (r === 'invalid') break;
+        if (r === 'forbidden') return forbid();
+        const rrec: Omit<EntityRecord, 'state'> = { kind: b.k, id: b.id };
+        if (r.owner) rrec.owner = r.owner;
+        merge(entityKey(b.k, b.id, r.owner), rrec, setOp(b.f, stamp));
         return;
       }
       const owner = OWNED_KINDS.includes(b.k) ? env.au : undefined;

@@ -670,6 +670,43 @@ teammate collapse: the first in 60 s notifies, the rest only update the
 banner ("3 task updates for you"). The throttle is per author and per device, so colluding
 members can each still raise one full alert per 60 s (accepted).
 
+### 11.5 Team trails, SOS, rally points, resolved messages (`records.ts`)
+
+Owner decisions 2026-10-07. Every field is validated on every write; a
+malformed op is `invalid`, a well-formed one the author may not write is
+`forbidden`; authority is the author's role at the op's place in the fold.
+
+| Kind                    | Key                                                                      | Writes                                                                                                                                | Deletes          |
+| ----------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| `trl` team trail        | owned (creator)                                                          | creator: all fields; members: `name`, `desc`, `color` of a live trail; `base` only at creation, never again (not even by the creator) | creator or admin |
+| `tve` trail vertex      | shared, id `<trail>_b<i>` (base vertex) or `<trail>_<random>` (inserted) | members, only on a live `trl` (`to`, `tr` name it); a base vertex never takes a key                                                   | members          |
+| `sos`                   | owned (raiser)                                                           | the raiser, guests too (a raise needs `la`, `lo`); the raiser or an admin: the resolution only                                        | raiser or admin  |
+| `rly` rally point       | owned (creator)                                                          | the creator (members; no `o`)                                                                                                         | creator or admin |
+| `mres` message resolved | owned by the **message's** author, id = the message id                   | its author, an admin, or a member the message mentions (guests too); the message must be live                                         | author or admin  |
+
+**Trail editing CRDT.** A team trail's `base` is an immutable polyline;
+vertex `i` of it has the fractional key `h` + 4 base-36 digits. A `tve`
+record moves a base vertex (`la`, `lo`, LWW per field), an `e.del` deletes it
+(a newer move resurrects it), and an inserted vertex carries its own key `k`,
+made between its neighbours' keys (`keyBetween`; ties break on the id). The
+trail is the live vertices sorted by key: a function of the op set, so every
+phone converges (property test: random concurrent moves, inserts and deletes
+from three members, shuffled). Undo is the client re-writing the previous
+value of its own last edit; "editing" presence is an ordinary message.
+
+**Status writes are whole**: `res: true` with `rby` = the author and `rat`;
+`res: false` with both null (as tasks).
+
+**SOS alerts** every active member except the raiser at once: always an
+`alert`, priority 2, never collapsed by the task throttle and not subject to
+the 30-member rule; the text comes from the merged record. A resolution is a
+badge (the raiser: "Your SOS was resolved"). The raiser's live position is the
+ordinary position register.
+
+**Resolved messages** (pins, notifies) leave the map and the unread counts and
+stay listed under "Resolved"; nothing is deleted. Resolving is reversible by
+the same set of people.
+
 ### 11.3 Blobs (stage 3)
 
 - `contentHash` identifies the bytes.

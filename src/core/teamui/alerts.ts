@@ -17,6 +17,7 @@
  */
 import type { Json } from '@core/team/canonical';
 import { isRecord } from '@core/team/canonical';
+import { isLive, visibleFields } from '@core/team/crdt';
 import type { SignedOp } from '@core/team/envelope';
 import type { TeamState } from '@core/team/membership';
 import { audienceMembers, LARGE_TEAM, routeDelivery } from '@core/team/notify';
@@ -35,7 +36,7 @@ export interface TeamAlert {
   key: string;
   author: string;
   level: 'badge' | 'alert';
-  kind: 'message' | 'comment' | 'task';
+  kind: 'message' | 'comment' | 'task' | 'sos';
   text: string;
   priority: 0 | 1 | 2;
   /** The route tapping it opens. */
@@ -54,6 +55,8 @@ export interface AlertContext {
   /** Whether `owner`'s pin `id` exists. */
   hasPin(owner: string, id: string): boolean;
   /** A task as merged by the fold (validated fields), never the raw op. */
+  /** An SOS as merged by the fold. */
+  sos?(owner: string, id: string): { text: string; resolved: boolean } | undefined;
   task(
     owner: string,
     id: string,
@@ -74,6 +77,12 @@ export function alertContext(state: TeamState, data: TeamData): AlertContext {
     trailOwner: (id) => owners.get(id),
     hasPin: (owner, id) => pins.has(`${owner}:${id}`),
     task: (owner, id) => tasks.get(`${owner}:${id}`),
+    sos: (owner, id) => {
+      const rec = data.entities.get(`sos:${owner}:${id}`);
+      if (rec === undefined || !isLive(rec.state)) return undefined;
+      const f = visibleFields(rec.state);
+      return { text: typeof f['tx'] === 'string' ? f['tx'] : '', resolved: f['res'] === true };
+    },
   };
 }
 
@@ -107,6 +116,7 @@ export function alertFor(
   if (op.env.t === 'e.set' && body['k'] === 'comment')
     return commentAlert(state, op, body, me, ctx);
   if (op.env.t === 'e.set' && body['k'] === 'task') return taskAlert(state, op, body, me, ctx);
+  if (op.env.t === 'e.set' && body['k'] === 'sos') return sosAlert(state, op, body, me, ctx);
   return null;
 }
 
@@ -243,3 +253,53 @@ export class TaskAlertThrottle {
     return { ...alert, level: 'badge', text: `${b.count} task updates for you` };
   }
 }
+
+/**
+ * An SOS alerts every active member but the raiser: always an `alert`, at
+ * priority 2, whatever the team's size (the 30-member rule and the task
+ * throttle never apply). Its resolution is a badge. Text from the merged record.
+ */
+function sosAlert(
+  state: TeamState,
+  op: SignedOp,
+  body: Record<string, Json>,
+  me: string,
+  ctx: AlertContext,
+): TeamAlert | null {
+  const id = body['id'];
+  const f = body['f'];
+  if (typeof id !== 'string' || !isRecord(f)) return null;
+  const self = state.members.get(me);
+  if (op.env.au === me || self?.status !== 'active') return null;
+  const owner = typeof body['o'] === 'string' ? body['o'] : op.env.au;
+  if (owner === me) {
+    // Someone resolved my SOS.
+    const mine = ctx.sos?.(owner, id);
+    if (mine === undefined || f['res'] !== true || !mine.resolved) return null;
+    return {
+      key: `sos:${op.id}`,
+      author: op.env.au,
+      level: 'badge',
+      kind: 'sos',
+      text: 'Your SOS was resolved',
+      priority: 0,
+      url: SOS_URL(owner, id),
+    };
+  }
+  const sos = ctx.sos?.(owner, id);
+  if (sos === undefined) return null;
+  const raise = typeof f['la'] === 'number' && f['res'] !== true && !sos.resolved;
+  const resolved = f['res'] === true && sos.resolved;
+  if (!raise && !resolved) return null;
+  return {
+    key: `sos:${op.id}`,
+    author: owner,
+    level: raise ? 'alert' : 'badge',
+    kind: 'sos',
+    text: raise ? `SOS${sos.text ? ` · ${cap(sos.text)}` : ' · needs help'}` : 'SOS resolved',
+    priority: raise ? 2 : 0,
+    url: SOS_URL(owner, id),
+  };
+}
+
+const SOS_URL = (owner: string, id: string) => `/team/sos/${owner}/${id}`;
