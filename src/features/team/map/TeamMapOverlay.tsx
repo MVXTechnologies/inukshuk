@@ -24,6 +24,7 @@ import { TEAM_TAP_LAYERS } from './layerIds';
 import { Round, TeamFab, TeamSheetCard } from './TeamCards';
 import { useTeamMapFocus } from './teamMapFocus';
 import { useTeamSheet, useTeamSignalMode } from './teamMode';
+import { usePhotoCard } from '@features/photos/PhotoBottomCard';
 import { TeamPinCard } from './TeamPinCard';
 import { TeamPinComposer, usePinDraft } from './TeamPinComposer';
 
@@ -105,6 +106,7 @@ export function TeamMapOverlay({
   const select = useTeamMapSelection((s) => s.select);
   const sheet = useTeamSheet((s) => s.sheet);
   const signal = useTeamSignalMode();
+  const photoCard = usePhotoCard((s) => s.target);
   if (installedAt === 0 || !show || view === null) return null;
 
   const member = hit?.kind === 'member' ? positions.find((p) => p.id === hit.id) : undefined;
@@ -123,7 +125,13 @@ export function TeamMapOverlay({
 
   return (
     <>
-      {signal && <TeamFab bottom={fabBottom} />}
+      {/* The team button never covers a card: any card, sheet or popup hides it. */}
+      {signal &&
+        cardSlotFree &&
+        draft === null &&
+        hit === null &&
+        photoCard === null &&
+        (sheet === null || sheet.kind === 'menu') && <TeamFab bottom={fabBottom} />}
       {draft !== null && (
         <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
           <TeamPinComposer onPinned={(owner, id) => select({ kind: 'pin', owner, id })} />
