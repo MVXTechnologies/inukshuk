@@ -15,7 +15,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   // Apple Health / Health Connect (native: HealthKit entitlement, Health
   // Connect permissions, minSdk 26), FIT/TCX "Open with"; MapLibre 11.4.
   // 2.0.0 was the vector Stone & Paper base map and the rest of the revamp.
-  version: '2.3.0',
+  version: '2.5.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
   scheme: 'inukshuk',
@@ -27,7 +27,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
     bundleIdentifier: 'com.inukshuk.app',
     // Increase for every App Store Connect upload.
-    buildNumber: '18',
+    buildNumber: '19',
     infoPlist: {
       // Trail recording keeps running with the screen off / app backgrounded.
       // The expo-location plugin (isIosBackgroundLocationEnabled) also adds
@@ -96,7 +96,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     package: 'com.inukshuk.app',
     // Play build 59 ships 2.0.1 (vc58 was never uploaded: rebuilt on the
     // Expo 56.0.23 patches so it shares main's runtime; see the version note).
-    versionCode: 63,
+    versionCode: 64,
     // Brand icon split into layers (scripts/brand/build-icons.py): the landscape
     // is the background, the stone figure + contact shadow the foreground (inside
     // the 66 dp safe zone), and a one-colour silhouette for Android 13+ themed
