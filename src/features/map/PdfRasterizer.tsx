@@ -721,6 +721,11 @@ export function buildHtml(sources: Omit<PdfjsSources, 'fallbacks'>): string {
       useWorkerFetch: false,
       BinaryDataFactory: InkBinaryDataFactory,
       useWasm: HAS_WASM,
+      // No WebCodecs ImageDecoder: it hands JPEGs to the page as VideoFrames,
+      // which WebKit redraws ~25x slower than ImageBitmaps — every held detail
+      // tile of a scanned sheet repainted in ~1 s instead of ~40 ms (desktop
+      // WebKit 26, USGS 1987 HTMC). pdf.js' own decoder is what 3.11 used.
+      isImageDecoderSupported: false,
     };
     if (wasmUrl) common.wasmUrl = wasmUrl;
     var params;

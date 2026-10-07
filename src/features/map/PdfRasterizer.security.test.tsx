@@ -146,6 +146,7 @@ it('opens every document without eval, worker fetches or scripting (served, inli
   for (const params of opened) {
     expect(params.isEvalSupported).toBe(false);
     expect(params.useWorkerFetch).toBe(false);
+    expect(params.isImageDecoderSupported).toBe(false);
     expect(typeof params.BinaryDataFactory).toBe('function');
     expect(params.enableScripting).not.toBe(true);
   }
