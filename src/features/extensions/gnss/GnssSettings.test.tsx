@@ -60,13 +60,19 @@ describe('Settings → Extensions: External GNSS receiver', () => {
     setGnss(0);
     await render(wrap(<ExtensionsSection />));
     expect(screen.getByText('External GNSS receiver')).toBeTruthy();
+    expect(screen.getByText('External receiver · RTK to cm').props.numberOfLines).toBe(1);
     await fireEvent.press(screen.getByLabelText('Get External GNSS receiver'));
     expect(useSettingsStore.getState().extensions.gnss.installedAt).toBeGreaterThan(0);
+    // Installed from the collapsed row: its switch, its rows folded until expanded.
+    expect(screen.getByLabelText('Use the external receiver')).toBeTruthy();
+    expect(screen.queryByText('Receiver')).toBeNull();
+    await fireEvent.press(screen.getByTestId('extension-row-gnss'));
+    expect(screen.getByText('On · your location uses it while its fix is good')).toBeTruthy();
     expect(screen.getByText('Receiver')).toBeTruthy();
     expect(screen.getByText('None yet — connect one')).toBeTruthy();
   });
 
-  it('installed: receiver, corrections, datum and the phone policy, in both themes', async () => {
+  it('installed, opened by its deep link: receiver, corrections, datum and the phone policy, in both themes', async () => {
     setGnss(1);
     useGnssStore.setState({
       config: {
@@ -89,7 +95,8 @@ describe('Settings → Extensions: External GNSS receiver', () => {
       ntrip: { phase: 'streaming', message: null, bytes: 10, lastDataAtMs: 1 },
     });
     for (const dark of [false, true]) {
-      const { unmount } = await render(wrap(<ExtensionsSection />, dark));
+      const { unmount } = await render(wrap(<ExtensionsSection openExtension="gnss" />, dark));
+      expect(screen.getByLabelText('Remove External GNSS receiver extension')).toBeTruthy();
       expect(screen.getByText('RTK Facet · connected · RTK fixed')).toBeTruthy();
       expect(screen.getByText('RTK2go · LEVIS · streaming')).toBeTruthy();
       expect(screen.getByText(/NAD83\(CSRS\) epoch 1997\.0/)).toBeTruthy();

@@ -245,8 +245,9 @@ one registry, not hand-wired screens (architecture review P1-3):
    case, no full stop, at most `EXTENSION_SUMMARY_MAX` (32) characters, e.g.
    "Survey marks and benchmarks" (`registry.test.ts` checks it).
    `summary`, `label` and `teaser` come from `ExtensionIdentity`, which every
-   extension descriptor type extends (map and device extensions alike), so
-   an extension without a summary does not type-check.
+   extension descriptor type extends (`ExtensionDescriptor`,
+   `DeviceExtensionDescriptor`), so an extension without a summary does not
+   type-check.
 3. Write its components under `features/extensions/<key>/` — a Settings body
    in `ExtensionSettingsShell`, a panel row and, if it has a map card, a map
    module — and add one line to each surface registry it uses. The shell

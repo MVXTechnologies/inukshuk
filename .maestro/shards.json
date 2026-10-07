@@ -25,7 +25,13 @@
       "recording-check.yaml"
     ],
     "catalog": ["make-map.yaml", "store.yaml", "pdf-overlays.yaml"],
-    "extensions": ["convert.yaml", "geodetic.yaml", "tides.yaml", "gnss.yaml", "extensions-review.yaml"]
+    "extensions": [
+      "convert.yaml",
+      "geodetic.yaml",
+      "tides.yaml",
+      "gnss.yaml",
+      "extensions-review.yaml"
+    ]
   },
   "requires": {
     "heatmap.yaml": ["category-record.yaml"],
