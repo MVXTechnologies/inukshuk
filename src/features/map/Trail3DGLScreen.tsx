@@ -680,7 +680,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
             points={points}
             segmentStarts={segmentStarts}
             notes={notes}
-            scrubAt={scrub}
+            // A caught photo is ringed on the map: no cursor dot on top of it.
+            scrubAt={selectedPhotoId ? null : scrub}
             basemap={basemap}
             onNotePress={openNote}
             focus={focusAt}

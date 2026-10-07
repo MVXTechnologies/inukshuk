@@ -119,14 +119,13 @@ export function ChartsTab({
     />
   ) : undefined;
   const guides = hasLane
-    ? circles.flatMap((c) =>
-        // One leader per photo, from its circle down to its spot on the profile.
-        c.anchorXs.map((x) => ({
-          fromX: c.x,
-          distanceM: laneW > 0 ? (x / laneW) * totalM : 0,
-          strong: c === caught,
-        })),
-      )
+    ? circles.map((c) => ({
+        // One straight leader per circle, down to the profile under it: a
+        // fan to every member of a stack read as clutter on device.
+        fromX: c.x,
+        distanceM: laneW > 0 ? (c.x / laneW) * totalM : 0,
+        strong: c === caught,
+      }))
     : undefined;
   const laneProps = { above: lane, guides, onWidth: setLaneW };
   // The lane rides the first chart there is (elevation, unless the trail has no altitude).
