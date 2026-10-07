@@ -663,15 +663,19 @@ write to its id.
 
   Node with the OpenSSL double, 2026-10-07:
 
-  | Measure                                              | Result     | Budget |
-  | ---------------------------------------------------- | ---------- | ------ |
-  | Ingest                                               | 0.13 ms/op | < 1 ms |
-  | Position                                             | 0.13 ms/op | < 1 ms |
-  | Append + fold                                        | 0.3 ms     |        |
-  | `m.add` while building the team                      | 0.45 ms    |        |
-  | `data()` full build of 20k entities (after a refold) | ~0.5 s     |        |
-  | `data()` first read after 500 new positions          | ~12 ms     |        |
-  | `data()` after an append                             | < 0.1 ms   | < 5 ms |
+  | Measure                                              | Result     | Test asserts                                     |
+  | ---------------------------------------------------- | ---------- | ------------------------------------------------ |
+  | Ingest                                               | 0.13 ms/op | **0 rebuilds**; ceiling 10 ms/op                 |
+  | Position                                             | 0.13 ms/op | **0 rebuilds**; ceiling 10 ms                    |
+  | Append + fold                                        | 0.3 ms     |                                                  |
+  | `m.add` while building the team                      | 0.45 ms    |                                                  |
+  | `data()` full build of 20k entities (after a refold) | ~0.5 s     |                                                  |
+  | `data()` first read after 500 new positions          | ~12 ms     |                                                  |
+  | `data()` after an append                             | < 0.1 ms   | **0 rebuilds, same cached view**; ceiling 100 ms |
+
+  The primary assertions count work (full refolds), not time. The wall-clock
+  ceilings are 10–100× the measured values: they never flake on a loaded runner
+  (20/20 runs under parallel load) yet still catch a per-op rebuild.
 
   Before this change: 6.4 ms per position update, 332 ms per `data()`, and
   35 s for 20k sequential writes.
