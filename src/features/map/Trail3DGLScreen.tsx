@@ -113,7 +113,10 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const router = useRouter();
   // Library's "Trim" menu item routes here with ?trim=1 to enter trim mode
   // as soon as this trail's points are loaded (see the effect below).
-  const { trim: trimParam } = useLocalSearchParams<{ trim?: string }>();
+  const { trim: trimParam, addPhotos: addPhotosParam } = useLocalSearchParams<{
+    trim?: string;
+    addPhotos?: string;
+  }>();
   const track = useLibraryStore((s) => s.tracks.find((t) => t.id === trackId));
   const addTrack = useLibraryStore((s) => s.addTrack);
   const updateTrack = useLibraryStore((s) => s.updateTrack);
@@ -180,6 +183,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
   // Rename-this-trail prompt, opened by tapping the summary card's title.
   const [renaming, setRenaming] = useState(false);
   const pendingTrimRef = useRef(trimParam === '1');
+  const pendingAddPhotosRef = useRef(addPhotosParam === '1');
 
   // DEM heightmap cache for the profile's terrain-sampled elevations.
   const hmRef = useRef<Awaited<ReturnType<typeof fetchHeightmap>> | null>(null);
@@ -234,6 +238,18 @@ export function Trail3DGLScreen({ trackId }: Props) {
       setTrimRange({ start: 0, end: points.length - 1 });
     } else showSnack('This trail is too short to trim');
   }, [points, showSnack]);
+
+  // The one-shot ?addPhotos=1 intent (#587: "Add photos from this outing?"
+  // after a recording is saved): open the Add-photos sheet once the points
+  // and the photo list are in. Same consumed-once exception as ?trim=1.
+  useEffect(() => {
+    if (!pendingAddPhotosRef.current || !points || trailPhotos.status === 'loading') return;
+    pendingAddPhotosRef.current = false;
+    if (canEditPhotos) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAddingPhotos(true);
+    } else if (photoNotice) showSnack(photoNotice);
+  }, [points, trailPhotos.status, canEditPhotos, photoNotice, showSnack]);
 
   // Re-read the (possibly just-overwritten) GPX file from disk — used after
   // an overwrite trim so the trace/profile reflect the new geometry

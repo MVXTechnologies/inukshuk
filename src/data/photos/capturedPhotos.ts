@@ -1,7 +1,12 @@
 import type { TrackPhoto } from '@core/photos/model';
 import { StorageFullError } from '@data/storage';
 
-import { deletePhotoFiles, writeFullSizeCopies, writePhotoCopies, type WrittenCopies } from './photoFiles';
+import {
+  deletePhotoFiles,
+  writeFullSizeCopies,
+  writePhotoCopies,
+  type WrittenCopies,
+} from './photoFiles';
 import type { ResizedPhoto } from './resizer';
 import { updateSidecar } from './sidecarStore';
 import { deleteTrailPhotoFolder } from './trailFolder';

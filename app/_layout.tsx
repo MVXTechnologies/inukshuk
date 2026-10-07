@@ -34,6 +34,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { installTileHostAlias } from '@data/tileHostAlias';
 import { clearPhotoInbox } from '@data/photos/inbox';
 import { PhotoResizeHost } from '@features/photos/PhotoResizeHost';
+import { AddPhotosAfterSavePrompt } from '@features/photos/AddPhotosAfterSavePrompt';
 
 // Before any map mounts: MapLibre's requests for the frozen tile-template host
 // go to wherever the Worker lives (a no-op until it moves; P1-2).
@@ -173,6 +174,7 @@ export default function RootLayout() {
                 <MapReparseWorker />
                 <StravaPushPrompt />
                 <GnssHost />
+                <AddPhotosAfterSavePrompt />
               </PdfRasterizerProvider>
             </ErrorBoundary>
           </PaperProvider>
