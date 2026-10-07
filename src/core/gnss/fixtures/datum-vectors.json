@@ -1,0 +1,329 @@
+{
+ "_meta": {
+  "generated": "2026-10-07T00:47:27-0400",
+  "method": "see src/core/gnss/README.md, \"Datum validation vectors\"",
+  "proj": {
+   "pyproj": "3.8.0",
+   "proj": "9.8.1"
+  },
+  "grids": "PROJ-data (cdn.proj.org): ca_nrc_NAD83v70VG.tif, ca_nrc_CGG2013an83.tif, us_noaa_nadcon5_*_conus.tif",
+  "conventions": {
+   "axis_order": "input / expected / proj = [lon_deg, lat_deg, h_m]; null = not compared",
+   "pass": "proj vs expected: horizontal |Δ| (metres on GRS80) <= tol.h, |Δh| <= tol.v",
+   "pipeline": "the exact PROJ pipeline src/core/gnss/datum.ts plans for the scenario (a change fails the gate)",
+   "proj_field": "PROJ 9.8.1 on that pipeline, frozen; the host runner reproduces it to 1e-6 m"
+  }
+ },
+ "vectors": [
+  {
+   "id": "qc-mrnf-wgs84",
+   "title": "MRNF RTK fix on mark 93K2005, Québec City (NAD83(CSRS) 1997.0) in the default project datum WGS 84: the converted part, to ITRF2020 at the observation epoch (then the WGS 84 ensemble identity, no change)",
+   "scenario": {
+    "kind": "rtk-fixed",
+    "corrections": {
+     "frame": "csrs",
+     "epoch": 1997
+    },
+    "project": {
+     "frame": "wgs84",
+     "height": "ell"
+    }
+   },
+   "input": [
+    -71.28388185944445,
+    46.78188763611111,
+    59.44
+   ],
+   "obsEpoch": 2026.75,
+   "expected": [
+    -71.28388927833333,
+    46.78189854833333,
+    58.448
+   ],
+   "tol": {
+    "h": 0.001,
+    "v": 0.0015
+   },
+   "source": {
+    "tool": "NRCan TRX web service (CSRS/tools/TRX/calc/geo)",
+    "version": "TRX online, velocities = NAD83v70VG at the point (the app's model)",
+    "date": "2026-10-05T00:17:38-0400",
+    "from": [
+     "reference.json CA-EPOCH-CSRS-math / 93K2005@1997.0",
+     "reference.json CA-CSRS-ITRF2020-math / 93K2005->ITRF2020@2026.75"
+    ],
+    "note": "TRX answers frozen in src/core/convert/fixtures/reference.json (queried 2026-10-05); TRX calc returned HTTP 500 throughout 2026-10-07"
+   },
+   "pipeline": "+proj=pipeline +step +proj=unitconvert +xy_in=deg +xy_out=rad +step +proj=cart +ellps=GRS80 +step +proj=deformation +dt=29.75 +grids=ca_nrc_NAD83v70VG.tif +ellps=GRS80 +step +inv +proj=helmert +x=1.0039 +y=-1.90961 +z=-0.54117 +rx=-0.02678138 +ry=0.00042027 +rz=-0.01093206 +s=-5.109e-05 +dx=0.00079 +dy=-0.0007 +dz=-0.00124 +drx=-6.667e-05 +dry=0.00075744 +drz=5.133e-05 +ds=-7.201e-05 +t_epoch=2010 +convention=position_vector +step +inv +proj=cart +ellps=GRS80 +step +proj=unitconvert +xy_in=rad +xy_out=deg",
+   "inDim": 4,
+   "validation": [
+    "CA-CSRS-ITRF2020-math",
+    "CA-CSRS-ITRF2020-TRXdefault"
+   ],
+   "proj": [
+    -71.28388927814483,
+    46.78189854850944,
+    58.447937284596264
+   ]
+  },
+  {
+   "id": "qc-mrnf-csrs2010",
+   "title": "MRNF RTK fix on mark 93K2005 (NAD83(CSRS) 1997.0) in project datum NAD83(CSRS) 2010.0",
+   "scenario": {
+    "kind": "rtk-fixed",
+    "corrections": {
+     "frame": "csrs",
+     "epoch": 1997
+    },
+    "project": {
+     "frame": "csrs",
+     "epoch": 2010,
+     "height": "ell"
+    }
+   },
+   "input": [
+    -71.28388185944445,
+    46.78188763611111,
+    59.44
+   ],
+   "obsEpoch": 2026.75,
+   "expected": [
+    -71.28388159777778,
+    46.78188744,
+    59.4672
+   ],
+   "tol": {
+    "h": 0.001,
+    "v": 0.0015
+   },
+   "source": {
+    "tool": "NRCan TRX web service (CSRS/tools/TRX/calc/geo)",
+    "version": "TRX online, velocities = NAD83v70VG at the point (the app's model)",
+    "date": "2026-10-05T00:17:33-0400",
+    "from": [
+     "reference.json CA-EPOCH-CSRS-math / 93K2005@1997.0"
+    ],
+    "note": "TRX answers frozen in src/core/convert/fixtures/reference.json (queried 2026-10-05); TRX calc returned HTTP 500 throughout 2026-10-07"
+   },
+   "pipeline": "+proj=pipeline +step +proj=unitconvert +xy_in=deg +xy_out=rad +step +proj=cart +ellps=GRS80 +step +proj=deformation +dt=13 +grids=ca_nrc_NAD83v70VG.tif +ellps=GRS80 +step +inv +proj=cart +ellps=GRS80 +step +proj=unitconvert +xy_in=rad +xy_out=deg",
+   "inDim": 3,
+   "validation": [
+    "CA-EPOCH-CSRS-math",
+    "CA-EPOCH-CSRS-TRXdefault"
+   ],
+   "proj": [
+    -71.2838815976739,
+    46.781887440056536,
+    59.46723464131355
+   ]
+  },
+  {
+   "id": "qc-mrnf-cgvd2013",
+   "title": "MRNF RTK fix on mark 93K2005 (NAD83(CSRS) 1997.0, h) in project datum NAD83(CSRS) 1997.0 + CGVD2013 (CGG2013a)",
+   "scenario": {
+    "kind": "rtk-fixed",
+    "corrections": {
+     "frame": "csrs",
+     "epoch": 1997
+    },
+    "project": {
+     "frame": "csrs",
+     "epoch": 1997,
+     "height": "cgvd2013a"
+    }
+   },
+   "input": [
+    -71.28388185944445,
+    46.78188763611111,
+    59.44
+   ],
+   "obsEpoch": 2026.75,
+   "expected": [
+    null,
+    null,
+    87.32
+   ],
+   "tol": {
+    "h": null,
+    "v": 0.003
+   },
+   "source": {
+    "tool": "NRCan GPS·H web service (CSRS/tools/GPSH/CGG2013a)",
+    "version": "GPS·H online",
+    "url": "https://webapp.csrs-scrs.nrcan-rncan.gc.ca/CSRS/tools/GPSH/CGG2013a?x=N46%C2%B0+46%27+54.795490%22&y=W71%C2%B0+17%27+1.974694%22&z=59.4400&frame=NAD83%28CSRS%29&epoch=1997.0&proj=geo&zone=utm",
+    "date": "2026-10-07T00:47:26-0400",
+    "response": "Frame: NAD83(CSRS), Epoch: 1997.0, Proj: geo, Zone: geo, X: N46° 46' 54.79549\", Y: W71° 17' 1.974694\", Z: 59.440, HO: 87.320, N: -27.880, SigN: 0.018, G: 980715.7, SigG: 1.2, Xi: -5.238, Eta: -1.033, VN: 0.00, Errors: ok"
+   },
+   "pipeline": "+proj=pipeline +step +proj=unitconvert +xy_in=deg +xy_out=rad +step +inv +proj=vgridshift +grids=ca_nrc_CGG2013an83.tif +multiplier=1 +step +proj=unitconvert +xy_in=rad +xy_out=deg",
+   "inDim": 3,
+   "validation": [
+    "CA-H-CGG2013a",
+    "CA-H-CGG2013a-1997",
+    "CA-H-datasheet-CGVD2013"
+   ],
+   "proj": [
+    -71.28388185944445,
+    46.78188763611111,
+    87.31989016320415
+   ]
+  },
+  {
+   "id": "mtl-polaris-csrs2010",
+   "title": "Polaris RTK fix (ITRF2014, current epoch) on mark 75K0139 near Montréal, in project datum NAD83(CSRS) 2010.0",
+   "scenario": {
+    "kind": "rtk-fixed",
+    "corrections": {
+     "frame": "itrf2014",
+     "epoch": "observation"
+    },
+    "project": {
+     "frame": "csrs",
+     "epoch": 2010,
+     "height": "ell"
+    }
+   },
+   "input": [
+    -73.35359570388889,
+    45.40805967,
+    -13.326
+   ],
+   "obsEpoch": 2026.75,
+   "expected": [
+    -73.35358769583333,
+    45.40804917305556,
+    -12.271
+   ],
+   "tol": {
+    "h": 0.001,
+    "v": 0.0015
+   },
+   "source": {
+    "tool": "NRCan TRX web service (CSRS/tools/TRX/calc/geo)",
+    "version": "TRX online, velocities = NAD83v70VG at the point (the app's model)",
+    "date": "2026-10-05T00:19:26-0400",
+    "from": [
+     "reference.json CA-CSRS-ITRF2014-math / 75K0139->ITRF2014@2026.75"
+    ],
+    "note": "TRX answers frozen in src/core/convert/fixtures/reference.json (queried 2026-10-05); TRX calc returned HTTP 500 throughout 2026-10-07",
+    "direction": "inverse of the TRX answer (input rounded by TRX to 1e-6″ / 1 mm)"
+   },
+   "pipeline": "+proj=pipeline +step +proj=unitconvert +xy_in=deg +xy_out=rad +step +proj=cart +ellps=GRS80 +step +proj=helmert +x=1.0053 +y=-1.90921 +z=-0.54157 +rx=-0.02678138 +ry=0.00042027 +rz=-0.01093206 +s=0.00036891 +dx=0.00079 +dy=-0.0006 +dz=-0.00144 +drx=-6.667e-05 +dry=0.00075744 +drz=5.133e-05 +ds=-7.201e-05 +t_epoch=2010 +convention=position_vector +step +proj=deformation +dt=-16.75 +grids=ca_nrc_NAD83v70VG.tif +ellps=GRS80 +step +inv +proj=cart +ellps=GRS80 +step +proj=unitconvert +xy_in=rad +xy_out=deg",
+   "inDim": 4,
+   "validation": [
+    "CA-CSRS-ITRF2014-math",
+    "CA-CSRS-ITRF2014-TRXdefault"
+   ],
+   "proj": [
+    -73.3535876957697,
+    45.40804917318753,
+    -12.271204332821071
+   ]
+  },
+  {
+   "id": "van-itrf2020-csrs2010",
+   "title": "ITRF2020 current-epoch fix (PPP / ITRF2020 caster) on mark B326595 near Vancouver, in project datum NAD83(CSRS) 2010.0",
+   "scenario": {
+    "kind": "rtk-fixed",
+    "corrections": {
+     "frame": "itrf2020",
+     "epoch": "observation"
+    },
+    "project": {
+     "frame": "csrs",
+     "epoch": 2010,
+     "height": "ell"
+    }
+   },
+   "input": [
+    -123.25105504722222,
+    49.35171866527778,
+    161.529
+   ],
+   "obsEpoch": 2026.75,
+   "expected": [
+    -123.25103448861111,
+    49.351716035277775,
+    161.7904
+   ],
+   "tol": {
+    "h": 0.001,
+    "v": 0.0015
+   },
+   "source": {
+    "tool": "NRCan TRX web service (CSRS/tools/TRX/calc/geo)",
+    "version": "TRX online, velocities = NAD83v70VG at the point (the app's model)",
+    "date": "2026-10-05T00:09:47-0400",
+    "from": [
+     "reference.json CA-CSRS-ITRF2020-math / B326595->ITRF2020@2026.75"
+    ],
+    "note": "TRX answers frozen in src/core/convert/fixtures/reference.json (queried 2026-10-05); TRX calc returned HTTP 500 throughout 2026-10-07",
+    "direction": "inverse of the TRX answer (input rounded by TRX to 1e-6″ / 1 mm)"
+   },
+   "pipeline": "+proj=pipeline +step +proj=unitconvert +xy_in=deg +xy_out=rad +step +proj=cart +ellps=GRS80 +step +proj=helmert +x=1.0039 +y=-1.90961 +z=-0.54117 +rx=-0.02678138 +ry=0.00042027 +rz=-0.01093206 +s=-5.109e-05 +dx=0.00079 +dy=-0.0007 +dz=-0.00124 +drx=-6.667e-05 +dry=0.00075744 +drz=5.133e-05 +ds=-7.201e-05 +t_epoch=2010 +convention=position_vector +step +proj=deformation +dt=-16.75 +grids=ca_nrc_NAD83v70VG.tif +ellps=GRS80 +step +inv +proj=cart +ellps=GRS80 +step +proj=unitconvert +xy_in=rad +xy_out=deg",
+   "inDim": 4,
+   "validation": [
+    "CA-CSRS-ITRF2020-math",
+    "CA-CSRS-ITRF2020-TRXdefault"
+   ],
+   "proj": [
+    -123.25103448861867,
+    49.351716035162426,
+    161.7906395914033
+   ]
+  },
+  {
+   "id": "den-rtn-nad83-1986",
+   "title": "US state RTN fix in Denver (NAD83(2011) epoch 2010.0) in project datum NAD83(1986) (horizontal)",
+   "scenario": {
+    "kind": "rtk-fixed",
+    "corrections": {
+     "frame": "nad83-2011"
+    },
+    "project": {
+     "frame": "nad83-1986-us",
+     "height": null
+    }
+   },
+   "input": [
+    -104.9903,
+    39.7392,
+    1600.0
+   ],
+   "obsEpoch": 2026.75,
+   "expected": [
+    -104.9902994162,
+    39.739197881,
+    null
+   ],
+   "tol": {
+    "h": 0.001,
+    "v": null
+   },
+   "source": {
+    "tool": "NOAA NCAT llh (NADCON 5.0)",
+    "version": "NCAT API, nadconVersion 5.0",
+    "url": "https://geodesy.noaa.gov/api/ncat/llh?lat=39.7392&lon=-104.9903&eht=1600.000&inDatum=nad83%282011%29&outDatum=nad83%281986%29",
+    "date": "2026-10-07T00:47:27-0400",
+    "response": {
+     "srcDatum": "NAD83(2011)",
+     "destDatum": "NAD83(1986)",
+     "destLat": "39.7391978810",
+     "destLon": "-104.9902994162",
+     "sigLat_m": "0.0926",
+     "sigLon_m": "0.1816"
+    }
+   },
+   "pipeline": "+proj=pipeline +step +proj=unitconvert +xy_in=deg +xy_out=rad +step +inv +proj=gridshift +no_z_transform +grids=us_noaa_nadcon5_nad83_2007_nad83_2011_conus.tif +step +inv +proj=gridshift +no_z_transform +grids=us_noaa_nadcon5_nad83_fbn_nad83_2007_conus.tif +step +inv +proj=gridshift +no_z_transform +grids=us_noaa_nadcon5_nad83_harn_nad83_fbn_conus.tif +step +inv +proj=gridshift +grids=us_noaa_nadcon5_nad83_1986_nad83_harn_conus.tif +step +proj=unitconvert +xy_in=rad +xy_out=deg",
+   "inDim": 3,
+   "validation": [
+    "US-NADCON5-NAD83_2011-to-NAD83_1986",
+    "US-NADCON5-NAD83_1986-to-NAD83_2011"
+   ],
+   "proj": [
+    -104.99029941615962,
+    39.739197881020125,
+    1600.0
+   ]
+  }
+ ]
+}

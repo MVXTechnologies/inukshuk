@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Run the Convert reference suite through the app's own facade + PROJ on the
-# build machine (no simulator). Builds PROJ for the host once.
+# Run the Convert reference suite and the GNSS datum vectors through the app's
+# own facade + PROJ on the build machine (no simulator). Builds PROJ for the
+# host once.
 #
 #   modules/inukshuk-proj/tests/run-host.sh GRID_DIR
 #
@@ -19,4 +20,5 @@ c++ -std=c++17 -O2 ${SDK:+-isysroot "$SDK"} -I"$HERE/prebuilt/host/include" \
   "$HERE/tests/host_runner.cpp" "$HERE/cpp/proj_facade.cpp" "${LIBS[@]}" -o "$OUT"
 cd "$ROOT"
 INKPROJ_HOST_RUNNER="$OUT" INKPROJ_PROJ_DB="$HERE/prebuilt/host/share/proj/proj.db" \
-  INKPROJ_GRIDS="$GRIDS" npx jest src/core/convert/nativeSuite.host.test.ts --verbose=false
+  INKPROJ_GRIDS="$GRIDS" npx jest src/core/convert/nativeSuite.host.test.ts \
+  src/core/gnss/datumVectors.host.test.ts --verbose=false
