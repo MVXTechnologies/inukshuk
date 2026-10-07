@@ -22,6 +22,9 @@ import type { TeamMarkHit } from './TeamMapMarks';
 import { useTeamMapSelection } from './TeamMapOverlay';
 import { usePinDraft } from './TeamPinComposer';
 import { SosHoldCard } from './TeamField';
+import { startEditing } from './TrailEditor';
+import { loadTrackGeometry } from '@data/trackGeometry';
+import { useLibraryStore } from '@state/libraryStore';
 import { useTeamPick } from './TeamPick';
 import { useTeamSheet, type TeamSheet } from './teamMode';
 
@@ -282,16 +285,51 @@ function askPhotoHere(at: [number, number], trackId: string | null, done: () => 
   ]);
 }
 
+/** Edit a team trail: this one, the one made from this recording, or a new one from it. */
+async function editTrailFrom(
+  team: { owner: string; id: string } | null,
+  trackId: string | null,
+  name: string,
+): Promise<void> {
+  const session = teamService()?.active;
+  if (!session) return;
+  if (team) {
+    startEditing(team);
+    return;
+  }
+  if (trackId === null) return;
+  const made = session
+    .teamTrails()
+    .find((x) => x.src?.id === trackId && x.src.owner === session.me);
+  if (made) {
+    startEditing({ owner: made.owner, id: made.id });
+    return;
+  }
+  const summary = useLibraryStore.getState().tracks.find((x) => x.id === trackId);
+  const geom = summary ? await loadTrackGeometry(summary).catch(() => null) : null;
+  const line = geom?.parts.reduce<[number, number][]>((a, p) => (p.length > a.length ? p : a), []);
+  if (!line || line.length < 2) {
+    Alert.alert('Can’t edit this trail', 'Its line could not be read.');
+    return;
+  }
+  const r = session.createTeamTrail(name, line, { owner: session.me, id: trackId });
+  useTeamStore.getState().refresh();
+  if (typeof r === 'string') Alert.alert('Can’t edit this trail', actionMessage(r));
+  else startEditing({ owner: session.me, id: r.id });
+}
+
 /** A spot on a trail (team mode): the team's actions there, never the profile. */
 function SpotCard({
   at,
   trail,
   trackId,
+  team,
   onClose,
 }: {
   at: [number, number];
   trail: string;
   trackId: string | null;
+  team: { owner: string; id: string } | null;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -321,6 +359,17 @@ function SpotCard({
           testID="team-spot-photo"
           onPress={() => askPhotoHere(at, trackId, onClose)}
         />
+        {!guest && (
+          <Round
+            icon="vector-polyline-edit"
+            label="Edit trail"
+            testID="team-spot-edit"
+            onPress={() => {
+              onClose();
+              void editTrailFrom(team, trackId, trail);
+            }}
+          />
+        )}
         {!guest && (
           <Round
             icon="checkbox-marked-circle-plus-outline"
@@ -543,6 +592,7 @@ export function TeamSheetCard({
           at={sheet.at}
           trail={sheet.trail}
           trackId={sheet.trackId ?? null}
+          team={sheet.team ?? null}
           onClose={close}
         />
       );

@@ -20,6 +20,7 @@ import { SyncSession, type SessionEvent } from '@core/team/sync';
 import { alertContext, alertFor, TaskAlertThrottle, type TeamAlert } from '@core/teamui/alerts';
 import { commentsByPhoto, type Said } from '@core/teamui/mapMarks';
 import { teamRally, teamSos, type TeamRally, type TeamSos } from '@core/teamui/field';
+import { editors, editText, SYS_EDIT, teamTrails, type TeamTrailView } from '@core/teamui/trails';
 import { pinThread, resolvedMessages, teamPins, type TeamPin } from '@core/teamui/pins';
 import {
   statusFields,
@@ -47,6 +48,7 @@ import {
   type ShareableTrack,
   type ShareableWaypoint,
   type TeamShares,
+  encodePolyline,
 } from '@core/teamui/shares';
 import {
   cleanName,
@@ -410,6 +412,115 @@ export class TeamSession {
     );
     if (op === undefined) return 'rotation-pending';
     return this.accepted(op.id) ? null : 'not-allowed';
+  }
+
+  private trailsCache: { key: string; trails: TeamTrailView[] } | null = null;
+
+  /** Team trails (editable by all members) with their current vertices. */
+  teamTrails(): TeamTrailView[] {
+    if (this.trailsCache?.key !== this.dataVersion)
+      this.trailsCache = {
+        key: this.dataVersion,
+        trails: teamTrails(this.replica.data(this.deps.now())),
+      };
+    return this.trailsCache.trails;
+  }
+
+  /** Who is editing which team trail now (member → `owner:id`). */
+  editors(): Map<string, string> {
+    const now = this.deps.now();
+    return editors(this.replica.data(now), now);
+  }
+
+  private writeOk(body: Json): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const op = this.run(() => this.replica.write(this.deps.now(), 'e.set', body));
+    if (op === undefined) return 'rotation-pending';
+    return this.accepted(op.id) ? null : 'not-allowed';
+  }
+
+  /** Make a team trail from a line (members); returns its id or an error. */
+  createTeamTrail(
+    name: string,
+    line: readonly [number, number][],
+    src: { owner: string; id: string } | null = null,
+  ): { id: string } | ActionError {
+    if (!this.canEditShared()) return 'not-allowed';
+    const pts =
+      line.length > 400
+        ? line.filter((_, i) => i % Math.ceil(line.length / 400) === 0 || i === line.length - 1)
+        : [...line];
+    if (pts.length < 2) return 'invalid';
+    const id = this.deps.newId().replace(/_/g, '-').slice(0, 40);
+    const f: Record<string, Json> = {
+      name: name.trim().slice(0, 80) || 'Trail',
+      base: encodePolyline(pts),
+    };
+    if (src) {
+      f['so'] = src.owner;
+      f['si'] = src.id;
+    }
+    const err = this.writeOk({ k: 'trl', id, f });
+    return err ?? { id };
+  }
+
+  /** Move a vertex (base or inserted) of a team trail. */
+  moveVertex(
+    trail: { owner: string; id: string },
+    vertexId: string,
+    lng: number,
+    lat: number,
+    key?: string,
+  ): ActionError | null {
+    const f: Record<string, Json> = { to: trail.owner, tr: trail.id, la: lat, lo: lng };
+    if (key !== undefined) f['k'] = key;
+    return this.writeOk({ k: 'tve', id: vertexId, o: trail.owner, f });
+  }
+
+  /** Insert a vertex with key `key`; returns its id or an error. */
+  insertVertex(
+    trail: { owner: string; id: string },
+    key: string,
+    lng: number,
+    lat: number,
+  ): { id: string } | ActionError {
+    const id = `${trail.id}_${this.deps.newId().replace(/_/g, '-').slice(0, 12)}`;
+    const err = this.moveVertex(trail, id, lng, lat, key);
+    return err ?? { id };
+  }
+
+  /** Delete a vertex of a team trail (members). */
+  deleteVertex(trail: { owner: string; id: string }, vertexId: string): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const op = this.run(() =>
+      this.replica.write(this.deps.now(), 'e.del', { k: 'tve', id: vertexId, o: trail.owner }),
+    );
+    if (op === undefined) return 'rotation-pending';
+    return this.accepted(op.id) ? null : 'not-allowed';
+  }
+
+  /** Rename, describe or recolour a team trail (members). */
+  editTrailMeta(
+    trail: { owner: string; id: string },
+    f: { name?: string; desc?: string; color?: string },
+  ): ActionError | null {
+    const body: Record<string, Json> = { k: 'trl', id: trail.id, f: { ...f } };
+    if (trail.owner !== this.me) body['o'] = trail.owner;
+    return this.writeOk(body);
+  }
+
+  /** "I'm editing this trail" (null: done), for the others' presence cue. */
+  setEditing(trail: { owner: string; id: string } | null): void {
+    if (this.guardWrite()) return;
+    this.writeMsg(
+      systemMessage(
+        this.deps.newId(),
+        SYS_EDIT,
+        editText(trail ? `${trail.owner}:${trail.id}` : null),
+      ),
+    );
   }
 
   private tasksCache: { key: string; tasks: TeamTask[] } | null = null;

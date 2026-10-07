@@ -26,6 +26,7 @@ import { useTeamMapFocus } from './teamMapFocus';
 import { useTeamSheet, useTeamSignalMode } from './teamMode';
 import { usePhotoCard } from '@features/photos/PhotoBottomCard';
 import { RallyPill, SosBanner } from './TeamField';
+import { TrailEditBar, useTrailEdit } from './TrailEditor';
 import { TeamPinCard } from './TeamPinCard';
 import { useTeamPick } from './TeamPick';
 import { TeamPinComposer, usePinDraft } from './TeamPinComposer';
@@ -113,6 +114,7 @@ export function TeamMapOverlay({
   const signal = useTeamSignalMode();
   const photoCard = usePhotoCard((s) => s.target);
   const picking = useTeamPick((s) => s.purpose !== null);
+  const editing = useTrailEdit((s) => s.trail !== null);
   if (installedAt === 0 || !show || view === null) return null;
 
   const member = hit?.kind === 'member' ? positions.find((p) => p.id === hit.id) : undefined;
@@ -131,6 +133,7 @@ export function TeamMapOverlay({
 
   return (
     <>
+      {editing && <TrailEditBar style={[cardStyle, styles.leaveFab]} />}
       {/* An open SOS is pinned at the top for everyone, signal mode or not. */}
       <SosBanner top={sosTop} here={here} onNavigate={onNavigate} />
       {/* The rally point's pill: signal mode, no card up. */}
@@ -145,6 +148,7 @@ export function TeamMapOverlay({
       {/* The team button never covers a card: any card, sheet or popup hides it. */}
       {signal &&
         !picking &&
+        !editing &&
         cardSlotFree &&
         draft === null &&
         hit === null &&
@@ -155,7 +159,7 @@ export function TeamMapOverlay({
           <TeamPinComposer onPinned={(owner, id) => select({ kind: 'pin', owner, id })} />
         </View>
       )}
-      {draft === null && card && sheet !== null && (
+      {!editing && draft === null && card && sheet !== null && (
         <View style={[cardStyle, styles.leaveFab]} pointerEvents="box-none" testID="team-card-dock">
           <TeamSheetCard sheet={sheet} here={here} onPointActions={onPointActions} />
         </View>

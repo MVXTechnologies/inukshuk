@@ -8,6 +8,7 @@ import type { TeamAlert } from '@core/teamui/alerts';
 import type { TeamPhoto } from '@core/teamui/comments';
 import type { Said } from '@core/teamui/mapMarks';
 import type { TeamRally, TeamSos } from '@core/teamui/field';
+import type { TeamTrailView } from '@core/teamui/trails';
 import type { TeamPin } from '@core/teamui/pins';
 import type { MemberStatus } from '@core/teamui/system';
 import type { TeamTask } from '@core/team/tasks';
@@ -46,6 +47,10 @@ export interface TeamSnapshot {
   pins: TeamPin[];
   /** Every live task. */
   tasks: TeamTask[];
+  /** Team trails with their vertices. */
+  teamTrails: TeamTrailView[];
+  /** Who is editing which team trail (member → owner:id). */
+  editors: ReadonlyMap<string, string>;
   /** Every live SOS, open ones first. */
   soses: TeamSos[];
   /** The team's rally point. */
@@ -79,6 +84,7 @@ const EMPTY_SHARES: TeamShares = { waypoints: [], tracks: [] };
 const NO_THREADS: ReadonlyMap<string, readonly Said[]> = new Map();
 const NO_STATUSES: ReadonlyMap<string, MemberStatus> = new Map();
 const NO_RESOLVED: ReadonlySet<string> = new Set();
+const NO_EDITORS: ReadonlyMap<string, string> = new Map();
 
 function snapshot(service: TeamService | null): Omit<TeamSnapshot, 'banner'> {
   const s: TeamSession | null = service?.active ?? null;
@@ -98,6 +104,8 @@ function snapshot(service: TeamService | null): Omit<TeamSnapshot, 'banner'> {
     statuses: s?.statuses() ?? NO_STATUSES,
     resolved: s?.resolved() ?? NO_RESOLVED,
     soses: s?.soses() ?? [],
+    teamTrails: s?.teamTrails() ?? [],
+    editors: s?.editors() ?? NO_EDITORS,
     rally: s?.rally() ?? null,
     photoThreads: s?.photoThreads() ?? NO_THREADS,
     dataVersion: s?.dataVersion ?? '',

@@ -23,7 +23,14 @@ export type TeamSheet =
   | { kind: 'status' }
   | { kind: 'sos' }
   | { kind: 'notify'; at: [number, number] | null }
-  | { kind: 'spot'; at: [number, number]; trail: string; trackId?: string }
+  | {
+      kind: 'spot';
+      at: [number, number];
+      trail: string;
+      trackId?: string;
+      /** A team trail (editable by all members). */
+      team?: { owner: string; id: string };
+    }
   | { kind: 'press'; at: [number, number] }
   /** Co-located marks a cluster can't split further. */
   | { kind: 'list'; items: TeamMarkHit[] };

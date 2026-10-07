@@ -94,7 +94,15 @@ export function TeamMapLayers({
     }),
   );
   const people = useMemo(() => JSON.parse(peopleJson) as FeatureCollection, [peopleJson]);
-  const tracks = useMemo(() => tracksGeoJson(shares, members ?? []), [shares, members]);
+  const teamTrails = useTeamStore((s) => s.teamTrails);
+  const tracks = useMemo(() => {
+    // A recording made into a team trail is drawn as that trail instead.
+    const made = new Set(teamTrails.flatMap((x) => (x.src ? [`${x.src.owner}:${x.src.id}`] : [])));
+    return tracksGeoJson(
+      { ...shares, tracks: shares.tracks.filter((x) => !made.has(`${x.owner}:${x.id}`)) },
+      members ?? [],
+    );
+  }, [shares, members, teamTrails]);
   const points = useMemo(() => waypointsGeoJson(shares), [shares]);
   const font = teamLabelFont(glyphs);
   const tokens = useSchemeTokens();

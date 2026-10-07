@@ -142,7 +142,12 @@ import { usePinDraft } from '@features/team/map/TeamPinComposer';
 import { TeamTrailPhotos } from '@features/team/map/TeamTrailPhotos';
 import { useTeamSheet, useTeamSignalMode } from '@features/team/map/teamMode';
 import { TeamPickOverlay, useTeamPick } from '@features/team/map/TeamPick';
-import { useTeamFieldLayers } from '@features/team/map/TeamFieldLayers';
+import {
+  hitTestTeamTrail,
+  useTeamFieldLayers,
+  useTeamTrailLayers,
+} from '@features/team/map/TeamFieldLayers';
+import { editTap, useTrailEdit } from '@features/team/map/TrailEditor';
 import { useTrailPhotosStore } from '@state/trailPhotosStore';
 import { PhotoBottomCard, usePhotoCard } from '../photos/PhotoBottomCard';
 import { useTeamStore } from '@state/teamStore';
@@ -995,6 +1000,7 @@ export function MapScreen() {
   ]);
   const teamMarks = useTeamMapMarks(style.glyphs);
   const teamField = useTeamFieldLayers(style.glyphs);
+  const teamTrailLayers = useTeamTrailLayers(style.glyphs);
 
   // Native 3D terrain (docs/plans/native-terrain.md): with "3D relief" on and
   // a binary that ships the module, tilting past ~25° grows real relief out of
@@ -1953,6 +1959,16 @@ export function MapScreen() {
       }
       const [px, py] = point;
 
+      // Editing a team trail: the taps edit it (select, move, insert, extend).
+      if (useTrailEdit.getState().trail !== null) {
+        if (lngLatArr)
+          editTap(
+            [lngLatArr[0], lngLatArr[1]],
+            22 * (metersPerPixel(scaleAt?.zoom ?? 16, lngLatArr[1]) ?? 1),
+          );
+        return;
+      }
+
       // Team pick mode ("Attach to…"): a photo, a pin, a trail point or a
       // place; nothing else answers the tap until it is confirmed or cancelled.
       if (useTeamPick.getState().purpose !== null) {
@@ -2146,6 +2162,22 @@ export function MapScreen() {
           router.push('/team/tasks' as never);
         }
         return;
+      }
+
+      // Team signal mode: a team trail is a place to act from (and to edit).
+      if (teamSignalRef.current && lngLatArr) {
+        const trl = await hitTestTeamTrail(map, px, py);
+        if (trl) {
+          useTeamMapSelection.getState().select(null);
+          setPointAt(null);
+          useTeamSheet.getState().open({
+            kind: 'spot',
+            at: [lngLatArr[0], lngLatArr[1]],
+            trail: trl.name,
+            team: { owner: trl.owner, id: trl.id },
+          });
+          return;
+        }
       }
 
       // Team mode (#589): a teammate's dot or a shared waypoint, above the
@@ -3157,6 +3189,7 @@ export function MapScreen() {
               deferPress={deferPhotoPress}
             />
             {teamMarks}
+            {teamTrailLayers}
             {teamField}
             {/* Revamp puck, replacing MapLibre's default one (children do):
               halo, ring and dot in the scheme's puck tokens, plus the amber
