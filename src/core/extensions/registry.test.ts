@@ -1,7 +1,13 @@
 import { STONE_FONTS_ATKINSON } from '@core/map/stoneStyle';
 
-import { EXTENSION_KEYS, isExtensionKey } from './keys';
-import { companionExtensions, extensionDescriptor, EXTENSIONS } from './registry';
+import { ALL_EXTENSION_KEYS, DEVICE_EXTENSION_KEYS, EXTENSION_KEYS, isExtensionKey } from './keys';
+import {
+  companionExtensions,
+  DEVICE_EXTENSIONS,
+  extensionBasics,
+  extensionDescriptor,
+  EXTENSIONS,
+} from './registry';
 
 const TILES = 'https://tiles.example/{z}/{x}/{y}.mvt';
 
@@ -72,5 +78,19 @@ describe('the extension registry', () => {
     expect(isExtensionKey('geodetic')).toBe(true);
     expect(isExtensionKey('climbing')).toBe(false);
     expect(isExtensionKey(3)).toBe(false);
+  });
+});
+
+describe('device extensions (#588)', () => {
+  it('are listed after the map ones, never in the map registry, with their own basics', () => {
+    expect(DEVICE_EXTENSION_KEYS).toEqual(['gnss']);
+    expect(ALL_EXTENSION_KEYS).toEqual(['geodetic', 'tides', 'gnss']);
+    expect(Object.keys(DEVICE_EXTENSIONS)).toEqual([...DEVICE_EXTENSION_KEYS]);
+    expect(isExtensionKey('gnss')).toBe(false);
+    expect(extensionBasics('gnss')).toBe(DEVICE_EXTENSIONS.gnss);
+    expect(extensionBasics('tides')).toBe(EXTENSIONS.tides);
+    const labels = ALL_EXTENSION_KEYS.map((k) => extensionBasics(k).label);
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(extensionBasics('gnss').legacySettings).toBeUndefined();
   });
 });

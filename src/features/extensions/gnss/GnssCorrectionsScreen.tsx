@@ -254,6 +254,7 @@ export function GnssCorrectionsScreen() {
 
       <TextInput
         mode="outlined"
+        returnKeyType="done"
         label="Caster"
         value={draft.host}
         onChangeText={(host) => set({ host })}
@@ -265,6 +266,7 @@ export function GnssCorrectionsScreen() {
       <View style={styles.pair}>
         <TextInput
           mode="outlined"
+          returnKeyType="done"
           label="Port"
           value={String(draft.port)}
           onChangeText={(v) => set({ port: Number(v.replace(/\D/g, '')) || 0 })}
@@ -284,7 +286,9 @@ export function GnssCorrectionsScreen() {
       <View style={styles.pair}>
         <TextInput
           mode="outlined"
+          returnKeyType="done"
           label="User"
+          testID="gnss-user"
           value={draft.username}
           onChangeText={(username) => set({ username })}
           autoCapitalize="none"
@@ -293,7 +297,9 @@ export function GnssCorrectionsScreen() {
         />
         <TextInput
           mode="outlined"
+          returnKeyType="done"
           label="Password"
+          testID="gnss-password"
           value={password}
           onChangeText={setPassword}
           secureTextEntry={!showPassword}
@@ -314,7 +320,9 @@ export function GnssCorrectionsScreen() {
       <View style={styles.pair}>
         <TextInput
           mode="outlined"
+          returnKeyType="done"
           label="Mountpoint"
+          testID="gnss-mountpoint"
           value={draft.mountpoint}
           onChangeText={(mountpoint) => set({ mountpoint })}
           autoCapitalize="characters"

@@ -7,6 +7,7 @@ import {
 import * as storage from '@data/storage';
 import { isBackgroundFeedConfirmed } from '@lib/backgroundLocation';
 import { reportError } from '@lib/errorReporting';
+import { useGnssStore } from '@state/gnssStore';
 import { useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { act, renderHook } from '@testing-library/react-native';
@@ -34,7 +35,7 @@ jest.mock('@lib/backgroundLocation', () => ({
 }));
 jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));
 jest.mock('expo-location', () => ({
-  Accuracy: { BestForNavigation: 6, High: 4, Balanced: 3 },
+  Accuracy: { BestForNavigation: 6, High: 4, Balanced: 3, Low: 2 },
   requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
   getForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
   watchPositionAsync: jest.fn(),
@@ -309,5 +310,98 @@ describe('location loss while the watch stays subscribed (#324)', () => {
     const { result } = await renderHook(useLocationTracking);
     await act(async () => {});
     expect(result.current.unavailableKind).toBeNull();
+  });
+});
+
+describe('an external GNSS receiver as the position source (#588)', () => {
+  const live = {
+    state: 'fixed' as const,
+    freshness: 'live' as const,
+    correction: 'ok' as const,
+    reportedState: 'fixed' as const,
+    correctionAgeS: 1,
+    lastFixAtMs: 1_000_000,
+    sinceMs: 1_000_000,
+  };
+  const map = {
+    lat: 46.80123,
+    lon: -71.21234,
+    result: {
+      ok: false as const,
+      refusal: { code: 'bad-input' as const, message: '' },
+      plan: null,
+    },
+  };
+
+  afterEach(() => useGnssStore.getState().resetLive());
+
+  it('location is the receiver’s; the phone watch idles at low accuracy and feeds nothing', async () => {
+    useGnssStore.setState({
+      use: 'external',
+      phone: 'standby',
+      status: live,
+      map,
+      link: 'connected',
+    });
+    const { result } = await renderHook(useLocationTracking);
+    expect(jest.mocked(Location.watchPositionAsync).mock.calls[0]?.[0]).toMatchObject({
+      accuracy: Location.Accuracy.Low,
+    });
+    await act(async () => {
+      deliver(fix(46.9));
+    });
+    expect(useRecorderStore.getState().points).toHaveLength(0);
+    expect(useGnssStore.getState().phoneAccuracyM).toBe(8);
+    expect(result.current.location).toEqual({ latitude: 46.80123, longitude: -71.21234 });
+    expect(result.current.unavailableKind).toBeNull();
+    // The receiver's later fixes reach `location` at most once a second.
+    await act(async () => {
+      useGnssStore.setState({ map: { ...map, lat: 46.802 } });
+    });
+    await act(async () => {
+      useGnssStore.setState({ map: { ...map, lat: 46.803 } });
+    });
+    expect(result.current.location?.latitude).toBe(46.80123);
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    expect(result.current.location?.latitude).toBe(46.803);
+  });
+
+  it('a silent standby watch is never probed while the receiver is the source', async () => {
+    useGnssStore.setState({ use: 'external', phone: 'standby', status: live, map });
+    await renderHook(useLocationTracking);
+    await act(async () => jest.advanceTimersByTime(FIX_STALE_MS + WATCHDOG_TICK_MS * 3));
+    expect(Location.getProviderStatusAsync).not.toHaveBeenCalled();
+  });
+
+  it('"phone GPS off" while the receiver is good: no watch at all', async () => {
+    useGnssStore.setState({ use: 'external', phone: 'off', status: live, map });
+    await renderHook(useLocationTracking);
+    expect(Location.watchPositionAsync).not.toHaveBeenCalled();
+  });
+
+  it('receiver lost with no fallback allowed: "no signal", which auto-pauses a recording', async () => {
+    useGnssStore.setState({
+      use: 'external',
+      phone: 'standby',
+      status: { ...live, state: 'no-fix', freshness: 'lost' },
+      map,
+    });
+    const { result } = await renderHook(useLocationTracking);
+    expect(result.current.unavailableKind).toBe('no-signal');
+  });
+
+  it('back on the phone: full accuracy, and its fixes are recorded again', async () => {
+    useGnssStore.setState({ use: 'phone', phone: 'active' });
+    const { result } = await renderHook(useLocationTracking);
+    expect(jest.mocked(Location.watchPositionAsync).mock.calls[0]?.[0]).toMatchObject({
+      accuracy: Location.Accuracy.BestForNavigation,
+    });
+    await act(async () => {
+      deliver(fix(46.9));
+    });
+    expect(useRecorderStore.getState().points).toHaveLength(1);
+    expect(result.current.location).toEqual({ latitude: 46.9, longitude: -71.2 });
   });
 });

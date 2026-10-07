@@ -71,6 +71,18 @@ caster bytes ──► NtripResponseParser (ntrip.ts) ──► RTCM bytes ─�
   around. `OutputPlan.method`, `.steps`, `.datumAccuracyM` and
   `.validation` are what the "how was this computed" panel shows.
 
+**Stage 3, in this folder** (the pure half of the UI; the app half is
+`@features/gnss`, `@features/extensions/gnss`, see docs/ARCHITECTURE.md):
+
+| File              | Responsibility                                                                                        |
+| ----------------- | ----------------------------------------------------------------------------------------------------- |
+| `receiver.ts`     | `ReceiverPipeline` (demuxer + assembler + status), `arbitrate` (source + "no fallback"), track points |
+| `output.ts`       | the fix on the map (WGS 84) and in the project datum, plans cached per frame / day / 10 km            |
+| `chip.ts`         | the chip's words and tone, accuracy / age / coordinate formatting (decimals follow the accuracy)      |
+| `config.ts`       | `gnss.json`: paired receiver, NTRIP profiles (never a password), project datum, phone policy          |
+| `projectDatum.ts` | the project datums offered (WGS 84 default, ITRF2020, NAD83(CSRS) 2010 / 1997, NAD83(2011))           |
+| `sim.ts`          | the scripted Québec City RTK session, pure (the app's simulated receiver replays it)                  |
+
 ## Datum rules
 
 - Autonomous / SBAS fixes are WGS 84 (broadcast). RTK / DGPS fixes are in

@@ -6,6 +6,8 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { asciiToBytes, LeWriter } from './bytes';
+import type { GnssFix } from './fix';
+import type { FixKind } from './quality';
 import { encodeUbx } from './ubx';
 
 const FIX = join(__dirname, 'fixtures');
@@ -118,4 +120,33 @@ export function navPvtPayload(p: {
 
 export function navPvtFrame(p: Parameters<typeof navPvtPayload>[0]): Uint8Array {
   return encodeUbx(0x01, 0x07, navPvtPayload(p));
+}
+
+/** A complete fix (RTK fixed at Québec City by default) for UI-model tests. */
+export function fixOf(kind: FixKind, over: Partial<GnssFix> = {}): GnssFix {
+  return {
+    timeMs: 1_800_000_000_000,
+    lat: 46.8,
+    lon: -71.2,
+    hEll: 20,
+    hMsl: 51,
+    geoidSep: -31,
+    kind,
+    sigmaLat: null,
+    sigmaLon: null,
+    sigmaV: null,
+    accuracy: { h95: 0.014, v95: 0.026, basis: 'receiver' },
+    hdop: 0.8,
+    pdop: 1.2,
+    vdop: 1,
+    satsUsed: 14,
+    satsInView: 28,
+    correctionAgeS: 1,
+    baseId: '0007',
+    correctionsInput: null,
+    speedMps: 1.2,
+    courseDeg: 45,
+    protocol: 'nmea',
+    ...over,
+  };
 }

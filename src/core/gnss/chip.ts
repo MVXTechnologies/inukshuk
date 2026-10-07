@@ -11,7 +11,6 @@
  */
 import type { GnssFix } from './fix';
 import {
-  CORR_AGING_S,
   usesCorrections,
   type AccuracyEstimate,
   type ExternalStatus,
@@ -190,7 +189,8 @@ export function receiverChip(i: ChipInput): ReceiverChip {
       const since = lastAt === null ? '' : ` · ${formatAge((i.nowMs - lastAt) / 1000)}`;
       return chip('lost', 'receiver-off', `Receiver lost${since}`);
     }
-    const acc = i.phoneAccuracyM === null ? '' : ` ${formatAccuracy(i.phoneAccuracyM)}`;
+    // The phone's accuracy as its own chip says it (`@core/recording/gpsChip`): whole metres.
+    const acc = i.phoneAccuracyM === null ? '' : ` ±${Math.max(1, Math.round(i.phoneAccuracyM))} m`;
     const why = gone ? 'receiver off' : 'receiver has no fix';
     return chip('warn', 'phone', `Phone GPS${acc} · ${why}`);
   }
@@ -206,10 +206,10 @@ export function receiverChip(i: ChipInput): ReceiverChip {
     const silent = lastAt === null ? '' : ` ${formatAge((i.nowMs - lastAt) / 1000)}`;
     return chip('warn', 'receiver', `Receiver silent${silent}${acc}`, detail);
   }
+  // "aging" / "stale" already mean older than CORR_AGING_S (`correctionHealth`).
   if (
     (status.correction === 'aging' || status.correction === 'stale') &&
-    status.correctionAgeS !== null &&
-    status.correctionAgeS > CORR_AGING_S
+    status.correctionAgeS !== null
   ) {
     return chip(
       'warn',

@@ -84,6 +84,8 @@ export interface LinkConnectOptions {
   deviceId: string;
   transport: LinkTransport;
   autoReconnect: boolean;
+  /** The native module's simulated receiver (`fake` transport): what it replays. */
+  fake?: { frames: string[]; intervalMs: number; loop: boolean };
 }
 
 /** What the session needs from the receiver link (the native module's shape). */

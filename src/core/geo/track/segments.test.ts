@@ -7,6 +7,7 @@ import {
   normalizeSegmentStarts,
   segmentIndexAt,
   segmentStartsFromPauses,
+  sourceChanged,
   splitSegments,
   startsNewSegment,
   totalPausedMs,
@@ -160,5 +161,28 @@ describe('accumulateSegmentedElevation', () => {
     expect(accumulateSegmentedElevation(points, [])).toEqual(
       accumulateElevationGainLoss(points.map((p) => p.altitude)),
     );
+  });
+});
+
+describe('position-source changes (#588)', () => {
+  const ext = (time: number): TrackPoint => ({ ...pt(time), source: 'external' });
+
+  it('a switch between the phone and the receiver starts a segment, pauses or not', () => {
+    expect(sourceChanged(pt(1), ext(2))).toBe(true);
+    expect(sourceChanged(ext(1), ext(2))).toBe(false);
+    expect(startsNewSegment(pt(1_000), ext(2_000), [])).toBe(true);
+    expect(startsNewSegment(ext(1_000), ext(2_000), [])).toBe(false);
+    expect(startsNewSegment(undefined, ext(2_000), [])).toBe(false);
+    const points = [pt(1_000), pt(2_000), ext(3_000), ext(4_000), ext(25_000), pt(26_000)];
+    expect(segmentStartsFromPauses(points, [])).toEqual([2, 5]);
+    expect(segmentStartsFromPauses(points, [PAUSE])).toEqual([2, 4, 5]);
+  });
+
+  it('nothing bridges the switch: distance stops at the last phone fix', () => {
+    const points = [pt(1_000, 46.8), pt(2_000, 46.8001), ext(3_000), ext(4_000)];
+    const starts = segmentStartsFromPauses(points, []);
+    const joined = computeSegmentedTrackStats(points, []).distanceM;
+    const split = computeSegmentedTrackStats(points, starts).distanceM;
+    expect(split).toBeLessThan(joined);
   });
 });

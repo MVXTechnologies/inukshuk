@@ -31,6 +31,7 @@ import {
 import { gnssSecrets } from '@data/gnss/credentials';
 import { gnssLink, type GnssLink, type LinkDevice, type LinkSubscription } from '@data/gnss/link';
 import { ntripSocketFactory } from '@data/gnss/ntripSocket';
+import { SIMULATED_INTERVAL_MS, simulatedFrames } from '@data/gnss/simulatedLink';
 import { initNativeProj, nativeEngine } from '@lib/nativeProj';
 import { reportError } from '@lib/errorReporting';
 import { useGnssStore } from '@state/gnssStore';
@@ -174,7 +175,15 @@ export class GnssSession {
     useGnssStore.getState().publish({ link: 'connecting', error: null });
     this.tickTimer = setInterval(() => this.tick(), TICK_MS);
     this.link
-      .connect({ deviceId: receiver.id, transport: receiver.transport, autoReconnect: true })
+      .connect({
+        deviceId: receiver.id,
+        transport: receiver.transport,
+        autoReconnect: receiver.transport !== 'fake',
+        // The native module's own simulated receiver replays what it is given.
+        ...(receiver.transport === 'fake'
+          ? { fake: { frames: simulatedFrames(), intervalMs: SIMULATED_INTERVAL_MS, loop: true } }
+          : {}),
+      })
       .catch((e: unknown) => {
         useGnssStore.getState().publish({
           link: 'disconnected',
