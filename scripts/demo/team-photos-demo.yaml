@@ -46,6 +46,12 @@ appId: com.inukshuk.app
       visible: 'Get Team mode'
     commands:
       - tapOn: 'Get Team mode'
+- runFlow:
+    when:
+      notVisible:
+        id: 'team-create-row'
+    commands:
+      - tapOn: 'Team mode.*'
 - scrollUntilVisible:
     element:
       id: 'team-create-row'
