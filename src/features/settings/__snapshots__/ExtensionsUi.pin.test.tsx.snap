@@ -1,0 +1,65 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Overlays › Extensions: both, hidden, dark 1`] = `"22a6cdb1ee6ec3f8"`;
+
+exports[`Overlays › Extensions: both, hidden, light 1`] = `"c9403aab52f6b78b"`;
+
+exports[`Overlays › Extensions: both, shown, dark 1`] = `"f38bf334872a96ad"`;
+
+exports[`Overlays › Extensions: both, shown, light 1`] = `"a7cbf84317d82204"`;
+
+exports[`Overlays › Extensions: geodetic, hidden, dark 1`] = `"14a3363b3e715ea5"`;
+
+exports[`Overlays › Extensions: geodetic, hidden, light 1`] = `"4e51933e4a39991b"`;
+
+exports[`Overlays › Extensions: geodetic, shown, dark 1`] = `"d88881e24b64707f"`;
+
+exports[`Overlays › Extensions: geodetic, shown, light 1`] = `"ea0203c079c72176"`;
+
+exports[`Overlays › Extensions: none, hidden, dark 1`] = `"c7d9fd0bd670b32a"`;
+
+exports[`Overlays › Extensions: none, hidden, light 1`] = `"8fb609568d988bfb"`;
+
+exports[`Overlays › Extensions: none, shown, dark 1`] = `"c7d9fd0bd670b32a"`;
+
+exports[`Overlays › Extensions: none, shown, light 1`] = `"8fb609568d988bfb"`;
+
+exports[`Overlays › Extensions: tides, hidden, dark 1`] = `"c7e6b3b2fb3686af"`;
+
+exports[`Overlays › Extensions: tides, hidden, light 1`] = `"f605359d2a05ab8a"`;
+
+exports[`Overlays › Extensions: tides, shown, dark 1`] = `"673b5a4ac34e89ec"`;
+
+exports[`Overlays › Extensions: tides, shown, light 1`] = `"705ca4de2db5d57e"`;
+
+exports[`Settings → Extensions: both, hidden, dark 1`] = `"3fac90a1e08afaa9"`;
+
+exports[`Settings → Extensions: both, hidden, light 1`] = `"5083d2215628dee1"`;
+
+exports[`Settings → Extensions: both, shown, dark 1`] = `"f4fd1815cf76d473"`;
+
+exports[`Settings → Extensions: both, shown, light 1`] = `"25ab4b25ffde3fb5"`;
+
+exports[`Settings → Extensions: geodetic, hidden, dark 1`] = `"6b2b957ee03662e9"`;
+
+exports[`Settings → Extensions: geodetic, hidden, light 1`] = `"7b03ee781add4834"`;
+
+exports[`Settings → Extensions: geodetic, shown, dark 1`] = `"f4f966b18871ff5d"`;
+
+exports[`Settings → Extensions: geodetic, shown, light 1`] = `"5c90ddc71df09379"`;
+
+exports[`Settings → Extensions: none, hidden, dark 1`] = `"cf55e89fd278cffd"`;
+
+exports[`Settings → Extensions: none, hidden, light 1`] = `"32c62aa4a619af56"`;
+
+exports[`Settings → Extensions: none, shown, dark 1`] = `"cf55e89fd278cffd"`;
+
+exports[`Settings → Extensions: none, shown, light 1`] = `"32c62aa4a619af56"`;
+
+exports[`Settings → Extensions: tides, hidden, dark 1`] = `"5f5db710e4ae4b7a"`;
+
+exports[`Settings → Extensions: tides, hidden, light 1`] = `"9216fb91a558210e"`;
+
+exports[`Settings → Extensions: tides, shown, dark 1`] = `"35319127980e1192"`;
+
+exports[`Settings → Extensions: tides, shown, light 1`] = `"4220b6cdf700a2e0"`;

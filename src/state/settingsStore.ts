@@ -7,6 +7,12 @@ import {
 import { isDisplayCondition, type DisplayCondition } from '@core/display/condition';
 import { sanitizeLastKnownPosition } from '@core/geo/lastKnownPosition';
 import { sanitizeOverlayTab, type OverlayTab } from '@core/map/overlayTabs';
+import {
+  defaultExtensionPrefs,
+  legacyExtensionFields,
+  migrateExtensionPrefs,
+} from '@core/extensions/prefs';
+import type { ExtensionPrefsMap } from '@core/extensions/types';
 import { DEFAULT_CATEGORY_ID } from '@core/library/categories';
 import { SETTINGS_SCHEMA_VERSION, migrateSettings } from '@core/library/migrations';
 import { DEFAULT_SORT, isSortKey, type SortKey } from '@core/library/sortTracks';
@@ -201,26 +207,15 @@ export interface Settings {
    */
   showParks: boolean;
   /**
-   * Settings → Extensions → Geodetic points (`@core/map/geodeticStyle`):
-   * "Get" installs the extension (epoch ms of the install; 0 = not installed).
-   * Installed, the map can draw the world's survey marks and new offline
-   * regions carry them.
+   * Settings → Extensions (`@core/extensions`): each map extension's install
+   * (epoch ms; 0 = not installed), layer switch and "Offline in your
+   * regions". Persisted with the pre-registry flat keys alongside
+   * (`geodeticInstalledAt`, `showGeodetic`, …) so an older build reads the
+   * same state — see `@core/extensions/prefs`.
    */
-  geodeticInstalledAt: number;
-  /** "Geodetic points" switch of the overlays menu (only while installed). */
-  showGeodetic: boolean;
-  /** Installed extension: include the marks in offline region downloads. */
-  geodeticOffline: boolean;
+  extensions: ExtensionPrefsMap;
   /** Geodetic points shown, by attribute (overlays menu → the funnel; `@core/geodetic/filter`). */
   geodeticFilter: GeodeticFilter;
-  /**
-   * Settings → Extensions → Tide stations (`@core/map/tideStyle`): epoch ms of
-   * the install (0 = not installed). Installed, the map can draw the tide
-   * stations (ours + Canada's live from CHS) and new offline regions carry them.
-   */
-  tidesInstalledAt: number;
-  /** The Tide stations switch (Overlays → Extensions; only while installed). */
-  showTideStations: boolean;
   /** The overlays sheet's last tab (`@core/map/overlayTabs`), reopened next time. */
   overlaysTab: OverlayTab;
   /**
@@ -333,12 +328,8 @@ const DEFAULTS: Settings = {
   hillshadeStrength: DEFAULT_HILLSHADE_STRENGTH,
   peakDensity: DEFAULT_PEAK_DENSITY,
   showParks: true,
-  geodeticInstalledAt: 0,
-  showGeodetic: true,
-  geodeticOffline: true,
+  extensions: defaultExtensionPrefs(),
   geodeticFilter: DEFAULT_GEODETIC_FILTER,
-  tidesInstalledAt: 0,
-  showTideStations: true,
   overlaysTab: 'map',
   tiltRelief: DEFAULT_TILT_RELIEF,
   betaTerrain3d: false,
@@ -368,7 +359,12 @@ interface SettingsState extends Settings {
 }
 
 function persist(s: Settings): void {
-  storage.writeJson(SETTINGS_FILE, { schemaVersion: SETTINGS_SCHEMA_VERSION, ...s });
+  storage.writeJson(SETTINGS_FILE, {
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
+    ...s,
+    // Rollback safety: the extensions' pre-registry keys, for older builds.
+    ...legacyExtensionFields(s.extensions),
+  });
 }
 
 /**
@@ -421,12 +417,8 @@ function snapshot(s: SettingsState): Settings {
     hillshadeStrength,
     peakDensity,
     showParks,
-    geodeticInstalledAt,
-    showGeodetic,
-    geodeticOffline,
+    extensions,
     geodeticFilter,
-    tidesInstalledAt,
-    showTideStations,
     overlaysTab,
     tiltRelief,
     betaTerrain3d,
@@ -476,12 +468,8 @@ function snapshot(s: SettingsState): Settings {
     hillshadeStrength,
     peakDensity,
     showParks,
-    geodeticInstalledAt,
-    showGeodetic,
-    geodeticOffline,
+    extensions,
     geodeticFilter,
-    tidesInstalledAt,
-    showTideStations,
     overlaysTab,
     tiltRelief,
     betaTerrain3d,
@@ -526,6 +514,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // An object default: the ladder's typeof check would pass object junk.
       next.geodeticFilter = sanitizeGeodeticFilter(next.geodeticFilter);
       next.overlaysTab = sanitizeOverlayTab(next.overlaysTab);
+      // An object default too, and read from the raw file: a settings file
+      // from before the registry holds the flat keys (`geodeticInstalledAt`…).
+      next.extensions = migrateExtensionPrefs(saved);
       next.marinePackSnoozes = sanitizeMarinePackSnoozes(next.marinePackSnoozes, Date.now());
       // weatherLayer's default is null (typeof 'object'), so the migration
       // ladder's typeof check DROPS a valid persisted string id (and would pass

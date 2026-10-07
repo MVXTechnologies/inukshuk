@@ -1,3 +1,4 @@
+import { EXTENSION_KEYS, EXTENSIONS, type ExtensionKey } from '@core/extensions/registry';
 import { MARINE_DISCLAIMER, OPENSEAMAP_ATTRIBUTION } from '@core/geo/marineLayers';
 import { ECCC_ATTRIBUTION } from '@core/geo/weatherLayers';
 
@@ -25,8 +26,7 @@ export interface MapCreditLine {
     | 'routing'
     | 'weather'
     | 'marine'
-    | 'geodetic'
-    | 'tides';
+    | ExtensionKey;
   /** The section label ("Base map", "Routing"). */
   label: string;
   /** The © line itself. */
@@ -49,10 +49,8 @@ export interface MapCreditsInput {
   routingEngines: readonly string[] | null;
   weather?: boolean;
   marine?: boolean;
-  /** Geodetic points (Settings → Extensions) drawn on the map. */
-  geodetic?: boolean;
-  /** Tide stations (Overlays → Tide stations) drawn on the map. */
-  tides?: boolean;
+  /** The map extensions (Settings → Extensions) drawn on the map. */
+  extensions?: readonly ExtensionKey[];
 }
 
 export const OSM_COPYRIGHT_URL = 'https://www.openstreetmap.org/copyright';
@@ -154,26 +152,11 @@ export function mapCredits(input: MapCreditsInput): MapCreditLine[] {
   if (input.weather) {
     lines.push({ id: 'weather', label: 'Weather', credit: ECCC_ATTRIBUTION });
   }
-  if (input.geodetic) {
-    lines.push({
-      id: 'geodetic',
-      label: 'Geodetic points',
-      credit:
-        "Survey agencies' published data (each mark's card names its source and licence) · " +
-        'survey points © OpenStreetMap contributors',
-      link: OSM_LINK,
-    });
-  }
-  if (input.tides) {
-    lines.push({
-      id: 'tides',
-      label: 'Tide stations',
-      credit:
-        'NOAA/NOS/CO-OPS · Shom, 2025. Références Altimétriques Maritimes, ' +
-        'doi:10.17183/MAREE_COURANTS_RAM (Licence Ouverte 2.0) · © Kartverket (CC BY 4.0) · ' +
-        '出典：気象庁 (JMA) · Canada: contains data of the Canadian Hydrographic Service (DFO), ' +
-        'fetched live by this device · Not for navigation',
-    });
+  // The extensions' lines, in registry (draw) order.
+  for (const key of EXTENSION_KEYS) {
+    if (!input.extensions?.includes(key)) continue;
+    const { label, credit, osmLink } = EXTENSIONS[key].credit;
+    lines.push({ id: key, label, credit, ...(osmLink ? { link: OSM_LINK } : {}) });
   }
   if (input.marine) {
     lines.push({

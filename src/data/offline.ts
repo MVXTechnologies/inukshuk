@@ -7,6 +7,7 @@ import {
   type PackBasemap,
   type PackFormat,
 } from '@core/geo/tiles';
+import { companionExtensions, EXTENSIONS, type ExtensionKey } from '@core/extensions/registry';
 import { parseUrlTemplates, styleUrlTemplates, type UrlTemplates } from '@core/map/tileUrls';
 import { isOutOfSpaceMessage } from '@core/storage/diskBudget';
 import { servedFileUrl } from '@core/storage/servedPaths';
@@ -128,8 +129,13 @@ interface PackMeta {
   createdAt?: number;
 }
 
-/** Extensions that can add a companion pack to an offline region. */
-export type ExtensionKind = 'geodetic';
+/**
+ * An extension that owns packs (`@core/extensions`): companion packs for the
+ * regions downloaded before its install; `includes` names those whose tiles a
+ * region's own style carried (only extensions with companion packs are
+ * recorded: nothing else reads it).
+ */
+export type ExtensionKind = ExtensionKey;
 
 /** An extension's companion pack, as the extension's settings list it. */
 export interface CompanionPack {
@@ -137,6 +143,12 @@ export interface CompanionPack {
   companionOf: string;
   sizeBytes: number;
   complete: boolean;
+}
+
+/** `{ includes }` for the companion-pack extensions named in `keys`, else `{}`. */
+function packIncludes(keys: readonly unknown[]): { includes?: ExtensionKind[] } {
+  const includes = companionExtensions().filter((k) => keys.includes(k));
+  return includes.length > 0 ? { includes } : {};
 }
 
 function regionFromPack(
@@ -161,9 +173,7 @@ function regionFromPack(
     sizeBytes: status ? status.completedTileSize || status.completedResourceSize : 0,
     complete: (status?.percentage ?? 0) >= 100,
     format: meta.format === 'vector' ? 'vector' : 'raster',
-    ...(Array.isArray(meta.includes) && meta.includes.includes('geodetic')
-      ? { includes: ['geodetic' as const] }
-      : {}),
+    ...packIncludes(Array.isArray(meta.includes) ? (meta.includes as unknown[]) : []),
     ...(urls !== null ? { urls } : {}),
     // Only trust a sane recorded number; legacy packs simply omit it.
     ...(typeof meta.maxZoom === 'number' && Number.isFinite(meta.maxZoom)
@@ -272,8 +282,12 @@ export async function createRegionPack(
     ...(args.companion
       ? { extension: args.companion.extension, companionOf: args.companion.of }
       : {}),
-    ...(!args.companion && styleHasSource(args.styleJSON, 'geodetic')
-      ? { includes: ['geodetic'] }
+    ...(!args.companion
+      ? packIncludes(
+          companionExtensions().filter((k) =>
+            styleHasSource(args.styleJSON, EXTENSIONS[k].map.sourceId),
+          ),
+        )
       : {}),
     urls: styleUrlTemplates(args.styleJSON),
     createdAt: Date.now(),

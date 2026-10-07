@@ -2,6 +2,9 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import type { OverlayTab } from '@core/map/overlayTabs';
+import { defaultExtensionPrefs } from '@core/extensions/prefs';
+import type { ExtensionKey } from '@core/extensions/keys';
+import type { ExtensionPrefs } from '@core/extensions/types';
 import { OverlaysPanel } from './MapOverlaysMenu';
 
 /**
@@ -31,6 +34,17 @@ const mockPush = jest.fn();
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 
 const noop = (): void => undefined;
+
+/** Put some extensions' persisted state in the settings store (the rest at defaults). */
+function setExtensions(p: Partial<Record<ExtensionKey, Partial<ExtensionPrefs>>>): void {
+  const d = defaultExtensionPrefs();
+  useSettingsStore.setState({
+    extensions: {
+      geodetic: { ...d.geodetic, ...p.geodetic },
+      tides: { ...d.tides, ...p.tides },
+    },
+  });
+}
 
 // `render` resolves asynchronously here (React 19 act); awaiting it is what
 // populates `screen`, exactly as mapLayers.test.tsx does.
@@ -112,7 +126,7 @@ describe('Overlays sheet layout (#484)', () => {
   });
 
   it('opens on a row’s tab when asked (the geodetic filter)', async () => {
-    useSettingsStore.setState({ geodeticInstalledAt: 1 });
+    setExtensions({ geodetic: { installedAt: 1 } });
     await render(
       <OverlaysPanel
         onSlopeEnabled={noop}
@@ -276,7 +290,7 @@ describe('Extensions tab', () => {
   });
 
   it('lists what is installed, then "Get more extensions"', async () => {
-    useSettingsStore.setState({ geodeticInstalledAt: 1, showGeodetic: true, tidesInstalledAt: 0 });
+    setExtensions({ geodetic: { installedAt: 1, show: true }, tides: { installedAt: 0 } });
     await renderMenu();
     expect(checked('Geodetic points')).toBe(true);
     expect(screen.queryByLabelText('Tide stations')).toBeNull();
@@ -288,15 +302,15 @@ describe('Extensions tab', () => {
   });
 
   it('geodetic: a switch with its legend', async () => {
-    useSettingsStore.setState({ geodeticInstalledAt: 1, showGeodetic: true });
+    setExtensions({ geodetic: { installedAt: 1, show: true } });
     await renderMenu();
     expect(screen.getByLabelText('Geodetic points legend')).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('Geodetic points'));
-    expect(useSettingsStore.getState().showGeodetic).toBe(false);
+    expect(useSettingsStore.getState().extensions.geodetic.show).toBe(false);
   });
 
   it('geodetic: filters from its funnel, back to the tab, badge counted, reset', async () => {
-    useSettingsStore.setState({ geodeticInstalledAt: 1, showGeodetic: true });
+    setExtensions({ geodetic: { installedAt: 1, show: true } });
     await renderMenu();
     await fireEvent.press(screen.getByLabelText('Filter geodetic points'));
     expect(screen.queryByLabelText('Map tab')).toBeNull(); // the filter takes the sheet
@@ -314,13 +328,13 @@ describe('Extensions tab', () => {
   });
 
   it('tide stations: its own switch and legend once installed', async () => {
-    useSettingsStore.setState({ tidesInstalledAt: 1, showTideStations: true });
+    setExtensions({ tides: { installedAt: 1, show: true } });
     await renderMenu();
     expect(screen.queryByLabelText('Geodetic points')).toBeNull();
     expect(checked('Tide stations')).toBe(true);
     expect(screen.getByLabelText('Gauge symbols legend')).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('Tide stations'));
-    expect(useSettingsStore.getState().showTideStations).toBe(false);
+    expect(useSettingsStore.getState().extensions.tides.show).toBe(false);
   });
 });
 

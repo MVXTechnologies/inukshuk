@@ -25,9 +25,9 @@ import { useOfflinePackHealthNotice } from '../offlinePackHealth';
 import { packStyle } from '../packStyle';
 import { resolveRegionName } from '../regionNaming';
 
-// Moved to `../packStyle` (the offline-maps health check builds them too);
-// re-exported for the callers that import them from here.
-export { geodeticPackOption, packStyle } from '../packStyle';
+// Moved to `../packStyle` (the offline-maps health check builds it too);
+// re-exported for the callers that import it from here.
+export { packStyle } from '../packStyle';
 
 /**
  * Offline-region download orchestration for the map screen: region-select

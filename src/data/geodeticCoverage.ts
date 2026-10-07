@@ -1,5 +1,5 @@
 import { parseGeodeticCoverage } from '@core/geodetic/coverage';
-import { TILE_HOST } from '@data/basemapTiles';
+import { datasetTileJsonUrl } from '@data/datasets';
 import { useGeodeticStore } from '@state/geodeticStore';
 
 /**
@@ -11,7 +11,7 @@ import { useGeodeticStore } from '@state/geodeticStore';
  */
 export async function refreshGeodeticCoverage(): Promise<void> {
   try {
-    const res = await fetch(`${TILE_HOST}/geodetic.json?v=2`);
+    const res = await fetch(datasetTileJsonUrl('geodetic'));
     if (!res.ok) return;
     const coverage = parseGeodeticCoverage(await res.json());
     if (coverage) useGeodeticStore.getState().patch({ coverage });
