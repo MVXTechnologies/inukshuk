@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import vm from 'node:vm';
 import { PDF_LAYER_RUNTIME_SOURCE } from './pdfLayers';
 import { PDF_WORKER_INSERTIONS, patchPdfWorkerSource } from './pdfWorkerPatch';
+import { moduleAsScript } from './pdfjsRealm.testUtils';
 
 /** A stand-in worker containing every anchor once, with filler between. */
 const SYNTHETIC = PDF_WORKER_INSERTIONS.map((p, i) => `/*${i}*/${p.anchor}`).join('\n');
@@ -69,11 +70,7 @@ describe('the bundled pdf.js worker', () => {
 
   it('still parses as a JavaScript module once patched', () => {
     const out = patchPdfWorkerSource(asset);
-    // Parsing only (nothing is linked or evaluated). Needs Jest's
-    // --experimental-vm-modules, which `npm test` passes.
-    const { SourceTextModule } = vm as unknown as {
-      SourceTextModule: new (source: string, options: object) => unknown;
-    };
-    expect(() => new SourceTextModule(out.source, { context: vm.createContext({}) })).not.toThrow();
+    // Parsing only, as the module body the test realm runs (pdfjsRealm.testUtils).
+    expect(() => new vm.Script(moduleAsScript(out.source, 'pdf.worker.mjs'))).not.toThrow();
   });
 });

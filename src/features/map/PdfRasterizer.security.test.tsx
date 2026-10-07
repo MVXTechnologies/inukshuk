@@ -1,19 +1,20 @@
 /**
- * Pins the mitigation for GHSA-wgrm-67xf-hhpq / CVE-2024-4367 ("PDF.js
- * vulnerable to arbitrary JavaScript execution upon opening a malicious PDF")
- * while the app still ships pdf.js 3.11.174.
+ * GHSA-wgrm-67xf-hhpq / CVE-2024-4367 ("PDF.js vulnerable to arbitrary
+ * JavaScript execution upon opening a malicious PDF"): a font's FontMatrix
+ * reached glyph code that pdf.js ≤ 4.1.392 compiled with `new Function`.
  *
- * The bug: a font's FontMatrix is copied unchecked into glyph-drawing code
- * that pdf.js compiles with `new Function` — but only when `isEvalSupported`
- * is true (pdf.js' default). With `isEvalSupported: false` pdf.js draws glyphs
- * through a plain command loop and never evaluates PDF-derived text; the same
- * flag also stops the worker compiling PostScript (Type 4) functions. Every
- * document the page opens must therefore pass it: the served and inline
- * paths, and the watchdog's retry of each.
+ * The app now ships pdf.js 6 (fixed since 4.2.67, and with no eval path at
+ * all; `scripts/pdfjs/assets.test.mjs` pins the version and the absence of
+ * string-compiling sinks in every shipped file). Defence in depth stays:
  *
- * The second half checks the shipped asset is still the build whose eval
- * sinks are gated on that flag. Replacing the asset (the pdf.js upgrade that
- * actually fixes the advisory) fails here on purpose: re-review, then update.
+ * - every document the page opens still passes `isEvalSupported: false` (a
+ *   no-op in 6.x, a guard should a future build bring an eval path back),
+ *   asks the page for the wasm decoders instead of fetching anything
+ *   (`useWorkerFetch: false`), and never enables scripting — on the served
+ *   and inline paths and the watchdog's retry of each;
+ * - the page's Content-Security-Policy has no `'unsafe-eval'`, so the engine
+ *   itself refuses to compile a string as JavaScript, on the page and in its
+ *   worker, and fetches stay on the page's own origin.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -21,7 +22,12 @@ import { runInNewContext } from 'node:vm';
 import { writeServedText } from '@data/localServer';
 import React from 'react';
 import { renderHook } from '@testing-library/react-native';
-import { PdfRasterizerProvider, usePdfRasterizer } from './PdfRasterizer';
+import {
+  PdfRasterizerProvider,
+  RASTERIZER_PAGE_CSP,
+  scriptSafe,
+  usePdfRasterizer,
+} from './PdfRasterizer';
 
 jest.mock(
   '@data/pdfRenderRecovery',
@@ -42,17 +48,10 @@ jest.mock('react-native-webview', () => {
     }),
   };
 });
-jest.mock('../../../assets/pdfjs/pdf.legacy.min.js.pdfjs', () => 1);
-jest.mock('../../../assets/pdfjs/pdf.worker.legacy.min.js.pdfjs', () => 2);
-jest.mock('expo-asset', () => ({
-  Asset: { fromModule: () => ({ downloadAsync: async () => ({ localUri: 'file://asset' }) }) },
-}));
-jest.mock('expo-file-system', () => ({
-  File: class {
-    async text() {
-      return '';
-    }
-  },
+// The bundled pdf.js sources (see ./pdfjsAssets); these tests script pdf.js.
+jest.mock('./pdfjsAssets', () => ({
+  loadPdfjsSources: async () => ({ main: '', worker: '', wasm: {}, fallbacks: {} }),
+  stagePdfjsFallbacks: async () => undefined,
 }));
 jest.mock('@data/localServer', () => ({
   acquireLocalServer: async () => ({
@@ -126,7 +125,7 @@ async function settled(posted: Posted[], id: string): Promise<Posted> {
   throw new Error(`no result posted for ${id}`);
 }
 
-it('opens every document with isEvalSupported: false (served, inline, and both retries)', async () => {
+it('opens every document without eval, worker fetches or scripting (served, inline, both retries)', async () => {
   const { view, window, opened, posted } = await loadPage();
   const page = window as unknown as {
     __pdfRender: (id: string, pageIndex: number, width: number, url: string | null) => void;
@@ -144,37 +143,58 @@ it('opens every document with isEvalSupported: false (served, inline, and both r
 
   // First attempt and watchdog retry, for each source kind.
   expect(opened.map((p) => ('url' in p ? 'url' : 'data'))).toEqual(['url', 'url', 'data', 'data']);
-  for (const params of opened) expect(params.isEvalSupported).toBe(false);
+  for (const params of opened) {
+    expect(params.isEvalSupported).toBe(false);
+    expect(params.useWorkerFetch).toBe(false);
+    expect(typeof params.BinaryDataFactory).toBe('function');
+    expect(params.enableScripting).not.toBe(true);
+  }
   await view.unmount();
 });
 
-describe('shipped pdf.js 3.11 asset', () => {
-  const main = readFileSync(join(ASSETS, 'pdf.legacy.min.js.pdfjs'), 'utf8');
-  const worker = readFileSync(join(ASSETS, 'pdf.worker.legacy.min.js.pdfjs'), 'utf8');
-
-  it('is the build this mitigation was reviewed against', () => {
-    expect(main).toContain('const version="3.11.174"');
+describe('the page Content-Security-Policy', () => {
+  it('is in the page and forbids compiling strings as JavaScript', async () => {
+    const view = await renderHook(usePdfRasterizer, { wrapper });
+    const html = jest.mocked(writeServedText).mock.calls.at(-1)?.[1] ?? '';
+    const meta = /<meta http-equiv="Content-Security-Policy" content="([^"]*)"/.exec(html)?.[1];
+    expect(meta).toBe(RASTERIZER_PAGE_CSP);
+    // The policy is the first thing in <head>, before any script.
+    expect(html.indexOf('Content-Security-Policy')).toBeLessThan(html.indexOf('<script'));
+    await view.unmount();
   });
 
-  it('compiles glyphs with new Function only behind the isEvalSupported option', () => {
-    // The CVE-2024-4367 sink. Its only other `new Function` is the
-    // FeatureTest probe `new Function("")`.
-    expect(main.match(/new Function\(/g)).toHaveLength(2);
-    expect(main).toContain('new Function("")');
-    expect(main).toMatch(
-      /if\(this\.isEvalSupported&&\w+\.FeatureTest\.isEvalSupported\)\{[^]{0,200}?new Function\("c","size"/,
+  it('allows the inlined scripts, the Blob worker and wasm, and nothing that evaluates strings', () => {
+    const directives = Object.fromEntries(
+      RASTERIZER_PAGE_CSP.split(';').map((d) => {
+        const [name, ...values] = d.trim().split(/\s+/);
+        return [name, values];
+      }),
     );
-    // ...and the option reaches FontFaceObject from getDocument's params.
-    expect(main).toMatch(/_=!1!==t\.isEvalSupported/);
-    expect(main).toMatch(
-      /new _font_loader\.FontFaceObject\(\w+,\{isEvalSupported:\w+\.isEvalSupported/,
+    expect(directives['script-src']).toEqual([
+      "'self'",
+      "'unsafe-inline'",
+      'blob:',
+      "'wasm-unsafe-eval'",
+    ]);
+    expect(RASTERIZER_PAGE_CSP).not.toContain("'unsafe-eval'");
+    expect(directives['connect-src']).toEqual(["'self'", 'blob:', 'data:']);
+    expect(directives['object-src']).toEqual(["'none'"]);
+  });
+});
+
+describe('scriptSafe', () => {
+  it('keeps an inlined script from closing its element', () => {
+    expect(scriptSafe('a="</script><script>x</SCRIPT>"')).toBe(
+      'a="<\\/script><script>x<\\/SCRIPT>"',
     );
   });
 
-  it('compiles PostScript functions in the worker only behind the same option', () => {
-    expect(worker.match(/new Function\(/g)).toHaveLength(2);
-    expect(worker).toMatch(
-      /if\(\w+&&\w+\.FeatureTest\.isEvalSupported\)\{const \w+=\(new PostScriptCompiler\)\.compile/,
-    );
+  it('leaves the shipped pdf.js unchanged (no sequence needs escaping)', () => {
+    for (const asset of ['pdf.legacy.min.mjs.pdfjs', 'pdf.worker.legacy.min.mjs.pdfjs']) {
+      const source = readFileSync(join(ASSETS, asset), 'utf8');
+      expect(scriptSafe(source)).toBe(source);
+      // An HTML comment opener would change how the parser reads the element.
+      expect(source).not.toContain('<!--');
+    }
   });
 });

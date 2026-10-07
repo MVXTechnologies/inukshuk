@@ -35,6 +35,13 @@ jest.mock('react-native-webview', () => {
     }),
   };
 });
+jest.mock('expo-file-system', () => ({
+  File: class {
+    async text() {
+      return '';
+    }
+  },
+}));
 // The bundled pdf.js sources (see ./pdfjsAssets); these tests script pdf.js.
 jest.mock('./pdfjsAssets', () => ({
   loadPdfjsSources: async () => ({ main: '', worker: '', wasm: {}, fallbacks: {} }),

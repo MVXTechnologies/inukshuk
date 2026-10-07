@@ -669,6 +669,8 @@ export function buildHtml(sources: Omit<PdfjsSources, 'fallbacks'>): string {
   // of it to find the xref), but a live worker keeps requesting ranges, and
   // each range re-arms the watchdog. A wedged worker requests nothing.
   var LOAD_WATCHDOG_MS = 12000;
+  // How long a stalled attempt's teardown may hold up the retry.
+  var STALL_RELEASE_MS = 1000;
   var RANGE_CHUNK_BYTES = 1048576;
 
   // How the raster is finished after pdf.js paints: { whiteKey: strength }
@@ -779,7 +781,12 @@ export function buildHtml(sources: Omit<PdfjsSources, 'fallbacks'>): string {
     function onStall() {
       if (stalled || loaded) return;
       stalled = true;
-      releaseDocument().then(function () {
+      // pdf.js 6's loadingTask.destroy() first awaits the worker setup, which
+      // a wedged worker never finishes: wait for it a moment, not forever.
+      Promise.race([
+        releaseDocument(),
+        new Promise(function (resolve) { setTimeout(resolve, STALL_RELEASE_MS); }),
+      ]).then(function () {
         if (attempt === 0) {
           // Drop to the main-thread fake worker and retry once. (Emptying
           // workerSrc, as this used to, makes pdf.js throw 'No
@@ -965,6 +972,10 @@ export function buildHtml(sources: Omit<PdfjsSources, 'fallbacks'>): string {
         return;
       }
       renderOnce(id, pageIndex, targetWidthPx, input, 0, crop, nativePage, look);
+    }).catch(function (err) {
+      // renderOnce throwing synchronously (pdf.js refusing its parameters,
+      // say) must still answer RN, not leave the request to its timeout.
+      post({ id: id, ok: false, error: 'render failed to start: ' + ((err && err.message) ? err.message : String(err)) });
     });
   };
 
@@ -1157,14 +1168,12 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         // Rewritten on every mount: the served copy can never be older than
         // this code, and the hash in the URL defeats any WebView cache.
         writeServedText(RASTERIZER_PAGE_PATH, html);
-        // The no-WebAssembly decoders next to it. Only a WebView without
-        // WebAssembly needs them, so a failed copy is reported, not fatal.
-        try {
-          await stagePdfjsFallbacks(fallbacks);
-        } catch (err) {
-          reportError(err, 'pdfjs-fallbacks-stage');
-        }
-        if (cancelled) return;
+        // The no-WebAssembly decoders next to it, in the background: only a
+        // WebView without WebAssembly needs them, so the page does not wait
+        // for the copy, and a failed one is reported, not fatal.
+        stagePdfjsFallbacks(fallbacks).catch((err: unknown) =>
+          reportError(err, 'pdfjs-fallbacks-stage'),
+        );
         const pageUrl = servedFileUrl(lease.value, RASTERIZER_PAGE_PATH);
         if (pageUrl === null)
           throw new Error(`${RASTERIZER_PAGE_PATH} is not on the served allowlist`);

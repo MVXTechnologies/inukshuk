@@ -39,31 +39,18 @@ jest.mock('react-native-webview', () => {
     }),
   };
 });
-jest.mock('../../../assets/pdfjs/pdf.legacy.min.js.pdfjs', () => 1);
-jest.mock('../../../assets/pdfjs/pdf.worker.legacy.min.js.pdfjs', () => 2);
-jest.mock('expo-asset', () => ({
-  Asset: {
-    fromModule: (id: number) => ({
-      downloadAsync: async () => ({ localUri: id === 1 ? 'file://main' : 'file://worker' }),
-    }),
-  },
-}));
 // A worker source carrying every anchor, so the provider builds a page whose
 // worker filters layers (the real asset is checked in pdfWorkerPatch.test.ts).
-const mockWorkerSource = () =>
-  (
-    jest.requireActual('@core/geo/pdfWorkerPatch') as typeof import('@core/geo/pdfWorkerPatch')
-  ).PDF_WORKER_INSERTIONS.map((p) => p.anchor).join('\n');
-jest.mock('expo-file-system', () => ({
-  File: class {
-    mockUri: string;
-    constructor(uri: string) {
-      this.mockUri = uri;
-    }
-    async text() {
-      return this.mockUri === 'file://worker' ? mockWorkerSource() : '';
-    }
-  },
+jest.mock('./pdfjsAssets', () => ({
+  loadPdfjsSources: async () => ({
+    main: '',
+    worker: (
+      jest.requireActual('@core/geo/pdfWorkerPatch') as typeof import('@core/geo/pdfWorkerPatch')
+    ).PDF_WORKER_INSERTIONS.map((p) => p.anchor).join('\n'),
+    wasm: {},
+    fallbacks: {},
+  }),
+  stagePdfjsFallbacks: async () => undefined,
 }));
 jest.mock('@data/localServer', () => ({
   acquireLocalServer: async () => ({
@@ -81,17 +68,23 @@ interface Group {
   visible: boolean;
 }
 
-/** pdf.js' OptionalContentConfig, as far as the page uses it. */
+/**
+ * pdf.js 6's OptionalContentConfig, as far as the page uses it: it iterates
+ * [id, group] pairs (an empty config for a document without layers).
+ */
 function fakeConfig(groups: Record<string, Group> | null) {
-  const state = groups ? structuredClone(groups) : null;
+  const state = groups ? structuredClone(groups) : {};
   return {
-    getGroups: () => state,
+    [Symbol.iterator]: () => Object.entries(state)[Symbol.iterator](),
     setVisibility: jest.fn((id: string, visible: boolean) => {
-      if (state?.[id]) state[id].visible = visible;
+      if (state[id]) state[id].visible = visible;
     }),
     state,
   };
 }
+
+/** The op codes the page hands the worker filter (pdf.js' own OPS). */
+const OPS = { paintXObject: 66, endInlineImage: 63, shadingFill: 31 };
 
 interface Scenario {
   config: ReturnType<typeof fakeConfig> | 'reject' | 'missing';
@@ -118,6 +111,7 @@ function scriptedPdfjs(scenario: Scenario) {
     doc.getOptionalContentConfig = async () => config;
   }
   const lib = {
+    OPS: { ...OPS, beginMarkedContentProps: 70 },
     GlobalWorkerOptions: { workerSrc: '' },
     getDocument: () => ({
       onProgress: null,
@@ -198,6 +192,7 @@ it('hides imagery for paint and for the worker, with the same visibility map', a
   expect(config.setVisibility).toHaveBeenCalledWith('1R', false);
   expect(port.postMessage).toHaveBeenCalledWith({
     inukshukOptionalContent: { '1R': false, '2R': true, '3R': false },
+    inukshukOps: OPS,
   });
   expect(renders).toHaveLength(1);
   await expect(renders[0]?.optionalContentConfigPromise).resolves.toBe(config);
@@ -231,7 +226,10 @@ it('still hands a page at its default layers to the native renderer', async () =
   const result = await render(NATIVE_PAGE);
   expect(result).toMatchObject({ ok: true, kind: 'native-geometry' });
   // Nothing changed, but the worker still learns the defaults it can skip.
-  expect(port.postMessage).toHaveBeenCalledWith({ inukshukOptionalContent: { '2R': true } });
+  expect(port.postMessage).toHaveBeenCalledWith({
+    inukshukOptionalContent: { '2R': true },
+    inukshukOps: OPS,
+  });
 });
 
 it.each([
@@ -245,7 +243,7 @@ it.each([
   expect(renders[0]?.optionalContentConfigPromise).toBeUndefined();
   // Cleared, never left holding a previous document's map (fake worker).
   for (const call of port.postMessage.mock.calls) {
-    expect(call[0]).toEqual({ inukshukOptionalContent: null });
+    expect(call[0]).toEqual({ inukshukOptionalContent: null, inukshukOps: OPS });
   }
   const filter = window.__inkOC as { visible(g: unknown): boolean };
   expect(filter.visible({ type: 'OCG', id: '1R' })).toBe(true);

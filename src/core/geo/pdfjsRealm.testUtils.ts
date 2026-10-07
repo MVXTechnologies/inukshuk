@@ -3,13 +3,19 @@
  * in a fresh JavaScript realm under Node, with its worker on the same thread
  * (pdf.js' "fake worker", the WebView page's main-thread fallback).
  *
- * The modules are evaluated with `vm.SourceTextModule`, so Jest must run with
- * `--experimental-vm-modules` (`npm test` passes it). Nothing is transformed:
- * this is the exact text the app ships, which is the point.
+ * Jest runs CommonJS; native ES modules in a vm need Node's
+ * `--experimental-vm-modules`, which also makes Jest load every `"type":
+ * "module"` dependency natively and breaks unrelated suites. So a module is
+ * evaluated as a strict-mode function body instead, with the only two
+ * module-only constructs the pdf.js builds use rewritten
+ * ({@link moduleAsScript}): the single trailing `export {…}` (its bindings
+ * are also published on `globalThis.pdfjsLib` / `pdfjsWorker`, which is what
+ * the page uses), and `import.meta.url` (read only inside the wasm decoders'
+ * factories, inside a try). Everything else is the exact shipped text.
  *
  * The realm is a browser-shaped global without `process`, so pdf.js takes
  * its browser code paths. It gets Node's web platform objects (Blob, URL,
- * streams, structuredClone…) and its own JavaScript built-ins.
+ * streams…) and its own JavaScript built-ins.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -24,37 +30,34 @@ export function readPdfjsAsset(name: string): string {
 export const PDFJS_MAIN_SOURCE = readPdfjsAsset('pdf.legacy.min.mjs.pdfjs');
 export const PDFJS_WORKER_SOURCE = readPdfjsAsset('pdf.worker.legacy.min.mjs.pdfjs');
 
-interface SourceTextModuleLike {
-  link(linker: () => never): Promise<void>;
-  evaluate(): Promise<unknown>;
-  namespace: Record<string, unknown>;
-}
-type SourceTextModuleCtor = new (
-  source: string,
-  options: { context: vm.Context; identifier?: string },
-) => SourceTextModuleLike;
+const EXPORT_STATEMENT = /\bexport\s*\{[^}]*\}\s*;?/g;
 
-function sourceTextModule(): SourceTextModuleCtor {
-  const ctor = (vm as unknown as { SourceTextModule?: SourceTextModuleCtor }).SourceTextModule;
-  if (!ctor) {
-    throw new Error('vm.SourceTextModule is unavailable: run Jest with --experimental-vm-modules');
+/**
+ * An ES module's text as a classic script with the same scoping: a strict
+ * function body (module scope, `this` undefined). Throws when the text uses
+ * module syntax this does not handle, so a future build cannot slip past.
+ */
+export function moduleAsScript(source: string, identifier = 'inline.mjs'): string {
+  const exports = source.match(EXPORT_STATEMENT) ?? [];
+  if (exports.length > 1) throw new Error(`${identifier}: ${exports.length} export statements`);
+  const body = source.replace(EXPORT_STATEMENT, '').replace(/\bimport\.meta\.url\b/g, 'undefined');
+  if (
+    /\bimport\.meta\b|^\s*import[\s{*]|\bexport\s+(default|const|let|var|function|class)\b/m.test(
+      body,
+    )
+  ) {
+    throw new Error(`${identifier}: module syntax the test realm cannot run`);
   }
-  return ctor;
+  return `(function () {\n'use strict';\n${body}\n}).call(undefined);`;
 }
 
-/** Evaluate an ES module's text in `context`; resolves its namespace. */
-export async function evaluateModule(
+/** Evaluate an ES module's text in `context` (see {@link moduleAsScript}). */
+export function evaluateModule(
   source: string,
   context: vm.Context,
   identifier = 'inline.mjs',
-): Promise<Record<string, unknown>> {
-  const Module = sourceTextModule();
-  const mod = new Module(source, { context, identifier });
-  await mod.link(() => {
-    throw new Error(`${identifier}: imports are not supported here`);
-  });
-  await mod.evaluate();
-  return mod.namespace;
+): void {
+  vm.runInContext(moduleAsScript(source, identifier), context, { filename: identifier });
 }
 
 /**
@@ -165,7 +168,7 @@ export interface PdfjsRealm {
  * pdf.js main + worker in a new realm, the worker module evaluated first so
  * pdf.js finds `globalThis.pdfjsWorker` and runs it on this thread.
  */
-export async function loadPdfjsRealm(
+export function loadPdfjsRealm(
   workerSource: string = PDFJS_WORKER_SOURCE,
   globals: Record<string, unknown> = {},
 ): Promise<PdfjsRealm> {
@@ -173,7 +176,9 @@ export async function loadPdfjsRealm(
   const context = vm.createContext(sandbox);
   vm.runInContext('globalThis.self = globalThis; globalThis.window = globalThis;', context);
   installRealmStructuredClone(context);
-  await evaluateModule(workerSource, context, 'pdf.worker.mjs');
-  const pdfjs = (await evaluateModule(PDFJS_MAIN_SOURCE, context, 'pdf.mjs')) as PdfjsRealm['pdfjs'];
-  return { context, pdfjs };
+  evaluateModule(workerSource, context, 'pdf.worker.mjs');
+  evaluateModule(PDFJS_MAIN_SOURCE, context, 'pdf.mjs');
+  const pdfjs = (context as { pdfjsLib?: PdfjsRealm['pdfjs'] }).pdfjsLib;
+  if (!pdfjs) return Promise.reject(new Error('pdf.mjs did not define globalThis.pdfjsLib'));
+  return Promise.resolve({ context, pdfjs });
 }

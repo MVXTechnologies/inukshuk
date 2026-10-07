@@ -27,8 +27,10 @@ const WASM: Readonly<Record<string, number>> = {
   'jbig2.wasm': require('../../../assets/pdfjs/jbig2.wasm.pdfjs') as number,
 };
 const FALLBACKS: Readonly<Record<string, number>> = {
-  'openjpeg_nowasm_fallback.js': require('../../../assets/pdfjs/openjpeg_nowasm_fallback.js.pdfjs') as number,
-  'jbig2_nowasm_fallback.js': require('../../../assets/pdfjs/jbig2_nowasm_fallback.js.pdfjs') as number,
+  'openjpeg_nowasm_fallback.js':
+    require('../../../assets/pdfjs/openjpeg_nowasm_fallback.js.pdfjs') as number,
+  'jbig2_nowasm_fallback.js':
+    require('../../../assets/pdfjs/jbig2_nowasm_fallback.js.pdfjs') as number,
 };
 /* eslint-enable @typescript-eslint/no-require-imports */
 
@@ -85,6 +87,8 @@ export async function loadPdfjsSources(): Promise<PdfjsSources> {
  */
 export async function stagePdfjsFallbacks(fallbacks: Record<string, string>): Promise<void> {
   await Promise.all(
-    Object.entries(fallbacks).map(([name, uri]) => copyToServed(uri, `${PDFJS_SERVED_DIR}/${name}`)),
+    Object.entries(fallbacks).map(([name, uri]) =>
+      copyToServed(uri, `${PDFJS_SERVED_DIR}/${name}`),
+    ),
   );
 }
