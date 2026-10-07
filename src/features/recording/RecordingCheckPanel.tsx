@@ -205,6 +205,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
     justifyContent: 'center',
     paddingHorizontal: 16,
+    // Above every piece of map chrome: the control rail's Surfaces carry an
+    // Android elevation that otherwise draws them over this scrim (seen on
+    // the first E2E screenshot), and zIndex orders it on iOS.
+    zIndex: 100,
+    elevation: 100,
   },
   card: { borderRadius: 28, maxHeight: '100%', overflow: 'hidden' },
   content: { padding: 24, paddingBottom: 8 },
