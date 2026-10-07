@@ -48,6 +48,8 @@ export interface TeamRecord {
   /** My display name in this team. */
   myName: string;
   joinedAt: number;
+  /** Last time this team was the active one (the app reopens it). */
+  lastOpenedAt?: number;
   prefs: TeamPrefs;
   /** Newest message time I have seen in the chat (unread count). */
   lastReadAt: number;

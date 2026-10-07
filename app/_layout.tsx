@@ -14,6 +14,8 @@ import { installStravaAutoImport } from '@features/import/autoImport';
 import { ImportFeedbackSnackbar } from '@features/share/ImportFeedbackSnackbar';
 import { StravaPushPrompt } from '@features/strava/StravaPushPrompt';
 import { GnssHost } from '@features/gnss/GnssHost';
+import { TeamAlertBanner } from '@features/team/TeamAlertBanner';
+import { TeamHost } from '@features/team/TeamHost';
 import { installErrorReporting, reportError } from '@lib/errorReporting';
 import { sweepUnfinishedTips } from '@lib/iap';
 import { useImportStore } from '@state/importStore';
@@ -152,6 +154,16 @@ export default function RootLayout() {
                   <Stack.Screen name="gnss/pair" />
                   <Stack.Screen name="gnss/corrections" />
                   <Stack.Screen name="gnss/datum" />
+                  {/* Team mode (#589): Settings › Extensions › Team mode and its screens. */}
+                  <Stack.Screen name="team/index" />
+                  <Stack.Screen name="team/create" />
+                  <Stack.Screen name="team/join" />
+                  <Stack.Screen name="team/invite" />
+                  <Stack.Screen name="team/chat" />
+                  <Stack.Screen name="team/groups" />
+                  <Stack.Screen name="team/share" />
+                  <Stack.Screen name="team/teams" />
+                  <Stack.Screen name="team/member/[id]" />
                 </Stack>
                 <ImportFeedbackSnackbar />
                 <PdfRecoverySnackbar />
@@ -159,6 +171,8 @@ export default function RootLayout() {
                 <MapReparseWorker />
                 <StravaPushPrompt />
                 <GnssHost />
+                <TeamHost />
+                <TeamAlertBanner />
               </PdfRasterizerProvider>
             </ErrorBoundary>
           </PaperProvider>

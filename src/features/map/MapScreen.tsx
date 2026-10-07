@@ -130,6 +130,12 @@ import { heatTapRadiusPx } from '@core/heat/heatStyle';
 import { RecordingPanel } from './components/RecordingPanel';
 import { ReceiverFollow } from '@features/gnss/ReceiverFollow';
 import { ReceiverMapOverlay } from '@features/gnss/ReceiverMapOverlay';
+import { TeamMapLayers } from '@features/team/map/TeamMapLayers';
+import {
+  hitTestTeam,
+  TeamMapOverlay,
+  useTeamMapSelection,
+} from '@features/team/map/TeamMapOverlay';
 import { useGnssStore } from '@state/gnssStore';
 import { TrailInspectPanel } from './components/TrailInspectPanel';
 import { TipButton } from '@features/support/TipButton';
@@ -1921,8 +1927,23 @@ export function MapScreen() {
             : { source: pin.source, id: pin.id },
         );
         setExtensionHit(null);
+        useTeamMapSelection.getState().select(null);
         return;
       }
+
+      // Team mode (#589): a teammate's dot or a shared waypoint, above the
+      // map extensions (they are what the user is looking for on a team map).
+      const teamHit = await hitTestTeam(map, px, py);
+      if (teamHit !== null) {
+        drawingRef.current.closeAreaCard();
+        setPointAt(null);
+        setViewWp(null);
+        setForecastAt(null);
+        setExtensionHit(null);
+        useTeamMapSelection.getState().select(teamHit);
+        return;
+      }
+      useTeamMapSelection.getState().select(null);
 
       // The map extensions (Settings → Extensions): under the waypoint pins
       // and the chip, above the trails, heat spots and the bare map; asked
@@ -2853,6 +2874,8 @@ export function MapScreen() {
               dropped: it points along the GPS course (garbage while standing
               still); the cone tracks the smoothed compass instead. */}
             <HeadingCone location={location} />
+            {/* Team mode (#589): teammates' positions, shared waypoints and trails. */}
+            <TeamMapLayers glyphs={style.glyphs} />
             {/* Revamp puck, replacing MapLibre's default one (children do):
               halo, ring and dot in the scheme's puck tokens, plus the amber
               uncertainty ring on a weak signal while recording. */}
@@ -3312,6 +3335,22 @@ export function MapScreen() {
               (marineActive || destination !== null || displayCondition === 'night' ? 44 : 0)
             }
             showChip={!recordingPanelUp}
+          />
+        )}
+
+        {/* Team mode (#589): the team chip under the receiver chip's lane and
+          a tapped teammate's or shared waypoint's card. */}
+        {makeMapState === null && (
+          <TeamMapOverlay
+            top={
+              insets.top +
+              TOP_CHIP_OFFSET +
+              (marineActive || destination !== null || displayCondition === 'night' ? 44 : 0)
+            }
+            here={location}
+            cardSlotFree={cardSlotFree && viewWaypoint === null && extensionHit === null}
+            cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+            onNavigate={(latitude, longitude) => setDestination({ latitude, longitude })}
           />
         )}
 

@@ -32,6 +32,8 @@ jest.mock('@data/gnss/link', () => ({
   ...jest.requireActual('@data/gnss/link'),
   gnssLinkAvailable: () => false,
 }));
+// Team mode (#589), the other device extension, has its own tests too.
+jest.mock('@data/team/appTeam', () => ({ appTeamService: () => null, teamAvailability: () => 'needs-update' }));
 jest.mock('@data/offline', () => ({
   listCompanionPacks: jest.fn(async () => []),
   listRegionPacks: jest.fn(async () => []),

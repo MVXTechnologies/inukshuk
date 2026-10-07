@@ -198,8 +198,14 @@ export class TeamSession {
     return unreadCount(this.view().messages, this.record.lastReadAt);
   }
 
+  private sharesCache: { key: string; shares: TeamShares } | null = null;
+
+  /** Stable identity while no data op arrived (the map re-serialises on change only). */
   shares(): TeamShares {
-    return teamShares(this.replica.data(this.deps.now()));
+    const data = this.replica.data(this.deps.now());
+    const key = `${this.replica.state.data.length}:${this.replica.fullFolds}`;
+    if (this.sharesCache?.key !== key) this.sharesCache = { key, shares: teamShares(data) };
+    return this.sharesCache.shares;
   }
 
   positions(): TeammatePosition[] {

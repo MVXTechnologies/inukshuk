@@ -240,6 +240,23 @@ export interface SchemeTokens {
     coin: string;
     heart: string;
   };
+  /** Team mode (#589): avatars, the team map layers, the invite QR and scanner. */
+  team: {
+    /** Initials on a member's colour. */
+    onAvatar: string;
+    /** The ring of admins and the organizer on the map. */
+    leadRing: string;
+    /** Team labels on the map, their halo, and the dots' paper ring. */
+    mapInk: string;
+    mapHalo: string;
+    mapPaper: string;
+    /** QR modules and background: black on white in both themes (scanners). */
+    qrDark: string;
+    qrLight: string;
+    /** The QR scanner's backdrop and viewfinder frame. */
+    scannerBackdrop: string;
+    scannerFrame: string;
+  };
   /** Logbook statistics (Statistics, Personal records, Year in review). */
   stats: {
     /** The week-streak flame and its count (warm orange). */
@@ -400,6 +417,17 @@ export const lightScheme: SchemeTokens = {
     cairnMid: '#AEB6AA',
     coin: '#E0B94E',
     heart: '#C2410C',
+  },
+  team: {
+    onAvatar: palette.white,
+    leadRing: '#E8B931',
+    mapInk: palette.ink,
+    mapHalo: palette.surface,
+    mapPaper: palette.white,
+    qrDark: palette.black,
+    qrLight: palette.white,
+    scannerBackdrop: palette.black,
+    scannerFrame: palette.white,
   },
   stats: {
     flame: '#C2410C',
@@ -562,6 +590,17 @@ export const darkScheme: SchemeTokens = {
     coin: '#E0B94E',
     heart: '#F07A45',
   },
+  team: {
+    onAvatar: palette.white,
+    leadRing: '#E8B931',
+    mapInk: palette.paper,
+    mapHalo: '#13171B',
+    mapPaper: '#1A1F24',
+    qrDark: palette.black,
+    qrLight: palette.white,
+    scannerBackdrop: palette.black,
+    scannerFrame: palette.white,
+  },
   stats: {
     flame: '#F07A45',
     bar: '#6F7F4A',
@@ -715,6 +754,17 @@ export const sunlightScheme: SchemeTokens = {
     cairnMid: '#CCCCCC',
     coin: '#E0B94E',
     heart: '#B02222',
+  },
+  team: {
+    onAvatar: palette.white,
+    leadRing: palette.black,
+    mapInk: palette.black,
+    mapHalo: palette.white,
+    mapPaper: palette.white,
+    qrDark: palette.black,
+    qrLight: palette.white,
+    scannerBackdrop: palette.black,
+    scannerFrame: palette.white,
   },
   stats: {
     flame: '#B02222',
@@ -874,6 +924,17 @@ export const nightScheme: SchemeTokens = {
     cairnMid: '#CC2E24',
     coin: NIGHT_INK,
     heart: NIGHT_INK,
+  },
+  team: {
+    onAvatar: palette.black,
+    leadRing: NIGHT_INK,
+    mapInk: NIGHT_INK,
+    mapHalo: palette.black,
+    mapPaper: palette.black,
+    qrDark: palette.black,
+    qrLight: palette.white,
+    scannerBackdrop: palette.black,
+    scannerFrame: NIGHT_INK,
   },
   stats: {
     flame: '#FF5C5C',

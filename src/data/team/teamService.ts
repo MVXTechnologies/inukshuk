@@ -84,6 +84,16 @@ export class TeamService {
     return this.records;
   }
 
+  /** The team to reopen at launch: the one opened last. */
+  get lastOpened(): TeamRecord | null {
+    let best: TeamRecord | null = null;
+    for (const r of this.records) {
+      if (best === null || (r.lastOpenedAt ?? r.joinedAt) > (best.lastOpenedAt ?? best.joinedAt))
+        best = r;
+    }
+    return best;
+  }
+
   get active(): TeamSession | null {
     return this.session;
   }
@@ -148,6 +158,15 @@ export class TeamService {
     };
   }
 
+  /** The network this phone is on (hotspot fallback hints); null without a mesh. */
+  networkInfo(): ReturnType<MeshTransport['networkInfo']> | null {
+    try {
+      return this.deps.transport?.networkInfo() ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   // ── Teams ────────────────────────────────────────────────────────────────
 
   /** Found a team; it becomes the active one (mesh not started: `startMesh`). */
@@ -192,6 +211,7 @@ export class TeamService {
     const session = await TeamSession.open(this.sessionDeps(), record, await this.deviceKeys());
     session.onRecordChange = (r) => this.putRecord(r);
     this.session = session;
+    session.updateRecord({ lastOpenedAt: this.now() });
     if (record.name !== session.view().name) session.updateRecord({ name: session.view().name });
     this.emit();
     return session;
