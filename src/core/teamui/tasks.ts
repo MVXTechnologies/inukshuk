@@ -47,10 +47,21 @@ export function parseTaskCommand(text: string, members: readonly MemberRow[]): T
     });
   const me = members.find((x) => x.isMe);
   const isMe = !hit && me !== undefined && /^me\b/iu.test(rest);
-  const who = hit ?? (isMe ? me : undefined);
+  // "@Julie" for "Julie Tremblay": a first name that only one active member has.
+  const first = /^[\p{L}\p{N}'’-]+/u.exec(rest)?.[0];
+  const byFirst =
+    hit || isMe || first === undefined
+      ? []
+      : members.filter(
+          (x) =>
+            x.active &&
+            (x.named || x.isMe) &&
+            x.name.split(/\s/u)[0]?.toLocaleLowerCase() === first.toLocaleLowerCase(),
+        );
+  const who = hit ?? (isMe ? me : byFirst.length === 1 ? byFirst[0] : undefined);
   if (who === undefined) return { ok: false, reason: 'no-assignee' };
   if (who.role === 'guest') return { ok: false, reason: 'guest' };
-  const used = hit ? hit.name.length : 2;
+  const used = hit ? hit.name.length : isMe ? 2 : (first?.length ?? 0);
   const title = rest
     .slice(used)
     .replace(/^[\s:,.–—-]+/u, '')

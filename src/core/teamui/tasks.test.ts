@@ -81,6 +81,20 @@ describe('+task command', () => {
     });
   });
 
+  it('takes a first name when only one member has it', () => {
+    expect(parseTaskCommand('+task @julie bring the rope', members)).toEqual({
+      ok: true,
+      assignee: 'julie',
+      title: 'bring the rope',
+      span: [0, 12],
+    });
+    const twins = [...members, member('j2', 'Julie Roy')];
+    expect(parseTaskCommand('+task @Julie bring the rope', twins)).toEqual({
+      ok: false,
+      reason: 'no-assignee',
+    });
+  });
+
   it('explains what is missing', () => {
     expect(parseTaskCommand('nice view', members)).toBeNull();
     expect(parseTaskCommand('email me+task@x.org', members)).toBeNull();

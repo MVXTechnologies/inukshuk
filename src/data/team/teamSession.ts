@@ -577,7 +577,7 @@ export class TeamSession {
 
   sendMessage(
     text: string,
-    options: { aud?: Audience; pr?: Priority; mentions?: string[] } = {},
+    options: { aud?: Audience; pr?: Priority; mentions?: string[]; id?: string } = {},
   ): ActionError | null {
     const blocked = this.guardWrite();
     if (blocked) return blocked;
@@ -590,7 +590,7 @@ export class TeamSession {
       // offers urgent to admins only (simpler to explain).
       return 'not-allowed';
     }
-    const body: Record<string, Json> = { id: this.deps.newId(), th: TEAM_THREAD, tx };
+    const body: Record<string, Json> = { id: options.id ?? this.deps.newId(), th: TEAM_THREAD, tx };
     if (options.mentions && options.mentions.length > 0) body['mn'] = options.mentions;
     const extra: { aud?: Audience; pr?: Priority } = {};
     if (options.aud) extra.aud = options.aud;

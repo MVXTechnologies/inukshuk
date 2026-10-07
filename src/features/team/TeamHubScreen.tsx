@@ -7,9 +7,9 @@
 import { MESH_DEFAULT_PORT, hotspotCandidates, isPrivateIPv4, parseIPv4 } from '@core/mesh/hotspot';
 import { expiryLine, EXTEND_PRESETS } from '@core/teamui/lifetime';
 import { parseHostPort } from '@core/teamui/invites';
-import { MESH_LOOPBACK } from '@data/team';
 import { reportError } from '@lib/errorReporting';
 import { teamService, useTeamStore } from '@state/teamStore';
+import type { ComponentType } from 'react';
 import type { TeamTask } from '@core/team/tasks';
 import { HeaderAction } from '@ui/components/ScreenHeader';
 import { space } from '@ui/tokens';
@@ -31,7 +31,6 @@ import {
   useNow,
 } from './components';
 import { actionMessage } from './messages';
-import { SimulatedTeammates } from './SimulatedTeammates';
 import { memberSyncLine, openPeers, teamSyncLine } from './syncLine';
 
 const SHARE_INTERVALS = [
@@ -42,6 +41,15 @@ const SHARE_INTERVALS = [
 
 /** A join's safety code stays up this long on the admitting phone. */
 const JOIN_NOTICE_MS = 3 * 60_000;
+
+// Loopback builds only (E2E and demos): the inlined flag lets Metro drop this
+// require, and the simulated phones with it, from store bundles.
+/* eslint-disable @typescript-eslint/no-require-imports */
+const SimulatedTeammates: ComponentType | null =
+  process.env.EXPO_PUBLIC_MESH_LOOPBACK === '1'
+    ? (require('./SimulatedTeammates') as typeof import('./SimulatedTeammates')).SimulatedTeammates
+    : null;
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 /** "3 open · 1 for you", or how to start. */
 export function tasksLine(tasks: readonly TeamTask[], me: string): string {
@@ -474,7 +482,7 @@ export function TeamHubScreen() {
         Nothing goes through an Inukshuk server. Messages, positions and shares are end-to-end
         encrypted; only members can read them. Someone removed keeps what they already received.
       </Note>
-      {MESH_LOOPBACK && <SimulatedTeammates />}
+      {SimulatedTeammates && <SimulatedTeammates />}
     </TeamScreenFrame>
   );
 }

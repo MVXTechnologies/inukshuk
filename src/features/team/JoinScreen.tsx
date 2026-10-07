@@ -9,7 +9,7 @@ import { hotspotCandidates, MESH_DEFAULT_PORT } from '@core/mesh/hotspot';
 import type { InviteToken } from '@core/team/invite';
 import { parseAnyInvite, parseHostPort } from '@core/teamui/invites';
 import { cleanName } from '@core/teamui/system';
-import { MESH_LOOPBACK } from '@data/team';
+import type { ComponentType } from 'react';
 import { JOIN_SEARCH_HINT_MS } from '@data/team/teamJoin';
 import { installExtension } from '@features/extensions/actions';
 import { setExtensionPrefs, useExtensionPrefs } from '@features/extensions/prefs';
@@ -26,10 +26,17 @@ import { Button, HelperText, Text, TextInput } from 'react-native-paper';
 import { ActionBanner, Note, SectionLabel, TeamScreenFrame, useNow } from './components';
 import { JOIN_FAILURE } from './messages';
 import { loadQrScanner } from './QrScanner';
-import { SimulatedTeamToJoin } from './SimulatedTeammates';
 
 /** The camera scanner, or null on a binary without the camera module. */
 const Scanner = loadQrScanner();
+
+// Loopback builds only (E2E and demos): dropped from store bundles (inlined flag).
+/* eslint-disable @typescript-eslint/no-require-imports */
+const SimulatedTeamToJoin: ComponentType<{ onLink: (link: string) => void }> | null =
+  process.env.EXPO_PUBLIC_MESH_LOOPBACK === '1'
+    ? (require('./SimulatedTeammates') as typeof import('./SimulatedTeammates')).SimulatedTeamToJoin
+    : null;
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 export function JoinScreen() {
   const t = useSchemeTokens();
@@ -333,7 +340,7 @@ export function JoinScreen() {
         Got an SMS? Tapping its link opens Inukshuk here. A team admin can make an invite from the
         team screen.
       </Note>
-      {MESH_LOOPBACK && <SimulatedTeamToJoin onLink={(link) => setPaste(link)} />}
+      {SimulatedTeamToJoin && <SimulatedTeamToJoin onLink={(link) => setPaste(link)} />}
     </TeamScreenFrame>
   );
 }

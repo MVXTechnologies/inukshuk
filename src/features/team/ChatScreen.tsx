@@ -27,7 +27,7 @@ import { IconButton, Text, TextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MemberAvatar } from './components';
-import { actionMessage } from './messages';
+import { sendTeamComment } from './taskSend';
 
 function time(at: number): string {
   const d = new Date(at);
@@ -101,12 +101,21 @@ export function ChatScreen() {
   const send = () => {
     const session = teamService()?.active;
     if (!session) return;
-    const err = session.sendMessage(text, {
-      ...(audience.aud ? { aud: audience.aud } : {}),
-      ...(priority ? { pr: priority } : {}),
-      mentions: findMentions(text, view.members),
+    // `+task @name …` in the chat makes a task too (no place).
+    const err = sendTeamComment({
+      session,
+      text,
+      members: view.members,
+      anchor: null,
+      write: (id) =>
+        session.sendMessage(text, {
+          ...(audience.aud ? { aud: audience.aud } : {}),
+          ...(priority ? { pr: priority } : {}),
+          mentions: findMentions(text, view.members),
+          id,
+        }),
     });
-    if (err !== null) Alert.alert('Not sent', actionMessage(err));
+    if (err !== null) Alert.alert('Not sent', err);
     else {
       setText('');
       setPriority(0);
