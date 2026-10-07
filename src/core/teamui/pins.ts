@@ -136,3 +136,22 @@ export function distanceToLine(
 
 /** A pin closer than this to a shown trail reads as "on the trail". */
 export const ON_TRAIL_M = 40;
+
+/** `owner:id` of every message marked resolved (`mres`, res = true). */
+export function resolvedMessages(data: TeamData): Set<string> {
+  const out = new Set<string>();
+  for (const rec of data.entities.values()) {
+    if (rec.kind !== 'mres' || rec.owner === undefined || !isLive(rec.state)) continue;
+    if (visibleFields(rec.state)['res'] === true) out.add(`${rec.owner}:${rec.id}`);
+  }
+  return out;
+}
+
+/** Whether `me` may resolve a message: its author, an admin, or someone it mentions. */
+export function canResolve(
+  msg: { author: string; mentions: readonly string[] },
+  me: string,
+  admin: boolean,
+): boolean {
+  return msg.author === me || admin || msg.mentions.includes(me);
+}

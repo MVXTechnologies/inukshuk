@@ -262,6 +262,8 @@ export function applyDataOp(out: TeamData, state: TeamState, op: SignedOp, decod
         const r = authorizeRecord(
           { kind: b.k as RecordKind, id: b.id, o: b.o, f: b.f, author: env.au, role },
           (kind, id, o) => out.entities.get(entityKey(kind as EntityKind, id, o)),
+          (kind, o) => [...out.entities.values()].filter((e) => e.kind === kind && e.owner === o),
+          stamp.wall,
         );
         if (r === 'invalid') break;
         if (r === 'forbidden') return forbid();

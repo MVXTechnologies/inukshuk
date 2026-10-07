@@ -700,7 +700,11 @@ value of its own last edit; "editing" presence is an ordinary message.
 **SOS alerts** every active member except the raiser at once: always an
 `alert`, priority 2, never collapsed by the task throttle and not subject to
 the 30-member rule; the text comes from the merged record. A resolution is a
-badge (the raiser: "Your SOS was resolved"). The raiser's live position is the
+badge (the raiser: "Your SOS was resolved"). Spam guard: a member holds at most one open SOS,
+and raises the next one at least 60 s after their last was resolved (by the
+resolution's stamp, which its writer chooses within the clock-skew bound);
+only the creating write alerts, so re-writing an open SOS's place doesn't
+re-alert. The raiser's live position is the
 ordinary position register.
 
 **Resolved messages** (pins, notifies) leave the map and the unread counts and

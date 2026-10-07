@@ -187,6 +187,11 @@ export interface RecordWrite {
 }
 
 type Lookup = (kind: string, id: string, owner?: string) => { state: EntityState } | undefined;
+/** Every record of a kind owned by `owner` (rare kinds only: the SOS limit). */
+type Scan = (kind: string, owner: string) => { id: string; state: EntityState }[];
+
+/** After an SOS is resolved, its raiser waits this long before raising another. */
+export const SOS_COOLDOWN_MS = 60_000;
 
 const live = (r: { state: EntityState } | undefined): r is { state: EntityState } =>
   r !== undefined && isLive(r.state);
@@ -198,6 +203,8 @@ const live = (r: { state: EntityState } | undefined): r is { state: EntityState 
 export function authorizeRecord(
   w: RecordWrite,
   get: Lookup,
+  scan: Scan = () => [],
+  wall = 0,
 ): { owner: string | undefined } | 'invalid' | 'forbidden' {
   const { kind, id, f, author, role } = w;
   const admin = isAdminRole(role);
@@ -235,7 +242,17 @@ export function authorizeRecord(
           return 'forbidden';
         return { owner };
       }
-      if (get('sos', id, owner) === undefined && (!has(f, 'la') || !has(f, 'lo'))) return 'invalid';
+      if (get('sos', id, owner) === undefined) {
+        if (!has(f, 'la') || !has(f, 'lo')) return 'invalid';
+        // Spam guard: one open SOS per member, and a cooldown after a resolve.
+        for (const other of scan('sos', owner)) {
+          if (!isLive(other.state)) continue;
+          const of = visibleFields(other.state);
+          if (of['res'] !== true) return 'forbidden';
+          const rat = other.state.fields['res']?.stamp.wall ?? 0;
+          if (wall - rat < SOS_COOLDOWN_MS) return 'forbidden';
+        }
+      }
       return { owner };
     }
     case 'rly': {

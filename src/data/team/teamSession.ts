@@ -19,7 +19,7 @@ import type { Audience, GroupLink, Priority, Role } from '@core/team/roles';
 import { SyncSession, type SessionEvent } from '@core/team/sync';
 import { alertContext, alertFor, TaskAlertThrottle, type TeamAlert } from '@core/teamui/alerts';
 import { commentsByPhoto, type Said } from '@core/teamui/mapMarks';
-import { pinThread, teamPins, type TeamPin } from '@core/teamui/pins';
+import { pinThread, resolvedMessages, teamPins, type TeamPin } from '@core/teamui/pins';
 import {
   statusFields,
   taskFields,
@@ -221,7 +221,11 @@ export class TeamSession {
   }
 
   unread(): number {
-    return unreadCount(this.view().messages, this.record.lastReadAt);
+    const done = this.resolved();
+    return unreadCount(
+      this.view().messages.filter((m) => !done.has(m.key.replace(/^msg:/, ''))),
+      this.record.lastReadAt,
+    );
   }
 
   private readonly taskThrottle = new TaskAlertThrottle();
@@ -296,6 +300,33 @@ export class TeamSession {
     const blocked = this.guardWrite();
     if (blocked) return blocked;
     return this.writeMsg(systemMessage(this.deps.newId(), SYS_STATUS, statusText(id)));
+  }
+
+  private resolvedCache: { key: string; set: Set<string> } | null = null;
+
+  /** `owner:id` of resolved messages (pins, notifies): off the map and the unread counts. */
+  resolved(): Set<string> {
+    if (this.resolvedCache?.key !== this.dataVersion)
+      this.resolvedCache = {
+        key: this.dataVersion,
+        set: resolvedMessages(this.replica.data(this.deps.now())),
+      };
+    return this.resolvedCache.set;
+  }
+
+  /** Mark a message (a pin, a notify) resolved, or open it again. */
+  resolveMessage(owner: string, id: string, res: boolean): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const now = this.deps.now();
+    const body: Record<string, Json> = {
+      k: 'mres',
+      id,
+      f: res ? { res: true, rby: this.me, rat: now } : { res: false, rby: null, rat: null },
+    };
+    if (owner !== this.me) body['o'] = owner;
+    const op = this.run(() => this.replica.write(now, 'e.set', body));
+    return op === undefined ? 'rotation-pending' : null;
   }
 
   private tasksCache: { key: string; tasks: TeamTask[] } | null = null;

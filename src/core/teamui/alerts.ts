@@ -56,7 +56,10 @@ export interface AlertContext {
   hasPin(owner: string, id: string): boolean;
   /** A task as merged by the fold (validated fields), never the raw op. */
   /** An SOS as merged by the fold. */
-  sos?(owner: string, id: string): { text: string; resolved: boolean } | undefined;
+  sos?(
+    owner: string,
+    id: string,
+  ): { text: string; resolved: boolean; createdWall: number } | undefined;
   task(
     owner: string,
     id: string,
@@ -81,7 +84,11 @@ export function alertContext(state: TeamState, data: TeamData): AlertContext {
       const rec = data.entities.get(`sos:${owner}:${id}`);
       if (rec === undefined || !isLive(rec.state)) return undefined;
       const f = visibleFields(rec.state);
-      return { text: typeof f['tx'] === 'string' ? f['tx'] : '', resolved: f['res'] === true };
+      return {
+        text: typeof f['tx'] === 'string' ? f['tx'] : '',
+        resolved: f['res'] === true,
+        createdWall: rec.state.created?.wall ?? 0,
+      };
     },
   };
 }
@@ -288,7 +295,8 @@ function sosAlert(
   }
   const sos = ctx.sos?.(owner, id);
   if (sos === undefined) return null;
-  const raise = typeof f['la'] === 'number' && f['res'] !== true && !sos.resolved;
+  // Only the creating write alerts (re-writing the place of an open SOS doesn't re-alert).
+  const raise = typeof f['la'] === 'number' && !sos.resolved && sos.createdWall === op.stamp.wall;
   const resolved = f['res'] === true && sos.resolved;
   if (!raise && !resolved) return null;
   return {

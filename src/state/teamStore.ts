@@ -45,6 +45,8 @@ export interface TeamSnapshot {
   pins: TeamPin[];
   /** Every live task. */
   tasks: TeamTask[];
+  /** `owner:id` of resolved messages (pins, notifies). */
+  resolved: ReadonlySet<string>;
   /** Each member's newest quick status. */
   statuses: ReadonlyMap<string, MemberStatus>;
   /** Who commented on each shared photo, and when. */
@@ -71,6 +73,7 @@ let loadedFlag = false;
 const EMPTY_SHARES: TeamShares = { waypoints: [], tracks: [] };
 const NO_THREADS: ReadonlyMap<string, readonly Said[]> = new Map();
 const NO_STATUSES: ReadonlyMap<string, MemberStatus> = new Map();
+const NO_RESOLVED: ReadonlySet<string> = new Set();
 
 function snapshot(service: TeamService | null): Omit<TeamSnapshot, 'banner'> {
   const s: TeamSession | null = service?.active ?? null;
@@ -88,6 +91,7 @@ function snapshot(service: TeamService | null): Omit<TeamSnapshot, 'banner'> {
     pins: s?.pins() ?? [],
     tasks: s?.tasks() ?? [],
     statuses: s?.statuses() ?? NO_STATUSES,
+    resolved: s?.resolved() ?? NO_RESOLVED,
     photoThreads: s?.photoThreads() ?? NO_THREADS,
     dataVersion: s?.dataVersion ?? '',
     peers: s?.peers() ?? [],

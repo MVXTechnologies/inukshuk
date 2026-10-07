@@ -271,6 +271,33 @@ describe('SOS (adversarial)', () => {
   });
 });
 
+describe('SOS spam guard', () => {
+  it('one open SOS per member, and a minute after a resolve', () => {
+    const { w, gus, rg, sync } = crew();
+    rg.write(T0 + MIN, 'e.set', { k: 'sos', id: 's1', f: { la: 47, lo: -71 } });
+    const second = rg.write(T0 + MIN + 1000, 'e.set', {
+      k: 'sos',
+      id: 's2',
+      f: { la: 47, lo: -71 },
+    })!;
+    rg.write(T0 + 2 * MIN, 'e.set', {
+      k: 'sos',
+      id: 's1',
+      f: { res: true, rby: gus.id, rat: T0 + 2 * MIN },
+    });
+    const soon = rg.write(T0 + 2 * MIN + 10_000, 'e.set', {
+      k: 'sos',
+      id: 's3',
+      f: { la: 47, lo: -71 },
+    })!;
+    const later = rg.write(T0 + 4 * MIN, 'e.set', { k: 'sos', id: 's4', f: { la: 47, lo: -71 } })!;
+    sync(T0 + 5 * MIN);
+    expect(why(w.root, second.id)).toBe('forbidden');
+    expect(why(w.root, soon.id)).toBe('forbidden');
+    expect(why(w.root, later.id)).toBeUndefined();
+  });
+});
+
 describe('rally points and resolved messages (adversarial)', () => {
   it('members set rallies; guests cannot; nobody edits another’s', () => {
     const { w, bob, rb, re, rg, sync } = crew();
