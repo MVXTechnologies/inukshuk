@@ -10,6 +10,14 @@ import type { ViewerTrailData } from './useViewerTrail';
 
 jest.mock('@data/storage', () => ({ resolveDocumentPath: (p: string) => `file:///doc/${p}` }));
 jest.mock('@data/photos/trailPhotos', () => ({}));
+const mockDispose = jest.fn();
+jest.mock('./sharePhoto', () => ({
+  ...jest.requireActual<object>('./sharePhoto'),
+  shareablePhotoUri: jest.fn(async (p: { file: string }) => ({
+    uri: `file:///doc/${p.file}`,
+    dispose: mockDispose,
+  })),
+}));
 const mockDismissTo = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
@@ -101,6 +109,8 @@ it('shares the location-free copy and hands "Show on map" to the trail view', as
     'file:///doc/photos/t1/a.jpg',
     expect.objectContaining({ mimeType: 'image/jpeg' }),
   );
+  // The checked (or re-stripped) copy is cleaned up after the share sheet.
+  expect(mockDispose).toHaveBeenCalled();
   await fireEvent.press(screen.getByLabelText('Show on map'));
   expect(usePhotoFocusStore.getState().request).toEqual({ trackId: 't1', photoId: 'a' });
   expect(mockDismissTo).toHaveBeenCalledWith('/trail3d/t1');

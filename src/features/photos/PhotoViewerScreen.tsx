@@ -11,6 +11,7 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
+import { shareablePhotoUri, UnshareablePhotoError, type ShareablePhoto } from './sharePhoto';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -170,11 +171,17 @@ export function PhotoViewerScreen({ trackId, photoId }: { trackId: string; photo
       show('Sharing is not available on this device');
       return;
     }
-    // The kept copy carries no location: a canvas re-encode, or a stripped original.
-    await Sharing.shareAsync(photoFileUri(photo.file), {
-      mimeType: 'image/jpeg',
-      UTI: 'public.jpeg',
-    });
+    // The kept copy carries no location (a canvas re-encode, or a stripped
+    // original); it is checked again before it leaves, and re-stripped if not.
+    let shareable: ShareablePhoto | null = null;
+    try {
+      shareable = await shareablePhotoUri(photo);
+      await Sharing.shareAsync(shareable.uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg' });
+    } catch (err) {
+      show(err instanceof UnshareablePhotoError ? err.message : 'Could not share the photo');
+    } finally {
+      shareable?.dispose();
+    }
   };
 
   const ordinal = photo ? photoOrdinal(photos, photo.id) : null;
