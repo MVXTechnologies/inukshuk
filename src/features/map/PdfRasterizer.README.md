@@ -289,6 +289,13 @@ from the installed package):
 | `openjpeg_nowasm_fallback.js.pdfjs` | `wasm/openjpeg_nowasm_fallback.js` | served, no-WebAssembly fallback  |
 | `jbig2_nowasm_fallback.js.pdfjs`    | `wasm/jbig2_nowasm_fallback.js`    | served, no-WebAssembly fallback  |
 
+Two of them are rewritten after the copy, and each is pinned in `assets.mjs`
+to its source and result hashes:
+
+- the worker, by `worker-split-operator-switch.mjs` (Android WebView 112/113;
+  see "pdf.js 6 (6.4.299) and the WebViews it runs on");
+- `openjpeg.wasm`, by `openjpeg-no-relaxed-simd.mjs` (iOS).
+
 The files use a custom **`.pdfjs`** extension, registered as a Metro **asset**
 extension in `metro.config.js`:
 
@@ -448,21 +455,34 @@ supported range has. The page was rendered end to end in WebKit 16.4
 inline, and on the iOS 27 simulator. `pdfjsPolyfills.test.ts` runs each
 polyfill in a realm where the native method was removed.
 
-**Known gap: Chromium ≤ 112/113.** V8 11.3 and older miscompiles part of
-pdf.js 6's worker. TurboFan optimizes `promiseBody` (getOperatorList /
-getTextContent), and the renderer then aborts with a V8 fatal error at
-`_simpleFontToUnicode`. This happens nondeterministically, on the fonts of
-2024 US Topo sheets; other sheets render.
+**Android WebView 112/113 (V8 11.2/11.3).** Unmodified pdf.js 6 crashes
+the renderer there on every 2024 US Topo sheet. TurboFan miscompiles
+`getOperatorList`'s `promiseBody` (the operator loop and its ~50-case
+switch), and V8 then aborts with a fatal error, reported later in font code
+(`_simpleFontToUnicode`). Evidence:
 
-- With `--no-turbofan` or `--jitless`, every run renders.
-- Stock pdf.js 6 (no worker patch, no polyfills, `useWasm:false`) crashes the
-  same way, so no polyfill or capability check avoids it.
+- Only that function optimized (`--turbo-filter`): 5/5 runs crash.
+- Every function but that one optimized: 5/5 runs render.
+- `--no-turbo-allocation-folding` or `--no-turbo-cf-optimization` alone also
+  stops the crash.
 - Chromium 114 is fine.
 
-Android System WebView updates through the Play Store (Android 8/9 get up to
-138), so this only reaches devices whose WebView never updates, such as the
-stock WebView 113 of the API 34 emulator image. pdf.js 3.11 rendered those
-sheets there.
+The shipped worker therefore has that switch moved, unchanged, into its own
+function, called once per operator
+(`scripts/pdfjs/worker-split-operator-switch.mjs`, a pinned derived asset).
+V8 then compiles the loop and the switch separately. The worker does the
+same work, and the pixels match.
+
+Headless Chromium 112 and 113, before → after the split:
+
+| test                                | before          | after    |
+| ----------------------------------- | --------------- | -------- |
+| 3 US Topo sheets per run            | crashed 3/3     | 25/25 OK |
+| Whole compat corpus                 | —               | 3/3 OK   |
+| Inline (main-thread) mode, 113 only | hung or crashed | 10/10 OK |
+
+`assets.test.mjs` checks that the shipped worker is that rewrite of the
+installed pdf.js.
 
 **JPEG 2000 on iOS.** pdf.js 6's `openjpeg.wasm` uses two relaxed-SIMD
 instructions, which no WKWebView supports (iOS 26.3 simulator: "relaxed simd

@@ -22,8 +22,12 @@ import { PDF_LAYER_RUNTIME_SOURCE } from './pdfLayers';
  * depth, `Ir` = `OPS.paintXObject`; `p` / `u` = the parsed `/OC` of an image
  * / form XObject.
  *
+ * The shipped worker has its operator switch moved into
+ * `__inkOperatorSwitch` (scripts/pdfjs/worker-split-operator-switch.mjs, for
+ * Android WebView 112/113), so insertion 1 anchors on the loop's call to it.
+ *
  * Insertions:
- * 1. Before the evaluator's operator switch: drop image/form XObjects, inline
+ * 1. Before the call to the evaluator's operator switch: drop image/form XObjects, inline
  *    images and shading fills inside hidden sections, before anything is
  *    fetched or decoded. The depth is pdf.js' own counter.
  * 2. Where pdf.js adds a parsed `/OC` section: record its visibility at the
@@ -43,7 +47,7 @@ interface Insertion {
 export const PDF_WORKER_INSERTIONS: readonly Insertion[] = [
   {
     label: 'operator switch',
-    anchor: 'switch(0|r){case Ir:S=e[0]instanceof Name;',
+    anchor: 'const __inkStep=__inkOperatorSwitch(e,r);',
     text: 'if(__inkOC.op(w,r,y))continue;',
     position: 'before',
   },

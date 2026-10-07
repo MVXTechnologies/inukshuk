@@ -27,12 +27,21 @@ export const PDFJS_ASSETS = Object.freeze({
 });
 
 /**
- * Shipped files that are not byte copies: `openjpeg-no-relaxed-simd.mjs`
- * rewrites pdf.js' JPEG 2000 decoder for engines without relaxed SIMD (all
- * of iOS). Each is pinned to the source it was made from and to its result,
- * so a pdf.js bump fails `assets.test.mjs` until it is regenerated.
+ * Shipped files that are not byte copies. Each is pinned to the source it was
+ * made from and to its result, so a pdf.js bump fails `assets.test.mjs` until
+ * it is regenerated:
+ * - `openjpeg-no-relaxed-simd.mjs` rewrites pdf.js' JPEG 2000 decoder for
+ *   engines without relaxed SIMD (all of iOS);
+ * - `worker-split-operator-switch.mjs` moves the worker's operator switch into
+ *   its own function, which Android WebView 112/113 (V8 11.3) would otherwise
+ *   miscompile and crash on.
  */
 export const PDFJS_DERIVED_ASSETS = Object.freeze({
+  'pdf.worker.legacy.min.mjs.pdfjs': {
+    sourceSha256: '145d2dd3ab0c86151011dba95acfa2d5336e2accd59388ea43dbee0efddaaec6',
+    sha256: '3407db2a7fba3838134198a077ed8fb4149fa3fee958af1808063dfc6059ce16',
+    script: 'scripts/pdfjs/worker-split-operator-switch.mjs',
+  },
   'openjpeg.wasm.pdfjs': {
     sourceSha256: '95e5002597af0824004aa57b1900fe019715db389e37640b1e58395e42f00cc5',
     sha256: '8049cafea9079111c1e9fa214569bf557f64bf65f9d8e67100542301dbb85f3b',

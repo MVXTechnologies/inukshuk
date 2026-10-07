@@ -17,6 +17,7 @@ import {
   builtPdfjsVersion,
   compareVersions,
 } from './assets.mjs';
+import { OPERATOR_SWITCH_CALL, splitOperatorSwitch } from './worker-split-operator-switch.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (...p) => readFileSync(join(root, ...p));
@@ -99,4 +100,13 @@ test('no shipped pdf.js file can compile JavaScript from a string', () => {
     const source = read('assets/pdfjs', asset).toString('utf8');
     assert.doesNotMatch(source, /new Function\s*\(|\beval\s*\(/, asset);
   }
+});
+
+test('the shipped worker runs its operator switch as a separate function (WebView 112/113)', () => {
+  const pristine = read('node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs').toString('utf8');
+  const shipped = read('assets/pdfjs/pdf.worker.legacy.min.mjs.pdfjs').toString('utf8');
+  assert.equal(shipped.split(OPERATOR_SWITCH_CALL).length, 2);
+  assert.equal(shipped.split('const __inkOperatorSwitch=function(e,r){switch(0|r){').length, 2);
+  // Regenerating from the installed pdf.js gives exactly the shipped file.
+  assert.equal(splitOperatorSwitch(pristine), shipped);
 });
