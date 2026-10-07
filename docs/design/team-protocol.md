@@ -676,13 +676,13 @@ Owner decisions 2026-10-07. Every field is validated on every write; a
 malformed op is `invalid`, a well-formed one the author may not write is
 `forbidden`; authority is the author's role at the op's place in the fold.
 
-| Kind                    | Key                                                                      | Writes                                                                                                                                | Deletes          |
-| ----------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| `trl` team trail        | owned (creator)                                                          | creator: all fields; members: `name`, `desc`, `color` of a live trail; `base` only at creation, never again (not even by the creator) | creator or admin |
-| `tve` trail vertex      | shared, id `<trail>_b<i>` (base vertex) or `<trail>_<random>` (inserted) | members, only on a live `trl` (`to`, `tr` name it); a base vertex never takes a key                                                   | members          |
-| `sos`                   | owned (raiser)                                                           | the raiser, guests too (a raise needs `la`, `lo`); the raiser or an admin: the resolution only                                        | raiser or admin  |
-| `rly` rally point       | owned (creator)                                                          | the creator (members; no `o`)                                                                                                         | creator or admin |
-| `mres` message resolved | owned by the **message's** author, id = the message id                   | its author, an admin, or a member the message mentions (guests too); the message must be live                                         | author or admin  |
+| Kind                    | Key                                                                                                                            | Writes                                                                                                                                                                   | Deletes                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- |
+| `trl` team trail        | owned (creator)                                                                                                                | creator: all fields; members: `name`, `desc`, `color` of a live trail; `base` only at creation, never again (not even by the creator)                                    | creator or admin                  |
+| `tve` trail vertex      | keyed by the TRAIL's owner, `tve:<to>:<id>`; id `<trail>_b<i>` (base) or `<trail>_<random>` (inserted); trail ids carry no `_` | members, only on a live `trl` (`to`, `tr` and the id prefix must agree); a base vertex never takes a key; at most 2,000 live vertices and 4,000 vertex records per trail | members (`o` = the trail's owner) |
+| `sos`                   | owned (raiser)                                                                                                                 | the raiser, guests too (a raise needs `la`, `lo`); the raiser or an admin: the resolution only                                                                           | raiser or admin                   |
+| `rly` rally point       | owned (creator)                                                                                                                | the creator (members; no `o`)                                                                                                                                            | creator or admin                  |
+| `mres` message resolved | owned by the **message's** author, id = the message id                                                                         | its author, an admin, or a member the message mentions (guests too); the message must be live                                                                            | author or admin                   |
 
 **Trail editing CRDT.** A team trail's `base` is an immutable polyline;
 vertex `i` of it has the fractional key `h` + 4 base-36 digits. A `tve`
@@ -693,6 +693,13 @@ trail is the live vertices sorted by key: a function of the op set, so every
 phone converges (property test: random concurrent moves, inserts and deletes
 from three members, shuffled). Undo is the client re-writing the previous
 value of its own last edit; "editing" presence is an ordinary message.
+
+Keys are canonical (base-36, at most 256 characters, never ending in `0`),
+so two different keys always have room between them; `keyBetween` returns
+null when there is none within the bound (the app then says the point can't
+be added there) and never an out-of-order key (property test). Edits whose
+fields name another trail than their key are ignored, never applied as
+deletions.
 
 **Status writes are whole**: `res: true` with `rby` = the author and `rat`;
 `res: false` with both null (as tasks).
@@ -707,8 +714,10 @@ only the creating write alerts, so re-writing an open SOS's place doesn't
 re-alert. The raiser's live position is the
 ordinary position register.
 
+A resolved SOS opens again only with the whole trio (`res: false, rby: null, rat: null`); that write alerts like a raise. Each phone also caps SOS alarms at one per raiser per 5 minutes (more update the banner).
+
 **Resolved messages** (pins, notifies) leave the map and the unread counts and
-stay listed under "Resolved"; nothing is deleted. Resolving is reversible by
+stay listed under "Resolved"; nothing is deleted (an `e.del` of `mres` is forbidden). Resolving is reversible by
 the same set of people.
 
 ### 11.3 Blobs (stage 3)
