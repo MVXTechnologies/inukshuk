@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import vm from 'node:vm';
 import { PDF_LAYER_RUNTIME_SOURCE } from './pdfLayers';
 import { PDF_WORKER_INSERTIONS, patchPdfWorkerSource } from './pdfWorkerPatch';
+import { moduleAsScript } from './pdfjsRealm.testUtils';
 
 /** A stand-in worker containing every anchor once, with filler between. */
 const SYNTHETIC = PDF_WORKER_INSERTIONS.map((p, i) => `/*${i}*/${p.anchor}`).join('\n');
@@ -51,11 +53,11 @@ describe('patchPdfWorkerSource', () => {
   });
 });
 
-describe('the bundled pdf.js 3.11.174 worker', () => {
+describe('the bundled pdf.js worker', () => {
   // The asset the app ships. If pdf.js is ever rebuilt or bumped, this is the
   // test that says the layer filter silently stopped applying.
   const asset = readFileSync(
-    join(__dirname, '../../../assets/pdfjs/pdf.worker.legacy.min.js.pdfjs'),
+    join(__dirname, '../../../assets/pdfjs/pdf.worker.legacy.min.mjs.pdfjs'),
     'utf8',
   );
 
@@ -66,8 +68,9 @@ describe('the bundled pdf.js 3.11.174 worker', () => {
     expect(out.source.length).toBeGreaterThan(asset.length);
   });
 
-  it('still parses as JavaScript once patched', () => {
+  it('still parses as a JavaScript module once patched', () => {
     const out = patchPdfWorkerSource(asset);
-    expect(() => new Function(out.source)).not.toThrow();
+    // Parsing only, as the module body the test realm runs (pdfjsRealm.testUtils).
+    expect(() => new vm.Script(moduleAsScript(out.source, 'pdf.worker.mjs'))).not.toThrow();
   });
 });

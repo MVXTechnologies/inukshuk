@@ -17,11 +17,12 @@ updates:
       - dependency-name: 'react-dom'
       - dependency-name: 'react-test-renderer'
       # pdf.js is BUNDLED as committed WebView assets (assets/pdfjs/*.pdfjs,
-      # v3 legacy builds exposing window.pdfjsLib); the npm package only pins
-      # the provenance of those assets. pdf.js v4+ ships ESM builds without
-      # the global our WebView loader needs, so a major bump here is a real
-      # migration (regenerate assets + revalidate the device-only rasterizer
-      # pipeline), not a dependency update. See PR #72's closing note.
+      # copied from the package by scripts/pdfjs/sync-assets.mjs); the npm
+      # package pins their provenance. Any bump fails CI until the assets are
+      # re-synced (scripts/pdfjs/assets.test.mjs) and, usually, the layer
+      # filter is re-anchored (src/core/geo/pdfWorkerPatch.ts) — then the
+      # device-only rasterizer pipeline must be revalidated. Majors are a
+      # migration (3 → 6 was), so Dependabot only proposes minors and patches.
       - dependency-name: 'pdfjs-dist'
         update-types: ['version-update:semver-major']
       # Everything below is version-managed by the Expo SDK: CI's

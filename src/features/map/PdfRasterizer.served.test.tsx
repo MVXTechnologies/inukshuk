@@ -15,6 +15,8 @@
 import { runInNewContext } from 'node:vm';
 import { createServer, request as httpRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { Blob as NodeBlob } from 'node:buffer';
+import { URL as NodeURL } from 'node:url';
 import { writeServedText } from '@data/localServer';
 import React from 'react';
 import { act, renderHook } from '@testing-library/react-native';
@@ -45,17 +47,17 @@ jest.mock('react-native-webview', () => {
     }),
   };
 });
-jest.mock('../../../assets/pdfjs/pdf.legacy.min.js.pdfjs', () => 1);
-jest.mock('../../../assets/pdfjs/pdf.worker.legacy.min.js.pdfjs', () => 2);
-jest.mock('expo-asset', () => ({
-  Asset: { fromModule: () => ({ downloadAsync: async () => ({ localUri: 'file://asset' }) }) },
-}));
 jest.mock('expo-file-system', () => ({
   File: class {
     async text() {
       return '';
     }
   },
+}));
+// The bundled pdf.js sources (see ./pdfjsAssets); these tests script pdf.js.
+jest.mock('./pdfjsAssets', () => ({
+  loadPdfjsSources: async () => ({ main: '', worker: '', wasm: {}, fallbacks: {} }),
+  stagePdfjsFallbacks: async () => undefined,
 }));
 jest.mock('@data/localServer', () => ({
   acquireLocalServer: async () => ({
@@ -284,7 +286,8 @@ async function loadPage(origin: string) {
   const window: Record<string, unknown> = {
     fetch: httpFetch,
     location: { href: `${origin}/.rasterizer/index.html` },
-    URL,
+    URL: NodeURL,
+    Blob: NodeBlob,
     AbortController,
     document: { getElementById: () => canvas },
     setTimeout,
