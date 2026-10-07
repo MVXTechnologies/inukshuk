@@ -17,13 +17,20 @@ import { activeMembers, cutFor } from '@core/team/membership';
 import { TeamReplica } from '@core/team/replica';
 import type { Audience, GroupLink, Priority, Role } from '@core/team/roles';
 import { SyncSession, type SessionEvent } from '@core/team/sync';
-import { alertFor, type TeamAlert } from '@core/teamui/alerts';
+import { alertContext, alertFor, TaskAlertThrottle, type TeamAlert } from '@core/teamui/alerts';
+import { pinThread, teamPins, type TeamPin } from '@core/teamui/pins';
+import {
+  statusFields,
+  taskFields,
+  teamTasks,
+  validTaskFields,
+  type NewTask,
+  type TeamTask,
+} from '@core/team/tasks';
 import {
   photoComments,
-  photoIndex,
   teamPhotos,
   trailComments,
-  trailOwners,
   trailThread,
   type TeamComment,
   type TeamPhoto,
@@ -211,6 +218,8 @@ export class TeamSession {
     return unreadCount(this.view().messages, this.record.lastReadAt);
   }
 
+  private readonly taskThrottle = new TaskAlertThrottle();
+
   private sharesCache: { key: string; shares: TeamShares } | null = null;
 
   /** Stable identity while no data op arrived (the map re-serialises on change only). */
@@ -239,6 +248,36 @@ export class TeamSession {
         .map((p) => p.id),
     );
     return trailComments(this.replica.data(this.deps.now()), trackId, ids);
+  }
+
+  private pinsCache: { key: string; pins: TeamPin[] } | null = null;
+
+  /** Every pin with its thread (stable identity while no data op arrived). */
+  pins(): TeamPin[] {
+    const data = this.replica.data(this.deps.now());
+    if (this.pinsCache?.key !== this.dataVersion)
+      this.pinsCache = { key: this.dataVersion, pins: teamPins(data) };
+    return this.pinsCache.pins;
+  }
+
+  private tasksCache: { key: string; tasks: TeamTask[] } | null = null;
+
+  /** Every live task, newest first (stable identity while no data op arrived). */
+  tasks(): TeamTask[] {
+    const data = this.replica.data(this.deps.now());
+    if (this.tasksCache?.key !== this.dataVersion)
+      this.tasksCache = { key: this.dataVersion, tasks: teamTasks(data) };
+    return this.tasksCache.tasks;
+  }
+
+  /** A fresh entity or message id (so a comment and the task made from it can refer to each other). */
+  newId(): string {
+    return this.deps.newId();
+  }
+
+  /** My role in this team, if I'm a member. */
+  get myRole(): Role | undefined {
+    return this.replica.state.members.get(this.me)?.role;
   }
 
   photoComments(photoId: string): TeamComment[] {
@@ -479,16 +518,11 @@ export class TeamSession {
     this.dirty = true;
     this.gossip(ops, from);
     if (from !== null && ops.some((op) => op.env.t === 'msg' || op.env.t === 'e.set')) {
-      const data = this.replica.data(this.deps.now());
-      const photos = photoIndex(data);
-      const owners = trailOwners(data);
-      const ctx = {
-        photo: (id: string) => photos.get(id),
-        trailOwner: (id: string) => owners.get(id),
-      };
+      const ctx = alertContext(this.replica.state, this.replica.data(this.deps.now()));
+      const now = this.deps.now();
       for (const op of ops) {
         const alert = alertFor(this.replica.state, op, this.replica.decode(op), this.me, ctx);
-        if (alert) this.deps.onAlert(alert);
+        if (alert) this.deps.onAlert(this.taskThrottle.admit(alert, now));
       }
     }
     this.changed();
@@ -678,17 +712,100 @@ export class TeamSession {
     return this.writeMsg(body);
   }
 
-  /** Comment on a shared photo (the core's owned `comment` entity, `PhotoComment`). */
-  commentOnPhoto(photoId: string, text: string, mentions: string[] = []): ActionError | null {
+  /** Comment on a shared photo (the core's owned `comment` entity, `PhotoComment`; guests too). */
+  commentOnPhoto(
+    photoId: string,
+    text: string,
+    mentions: string[] = [],
+    id: string = this.deps.newId(),
+  ): ActionError | null {
     const blocked = this.guardWrite();
     if (blocked) return blocked;
-    if (!this.canEditShared()) return 'not-allowed';
     const tx = text.trim();
     if (tx.length === 0 || tx.length > 4000) return 'invalid';
     const f: Record<string, Json> = { photoId, text: tx };
     if (mentions.length > 0) f['mentions'] = mentions;
     const op = this.run(() =>
-      this.replica.write(this.deps.now(), 'e.set', { k: 'comment', id: this.deps.newId(), f }),
+      this.replica.write(this.deps.now(), 'e.set', { k: 'comment', id, f }),
+    );
+    if (op !== undefined) this.markSeen(`photo:${photoId}`);
+    return op === undefined ? 'rotation-pending' : null;
+  }
+
+  /** Pin a message to a place (guests too). Returns the pin's id. */
+  dropPin(
+    lng: number,
+    lat: number,
+    text: string,
+    mentions: string[] = [],
+    id: string = this.deps.newId(),
+  ): ActionError | string {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const tx = text.trim();
+    if (tx.length === 0 || tx.length > 4000) return 'invalid';
+    if (!Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lng) > 180 || Math.abs(lat) > 90)
+      return 'invalid';
+    const body: Record<string, Json> = { id, th: pinThread(this.me, id), tx, ll: [lng, lat] };
+    if (mentions.length > 0) body['mn'] = mentions;
+    const err = this.writeMsg(body);
+    if (err === null) this.markSeen(pinThread(this.me, id));
+    return err ?? id;
+  }
+
+  /** Reply under a pin (guests too). */
+  replyToPin(
+    pinOwner: string,
+    pinId: string,
+    text: string,
+    mentions: string[] = [],
+    id: string = this.deps.newId(),
+  ): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const tx = text.trim();
+    if (tx.length === 0 || tx.length > 4000) return 'invalid';
+    const body: Record<string, Json> = { id, th: pinThread(pinOwner, pinId), tx };
+    if (mentions.length > 0) body['mn'] = mentions;
+    const err = this.writeMsg(body);
+    if (err === null) this.markSeen(pinThread(pinOwner, pinId));
+    return err;
+  }
+
+  /** Create a task (members and up). */
+  createTask(t: NewTask): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    if (!this.canEditShared()) return 'not-allowed';
+    const f = taskFields(t);
+    if (!validTaskFields(f, this.me)) return 'invalid';
+    const op = this.run(() =>
+      this.replica.write(this.deps.now(), 'e.set', { k: 'task', id: this.deps.newId(), f }),
+    );
+    return op === undefined ? 'rotation-pending' : null;
+  }
+
+  /** Mark a task done (or open again): its creator, its assignee or an admin. */
+  setTaskDone(owner: string, id: string, done: boolean): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    if (!this.canEditShared()) return 'not-allowed';
+    const body: Record<string, Json> = {
+      k: 'task',
+      id,
+      f: statusFields(done, this.me, this.deps.now()),
+    };
+    if (owner !== this.me) body['o'] = owner;
+    const op = this.run(() => this.replica.write(this.deps.now(), 'e.set', body));
+    return op === undefined ? 'rotation-pending' : null;
+  }
+
+  /** Delete a task: its creator or an admin. */
+  deleteTask(owner: string, id: string): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const op = this.run(() =>
+      this.replica.write(this.deps.now(), 'e.del', { k: 'task', id, o: owner }),
     );
     return op === undefined ? 'rotation-pending' : null;
   }
@@ -847,6 +964,21 @@ export class TeamSession {
   markRead(): void {
     const latest = this.view().messages.reduce((m, msg) => Math.max(m, msg.at), 0);
     if (latest > this.record.lastReadAt) this.updateRecord({ lastReadAt: latest });
+  }
+
+  /** When I last looked at a thread (`photo:<id>`, `pin:<id>`), epoch ms; 0 = never. */
+  seenAt(thread: string): number {
+    return this.record.seen?.[thread] ?? 0;
+  }
+
+  /** I looked at a thread now (kept to the 300 most recent threads). */
+  markSeen(thread: string): void {
+    const now = this.deps.now();
+    if ((this.record.seen?.[thread] ?? 0) >= now) return;
+    const entries = Object.entries({ ...this.record.seen, [thread]: now })
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 300);
+    this.updateRecord({ seen: Object.fromEntries(entries) });
   }
 
   /** Local record changes (prefs, read marker): the service persists the index. */

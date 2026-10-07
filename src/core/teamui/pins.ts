@@ -1,23 +1,27 @@
 /**
  * Pins: comments anchored to a place (#589 UI). Pure.
  *
- * A pin is a message on the thread `pin:<id>` whose own id is `<id>` and which
- * carries `ll = [lng, lat]` (validated by `data.ts`); replies are messages on
- * the same thread. Guests may pin and reply (they "only comment").
- *
- * Two authors could post roots with the same id: the earliest (by creation
- * stamp, then author id) is the pin, so every phone shows the same place; any
- * other "root" reads as a reply.
+ * A pin is a message on the thread `pin:<owner>:<id>` written by `<owner>`,
+ * whose own id is `<id>` and which carries `ll = [lng, lat]` (`data.ts`
+ * refuses an anchored message on any other thread, so nobody can root or move
+ * someone else's pin; messages are immutable). Replies are messages on the
+ * same thread from anyone, guests too (they "only comment").
  */
 import type { Json } from '@core/team/canonical';
 import { isLive, visibleFields } from '@core/team/crdt';
-import type { TeamData } from '@core/team/data';
+import { entityKey, type TeamData } from '@core/team/data';
 import { compareStamp, type Stamp } from '@core/team/hlc';
 
 export const PIN_THREAD_PREFIX = 'pin:';
 
-export function pinThread(id: string): string {
-  return `${PIN_THREAD_PREFIX}${id}`;
+export function pinThread(owner: string, id: string): string {
+  return `${PIN_THREAD_PREFIX}${owner}:${id}`;
+}
+
+/** The owner and id a pin thread names, or null. */
+export function parsePinThread(th: string): { owner: string; id: string } | null {
+  const m = /^pin:([A-Za-z0-9_-]{43}):([A-Za-z0-9_-]{1,64})$/.exec(th);
+  return m ? { owner: m[1]!, id: m[2]! } : null;
 }
 
 export interface PinMessage {
@@ -39,12 +43,6 @@ export interface TeamPin {
   lastAt: number;
 }
 
-interface Raw {
-  msg: PinMessage;
-  stamp: Stamp;
-  ll: [number, number] | null;
-}
-
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 function anchor(v: Json | undefined): [number, number] | null {
@@ -55,7 +53,7 @@ function anchor(v: Json | undefined): [number, number] | null {
 
 /** Every live pin with its thread, newest activity first. */
 export function teamPins(data: TeamData): TeamPin[] {
-  const threads = new Map<string, Raw[]>();
+  const threads = new Map<string, { msg: PinMessage; stamp: Stamp }[]>();
   for (const rec of data.entities.values()) {
     if (rec.kind !== 'msg' || rec.owner === undefined || rec.state.created === undefined) continue;
     if (!isLive(rec.state)) continue;
@@ -67,28 +65,34 @@ export function teamPins(data: TeamData): TeamPin[] {
     const mn = Array.isArray(f['mn'])
       ? f['mn'].filter((m): m is string => typeof m === 'string')
       : [];
-    const raw: Raw = {
+    const item = {
       msg: { id: rec.id, author: rec.owner, text: tx, at: rec.state.created.wall, mentions: mn },
       stamp: rec.state.created,
-      ll: th === pinThread(rec.id) ? anchor(f['ll']) : null,
     };
     const list = threads.get(th);
-    if (list) list.push(raw);
-    else threads.set(th, [raw]);
+    if (list) list.push(item);
+    else threads.set(th, [item]);
   }
   const out: TeamPin[] = [];
   for (const [th, list] of threads) {
-    const byStamp = (a: Raw, b: Raw) =>
-      compareStamp(a.stamp, b.stamp) || (a.msg.author < b.msg.author ? -1 : 1);
-    const root = list.filter((r) => r.ll !== null).sort(byStamp)[0];
-    if (root === undefined || root.ll === null) continue; // replies to a redacted or unknown pin
-    const rest = list.filter((r) => r !== root).sort(byStamp);
-    const messages = [root, ...rest].map((r) => r.msg);
+    const named = parsePinThread(th);
+    if (named === null) continue;
+    // The root is the owner's own message with the pin's id (msg keys are owned: one at most).
+    const rootRec = data.entities.get(entityKey('msg', named.id, named.owner));
+    if (rootRec === undefined || !isLive(rootRec.state)) continue;
+    const ll = anchor(visibleFields(rootRec.state)['ll']);
+    if (ll === null) continue;
+    const ordered = [...list].sort(
+      (a, b) => compareStamp(a.stamp, b.stamp) || (a.msg.author < b.msg.author ? -1 : 1),
+    );
+    const root = ordered.find((x) => x.msg.author === named.owner && x.msg.id === named.id);
+    if (root === undefined) continue;
+    const messages = [root, ...ordered.filter((x) => x !== root)].map((x) => x.msg);
     out.push({
-      id: th.slice(PIN_THREAD_PREFIX.length),
-      owner: root.msg.author,
-      lng: root.ll[0],
-      lat: root.ll[1],
+      id: named.id,
+      owner: named.owner,
+      lng: ll[0],
+      lat: ll[1],
       messages,
       lastAt: Math.max(...messages.map((m) => m.at)),
     });
@@ -125,9 +129,7 @@ export function distanceToLine(
     const dy = b[1] * k - ay;
     const len = dx * dx + dy * dy;
     const t = len === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len));
-    const ex = ax + t * dx - px;
-    const ey = ay + t * dy - py;
-    best = Math.min(best, Math.hypot(ex, ey));
+    best = Math.min(best, Math.hypot(ax + t * dx - px, ay + t * dy - py));
   }
   return best;
 }

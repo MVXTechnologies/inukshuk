@@ -9,7 +9,7 @@ import {
   T0,
 } from '@core/team/testing/fixtures';
 
-import { alertFor, trailUrl, type AlertContext } from './alerts';
+import { alertContext, alertFor, TaskAlertThrottle, trailUrl, type AlertContext } from './alerts';
 import { statusFields, taskFields } from '@core/team/tasks';
 import {
   photoComments,
@@ -215,7 +215,13 @@ describe('shares', () => {
 });
 
 describe('alerts', () => {
-  const noShares: AlertContext = { photo: () => undefined, trailOwner: () => undefined };
+  const noShares: AlertContext = {
+    applied: () => true,
+    photo: () => undefined,
+    trailOwner: () => undefined,
+    hasPin: () => false,
+    task: () => undefined,
+  };
 
   it('alerts on team messages per the core routing, never on sys: threads', () => {
     const { owner, other } = pair();
@@ -275,7 +281,11 @@ describe('alerts', () => {
     const data = owner.data(T0 + 3 * MIN);
     const photos = photoIndex(data);
     const owners = trailOwners(data);
-    const ctx: AlertContext = { photo: (id) => photos.get(id), trailOwner: (id) => owners.get(id) };
+    const ctx: AlertContext = {
+      ...noShares,
+      photo: (id) => photos.get(id),
+      trailOwner: (id) => owners.get(id),
+    };
     expect(alertFor(owner.state, c, cBody, owner.id, ctx)).toMatchObject({
       level: 'alert',
       kind: 'comment',
@@ -303,52 +313,147 @@ describe('alerts', () => {
   });
 
   it('alerts the assignee of a task and its creator when it is done; replies on my pin', () => {
-    const { owner, other } = pair();
-    const meOther = [...owner.state.members.values()].find((m) => m.role === 'member')!.id;
-    const ownerId = [...owner.state.members.values()].find((m) => m.role === 'owner')!.id;
+    const w = newWorld();
+    const alice = device();
+    const gus = device();
+    addMember(w.root, alice, 'member', T0 + 1);
+    addMember(w.root, gus, 'guest', T0 + 2);
+    const ra = joinReplica(w, alice, w.root, T0 + 3);
+    const rg = joinReplica(w, gus, w.root, T0 + 3);
+    const sync = (now: number) => {
+      exchange(w.root, ra, now);
+      exchange(w.root, rg, now);
+      exchange(w.root, ra, now);
+    };
+    const boss = w.owner.id;
+    const ctxOf = (r: typeof ra, now: number) => alertContext(r.state, r.data(now));
     const tBody = {
       k: 'task',
       id: 't1',
-      f: taskFields({ title: 'Flag the detour', assignee: meOther }),
+      f: taskFields({ title: 'Flag the detour', assignee: alice.id }),
     };
-    const t = owner.write(T0 + MIN, 'e.set', tBody)!;
-    exchange(owner, other, T0 + MIN);
-    const ctx: AlertContext = {
-      photo: () => undefined,
-      trailOwner: () => undefined,
-      pinOwner: (id) => (id === 'p1' ? ownerId : undefined),
-      task: () => ({ title: 'Flag the detour', assignee: meOther }),
-    };
-    expect(alertFor(other.state, t, tBody, meOther, ctx)).toMatchObject({
+    const t = w.root.write(T0 + MIN, 'e.set', tBody)!;
+    sync(T0 + MIN);
+    expect(alertFor(ra.state, t, tBody, alice.id, ctxOf(ra, T0 + MIN))).toMatchObject({
       level: 'alert',
       kind: 'task',
       text: 'New task for you: Flag the detour',
       url: '/team/tasks',
     });
-    expect(alertFor(owner.state, t, tBody, ownerId, ctx)).toBeNull(); // my own
-    const dBody = { k: 'task', id: 't1', o: ownerId, f: statusFields(true, meOther, T0 + 2 * MIN) };
-    const d = other.write(T0 + 2 * MIN, 'e.set', dBody)!;
-    exchange(owner, other, T0 + 2 * MIN);
-    expect(alertFor(owner.state, d, dBody, ownerId, ctx)).toMatchObject({
-      level: 'alert',
+    expect(alertFor(w.root.state, t, tBody, boss, ctxOf(w.root, T0 + MIN))).toBeNull(); // mine
+    const dBody = { k: 'task', id: 't1', o: boss, f: statusFields(true, alice.id, T0 + 2 * MIN) };
+    const d = ra.write(T0 + 2 * MIN, 'e.set', dBody)!;
+    sync(T0 + 2 * MIN);
+    expect(alertFor(w.root.state, d, dBody, boss, ctxOf(w.root, T0 + 2 * MIN))).toMatchObject({
       kind: 'task',
       text: 'Done: Flag the detour',
     });
-    const pinBody = { id: 'p1', th: 'pin:p1', tx: 'Rockfall', ll: [-70.92, 47.09] };
-    const pin = owner.write(T0 + 3 * MIN, 'msg', pinBody)!;
-    const replyBody = { id: 'r1', th: 'pin:p1', tx: 'Taking the ridge' };
-    const reply = other.write(T0 + 4 * MIN, 'msg', replyBody)!;
-    exchange(owner, other, T0 + 4 * MIN);
-    expect(alertFor(other.state, pin, pinBody, meOther, ctx)).toMatchObject({
+    const pinBody = { id: 'p1', th: `pin:${boss}:p1`, tx: 'Rockfall', ll: [-70.92, 47.09] };
+    const pin = w.root.write(T0 + 3 * MIN, 'msg', pinBody)!;
+    const replyBody = { id: 'r1', th: `pin:${boss}:p1`, tx: 'Taking the ridge' };
+    const reply = ra.write(T0 + 4 * MIN, 'msg', replyBody)!;
+    sync(T0 + 4 * MIN);
+    expect(alertFor(ra.state, pin, pinBody, alice.id, ctxOf(ra, T0 + 4 * MIN))).toMatchObject({
       level: 'badge',
       kind: 'comment',
-      url: '/team/pin/p1',
+      url: `/team/pin/${boss}/p1`,
     });
-    expect(alertFor(owner.state, reply, replyBody, ownerId, ctx)).toMatchObject({
-      level: 'alert',
-      url: '/team/pin/p1',
+    expect(
+      alertFor(w.root.state, reply, replyBody, boss, ctxOf(w.root, T0 + 4 * MIN)),
+    ).toMatchObject({ level: 'alert', url: `/team/pin/${boss}/p1` });
+  });
+
+  it('PoC (review #1): no alert for ops the fold refused; texts come from the merged task', () => {
+    const w = newWorld();
+    const alice = device();
+    const gus = device();
+    addMember(w.root, alice, 'member', T0 + 1);
+    addMember(w.root, gus, 'guest', T0 + 2);
+    const ra = joinReplica(w, alice, w.root, T0 + 3);
+    const rg = joinReplica(w, gus, w.root, T0 + 3);
+    const sync = (now: number) => {
+      exchange(w.root, ra, now);
+      exchange(w.root, rg, now);
+      exchange(w.root, ra, now);
+    };
+    // A guest's forbidden task "assigned" to Alice.
+    const evac = {
+      k: 'task',
+      id: 'g1',
+      f: taskFields({ title: 'EVACUATE NOW, leave the trail', assignee: alice.id }),
+    };
+    const g = rg.write(T0 + MIN, 'e.set', evac)!;
+    // Alice's real task from the owner, then Gus "completes" it (forbidden).
+    const tBody = {
+      k: 'task',
+      id: 't1',
+      f: taskFields({ title: 'x'.repeat(300), assignee: alice.id }),
+    };
+    w.root.write(T0 + MIN, 'e.set', tBody);
+    sync(T0 + 2 * MIN);
+    const fake = { k: 'task', id: 't1', o: w.owner.id, f: statusFields(true, gus.id, T0) };
+    const f = rg.write(T0 + 3 * MIN, 'e.set', fake)!;
+    // Alice's forbidden retitle in the owner's name.
+    const spoof = {
+      k: 'task',
+      id: 't1',
+      o: w.owner.id,
+      f: { title: 'EVACUATE', assignee: alice.id },
+    };
+    const s = ra.write(T0 + 3 * MIN, 'e.set', spoof)!;
+    sync(T0 + 4 * MIN);
+    const ctxA = alertContext(ra.state, ra.data(T0 + 4 * MIN));
+    const ctxO = alertContext(w.root.state, w.root.data(T0 + 4 * MIN));
+    expect(alertFor(ra.state, g, evac, alice.id, ctxA)).toBeNull();
+    expect(alertFor(w.root.state, f, fake, w.owner.id, ctxO)).toBeNull();
+    expect(alertFor(w.root.state, s, spoof, w.owner.id, ctxO)).toBeNull();
+    // Even when the merged task matches (Alice really completed it), Gus's refused
+    // "done" op raises nothing: only applied ops alert.
+    w.root.write(T0 + 5 * MIN, 'e.set', { k: 'task', id: 't1', f: { assignee: alice.id } });
+    sync(T0 + 5 * MIN);
+    ra.write(T0 + 6 * MIN, 'e.set', {
+      k: 'task',
+      id: 't1',
+      o: w.owner.id,
+      f: statusFields(true, alice.id, T0 + 6 * MIN),
     });
-    // A reply to an unknown pin is dropped.
-    expect(alertFor(owner.state, reply, { ...replyBody, th: 'pin:zz' }, ownerId, ctx)).toBeNull();
+    const late = rg.write(T0 + 7 * MIN, 'e.set', fake)!;
+    sync(T0 + 8 * MIN);
+    const ctxO2 = alertContext(w.root.state, w.root.data(T0 + 8 * MIN));
+    expect(alertFor(w.root.state, late, fake, w.owner.id, ctxO2)).toBeNull();
+    // A forged body for an applied op can't change the text either: it is the merged title, capped.
+    const real = [...w.root.log.logged()].find((op) => op.env.t === 'e.set')!;
+    const alert = alertFor(
+      ra.state,
+      real,
+      { ...tBody, f: { ...tBody.f, title: 'EVACUATE' } },
+      alice.id,
+      ctxA,
+    );
+    expect(alert?.text.startsWith('New task for you: xxx')).toBe(true);
+    expect(alert!.text.length).toBeLessThanOrEqual('New task for you: '.length + 120);
+  });
+
+  it('collapses a burst of task alerts from one teammate (review #6)', () => {
+    const throttle = new TaskAlertThrottle();
+    const a = {
+      key: 'k',
+      author: 'alex',
+      level: 'alert' as const,
+      kind: 'task' as const,
+      text: 'New task for you: x',
+      priority: 0 as const,
+      url: '/team/tasks',
+    };
+    expect(throttle.admit(a, T0)).toEqual(a);
+    expect(throttle.admit(a, T0 + 1000)).toMatchObject({
+      level: 'badge',
+      text: '2 task updates for you',
+    });
+    expect(throttle.admit(a, T0 + 2000)).toMatchObject({ text: '3 task updates for you' });
+    expect(throttle.admit({ ...a, author: 'bob' }, T0 + 2000)).toMatchObject({ level: 'alert' });
+    expect(throttle.admit(a, T0 + 62_000)).toMatchObject({ level: 'alert' });
+    const msg = { ...a, kind: 'message' as const };
+    expect(throttle.admit(msg, T0 + 62_500)).toEqual(msg);
   });
 });

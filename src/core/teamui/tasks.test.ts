@@ -51,6 +51,7 @@ const task = (extra: Partial<TeamTask>): TeamTask => ({
   doneAt: null,
   createdAt: 0,
   updatedAt: 0,
+  doneBeforeReassignment: false,
   ...extra,
 });
 

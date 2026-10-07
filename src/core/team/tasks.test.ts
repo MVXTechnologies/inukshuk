@@ -91,16 +91,20 @@ describe('task fields', () => {
     expect(parseSetBody({ k: 'wpt', id: 't', f: { name: 'x' }, o })).toBeUndefined();
     expect(parseSetBody({ k: 'comment', id: 't', f: { text: 'x' }, o })).toBeUndefined();
     expect(parseSetBody({ k: 'task', id: 't', f: { done: true }, o: 'x' })).toBeUndefined();
-    expect(
-      parseMsgBody({ id: 'p1', th: 'pin:p1', tx: 'Rockfall', ll: [-70.9, 47.1] }),
-    ).toBeDefined();
+    const th = `pin:${o}:p1`;
+    expect(parseMsgBody({ id: 'p1', th, tx: 'Rockfall', ll: [-70.9, 47.1] })).toBeDefined();
+    expect(parseMsgBody({ id: 'r1', th, tx: 'A reply' })).toBeDefined();
     for (const bad of [
-      { id: 'p1', th: 'pin:p2', tx: 'x', ll: [-70.9, 47.1] },
+      { id: 'p1', th: `pin:${o}:p2`, tx: 'x', ll: [-70.9, 47.1] },
+      { id: 'p1', th: 'pin:p1', tx: 'x', ll: [-70.9, 47.1] },
+      { id: 'p1', th: 'pin:p1', tx: 'x' },
+      { id: 'p1', th: `pin:nope:p1`, tx: 'x' },
       { id: 'p1', th: 'team', tx: 'x', ll: [-70.9, 47.1] },
-      { id: 'p1', th: 'pin:p1', tx: 'x', ll: [-70.9] },
-      { id: 'p1', th: 'pin:p1', tx: 'x', ll: [-190, 47] },
-      { id: 'p1', th: 'pin:p1', tx: 'x', ll: [0, 91] },
-      { id: 'p1', th: 'pin:p1', tx: 'x', ll: ['a', 'b'] },
+      { id: 'p1', th, tx: 'x', ll: [-70.9] },
+      { id: 'p1', th, tx: 'x', ll: [-190, 47] },
+      { id: 'p1', th, tx: 'x', ll: [0, 91] },
+      { id: 'p1', th, tx: 'x', ll: ['a', 'b'] },
+      { id: 'p1', th: 'team:a:b', tx: 'x' },
     ]) {
       expect(parseMsgBody(bad)).toBeUndefined();
     }
@@ -288,7 +292,12 @@ describe('task authorization (adversarial)', () => {
       id: 'gc',
       f: { photoId: 'p1', text: 'Nice view' },
     });
-    rg.write(T0 + 3 * MIN, 'msg', { id: 'gp', th: 'pin:gp', tx: 'Mud here', ll: [-70.9, 47.08] });
+    rg.write(T0 + 3 * MIN, 'msg', {
+      id: 'gp',
+      th: `pin:${gus.id}:gp`,
+      tx: 'Mud here',
+      ll: [-70.9, 47.08],
+    });
     rg.write(T0 + 4 * MIN, 'e.del', { k: 'comment', id: 'gc' });
     sync(T0 + 5 * MIN);
     const d = w.root.data();
@@ -317,6 +326,7 @@ describe('task authorization (adversarial)', () => {
       doneAt: null,
       createdAt: T0,
       updatedAt: T0,
+      doneBeforeReassignment: false,
     };
     expect(canCompleteTask(t, me, 'member')).toBe(true);
     expect(canEditTask(t, me, 'member')).toBe(false);
@@ -328,14 +338,13 @@ describe('task authorization (adversarial)', () => {
 });
 
 describe('pins', () => {
-  it('threads replies under the earliest root; a redacted root hides the pin', () => {
+  it('threads replies under the owner’s root; a redacted root hides the pin', () => {
     const { w, bob, alex, rb, ra, sync } = crew();
-    rb.write(T0 + MIN, 'msg', { id: 'p1', th: 'pin:p1', tx: 'Rockfall', ll: [-70.92, 47.09] });
-    // Alex posts a second "root" with the same id later: it reads as a reply.
-    ra.write(T0 + 2 * MIN, 'msg', { id: 'p1', th: 'pin:p1', tx: 'Mine!', ll: [0, 0] });
-    ra.write(T0 + 3 * MIN, 'msg', { id: 'r1', th: 'pin:p1', tx: 'Taking the ridge' });
+    const th = `pin:${bob.id}:p1`;
+    rb.write(T0 + MIN, 'msg', { id: 'p1', th, tx: 'Rockfall', ll: [-70.92, 47.09] });
+    ra.write(T0 + 3 * MIN, 'msg', { id: 'r1', th, tx: 'Taking the ridge' });
     // A reply to a pin nobody posted is not a pin.
-    ra.write(T0 + 3 * MIN, 'msg', { id: 'r2', th: 'pin:zz', tx: 'Orphan' });
+    ra.write(T0 + 3 * MIN, 'msg', { id: 'r2', th: `pin:${bob.id}:zz`, tx: 'Orphan' });
     sync(T0 + 4 * MIN);
     for (const r of [rb, ra, w.root]) {
       const pins = teamPins(r.data());
@@ -343,14 +352,126 @@ describe('pins', () => {
       expect(pins[0]).toMatchObject({ id: 'p1', owner: bob.id, lng: -70.92, lat: 47.09 });
       expect(pins[0]!.messages.map((m) => [m.author, m.text])).toEqual([
         [bob.id, 'Rockfall'],
-        [alex.id, 'Mine!'],
         [alex.id, 'Taking the ridge'],
       ]);
     }
     rb.write(T0 + 5 * MIN, 'e.del', { k: 'msg', id: 'p1' });
     sync(T0 + 6 * MIN);
-    // Alex's same-id message now stands as the pin, at its own anchor.
-    expect(teamPins(rb.data()).map((p) => [p.owner, p.lng])).toEqual([[alex.id, 0]]);
+    expect(teamPins(rb.data())).toEqual([]);
+  });
+
+  it('PoC (review #3): nobody can root, backdate or move someone else’s pin', () => {
+    const { w, alex, bob, gus, rb, ra, rg, sync } = crew();
+    const th = `pin:${alex.id}:p1`;
+    ra.write(T0 + 10 * MIN, 'msg', { id: 'p1', th, tx: 'Rockfall', ll: [-70.92, 47.09] });
+    // Bob backdates an anchored "root" on Alice's thread; a guest tries too.
+    const bobRoot = rb.write(T0 + MIN, 'msg', { id: 'p1', th, tx: 'Moved', ll: [0, 0] })!;
+    const gusRoot = rg.write(T0 + MIN, 'msg', { id: 'p1', th, tx: 'Moved', ll: [1, 1] })!;
+    // Alice "moves" her pin with a second message of the same id: messages are immutable.
+    ra.write(T0 + 11 * MIN, 'msg', { id: 'p1', th, tx: 'Moved', ll: [2, 2] });
+    sync(T0 + 12 * MIN);
+    for (const r of [w.root, ra, rb, rg]) {
+      expect(teamPins(r.data()).map((p) => [p.owner, p.lng, p.lat, p.messages.length])).toEqual([
+        [alex.id, -70.92, 47.09, 1],
+      ]);
+      const invalid = r
+        .data()
+        .skipped.filter((x) => x.why === 'invalid')
+        .map((x) => x.id);
+      expect(invalid).toEqual(expect.arrayContaining([bobRoot.id, gusRoot.id]));
+    }
+    void bob;
+    void gus;
+  });
+});
+
+describe('review regressions', () => {
+  it('PoC (review #2): "done by" never shows the wrong person', () => {
+    const { bob, alex, rb, ra, sync } = crew();
+    rb.write(T0 + MIN, 'e.set', {
+      k: 'task',
+      id: 't1',
+      f: taskFields({ title: 'x', assignee: alex.id }),
+    });
+    sync(T0 + 2 * MIN);
+    ra.write(T0 + 3 * MIN, 'e.set', {
+      k: 'task',
+      id: 't1',
+      o: bob.id,
+      f: statusFields(true, alex.id, T0 + 3 * MIN),
+    });
+    ra.write(T0 + 4 * MIN, 'e.set', {
+      k: 'task',
+      id: 't1',
+      o: bob.id,
+      f: statusFields(false, alex.id, 0),
+    });
+    // Bob (the creator) ticks it with a bare `done`: refused whole.
+    const bare = rb.write(T0 + 5 * MIN, 'e.set', { k: 'task', id: 't1', f: { done: true } })!;
+    const half = rb.write(T0 + 5 * MIN, 'e.set', {
+      k: 'task',
+      id: 't1',
+      f: { done: true, dby: bob.id },
+    })!;
+    const stale = rb.write(T0 + 5 * MIN, 'e.set', {
+      k: 'task',
+      id: 't1',
+      f: { done: false, dby: bob.id, dat: T0 },
+    })!;
+    sync(T0 + 6 * MIN);
+    const t = entityToTask(task(rb, bob.id, 't1')!)!;
+    expect(t).toMatchObject({ done: false, doneBy: null, doneAt: null });
+    const invalid = rb
+      .data()
+      .skipped.filter((x) => x.why === 'invalid')
+      .map((x) => x.id);
+    expect(invalid).toEqual(expect.arrayContaining([bare.id, half.id, stale.id]));
+    rb.write(T0 + 7 * MIN, 'e.set', {
+      k: 'task',
+      id: 't1',
+      f: statusFields(true, bob.id, T0 + 7 * MIN),
+    });
+    sync(T0 + 8 * MIN);
+    expect(entityToTask(task(ra, bob.id, 't1')!)).toMatchObject({ done: true, doneBy: bob.id });
+  });
+
+  it('PoC (review #5): nobody, admins included, creates a task in another member’s name', () => {
+    const { w, bob, alex, rb, sync } = crew();
+    const forged = w.root.write(T0 + MIN, 'e.set', {
+      k: 'task',
+      id: 'f1',
+      o: bob.id,
+      f: taskFields({ title: 'Bob says: give me your keys', assignee: alex.id }),
+    })!;
+    sync(T0 + 2 * MIN);
+    expect(rb.data().skipped).toContainEqual({ id: forged.id, why: 'forbidden' });
+    expect(teamTasks(rb.data())).toEqual([]);
+  });
+
+  it('PoC (review #4): a former assignee’s backdated completion is flagged', () => {
+    const { bob, alex, eve, rb, ra, sync } = crew();
+    rb.write(T0 + MIN, 'e.set', {
+      k: 'task',
+      id: 't1',
+      f: taskFields({ title: 'x', assignee: alex.id }),
+    });
+    sync(T0 + 2 * MIN);
+    // Alex, offline, completes "before" the reassignment by backdating his clock.
+    ra.write(T0 + 2 * MIN + 1, 'e.set', {
+      k: 'task',
+      id: 't1',
+      o: bob.id,
+      f: statusFields(true, alex.id, T0 + 2 * MIN),
+    });
+    rb.write(T0 + 3 * MIN, 'e.set', { k: 'task', id: 't1', f: { assignee: eve.id } });
+    sync(T0 + 4 * MIN);
+    // Accepted residual: the completion stands, but it shows it predates the reassignment.
+    expect(entityToTask(task(rb, bob.id, 't1')!)).toMatchObject({
+      assignee: eve.id,
+      done: true,
+      doneBy: alex.id,
+      doneBeforeReassignment: true,
+    });
   });
 });
 

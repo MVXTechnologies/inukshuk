@@ -631,8 +631,9 @@ malformed field makes the whole op `invalid`):
 Authorization, by the author's role **at the op's place in the fold**:
 
 - `e.set {k: 'task', id, f}` without `o` writes the author's own task;
-- `e.set {k: 'task', id, o, f}` updates `o`'s task: allowed for an admin
-  (any field), or for the task's **current** assignee (the visible
+- `e.set {k: 'task', id, o, f}` updates `o`'s **existing, live** task
+  (nobody, admins included, creates a task in another member's name):
+  allowed for an admin (any field), or for the task's **current** assignee (the visible
   `assignee` at that point of the fold) when `f` holds only `done`, `dby`,
   `dat`. Anything else is `forbidden`. `o` is accepted on tasks only;
 - the owner or an admin deletes (`e.del` with `o`, the owned rule);
@@ -641,22 +642,32 @@ Authorization, by the author's role **at the op's place in the fold**:
 Because the fold is in the team's total order and the replica rebuilds when
 an op lands in the middle, "current assignee" is the same on every phone:
 a status write after a reassignment (in that order) by the old assignee is
-`forbidden` everywhere. Property tests replay random histories from five
+`forbidden` everywhere. **Accepted residual:** order is by HLC stamp, which an
+author chooses within the clock-skew bound, so a former assignee can backdate
+a completion to before the reassignment. Readers flag it: a task whose `done`
+register is older than its `assignee` register shows "completed before
+reassignment" (`TeamTask.doneBeforeReassignment`). Property tests replay random histories from five
 roles (owner, creator, assignee, another member, guest) in shuffled orders
 and check convergence and that no guest owns or completes a task.
 
-**Pins** (comments anchored to a place) are messages: the root is a `msg` on
-the thread `pin:<id>` whose own id is `<id>`, carrying `ll = [lng, lat]`
-(finite, in range; `ll` anywhere else makes the body invalid). Replies are
-plain messages on the thread. Guests may pin and reply. If two authors post
-roots with the same id, the earliest by creation stamp (then author id) is
-the pin and the other reads as a reply; redacting the root shows the next
-root, if any. "On the trail" vs "off the trail" is computed by the reader
+**Pins** (comments anchored to a place) are messages on the thread
+`pin:<owner>:<id>`. The root is `<owner>`'s message whose own id is `<id>`,
+carrying `ll = [lng, lat]` (finite, in range). An anchored message on any
+other thread, or by anyone but the owner the thread names, is `invalid`, so
+nobody can root, backdate or move someone else's pin; messages are immutable,
+so the owner can't move it either (a new pin is a new thread). Replies are
+plain messages on the thread, from anyone. Guests may pin and reply.
+Redacting the root removes the pin. "On the trail" vs "off the trail" is computed by the reader
 (distance to a shown trail ≤ 40 m), never stored.
 
-**Alerts** (`teamui/alerts.ts`): a task whose `assignee` becomes me alerts
+**Alerts** (`teamui/alerts.ts`) fire only for ops the fold **applied**
+(accepted with a role and not skipped as forbidden or invalid), and a task
+alert's text comes from the merged, validated task (title capped at 120
+chars), never from the op body. A task whose `assignee` becomes me alerts
 me; my own task marked done by someone else alerts me; a reply on my pin
-alerts me; a new pin follows the normal-message rule.
+alerts me; a new pin follows the normal-message rule. Task alerts from one
+teammate collapse: the first in 60 s notifies, the rest only update the
+banner ("3 task updates for you").
 
 ### 11.3 Blobs (stage 3)
 

@@ -1,5 +1,6 @@
 import type { Json } from './canonical';
 import { isLive, lastWrite, visibleFields } from './crdt';
+import { compareStamp } from './hlc';
 import type { EntityRecord, TeamData } from './data';
 import { isMemberId, isShortId } from './ids';
 import { isAdminRole, type Role } from './roles';
@@ -68,17 +69,28 @@ function validField(name: string, v: Json, author: string): boolean {
     case 'done':
       return typeof v === 'boolean';
     case 'dby':
-      return v === author;
+      return v === author || v === null;
     case 'dat':
-      return time(v);
+      return v === null || time(v);
     default:
       return false;
   }
 }
 
-/** Whether a task write's fields are all known and well-formed for this author. */
+/**
+ * Whether a task write's fields are all known and well-formed for this author.
+ * The status is written whole (review: "done by" showing the wrong person):
+ * `done: true` with `dby` = the author and `dat`; `done: false` with
+ * `dby: null, dat: null`; never `dby`/`dat` without `done`.
+ */
 export function validTaskFields(f: Record<string, Json>, author: string): boolean {
-  return Object.entries(f).every(([name, v]) => validField(name, v, author));
+  if (!Object.entries(f).every(([name, v]) => validField(name, v, author))) return false;
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(f, k);
+  if (!has('done')) return !has('dby') && !has('dat');
+  if (!has('dby') || !has('dat')) return false;
+  return f['done'] === true
+    ? f['dby'] === author && f['dat'] !== null
+    : f['dby'] === null && f['dat'] === null;
 }
 
 /** Whether a write touches only the status (what an assignee may do). */
@@ -105,6 +117,12 @@ export interface TeamTask {
   doneAt: number | null;
   createdAt: number;
   updatedAt: number;
+  /**
+   * Its status was written before its latest reassignment, in the team's
+   * order (a former assignee's late, or backdated, completion): shown as
+   * "completed before reassignment" (review: the accepted HLC residual).
+   */
+  doneBeforeReassignment: boolean;
 }
 
 export interface NewTask {
@@ -117,7 +135,13 @@ export interface NewTask {
 
 /** A new task's fields (validated by the caller with {@link validTaskFields}). */
 export function taskFields(t: NewTask): Record<string, Json> {
-  const f: Record<string, Json> = { title: t.title.trim(), assignee: t.assignee, done: false };
+  const f: Record<string, Json> = {
+    title: t.title.trim(),
+    assignee: t.assignee,
+    done: false,
+    dby: null,
+    dat: null,
+  };
   if (t.due != null) f['due'] = t.due;
   const a = t.anchor;
   if (a) {
@@ -139,7 +163,7 @@ export function taskFields(t: NewTask): Record<string, Json> {
 
 /** The status write that marks a task done (or open again). */
 export function statusFields(done: boolean, me: string, now: number): Record<string, Json> {
-  return done ? { done: true, dby: me, dat: now } : { done: false };
+  return done ? { done: true, dby: me, dat: now } : { done: false, dby: null, dat: null };
 }
 
 function anchorOf(f: Record<string, Json>): TaskAnchor | null {
@@ -171,6 +195,8 @@ export function entityToTask(rec: EntityRecord): TeamTask | null {
   const so = f['so'];
   const sc = f['sc'];
   const done = f['done'] === true;
+  const doneReg = rec.state.fields['done'];
+  const toReg = rec.state.fields['assignee'];
   return {
     id: rec.id,
     owner: rec.owner,
@@ -184,6 +210,11 @@ export function entityToTask(rec: EntityRecord): TeamTask | null {
     doneAt: done && time(f['dat']) ? (f['dat'] as number) : null,
     createdAt: rec.state.created.wall,
     updatedAt: lastWrite(rec.state)?.wall ?? rec.state.created.wall,
+    doneBeforeReassignment:
+      done &&
+      doneReg !== undefined &&
+      toReg !== undefined &&
+      compareStamp(doneReg.stamp, toReg.stamp) < 0,
   };
 }
 

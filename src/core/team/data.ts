@@ -112,14 +112,19 @@ export function parseDelBody(v: unknown): DelBody | undefined {
   return v as unknown as DelBody;
 }
 
+const THREAD = /^[a-z]{1,8}(:[A-Za-z0-9_-]{1,64})?$/;
+/** `pin:<owner member id>:<pin id>`: a pin's thread names its owner, so nobody else can root it. */
+const PIN_THREAD = /^pin:([A-Za-z0-9_-]{43}):([A-Za-z0-9_-]{1,64})$/;
+
 export function parseMsgBody(v: unknown): MsgBody | undefined {
   if (!isRecord(v) || !only(v, ['id', 'th', 'tx', 'mn', 'll'])) return undefined;
   if (!isShortId(v['id']) || typeof v['th'] !== 'string' || typeof v['tx'] !== 'string') {
     return undefined;
   }
-  if (!/^[a-z]{1,8}(:[A-Za-z0-9_-]{1,64})?$/.test(v['th']) || v['tx'].length > MAX_MESSAGE_CHARS) {
-    return undefined;
-  }
+  const th = v['th'];
+  const pin = PIN_THREAD.exec(th);
+  if (th.startsWith('pin:') ? !pin || !isMemberId(pin[1]) : !THREAD.test(th)) return undefined;
+  if (v['tx'].length > MAX_MESSAGE_CHARS) return undefined;
   const mn = v['mn'];
   if (
     mn !== undefined &&
@@ -129,7 +134,8 @@ export function parseMsgBody(v: unknown): MsgBody | undefined {
   }
   const ll = v['ll'];
   if (ll !== undefined) {
-    if (v['th'] !== `pin:${v['id']}` || !Array.isArray(ll) || ll.length !== 2) return undefined;
+    // A pin's root: on its own thread `pin:<author>:<its id>` (the author is checked by the fold).
+    if (!pin || pin[2] !== v['id'] || !Array.isArray(ll) || ll.length !== 2) return undefined;
     const [lng, lat] = ll as unknown[];
     if (!finite(lng) || !finite(lat) || Math.abs(lng) > 180 || Math.abs(lat) > 90) return undefined;
   }
@@ -217,12 +223,15 @@ export function applyDataOp(out: TeamData, state: TeamState, op: SignedOp, decod
         if (!validTaskFields(b.f, env.au)) break;
         const owner = b.o ?? env.au;
         const key = entityKey('task', b.id, owner);
-        if (owner !== env.au && !isAdminRole(role)) {
-          // Not mine and I'm no admin: only the current assignee, only the status.
+        if (owner !== env.au) {
+          // Someone else's task: it must exist (nobody, admins included, creates a
+          // task in another member's name); then an admin writes any field, the
+          // current assignee only the status.
           const cur = out.entities.get(key);
-          const assignee =
-            cur && isLive(cur.state) ? visibleFields(cur.state)['assignee'] : undefined;
-          if (assignee !== env.au || !isTaskStatusUpdate(b.f)) return forbid();
+          if (cur === undefined || !isLive(cur.state)) return forbid();
+          const assignee = visibleFields(cur.state)['assignee'];
+          if (!isAdminRole(role) && (assignee !== env.au || !isTaskStatusUpdate(b.f)))
+            return forbid();
         }
         merge(key, { kind: 'task', id: b.id, owner }, setOp(b.f, stamp));
         return;
@@ -248,6 +257,8 @@ export function applyDataOp(out: TeamData, state: TeamState, op: SignedOp, decod
     case 'msg': {
       const b = parseMsgBody(body);
       if (!b) break;
+      // Only the owner named in a pin thread can root it (review: pin hijack).
+      if (b.ll && b.th !== `pin:${env.au}:${b.id}`) break;
       const key = entityKey('msg', b.id, env.au);
       if (out.entities.get(key)?.state.created !== undefined) return; // immutable: first wins
       const fields = dict<Json>([

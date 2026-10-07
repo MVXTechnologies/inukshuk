@@ -6,6 +6,8 @@
  */
 import type { TeamAlert } from '@core/teamui/alerts';
 import type { TeamPhoto } from '@core/teamui/comments';
+import type { TeamPin } from '@core/teamui/pins';
+import type { TeamTask } from '@core/team/tasks';
 import type { TeammatePosition } from '@core/teamui/positions';
 import type { TeamShares } from '@core/teamui/shares';
 import type { TeamView } from '@core/teamui/view';
@@ -37,6 +39,10 @@ export interface TeamSnapshot {
   shares: TeamShares;
   /** Shared trail photos (thumbnails), all trails. */
   photos: TeamPhoto[];
+  /** Pins (comments anchored to places) with their threads. */
+  pins: TeamPin[];
+  /** Every live task. */
+  tasks: TeamTask[];
   /** Changes whenever team data changes (screens reading the session directly). */
   dataVersion: string;
   peers: PeerStatus[];
@@ -71,6 +77,8 @@ function snapshot(service: TeamService | null): Omit<TeamSnapshot, 'banner'> {
     positions: s?.positions() ?? [],
     shares: s?.shares() ?? EMPTY_SHARES,
     photos: s?.photos() ?? [],
+    pins: s?.pins() ?? [],
+    tasks: s?.tasks() ?? [],
     dataVersion: s?.dataVersion ?? '',
     peers: s?.peers() ?? [],
     mesh: s?.meshStatus() ?? null,
@@ -116,11 +124,13 @@ export function wireTeamStore(): TeamService | null {
     if (alert.level === 'alert') {
       void notifyTeam({
         title:
-          alert.kind === 'comment'
-            ? `${authorName} commented · ${teamName}`
-            : alert.priority === 2
-              ? `Urgent · ${authorName} · ${teamName}`
-              : `${authorName} · ${teamName}`,
+          alert.kind === 'task'
+            ? `${authorName} · tasks · ${teamName}`
+            : alert.kind === 'comment'
+              ? `${authorName} commented · ${teamName}`
+              : alert.priority === 2
+                ? `Urgent · ${authorName} · ${teamName}`
+                : `${authorName} · ${teamName}`,
         body: alert.text,
         url: alert.url,
       });

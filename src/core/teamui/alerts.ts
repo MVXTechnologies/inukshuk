@@ -22,8 +22,11 @@ import type { TeamState } from '@core/team/membership';
 import { audienceMembers, LARGE_TEAM, routeDelivery } from '@core/team/notify';
 import { isAdminRole } from '@core/team/roles';
 
-import { TRAIL_THREAD_PREFIX } from './comments';
-import { PIN_THREAD_PREFIX } from './pins';
+import type { TeamData } from '@core/team/data';
+import { teamTasks } from '@core/team/tasks';
+
+import { photoIndex, TRAIL_THREAD_PREFIX, trailOwners } from './comments';
+import { parsePinThread, PIN_THREAD_PREFIX, teamPins } from './pins';
 import { isSystemThread } from './system';
 import { TEAM_THREAD } from './view';
 
@@ -41,18 +44,47 @@ export interface TeamAlert {
 
 /** What alert routing needs to know about shared trails and photos (from the data view). */
 export interface AlertContext {
+  /**
+   * Whether the data fold APPLIED this op (accepted, not skipped as forbidden
+   * or invalid). Nothing alerts on an op the fold refused (review #1).
+   */
+  applied(opId: string): boolean;
   photo(photoId: string): { owner: string; trackId: string } | undefined;
   trailOwner(trackId: string): string | undefined;
-  /** The author of the pin `id`, when it is known. */
-  pinOwner?(id: string): string | undefined;
-  /** A task's current title and assignee. */
-  task?(owner: string, id: string): { title: string; assignee: string } | undefined;
+  /** Whether `owner`'s pin `id` exists. */
+  hasPin(owner: string, id: string): boolean;
+  /** A task as merged by the fold (validated fields), never the raw op. */
+  task(
+    owner: string,
+    id: string,
+  ): { owner: string; title: string; assignee: string; done: boolean } | undefined;
+}
+
+/** The alert context of a resolved team and its data view (what the session uses). */
+export function alertContext(state: TeamState, data: TeamData): AlertContext {
+  const photos = photoIndex(data);
+  const owners = trailOwners(data);
+  const pins = new Set(teamPins(data).map((p) => `${p.owner}:${p.id}`));
+  const tasks = new Map(teamTasks(data).map((t) => [`${t.owner}:${t.id}`, t]));
+  const skipped = new Set(data.skipped.map((x) => x.id));
+  return {
+    // Applied = a data op the fold accepted (it has a role) and did not skip.
+    applied: (id) => state.roleAt.has(id) && !skipped.has(id),
+    photo: (id) => photos.get(id),
+    trailOwner: (id) => owners.get(id),
+    hasPin: (owner, id) => pins.has(`${owner}:${id}`),
+    task: (owner, id) => tasks.get(`${owner}:${id}`),
+  };
 }
 
 /** Where a pin opens: the map, with its card. */
-export function pinUrl(id: string): string {
-  return `/team/pin/${id}`;
+export function pinUrl(owner: string, id: string): string {
+  return `/team/pin/${owner}/${id}`;
 }
+
+/** Alert texts are short: a long title is cut. */
+const MAX_ALERT_TITLE = 120;
+const cap = (s: string) => (s.length > MAX_ALERT_TITLE ? `${s.slice(0, MAX_ALERT_TITLE - 1)}…` : s);
 
 export const TASKS_URL = '/team/tasks';
 
@@ -70,7 +102,7 @@ export function alertFor(
   me: string,
   ctx: AlertContext,
 ): TeamAlert | null {
-  if (!isRecord(body)) return null;
+  if (!isRecord(body) || !ctx.applied(op.id)) return null;
   if (op.env.t === 'msg') return messageAlert(state, op, body, me, ctx);
   if (op.env.t === 'e.set' && body['k'] === 'comment')
     return commentAlert(state, op, body, me, ctx);
@@ -101,12 +133,11 @@ function messageAlert(
     url = trailUrl(owner, trackId, me);
     if (owner === me && op.env.au !== me && level !== 'none') level = 'alert';
   } else if (th.startsWith(PIN_THREAD_PREFIX)) {
-    const pinId = th.slice(PIN_THREAD_PREFIX.length);
-    const owner = id === pinId ? op.env.au : ctx.pinOwner?.(pinId);
-    if (owner === undefined) return null;
+    const pin = parsePinThread(th);
+    if (pin === null || !ctx.hasPin(pin.owner, pin.id)) return null;
     kind = 'comment';
-    url = pinUrl(pinId);
-    if (owner === me && op.env.au !== me && level !== 'none') level = 'alert';
+    url = pinUrl(pin.owner, pin.id);
+    if (pin.owner === me && op.env.au !== me && level !== 'none') level = 'alert';
   } else if (th !== TEAM_THREAD) {
     return null;
   }
@@ -172,12 +203,12 @@ function taskAlert(
   const self = state.members.get(me);
   if (op.env.au === me || self?.status !== 'active') return null;
   const owner = typeof body['o'] === 'string' ? body['o'] : op.env.au;
-  const known = ctx.task?.(owner, id);
-  const title = typeof f['title'] === 'string' ? f['title'] : known?.title;
-  if (title === undefined) return null;
+  // What the fold merged, not what the op claims (review #1).
+  const task = ctx.task(owner, id);
+  if (task === undefined) return null;
   let text: string;
-  if (f['assignee'] === me) text = `New task for you: ${title}`;
-  else if (f['done'] === true && owner === me) text = `Done: ${title}`;
+  if (f['assignee'] === me && task.assignee === me) text = `New task for you: ${cap(task.title)}`;
+  else if (f['done'] === true && task.done && task.owner === me) text = `Done: ${cap(task.title)}`;
   else return null;
   return {
     key: `task:${op.id}`,
@@ -188,4 +219,27 @@ function taskAlert(
     priority: 0,
     url: TASKS_URL,
   };
+}
+
+/** How long task alerts from one teammate collapse into one notification. */
+export const TASK_ALERT_WINDOW_MS = 60_000;
+
+/**
+ * Collapses a burst of task alerts from one author (review #6): the first in
+ * a {@link TASK_ALERT_WINDOW_MS} window notifies; the next ones only update
+ * the banner ("4 new tasks for you", level `badge`). Other alerts pass.
+ */
+export class TaskAlertThrottle {
+  private readonly bursts = new Map<string, { start: number; count: number }>();
+
+  admit(alert: TeamAlert, now: number): TeamAlert {
+    if (alert.kind !== 'task') return alert;
+    const b = this.bursts.get(alert.author);
+    if (b === undefined || now - b.start > TASK_ALERT_WINDOW_MS) {
+      this.bursts.set(alert.author, { start: now, count: 1 });
+      return alert;
+    }
+    b.count += 1;
+    return { ...alert, level: 'badge', text: `${b.count} task updates for you` };
+  }
 }

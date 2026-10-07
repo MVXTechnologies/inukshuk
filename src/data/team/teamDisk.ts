@@ -57,6 +57,8 @@ export interface TeamRecord {
   profileKeyId?: string;
   /** Key id the team-name message was last re-posted under (admins). */
   teamNameKeyId?: string;
+  /** Newest message time seen per thread (`photo:<id>`, `pin:<id>`): the map's "new" bubbles. */
+  seen?: Record<string, number>;
 }
 
 /** Device secrets, base64url (the public keys are derived on load). */
