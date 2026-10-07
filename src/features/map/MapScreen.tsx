@@ -221,6 +221,8 @@ import { WeatherModelSheet } from './weather/WeatherModelSheet';
 import { WeatherPointLine } from './weather/WeatherPointLine';
 import { WeatherTimeScrubber } from './weather/WeatherTimeScrubber';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
+import { RecordingCheckPanel } from '@features/recording/RecordingCheckPanel';
+import { useRecordingCheck } from '@features/recording/useRecordingCheck';
 import { useMapDrawing } from './draw/useMapDrawing';
 
 /** Kept out of the 3D drape: the 2D tilted-relief pass (the mesh is the relief). */
@@ -1018,6 +1020,11 @@ export function MapScreen() {
     if (overlayError) showOverlaySnack(`Map overlay: ${overlayError}`);
   }, [overlayError, showOverlaySnack]);
 
+  // Recording check (2.5.0 field report: straight-line tracks) — before the
+  // first recording, on a detected problem, and after a recording whose GPS
+  // failed. An inline overlay, never a Portal (recording path).
+  const recordingCheck = useRecordingCheck();
+
   const {
     status,
     stats,
@@ -1036,7 +1043,7 @@ export function MapScreen() {
     removeWaypoint,
     bgRationaleVisible,
     respondToBgRationale,
-  } = useRecordingSession({ showSnack });
+  } = useRecordingSession({ showSnack, onRecordingIssue: recordingCheck.openReview });
 
   // Recording panel (revamp decision 3): its measured height lifts the map's
   // bottom chrome above it, and glove lock shields everything else.
@@ -3462,7 +3469,7 @@ export function MapScreen() {
           onStart={(categoryId) => {
             setPickingCategory(false);
             setRecordRequested(false);
-            startRecording(categoryId);
+            recordingCheck.requestStart(() => startRecording(categoryId));
           }}
           onDismiss={() => {
             setPickingCategory(false);
@@ -3474,6 +3481,8 @@ export function MapScreen() {
           visible={bgRationaleVisible}
           onRespond={respondToBgRationale}
         />
+
+        <RecordingCheckPanel {...recordingCheck.panel} />
 
         {/* Waypoint card (pin tap, #505): note/photo at a glance, Edit and
           hold-to-delete. Hidden while the trail inspector or the editor is up

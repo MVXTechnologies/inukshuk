@@ -250,6 +250,12 @@ export interface Settings {
    */
   terrainSlopeMinDeg: number;
   terrainSlopeMaxDeg: number;
+  /** The Recording check (permissions/battery for screen-off GPS) was shown
+   * before a first recording; afterwards it only reappears on a problem. */
+  recordingCheckShown: boolean;
+  /** The user opened the battery settings from the Recording check (Android
+   * restrictions can't be read without a native module). */
+  recordingBatteryReviewed: boolean;
   /** Whether the one-time "slope shading is indicative" disclaimer was shown. */
   slopeDisclaimerShown: boolean;
   /** Last activity category picked at record start (the picker's default). */
@@ -349,6 +355,8 @@ const DEFAULTS: Settings = {
   terrainSlopeMinDeg: 27,
   terrainSlopeMaxDeg: 90,
   slopeDisclaimerShown: false,
+  recordingCheckShown: false,
+  recordingBatteryReviewed: false,
   lastActivityCategory: DEFAULT_CATEGORY_ID,
   librarySortKey: DEFAULT_SORT,
   trailViewTab: 'overview',
@@ -437,6 +445,8 @@ function snapshot(s: SettingsState): Settings {
     terrainSlopeMinDeg,
     terrainSlopeMaxDeg,
     slopeDisclaimerShown,
+    recordingCheckShown,
+    recordingBatteryReviewed,
     lastActivityCategory,
     librarySortKey,
     trailViewTab,
@@ -492,6 +502,8 @@ function snapshot(s: SettingsState): Settings {
     terrainSlopeMinDeg,
     terrainSlopeMaxDeg,
     slopeDisclaimerShown,
+    recordingCheckShown,
+    recordingBatteryReviewed,
     lastActivityCategory,
     librarySortKey,
     trailViewTab,

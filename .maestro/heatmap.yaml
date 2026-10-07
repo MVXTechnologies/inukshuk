@@ -100,6 +100,19 @@ appId: com.inukshuk.app
 # category-record's overlap partner.
 - tapOn: 'Category Run(, selected)?'
 - tapOn: 'Start recording'
+# The Recording check (precise location / screen-off / battery) opens before
+# the FIRST recording ever, and again only when a check reports a problem.
+# Wait for whichever comes first — the check or the recording HUD — then
+# continue past the check (its primary button is labelled "Continue to
+# recording"; the visible text is just "Start").
+- extendedWaitUntil:
+    visible: '(Continue to recording|Stop recording)'
+    timeout: 10000
+- runFlow:
+    when:
+      visible: 'Continue to recording'
+    commands:
+      - tapOn: 'Continue to recording'
 # Background-permission rationale card on first record: decline (inline card).
 # Skipped entirely when background location is already granted.
 - runFlow:

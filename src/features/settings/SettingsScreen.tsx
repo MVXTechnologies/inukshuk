@@ -42,6 +42,7 @@ import {
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DisplaySheet } from '@features/display/DisplaySheet';
+import { RecordingCheckPanel } from '@features/recording/RecordingCheckPanel';
 import { DonorsList } from '@features/support/DonorsList';
 import { SupportSettingsRow } from '@features/support/SupportSettingsRow';
 import { exportAllData } from './exportAllData';
@@ -129,6 +130,7 @@ export function SettingsScreen() {
   const accordionTitleStyle = { fontWeight: '700' } as const;
   const tileUrl = useSettingsStore((s) => s.tileUrl);
   const keepAwake = useSettingsStore((s) => s.keepAwakeWhileRecording);
+  const [recordingCheckOpen, setRecordingCheckOpen] = useState(false);
   const rotateMap = useSettingsStore((s) => s.rotateMapWithHeading);
   const showScaleBar = useSettingsStore((s) => s.showScaleBar);
   const showHillshade = useSettingsStore((s) => s.showHillshade);
@@ -296,6 +298,14 @@ export function SettingsScreen() {
             <View style={styles.accordionBody}>
               <List.Section>
                 <List.Subheader>Recording</List.Subheader>
+                <List.Item
+                  title="Recording check"
+                  description="Precise location, screen-off recording and battery"
+                  left={(p) => <List.Icon {...p} icon="map-marker-check-outline" />}
+                  onPress={() => setRecordingCheckOpen(true)}
+                  accessibilityLabel="Recording check"
+                  testID="settings-recording-check"
+                />
                 <List.Item
                   title="Keep screen awake"
                   description="Prevents the device sleeping while recording"
@@ -749,6 +759,11 @@ export function SettingsScreen() {
         {snack ?? ''}
       </Snackbar>
       <DisplaySheet visible={displaySheetOpen} onDismiss={() => setDisplaySheetOpen(false)} />
+      <RecordingCheckPanel
+        visible={recordingCheckOpen}
+        mode="settings"
+        onClose={() => setRecordingCheckOpen(false)}
+      />
     </View>
   );
 }

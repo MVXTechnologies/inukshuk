@@ -4,27 +4,11 @@ import {
   startBackgroundLocationUpdates,
   stopBackgroundLocationUpdates,
 } from '@lib/backgroundLocation';
+import { requestNotificationsForRecording } from '@lib/recordingReadiness';
 import { useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, PermissionsAndroid, Platform } from 'react-native';
-
-/**
- * Android 13+ suppresses ALL notifications — including the recording
- * foreground service's — unless POST_NOTIFICATIONS is granted at runtime.
- * Ask once when a recording starts (the moment the notification matters);
- * a denial degrades to an invisible-but-running service, never an error.
- * On binaries whose manifest doesn't declare the permission (≤ vc45 pre-fix)
- * the request resolves as denied immediately — harmless.
- */
-async function ensureNotificationPermission(): Promise<void> {
-  if (Platform.OS !== 'android' || Platform.Version < 33) return;
-  try {
-    await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
-  } catch {
-    /* never block recording on the notification prompt */
-  }
-}
+import { AppState } from 'react-native';
 
 export interface BackgroundRecordingControls {
   /** Show the "Allow all the time" rationale dialog. */
@@ -79,9 +63,11 @@ export function useBackgroundRecording({
     }
     let cancelled = false;
     void (async () => {
-      await ensureNotificationPermission();
+      await requestNotificationsForRecording();
       if (cancelled) return;
-      const permission = await ensureBackgroundLocationPermission(askRationale);
+      // Android "Allow all the time" (with its rationale); iOS needs nothing
+      // beyond "While Using" — see ensureBackgroundLocationPermission.
+      await ensureBackgroundLocationPermission(askRationale);
       if (cancelled) return;
       const started = await startBackgroundLocationUpdates(minDisplacement);
       if (cancelled) {
@@ -91,10 +77,6 @@ export function useBackgroundRecording({
       }
       if (!started) {
         showSnack('Background tracking unavailable — keep Inukshuk open while recording');
-      } else if (permission !== 'granted' && Platform.OS === 'ios') {
-        // Android's foreground service records regardless; iOS without
-        // "Always" may be suspended once the app leaves the foreground.
-        showSnack('Without "Always" location, recording may stop in the background');
       }
     })();
     return () => {

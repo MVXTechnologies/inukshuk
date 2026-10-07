@@ -120,6 +120,28 @@ four stages:
   flat ground doesn't inflate elevation gain — the number hikers actually expect.
 - Tracks persist as standard GPX 1.1 in the document directory; the library
   index (`library.json`) keeps lightweight summaries and loads points on demand.
+- **Screen-off recording & permissions** (`lib/backgroundLocation.ts`). The
+  OS task (`startLocationUpdatesAsync`) is started while the app is in front.
+  Android runs it as a foreground service. "Allow all the time" is
+  recommended, with a rationale, but it is not required. iOS sets
+  `allowsBackgroundLocationUpdates` under `UIBackgroundModes: [location]`, so
+  **"While Using the App" is enough and the app never asks for "Always"**.
+  That choice avoids an alarming prompt and App Review friction for no gain.
+- **Recording check** (`core/recording/recordingReadiness.ts`,
+  `features/recording`). It shows precise location, screen-off recording
+  (Android), battery restrictions (Android; these can't be read without a
+  native module, so the row is advice) and notifications (Android 13+). Each
+  row has a one-tap fix. iOS precise location is fixed only through Settings,
+  because expo-location 56 has no temporary-full-accuracy API. The check opens
+  before the first recording, on any start where a row reports a problem, and
+  from Settings. It is an inline overlay, never a Portal.
+- **Recording health** (`core/geo/track/recordingHealth.ts`). The recorder
+  counts the fixes it drops for an approximate-location accuracy (≥ 500 m).
+  The session tracks its screen-off spells. A silent span in which the user
+  moved ≥ 150 m over ≥ 90 s is a gap. Mostly-background gaps (≥ 2 min in total)
+  mean GPS stopped with the screen off. That, or approximate location, opens
+  the Recording check with a one-line explanation, both mid-recording (after
+  the screen comes back on) and after Stop.
 - Waypoints dropped during recording become distance-anchored trail notes
   (optionally with photos) on the saved track. Waypoints dropped outside a
   recording (map "+" speed-dial) are standalone: they keep their coordinate

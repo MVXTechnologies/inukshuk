@@ -91,6 +91,8 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
     ['paused ink on elevation 5', t.status.pausedInk, t.elevation.level5, TEXT],
     ['weak-GPS ink on surface', t.status.gpsWeak, t.surface, TEXT],
     ['weak-GPS ink on elevation 5', t.status.gpsWeak, t.elevation.level5, TEXT],
+    // Recording check: the "needs action" icon on the panel's level-3 card.
+    ['recording-check advice icon on elevation 3', t.status.gpsWeak, t.elevation.level3, GRAPHIC],
     ['lost-GPS ink on elevation 5', t.status.gpsLostInk, t.elevation.level5, TEXT],
     ['text on lost-GPS fill', t.status.onGpsLost, t.status.gpsLost, TEXT],
     ['recording dot on recording chip', t.status.recordingDot, t.status.recording, GRAPHIC],
