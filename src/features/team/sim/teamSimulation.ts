@@ -585,6 +585,80 @@ class Simulation {
         }
       }
     }
+    // The field: my SOS, my rally point, my trail edits.
+    if (lead) any = this.field(human) || any;
+    return any;
+  }
+
+  /** The team answers an SOS, walks to a rally point, and joins a trail edit. */
+  private field(human: string): boolean {
+    const lead = this.bots[0];
+    if (!lead) return false;
+    const s = lead.session;
+    let any = false;
+    for (const sos of s.soses()) {
+      if (sos.owner !== human || sos.resolved) continue;
+      if (!this.fresh(`sos:${sos.owner}:${sos.id}:${sos.at}`)) continue;
+      any = true;
+      const name =
+        s
+          .view()
+          .members.find((m) => m.id === human)
+          ?.name.split(' ')[0] ?? '';
+      this.later(between(4_000, 10_000), () => {
+        lead.session.sendMessage(`@${name} J’arrive — I’m coming`);
+        lead.target = [sos.lng, sos.lat];
+        this.note(`${lead.spec.name} is coming to the SOS`);
+      });
+      const other = this.bots[1];
+      if (other)
+        this.later(between(8_000, 16_000), () => {
+          other.session.setMyStatus('stop10');
+          other.session.sendMessage('On t’attend, on arrête ici.');
+        });
+    }
+    const rally = s.rally();
+    if (rally && rally.owner === human && this.fresh(`rly:${rally.id}:${rally.at}`)) {
+      any = true;
+      for (const b of this.bots) {
+        this.later(between(3_000, 20_000), () => {
+          b.target = [rally.lng, rally.lat];
+          this.note(`${b.spec.name} heads to the rally point`);
+        });
+        this.later(between(60_000, 150_000) / this.state.speed, () => {
+          b.pos = [rally.lng + (rnd() - 0.5) / 11_132, rally.lat + (rnd() - 0.5) / 11_132];
+          b.target = null;
+          b.session.setMyStatus('arrived');
+          this.note(`${b.spec.name} arrived`);
+        });
+      }
+    }
+    const editing = s.editors().get(human);
+    const julie = this.bots[1];
+    if (editing && julie && this.fresh(`edit:${editing}:${Math.floor(Date.now() / 600_000)}`)) {
+      any = true;
+      const [owner, id] = editing.split(':') as [string, string];
+      const trail = { owner, id };
+      this.later(between(8_000, 15_000), () => {
+        julie.session.setEditing(trail);
+        this.note(`${julie.spec.name} is editing the trail too`);
+      });
+      this.later(between(25_000, 40_000), () => {
+        const tr = julie.session.teamTrails().find((x) => x.owner === owner && x.id === id);
+        const v = tr?.vertices[Math.floor((tr?.vertices.length ?? 0) / 2)];
+        if (v) {
+          julie.session.moveVertex(
+            trail,
+            v.id,
+            v.lng + 0.00015,
+            v.lat + 0.0001,
+            v.inserted ? v.key : undefined,
+          );
+          this.note(`${julie.spec.name} moved a trail point`);
+        }
+      });
+      this.later(between(70_000, 90_000), () => julie.session.setEditing(null));
+    }
     return any;
   }
 
