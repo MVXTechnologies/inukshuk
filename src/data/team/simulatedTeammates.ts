@@ -99,9 +99,14 @@ export async function addSimulatedTeammate(
 function commentOnFirstSharedTrail(bot: Bot, text: string): void {
   const session = bot.service.active;
   if (session === null) return;
+  let last = -1;
   const timer = setInterval(() => {
     const theirs = session.photos().filter((p) => p.owner !== session.me && p.thumbUri !== null);
-    if (theirs.length === 0) return;
+    // Wait until the whole trail has arrived (the count stopped growing).
+    if (theirs.length === 0 || theirs.length !== last) {
+      last = theirs.length;
+      return;
+    }
     clearInterval(timer);
     const pick =
       theirs.find((p) => /sommet|summit/i.test(p.caption ?? '')) ??
