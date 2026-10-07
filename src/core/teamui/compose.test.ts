@@ -36,7 +36,9 @@ describe('compose', () => {
   });
 
   it('offers the core audiences', () => {
-    const groups: GroupRow[] = [{ id: 'crew', name: 'Trail crew', parent: null, depth: 0, members: 2 }];
+    const groups: GroupRow[] = [
+      { id: 'crew', name: 'Trail crew', parent: null, depth: 0, members: 2 },
+    ];
     expect(audienceChoices([]).map((c) => c.label)).toEqual(['Everyone', 'Admins']);
     expect(audienceChoices(groups).map((c) => [c.label, c.aud])).toEqual([
       ['Everyone', undefined],
