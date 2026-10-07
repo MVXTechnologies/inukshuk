@@ -5,7 +5,7 @@
 #
 # Settings → Extensions → "Get External GNSS receiver" → Receiver → connect
 # the simulated receiver → the map's receiver chip goes to "RTK fixed" → its
-# sheet shows the position with how it was computed and "⚠ frame unknown"
+# sheet shows the position with how it was computed and "Frame unknown"
 # (no caster declares a frame here, owner A5) → Remove leaves the default.
 #
 # Settings rows merge title + subtitle on iOS: their matches are wildcard
@@ -70,9 +70,11 @@ appId: com.inukshuk.app
     direction: DOWN
 - tapOn: 'Get External GNSS receiver'
 - extendedWaitUntil:
-    visible: 'Receiver'
+    visible:
+      id: 'gnss-receiver-row'
     timeout: 10000
-- tapOn: 'Receiver'
+- tapOn:
+    id: 'gnss-receiver-row'
 # Pairing: the scan finds the simulated receiver within a second.
 - extendedWaitUntil:
     visible: 'Connect Simulated RTK receiver'
@@ -104,7 +106,7 @@ appId: com.inukshuk.app
       id: 'gnss-receiver-sheet'
     timeout: 5000
 - assertVisible: '.*Simulated RTK receiver.*'
-- assertVisible: '.*⚠ frame unknown.*'
+- assertVisible: '.*Frame unknown.*'
 - assertVisible: '.*Your location · phone GPS in standby.*'
 - takeScreenshot: gnss-sheet
 - tapOn: 'Close'

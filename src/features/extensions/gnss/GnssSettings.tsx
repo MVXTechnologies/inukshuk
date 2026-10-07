@@ -101,7 +101,6 @@ export function GnssSettings() {
         }
         onPress={() => router.push('/gnss/pair')}
         right={(p) => <List.Icon {...p} icon="chevron-right" />}
-        accessibilityLabel="Receiver"
         testID="gnss-receiver-row"
       />
       <List.Item
@@ -114,7 +113,6 @@ export function GnssSettings() {
         descriptionNumberOfLines={3}
         onPress={() => router.push('/gnss/corrections')}
         right={(p) => <List.Icon {...p} icon="chevron-right" />}
-        accessibilityLabel="RTK corrections"
         testID="gnss-corrections-row"
       />
       <List.Item
@@ -123,7 +121,6 @@ export function GnssSettings() {
         descriptionNumberOfLines={2}
         onPress={() => router.push('/gnss/datum')}
         right={(p) => <List.Icon {...p} icon="chevron-right" />}
-        accessibilityLabel="Project datum"
         testID="gnss-datum-row"
       />
       <List.Item

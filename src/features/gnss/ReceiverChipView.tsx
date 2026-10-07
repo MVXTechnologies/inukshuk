@@ -1,7 +1,7 @@
 import type { ChipIcon, ChipTone, ReceiverChip } from '@core/gnss/chip';
 import type { SchemeTokens } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
 
 const ICONS: Record<ChipIcon, string> = {
@@ -97,14 +97,17 @@ export function ReceiverChipView({ chip, variant, onPress, testID }: Props) {
       ]}
     >
       <Icon source={ICONS[chip.icon]} size={16} color={chromeIcon(t, chip.tone)} />
-      <Text numberOfLines={1} style={[styles.chromeLabel, { color: t.map.chromeInk }]}>
-        {chip.label}
-      </Text>
-      {chip.detail !== null && (
-        <Text numberOfLines={1} style={[styles.chromeDetail, { color: t.map.chromeInk }]}>
-          {chip.detail}
+      {/* Two lines: the state and accuracy, then satellites and correction age. */}
+      <View style={styles.chromeText}>
+        <Text numberOfLines={1} style={[styles.chromeLabel, { color: t.map.chromeInk }]}>
+          {chip.label}
         </Text>
-      )}
+        {chip.detail !== null && (
+          <Text numberOfLines={1} style={[styles.chromeDetail, { color: t.map.chromeInk }]}>
+            {chip.detail}
+          </Text>
+        )}
+      </View>
     </Pressable>
   );
 }
@@ -124,9 +127,10 @@ const styles = StyleSheet.create({
   noBorder: { borderWidth: 0 },
   surfaceText: { fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'], flexShrink: 1 },
   chromeChip: {
-    minHeight: 36,
+    minHeight: 40,
     paddingHorizontal: 14,
-    borderRadius: 18,
+    paddingVertical: 5,
+    borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
@@ -136,6 +140,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
   },
+  chromeText: { flexShrink: 1 },
   chromeLabel: { fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'], flexShrink: 1 },
   chromeDetail: {
     fontSize: 12,

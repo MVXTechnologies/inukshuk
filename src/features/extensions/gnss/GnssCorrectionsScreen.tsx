@@ -211,6 +211,7 @@ export function GnssCorrectionsScreen() {
             {config.profiles.map((p) => (
               <Chip
                 key={p.id}
+                mode="outlined"
                 selected={p.id === draft.id}
                 onPress={() => {
                   setDraft(p);
@@ -220,7 +221,11 @@ export function GnssCorrectionsScreen() {
                 {p.label}
               </Chip>
             ))}
-            <Chip icon="plus" onPress={() => setDraft(newProfile(newId(), 'rtk2go'))}>
+            <Chip
+              mode="outlined"
+              icon="plus"
+              onPress={() => setDraft(newProfile(newId(), 'rtk2go'))}
+            >
               New
             </Chip>
           </View>
@@ -231,6 +236,7 @@ export function GnssCorrectionsScreen() {
         {CASTER_PRESETS.map((p) => (
           <Chip
             key={p.id}
+            mode="outlined"
             selected={draft.presetId === p.id}
             showSelectedCheck
             onPress={() => choosePreset(p.id)}
@@ -239,6 +245,7 @@ export function GnssCorrectionsScreen() {
           </Chip>
         ))}
         <Chip
+          mode="outlined"
           selected={draft.presetId === null}
           showSelectedCheck
           onPress={() => choosePreset(null)}
@@ -420,7 +427,7 @@ export function GnssCorrectionsScreen() {
         <View style={[styles.warn, { backgroundColor: t.surfaceVariant }]}>
           <Icon source="alert-outline" size={18} color={t.status.gpsWeak} />
           <Text variant="bodySmall" style={[styles.flex, { color: t.status.gpsWeak }]}>
-            {`${preset ? preset.label.split(' (')[0] : 'This caster'} doesn’t say which datum its bases use — ask the base owner. Wrong here puts you about 1.5 m off in Canada, even when the chip says ±2 cm. Until then the coordinates are shown as WGS 84 with ⚠ frame unknown.`}
+            {`${preset ? preset.label.split(' (')[0] : 'This caster'} doesn’t say which datum its bases use — ask the base owner. Wrong here puts you about 1.5 m off in Canada, even when the chip says ±2 cm. Until then the coordinates are shown as WGS 84, marked “frame unknown”.`}
           </Text>
         </View>
       )}

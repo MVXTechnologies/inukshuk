@@ -6,7 +6,7 @@ import { useGnssStore } from '@state/gnssStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { RadioButton, Text } from 'react-native-paper';
+import { Icon, RadioButton, Text } from 'react-native-paper';
 
 import { GnssScreenFrame } from './GnssScreenFrame';
 
@@ -81,12 +81,19 @@ export function GnssDatumScreen() {
                   {o.note}
                 </Text>
                 {line !== null && (
-                  <Text
-                    variant="bodySmall"
-                    style={[styles.route, { color: line.ok ? t.inkMuted : t.status.gpsWeak }]}
-                  >
-                    {line.ok ? `✓ ${line.text}` : `⚠ ${line.text}`}
-                  </Text>
+                  <View style={styles.routeRow}>
+                    <Icon
+                      source={line.ok ? 'check-circle-outline' : 'alert-outline'}
+                      size={14}
+                      color={line.ok ? t.inkMuted : t.status.gpsWeak}
+                    />
+                    <Text
+                      variant="bodySmall"
+                      style={[styles.flex, { color: line.ok ? t.inkMuted : t.status.gpsWeak }]}
+                    >
+                      {line.text}
+                    </Text>
+                  </View>
                 )}
               </View>
             </Pressable>
@@ -114,5 +121,5 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     marginBottom: 8,
   },
-  route: { marginTop: 4 },
+  routeRow: { flexDirection: 'row', gap: 6, alignItems: 'flex-start', marginTop: 4 },
 });

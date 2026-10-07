@@ -88,11 +88,11 @@ describe('the receiver on the map', () => {
     expect(screen.getByTestId('gnss-receiver-sheet')).toBeTruthy();
     expect(screen.getByText('RTK Facet')).toBeTruthy();
     expect(screen.getByText('Your location · phone GPS in standby')).toBeTruthy();
-    expect(screen.getByText('RTK fixed · 6 min')).toBeTruthy();
+    expect(screen.getByText('RTK fixed for 6 min')).toBeTruthy();
     expect(screen.getByText('14 of 28 satellites')).toBeTruthy();
     expect(screen.getByLabelText('Horizontal accuracy ±1.4 cm')).toBeTruthy();
     expect(screen.getByLabelText('Vertical accuracy ±2.6 cm')).toBeTruthy();
-    expect(screen.getByText('RTK2go · LEVIS · LEVIS')).toBeTruthy();
+    expect(screen.getByText('RTK2go · LEVIS')).toBeTruthy();
     expect(screen.getByText(/RTCM 3 over the phone’s data · age 1 s/)).toBeTruthy();
     // The project datum: ITRF2020 at the observation epoch, via the WGS 84 ensemble (2 m).
     expect(screen.getByText('46.800000° N, 71.200000° W')).toBeTruthy();
@@ -100,7 +100,7 @@ describe('the receiver on the map', () => {
     expect(
       screen.getByText(/Stated accuracy: ±2\.0 m \(receiver ±1\.4 cm, conversion ±2\.0 m\)/),
     ).toBeTruthy();
-    expect(screen.getByText(/⚠ frame unknown/)).toBeTruthy();
+    expect(screen.getByText(/^Frame unknown/)).toBeTruthy();
     expect(screen.getByText('As received')).toBeTruthy();
     await fireEvent.press(screen.getByText('Receiver settings'));
     expect(mockPush).toHaveBeenCalledWith('/settings');

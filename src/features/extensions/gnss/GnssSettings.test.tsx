@@ -95,7 +95,7 @@ describe('Settings → Extensions: External GNSS receiver', () => {
       await act(async () => {
         useGnssStore.getState().updateConfig({ phoneWhileGood: 'standby', fallbackToPhone: true });
       });
-      await fireEvent.press(screen.getByLabelText('Receiver'));
+      await fireEvent.press(screen.getByTestId('gnss-receiver-row'));
       expect(mockPush).toHaveBeenLastCalledWith('/gnss/pair');
       await unmount();
     }
@@ -125,10 +125,10 @@ describe('the receiver sub-screens', () => {
   it('project datum: each option says whether Convert can get there from the fix', async () => {
     useGnssStore.setState({ fix: fixOf('autonomous', { timeMs: Date.UTC(2026, 9, 7) }) });
     await render(wrap(<GnssDatumScreen />));
-    expect(screen.getAllByText(/✓ WGS 84 → ITRF2020/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^WGS 84 → ITRF2020/).length).toBeGreaterThan(0);
     expect(
       screen.getByText(
-        /⚠ Not from here: No validated conversion between ITRF2020 and NAD83\(2011\)/,
+        /^Not from here: No validated conversion between ITRF2020 and NAD83\(2011\)/,
       ),
     ).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('NAD83(CSRS) epoch 1997.0'));

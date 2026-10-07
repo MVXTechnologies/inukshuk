@@ -87,7 +87,7 @@ export function ReceiverSheet({ chip }: { chip: ReceiverChip }) {
   const approx = acc?.basis === 'hdop';
   const since =
     status && status.state !== 'no-fix' && status.sinceMs > 0
-      ? ` · ${formatAge((now - status.sinceMs) / 1000)}`
+      ? formatAge((now - status.sinceMs) / 1000)
       : '';
 
   const satsLine =
@@ -98,7 +98,7 @@ export function ReceiverSheet({ chip }: { chip: ReceiverChip }) {
         : null;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+    <View style={[StyleSheet.absoluteFill, styles.layer]} pointerEvents="box-none">
       <Pressable
         style={[StyleSheet.absoluteFill, styles.scrim]}
         onPress={() => close(false)}
@@ -109,7 +109,7 @@ export function ReceiverSheet({ chip }: { chip: ReceiverChip }) {
         style={[
           styles.sheet,
           {
-            backgroundColor: t.elevation.level2,
+            backgroundColor: t.surface,
             paddingBottom: insets.bottom + 12,
             shadowColor: palette.shadow,
           },
@@ -141,7 +141,7 @@ export function ReceiverSheet({ chip }: { chip: ReceiverChip }) {
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
           <View style={styles.pills}>
             <ReceiverChipView chip={chip} variant="surface" />
-            {since !== '' && fix && <Pill text={`${kindLabel(fix.kind)}${since}`} />}
+            {since !== '' && fix && <Pill text={`${kindLabel(fix.kind)} for ${since}`} />}
             {satsLine !== null && <Pill text={satsLine} />}
             {fix?.hdop != null && <Pill text={`HDOP ${fix.hdop.toFixed(1)}`} />}
           </View>
@@ -166,9 +166,7 @@ export function ReceiverSheet({ chip }: { chip: ReceiverChip }) {
 
           <Row label="Corrections">
             <Text style={[styles.body, { color: t.ink }]}>
-              {profile
-                ? `${profile.label}${profile.mountpoint ? ` · ${profile.mountpoint}` : ''}`
-                : 'None from Inukshuk'}
+              {profile ? profileLine(profile) : 'None from Inukshuk'}
             </Text>
             <Text style={[styles.small, { color: t.inkVariant }]}>
               {correctionLine(profile, ntrip, fix, status?.correctionAgeS ?? null)}
@@ -186,16 +184,17 @@ export function ReceiverSheet({ chip }: { chip: ReceiverChip }) {
                 label={option.label}
               />
             )}
-            {frame !== null && (
-              <Text
-                style={[
-                  styles.small,
-                  { color: frame.frameUnknown ? t.status.gpsWeak : t.inkVariant },
-                ]}
-              >
-                {frame.frameUnknown
-                  ? '⚠ frame unknown — the caster doesn’t say which datum its base uses; WGS 84 assumed'
-                  : `Received in ${receiverFrameLabel(frame)}`}
+            {frame !== null && frame.frameUnknown && (
+              <View style={styles.warnRow}>
+                <Icon source="alert-outline" size={16} color={t.status.gpsWeak} />
+                <Text style={[styles.small, styles.flex, { color: t.status.gpsWeak }]}>
+                  Frame unknown — the caster doesn’t say which datum its base uses; WGS 84 assumed
+                </Text>
+              </View>
+            )}
+            {frame !== null && !frame.frameUnknown && (
+              <Text style={[styles.small, { color: t.inkVariant }]}>
+                Received in {receiverFrameLabel(frame)}
               </Text>
             )}
           </Row>
@@ -226,6 +225,11 @@ export function ReceiverSheet({ chip }: { chip: ReceiverChip }) {
   );
 }
 
+/** "RTK2go · LEVIS": the label, with the mountpoint when the label doesn't already say it. */
+export function profileLine(p: { label: string; mountpoint: string }): string {
+  return p.mountpoint && !p.label.includes(p.mountpoint) ? `${p.label} · ${p.mountpoint}` : p.label;
+}
+
 function correctionLine(
   profile: ReturnType<typeof activeProfile>,
   ntrip: { phase: string; message: string | null; bytes: number },
@@ -243,7 +247,9 @@ function correctionLine(
   const parts = ['RTCM 3 over the phone’s data'];
   if (fix && profile.baseLat !== null && profile.baseLon !== null) {
     const km = distanceKm(fix.lat, fix.lon, profile.baseLat, profile.baseLon);
-    parts.push(`base ${km.toFixed(1)} km${km > BASELINE_WARN_KM ? ' ⚠ long baseline' : ''}`);
+    parts.push(
+      `base ${km.toFixed(1)} km${km > BASELINE_WARN_KM ? ' (long baseline: RTK less reliable)' : ''}`,
+    );
   }
   if (ageS !== null) parts.push(`age ${formatAge(ageS)}`);
   return parts.join(' · ');
@@ -289,9 +295,11 @@ function PositionBlock({
       <Text style={[styles.small, { color: t.inkVariant }]}>Method: {plan.method}</Text>
       <Text style={[styles.small, { color: t.inkVariant }]}>
         Stated accuracy:{' '}
-        {total !== null
-          ? `${formatAccuracy(total)} (receiver ${formatAccuracy(receiverAccM ?? 0)}, conversion ${formatAccuracy(plan.datumAccuracyM ?? 0)})`
-          : 'not stated'}
+        {total === null
+          ? 'not stated'
+          : plan.datumAccuracyM === 0
+            ? `${formatAccuracy(total)} (the receiver’s; no conversion)`
+            : `${formatAccuracy(total)} (receiver ${formatAccuracy(receiverAccM ?? 0)}, conversion ${formatAccuracy(plan.datumAccuracyM ?? 0)})`}
       </Text>
       {plan.validation.length > 0 && (
         <Text style={[styles.small, { color: t.inkMuted }]}>
@@ -351,6 +359,9 @@ function Tile({ label, value, tint }: { label: string; value: string; tint: bool
 }
 
 const styles = StyleSheet.create({
+  // Above the map's controls rail and the recording panel.
+  layer: { zIndex: 50, elevation: 50 },
+  warnRow: { flexDirection: 'row', gap: 6, alignItems: 'flex-start', marginTop: 2 },
   scrim: { backgroundColor: 'rgba(0,0,0,0.25)' },
   sheet: {
     position: 'absolute',
