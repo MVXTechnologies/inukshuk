@@ -8,6 +8,7 @@ import {
   importActivitiesFromUri,
   openImportedUri,
 } from '@features/library/importActivities';
+import { photoCountLabel } from '@core/photos/summary';
 import * as storage from '@data/storage';
 import { addBreadcrumb, reportError } from '@lib/errorReporting';
 import { handleStravaAuthRedirect } from '@lib/strava';
@@ -136,7 +137,12 @@ async function importOpenedActivities(uri: string): Promise<string> {
   useLibraryStore.getState().addTracks(items);
   const [only] = items;
   if (only && items.length === 1 && duplicates === 0 && summary.failed === 0) {
-    feedback.show(`Imported ${only.track.name}`);
+    // A "Trail + photos" zip (#587) says how many photos came back with it.
+    feedback.show(
+      summary.photos > 0
+        ? `Imported ${only.track.name} with ${photoCountLabel(summary.photos)}`
+        : `Imported ${only.track.name}`,
+    );
     return `/trail3d/${only.track.id}`;
   }
   feedback.show(items.length === 0 ? 'Already in your library' : activityImportMessage(summary));
