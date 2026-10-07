@@ -16,6 +16,7 @@ import {
 } from '@core/geo/track';
 import { shouldAcceptFix } from '@core/geo/track/gpsFilter';
 import { mergeTrackPoints } from '@core/geo/track/mergePoints';
+import { APPROXIMATE_ACCURACY_M } from '@core/geo/track/recordingHealth';
 import { findCategory } from '@core/library/categories';
 import * as checkpoint from '@data/recorderCheckpoint';
 import * as storage from '@data/storage';
@@ -96,6 +97,14 @@ interface RecorderState {
    */
   lastFixAt: number | null;
   lastAccuracyM: number | null;
+  /**
+   * Fixes this session dropped for an approximate-location accuracy radius
+   * (≥ APPROXIMATE_ACCURACY_M): the signature of iOS "Precise: Off" / Android
+   * "Approximate", which the filter otherwise drops without a trace. Read by
+   * the recording-health check (`@core/geo/track/recordingHealth`). Diagnostic
+   * only — not checkpointed; a double-fed fix may count twice.
+   */
+  approximateFixes: number;
   /**
    * Id of the most recently stopped-AND-saved recording, until a consumer
    * acknowledges it. Observed by the Strava push prompt (features/strava) so
@@ -299,6 +308,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   waypoints: [],
   lastFixAt: null,
   lastAccuracyM: null,
+  approximateFixes: 0,
   lastSavedTrackId: null,
 
   start: (name, category) => {
@@ -321,6 +331,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       waypoints: [],
       lastFixAt: null,
       lastAccuracyM: null,
+      approximateFixes: 0,
     });
   },
 
@@ -337,7 +348,12 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     // Gate raw fixes: bad-accuracy and teleport outliers inflate distance/D±,
     // and near-duplicate timestamps guard against double-feeding when both the
     // background task and the foreground watch deliver the same fix.
-    if (!shouldAcceptFix(prev, point)) return;
+    if (!shouldAcceptFix(prev, point)) {
+      if (point.accuracy !== undefined && point.accuracy >= APPROXIMATE_ACCURACY_M) {
+        set({ approximateFixes: get().approximateFixes + 1 });
+      }
+      return;
+    }
     // True live D+/D- hysteresis: fold this fix into the persisted-reference
     // accumulator (matches computeTrackStats's batch hysteresis exactly,
     // incrementally) and overwrite reduceStatsWith's own per-step

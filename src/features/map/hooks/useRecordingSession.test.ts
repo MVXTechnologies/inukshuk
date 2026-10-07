@@ -35,6 +35,7 @@ jest.mock('./useBackgroundRecording', () => ({
 }));
 
 const showSnack = jest.fn();
+const onRecordingIssue = jest.fn();
 
 /**
  * A fix ~1 m from the last one, timestamped now. Well inside the recorder's
@@ -75,7 +76,7 @@ describe('useRecordingSession — the elapsed/GPS-quality ticker', () => {
     jest.useRealTimers();
   });
 
-  const mount = () => renderHook(() => useRecordingSession({ showSnack }));
+  const mount = () => renderHook(() => useRecordingSession({ showSnack, onRecordingIssue }));
 
   it('advances once per second with NO fixes at all (out of signal, phone in pocket)', async () => {
     const view = await mount();
@@ -234,7 +235,7 @@ describe('useRecordingSession — a Stop that cannot save', () => {
     ['storage is full', new Error('ENOSPC'), /storage may be full/],
   ])('says why when %s, and does not claim a save', async (_label, error, message) => {
     useRecorderStore.setState({ stop: jest.fn(async () => Promise.reject(error)) });
-    const view = await renderHook(() => useRecordingSession({ showSnack }));
+    const view = await renderHook(() => useRecordingSession({ showSnack, onRecordingIssue }));
 
     await act(async () => {
       await view.result.current.handleStop();

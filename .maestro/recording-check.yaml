@@ -1,0 +1,98 @@
+# Recording check e2e (2.5.0 field report: a friend's trail came out as a few
+# points joined by straight lines — approximate location / GPS stopped with
+# the screen off). Settings › App settings › Recording check opens the inline
+# check (never a Portal), lists the permission rows with the granted state,
+# and closes again.
+#
+# Launch grants precise location, so the location + precision rows must read
+# green on both platforms. Row titles are matched with a trailing .* because
+# iOS merges a row's title and detail into one accessibility string.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            notifications: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: inUse
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- tapOn: 'Settings'
+- assertVisible: 'App settings.*'
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Recording check.*'
+          commands:
+            - tapOn: 'App settings.*'
+      - extendedWaitUntil:
+          visible: 'Recording check.*'
+          timeout: 5000
+- tapOn: 'Recording check.*'
+# The overlay re-reads the permissions on open.
+- extendedWaitUntil:
+    visible: 'What your phone needs to record your whole trail.*'
+    timeout: 10000
+- extendedWaitUntil:
+    visible: 'Location allowed.*'
+    timeout: 10000
+- assertVisible: 'Precise location on.*'
+# iOS never asks for "Always": "While Using" reads as enough.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - assertVisible: '.*While Using the App.*'
+# Android: the screen-off battery advice is always offered.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - scrollUntilVisible:
+          element: 'Let GPS run with the screen off.*'
+          direction: DOWN
+          timeout: 10000
+# Review screenshot (light). Files named review-*.png are uploaded by e2e.yml
+# so a PR can show the panel without a local device.
+- takeScreenshot: review-recording-check-light
+- tapOn: 'Close recording check'
+- assertNotVisible: 'Precise location on.*'
+- assertVisible: 'App settings.*'
+# Same panel in the dark theme (the owner's phone runs dark mode), then back
+# to System so later flows see the default look.
+- scrollUntilVisible:
+    element:
+      text: 'Theme.*'
+    direction: DOWN
+- tapOn: 'Dark'
+- scrollUntilVisible:
+    element:
+      text: 'Recording check.*'
+    direction: UP
+- tapOn: 'Recording check.*'
+- extendedWaitUntil:
+    visible: 'Location allowed.*'
+    timeout: 10000
+- takeScreenshot: review-recording-check-dark
+- tapOn: 'Close recording check'
+- scrollUntilVisible:
+    element:
+      text: 'Theme.*'
+    direction: DOWN
+- tapOn: 'System'
+- assertVisible: 'Theme.*'
