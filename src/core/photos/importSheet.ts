@@ -202,6 +202,18 @@ export function importOutcomeMessage(r: {
   failed: number;
   chosen: number;
   stopped?: 'cancelled' | 'storage-full';
+  /** Picks skipped because they are already on the trail (never silent). */
+  alreadyThere?: number;
+}): string {
+  const message = importOutcomeCore(r);
+  return r.alreadyThere ? `${message} · ${r.alreadyThere} already on this trail` : message;
+}
+
+function importOutcomeCore(r: {
+  added: number;
+  failed: number;
+  chosen: number;
+  stopped?: 'cancelled' | 'storage-full';
 }): string {
   const added = r.added === 0 ? 'no photos added' : `added ${plural(r.added, 'photo', 'photos')}`;
   if (r.stopped === 'storage-full') return `Stopped: storage is full · ${added}`;

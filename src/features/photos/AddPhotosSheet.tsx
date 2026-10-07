@@ -206,6 +206,7 @@ function AddPhotosSession({
         added: result.added.length,
         failed: result.failed.length,
         chosen: total,
+        alreadyThere: prepared.duplicates,
       };
       if (result.stopped) outcome.stopped = result.stopped;
       // Each photo that could not be added is reported (its reason only:

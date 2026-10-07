@@ -55,24 +55,58 @@ export function newTrackPhoto(input: NewPhotoInput): TrackPhoto {
 }
 
 /**
- * A re-import dedupe key for a picked photo: the platform asset id when the
- * picker gives one (stable across picks), else the camera's raw EXIF wall
- * clock with the pixel size (the same shot picked twice). The raw string, not
- * the resolved instant: an unzoned time is read in the device's CURRENT zone,
- * so the same shot would get a different instant after travel or a DST
- * switch. Undefined when neither is known — such a photo can't be recognised
- * again, so it is never skipped.
+ * A cheap fingerprint of a picked file's actual bytes: its size and an
+ * FNV-1a hash of its first bytes (the caller reads at most
+ * {@link FINGERPRINT_HEAD_BYTES}). Two different images practically never
+ * share both; the same file picked again always does.
+ */
+export const FINGERPRINT_HEAD_BYTES = 64 * 1024;
+
+export function fileFingerprint(size: number, head: Uint8Array): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < head.length; i++) {
+    h ^= head[i]!;
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `${size}-${h.toString(16).padStart(8, '0')}`;
+}
+
+/**
+ * A re-import dedupe key for a picked photo.
+ *
+ * - The platform asset id when the picker gives one (iOS: stable across
+ *   picks). Android's Photo Picker gives none.
+ * - Else the image itself: the file fingerprint, with the camera's raw EXIF
+ *   wall clock (sub-seconds included), the camera and the pixel size. The
+ *   fingerprint is what tells apart two DIFFERENT photos taken in the same
+ *   second (a burst, two cameras): without it they shared a key and the
+ *   second was silently skipped. The raw clock string (never the resolved
+ *   instant) keeps the key stable across time zones and DST.
+ * - Without a fingerprint (the file could not be read), the older clock +
+ *   camera + size key, which can only collide for same-second shots of one
+ *   camera at one size.
+ *
+ * Undefined when nothing identifies the shot: such a photo is never skipped.
  */
 export function sourceKeyFor(input: {
   assetId?: string | null;
   /** `NormalizedExif.wallClock`. */
   exifWallClock?: string;
+  /** `NormalizedExif.camera`. */
+  camera?: string;
   width?: number;
   height?: number;
+  /** {@link fileFingerprint} of the picked file. */
+  fingerprint?: string;
 }): string | undefined {
   if (input.assetId) return `asset:${input.assetId}`;
+  const size = input.width && input.height ? `${input.width}x${input.height}` : '-';
+  const camera = input.camera ?? '-';
+  if (input.fingerprint) {
+    return `shot:${input.exifWallClock ?? '-'}:${camera}:${size}:${input.fingerprint}`;
+  }
   if (input.exifWallClock && input.width && input.height) {
-    return `shot:${input.exifWallClock}:${input.width}x${input.height}`;
+    return `shot:${input.exifWallClock}:${camera}:${size}`;
   }
   return undefined;
 }

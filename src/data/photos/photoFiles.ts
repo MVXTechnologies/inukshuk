@@ -1,6 +1,7 @@
 import { Directory, File } from 'expo-file-system';
 
 import { stripJpegMetadata } from '@core/photos/jpegStrip';
+import { FINGERPRINT_HEAD_BYTES, fileFingerprint } from '@core/photos/record';
 import {
   orphanFiles,
   PHOTOS_ROOT,
@@ -148,6 +149,26 @@ export async function writeFullSizeCopies(
     writeStaged(paths.sprite, outputs.sprite, true);
     return finish(paths);
   });
+}
+
+/**
+ * A picked file's fingerprint (its size and a hash of its first 64 KB, see
+ * `fileFingerprint`), or undefined when it cannot be read. Reads only the
+ * head, so 200 picks cost a few MB of I/O, not their full size.
+ */
+export function pickedFingerprint(uri: string): string | undefined {
+  try {
+    const file = new File(uri);
+    const size = file.size ?? 0;
+    const handle = file.open();
+    try {
+      return fileFingerprint(size, handle.readBytes(Math.min(size, FINGERPRINT_HEAD_BYTES)));
+    } finally {
+      handle.close();
+    }
+  } catch {
+    return undefined;
+  }
 }
 
 /** Delete one photo's copies. Best effort: an orphan sweep catches leftovers. */

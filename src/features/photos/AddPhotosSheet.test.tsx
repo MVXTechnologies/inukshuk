@@ -118,7 +118,9 @@ it('adds the ticked photos and reports the result', async () => {
   const { onDone } = await open();
   await fireEvent.press(await screen.findByLabelText('Not from this outing'));
   await fireEvent.press(screen.getByLabelText('Add 4 photos'));
-  await waitFor(() => expect(onDone).toHaveBeenCalledWith('Added 4 photos'));
+  await waitFor(() =>
+    expect(onDone).toHaveBeenCalledWith('Added 4 photos · 1 already on this trail'),
+  );
   const args = importer.commitPhotoImport.mock.calls[0]![0] as { selected: Set<string> };
   expect([...args.selected].sort()).toEqual(['pick-0', 'pick-1', 'pick-2', 'pick-3']);
 });

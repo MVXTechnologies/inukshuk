@@ -3,6 +3,7 @@ import { photoFilePaths } from './paths';
 import {
   editPhoto,
   existingKeys,
+  fileFingerprint,
   newTrackPhoto,
   pruneTombstones,
   sourceKeyFor,
@@ -97,10 +98,55 @@ describe('sourceKeyFor / existingKeys', () => {
       'asset:ABC/L0/001',
     );
     expect(sourceKeyFor({ assetId: null, exifWallClock: wall, width: 2, height: 3 })).toBe(
-      'shot:2026:09:27 10:31:05.120:2x3',
+      'shot:2026:09:27 10:31:05.120:-:2x3',
     );
     expect(sourceKeyFor({ exifWallClock: wall })).toBeUndefined();
     expect(sourceKeyFor({})).toBeUndefined();
+  });
+
+  it('tells apart different photos taken in the same second (Android: no asset id)', () => {
+    const wall = '2026:09:27 10:31:05';
+    const a = sourceKeyFor({
+      exifWallClock: wall,
+      camera: 'samsung SM-S911W',
+      width: 4032,
+      height: 3024,
+      fingerprint: fileFingerprint(2_100_000, new Uint8Array([1, 2, 3])),
+    });
+    const b = sourceKeyFor({
+      exifWallClock: wall,
+      camera: 'samsung SM-S911W',
+      width: 4032,
+      height: 3024,
+      fingerprint: fileFingerprint(2_100_000, new Uint8Array([1, 2, 4])),
+    });
+    expect(a).not.toBe(b);
+    // The same file picked again: the same key.
+    expect(
+      sourceKeyFor({
+        exifWallClock: wall,
+        camera: 'samsung SM-S911W',
+        width: 4032,
+        height: 3024,
+        fingerprint: fileFingerprint(2_100_000, new Uint8Array([1, 2, 3])),
+      }),
+    ).toBe(a);
+    // Two cameras in the same second, without a fingerprint: still apart.
+    expect(sourceKeyFor({ exifWallClock: wall, camera: 'A', width: 2, height: 3 })).not.toBe(
+      sourceKeyFor({ exifWallClock: wall, camera: 'B', width: 2, height: 3 }),
+    );
+    // A timeless photo is still recognised by its bytes.
+    expect(sourceKeyFor({ fingerprint: '10-00000001' })).toBe('shot:-:-:-:10-00000001');
+  });
+
+  it('fingerprints a file by its size and first bytes', () => {
+    expect(fileFingerprint(5, new Uint8Array([]))).toBe('5-811c9dc5');
+    expect(fileFingerprint(5, new Uint8Array([1]))).not.toBe(
+      fileFingerprint(6, new Uint8Array([1])),
+    );
+    expect(fileFingerprint(5, new Uint8Array([1]))).not.toBe(
+      fileFingerprint(5, new Uint8Array([2])),
+    );
   });
 
   it('collects keys and hashes of live photos only', () => {

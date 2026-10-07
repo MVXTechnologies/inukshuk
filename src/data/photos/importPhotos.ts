@@ -16,6 +16,7 @@ import { StorageFullError } from '@data/storage';
 
 import {
   deletePhotoFiles,
+  pickedFingerprint,
   writeFullSizeCopies,
   writePhotoCopies,
   type WrittenCopies,
@@ -83,6 +84,12 @@ export async function preparePhotoImport(args: {
   const items = new Map<string, PreparedItem>();
   const candidates: ImportCandidate[] = [];
   let duplicates = 0;
+  // What each picked file actually is (size + a hash of its first bytes):
+  // two different shots from the same second must never share a key.
+  const fingerprints: (string | undefined)[] = [];
+  for (const picked of args.picked) fingerprints.push(pickedFingerprint(picked.uri));
+  // Keys seen in this batch: the same photo picked twice is added once.
+  const inBatch = new Set<string>();
   args.picked.forEach((picked, i) => {
     const key = `pick-${i}`;
     const exif = normalizeExif(picked.exif);
@@ -95,18 +102,23 @@ export async function preparePhotoImport(args: {
     }
     if (exif.lngLat) candidate.lngLat = exif.lngLat;
     if (exif.camera) candidate.camera = exif.camera;
-    const sourceKey = sourceKeyFor({
+    const keyInput: Parameters<typeof sourceKeyFor>[0] = {
       assetId: picked.assetId,
       exifWallClock: exif.wallClock,
       width: exif.width ?? picked.width,
       height: exif.height ?? picked.height,
-    });
+    };
+    if (exif.camera) keyInput.camera = exif.camera;
+    const fingerprint = fingerprints[i];
+    if (fingerprint) keyInput.fingerprint = fingerprint;
+    const sourceKey = sourceKeyFor(keyInput);
     if (sourceKey) {
       item.sourceKey = sourceKey;
-      if (known.has(sourceKey)) {
+      if (known.has(sourceKey) || inBatch.has(sourceKey)) {
         item.duplicate = true;
         duplicates++;
       }
+      inBatch.add(sourceKey);
     }
     items.set(key, item);
     if (!item.duplicate) candidates.push(candidate);
