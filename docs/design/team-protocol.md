@@ -591,15 +591,72 @@ read-only `session.safetyCode` after open. Changed on the wire: the `hi1`/`hi2`/
 
 ### 11.2 Kinds
 
-| Kind                        | Ownership                      | Notes                                                |
-| --------------------------- | ------------------------------ | ---------------------------------------------------- |
-| `wpt`, `point`, `task`      | shared                         | anyone writes or deletes                             |
-| `track`, `photo`, `comment` | owned: key `(kind, owner, id)` | only the owner writes; the owner or an admin deletes |
-| `msg`                       | owned, immutable               | the first write wins; redaction is `e.del`           |
-| positions                   | one register per member        | only that member writes                              |
+| Kind               | Ownership                      | Notes                                                                                 |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------------- |
+| Kind               | Ownership                      | Notes                                                                                 |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------------- |
+| `wpt`, `point`     | shared                         | any member writes or deletes                                                          |
+| `task`             | owned: key `(task, owner, id)` | the owner writes; its assignee writes only the status; admins write; see §11.4        |
+| `track`, `photo`   | owned: key `(kind, owner, id)` | only the owner writes; the owner or an admin deletes                                  |
+| `comment`          | owned: key `(kind, owner, id)` | only the owner writes (guests too); the owner or an admin deletes                     |
+| `msg`              | owned, immutable               | the first write wins; redaction is `e.del`; a pin is a `msg` with an anchor (§11.4)   |
+| positions          | one register per member        | only that member writes                                                               |
 
 Owned keys include the owner, so nobody can hijack a record by backdating a
 write to its id.
+
+**Guests only comment.** A guest may author `pos` and `msg` ops and `e.set` /
+`e.del` of their **own** `comment` records. The op-type gate
+(`roles.canWriteData`) lets guest `e.set`/`e.del` through and the data fold
+narrows them by kind (`data.GUEST_KINDS`); every other guest entity write is
+skipped as `forbidden`. The fold fails closed: an entity op without a
+recorded role (`state.roleAt`) is forbidden.
+
+### 11.4 Tasks and pins (`tasks.ts`, `teamui/pins.ts`)
+
+**Tasks** are owned `task` entities, so the creator is part of the key and
+can't be forged. Fields (each validated on every write; an unknown or
+malformed field makes the whole op `invalid`):
+
+| Field                    | Meaning                                                           |
+| ------------------------ | ----------------------------------------------------------------- |
+| `title`                  | 1–500 chars, not blank                                            |
+| `assignee`               | a member id                                                       |
+| `due`                    | epoch ms or `null`                                                |
+| `ak`, `ao`, `ai`         | anchor: `photo` / `pin` / `trail` + its owner and id              |
+| `ak = point`, `la`, `lo` | anchor: a place                                                   |
+| `so`, `sc`               | the comment or message it was made from (`+task @name …`)         |
+| `done`, `dby`, `dat`     | status; `dby` must equal the op's author (no "done in your name") |
+
+Authorization, by the author's role **at the op's place in the fold**:
+
+- `e.set {k: 'task', id, f}` without `o` writes the author's own task;
+- `e.set {k: 'task', id, o, f}` updates `o`'s task: allowed for an admin
+  (any field), or for the task's **current** assignee (the visible
+  `assignee` at that point of the fold) when `f` holds only `done`, `dby`,
+  `dat`. Anything else is `forbidden`. `o` is accepted on tasks only;
+- the owner or an admin deletes (`e.del` with `o`, the owned rule);
+- guests write no tasks.
+
+Because the fold is in the team's total order and the replica rebuilds when
+an op lands in the middle, "current assignee" is the same on every phone:
+a status write after a reassignment (in that order) by the old assignee is
+`forbidden` everywhere. Property tests replay random histories from five
+roles (owner, creator, assignee, another member, guest) in shuffled orders
+and check convergence and that no guest owns or completes a task.
+
+**Pins** (comments anchored to a place) are messages: the root is a `msg` on
+the thread `pin:<id>` whose own id is `<id>`, carrying `ll = [lng, lat]`
+(finite, in range; `ll` anywhere else makes the body invalid). Replies are
+plain messages on the thread. Guests may pin and reply. If two authors post
+roots with the same id, the earliest by creation stamp (then author id) is
+the pin and the other reads as a reply; redacting the root shows the next
+root, if any. "On the trail" vs "off the trail" is computed by the reader
+(distance to a shown trail ≤ 40 m), never stored.
+
+**Alerts** (`teamui/alerts.ts`): a task whose `assignee` becomes me alerts
+me; my own task marked done by someone else alerts me; a reply on my pin
+alerts me; a new pin follows the normal-message rule.
 
 ### 11.3 Blobs (stage 3)
 

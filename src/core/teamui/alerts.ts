@@ -10,6 +10,9 @@
  * - a comment on MY shared trail or photo alerts me (like a mention: it is
  *   addressed to me), whatever the team size; a comment that mentions me too;
  *   other photo comments follow the normal-message rule;
+ * - a reply on MY pin alerts me (a new pin follows the normal-message rule);
+ * - a task assigned to me alerts me; my task marked done by someone else
+ *   alerts me;
  * - every alert carries where tapping it goes (`url`). Pure.
  */
 import type { Json } from '@core/team/canonical';
@@ -20,6 +23,7 @@ import { audienceMembers, LARGE_TEAM, routeDelivery } from '@core/team/notify';
 import { isAdminRole } from '@core/team/roles';
 
 import { TRAIL_THREAD_PREFIX } from './comments';
+import { PIN_THREAD_PREFIX } from './pins';
 import { isSystemThread } from './system';
 import { TEAM_THREAD } from './view';
 
@@ -28,7 +32,7 @@ export interface TeamAlert {
   key: string;
   author: string;
   level: 'badge' | 'alert';
-  kind: 'message' | 'comment';
+  kind: 'message' | 'comment' | 'task';
   text: string;
   priority: 0 | 1 | 2;
   /** The route tapping it opens. */
@@ -39,7 +43,18 @@ export interface TeamAlert {
 export interface AlertContext {
   photo(photoId: string): { owner: string; trackId: string } | undefined;
   trailOwner(trackId: string): string | undefined;
+  /** The author of the pin `id`, when it is known. */
+  pinOwner?(id: string): string | undefined;
+  /** A task's current title and assignee. */
+  task?(owner: string, id: string): { title: string; assignee: string } | undefined;
 }
+
+/** Where a pin opens: the map, with its card. */
+export function pinUrl(id: string): string {
+  return `/team/pin/${id}`;
+}
+
+export const TASKS_URL = '/team/tasks';
 
 /** Where a shared trail opens: my own in the Library's trail view, a teammate's in the team's. */
 export function trailUrl(owner: string, trackId: string, me: string, photoId?: string): string {
@@ -59,6 +74,7 @@ export function alertFor(
   if (op.env.t === 'msg') return messageAlert(state, op, body, me, ctx);
   if (op.env.t === 'e.set' && body['k'] === 'comment')
     return commentAlert(state, op, body, me, ctx);
+  if (op.env.t === 'e.set' && body['k'] === 'task') return taskAlert(state, op, body, me, ctx);
   return null;
 }
 
@@ -83,6 +99,13 @@ function messageAlert(
     if (owner === undefined) return null;
     kind = 'comment';
     url = trailUrl(owner, trackId, me);
+    if (owner === me && op.env.au !== me && level !== 'none') level = 'alert';
+  } else if (th.startsWith(PIN_THREAD_PREFIX)) {
+    const pinId = th.slice(PIN_THREAD_PREFIX.length);
+    const owner = id === pinId ? op.env.au : ctx.pinOwner?.(pinId);
+    if (owner === undefined) return null;
+    kind = 'comment';
+    url = pinUrl(pinId);
     if (owner === me && op.env.au !== me && level !== 'none') level = 'alert';
   } else if (th !== TEAM_THREAD) {
     return null;
@@ -133,5 +156,36 @@ function commentAlert(
     text,
     priority: 0,
     url: trailUrl(photo.owner, photo.trackId, me, photoId),
+  };
+}
+
+function taskAlert(
+  state: TeamState,
+  op: SignedOp,
+  body: Record<string, Json>,
+  me: string,
+  ctx: AlertContext,
+): TeamAlert | null {
+  const id = body['id'];
+  const f = body['f'];
+  if (typeof id !== 'string' || !isRecord(f)) return null;
+  const self = state.members.get(me);
+  if (op.env.au === me || self?.status !== 'active') return null;
+  const owner = typeof body['o'] === 'string' ? body['o'] : op.env.au;
+  const known = ctx.task?.(owner, id);
+  const title = typeof f['title'] === 'string' ? f['title'] : known?.title;
+  if (title === undefined) return null;
+  let text: string;
+  if (f['assignee'] === me) text = `New task for you: ${title}`;
+  else if (f['done'] === true && owner === me) text = `Done: ${title}`;
+  else return null;
+  return {
+    key: `task:${op.id}`,
+    author: op.env.au,
+    level: 'alert',
+    kind: 'task',
+    text,
+    priority: 0,
+    url: TASKS_URL,
   };
 }

@@ -10,6 +10,7 @@ import {
 } from '@core/team/testing/fixtures';
 
 import { alertFor, trailUrl, type AlertContext } from './alerts';
+import { statusFields, taskFields } from '@core/team/tasks';
 import {
   photoComments,
   photoIndex,
@@ -299,5 +300,55 @@ describe('alerts', () => {
       ['Belle boucle', null],
     ]);
     expect(photoComments(data, 'ph1').map((x) => x.author)).toEqual([other.id]);
+  });
+
+  it('alerts the assignee of a task and its creator when it is done; replies on my pin', () => {
+    const { owner, other } = pair();
+    const meOther = [...owner.state.members.values()].find((m) => m.role === 'member')!.id;
+    const ownerId = [...owner.state.members.values()].find((m) => m.role === 'owner')!.id;
+    const tBody = {
+      k: 'task',
+      id: 't1',
+      f: taskFields({ title: 'Flag the detour', assignee: meOther }),
+    };
+    const t = owner.write(T0 + MIN, 'e.set', tBody)!;
+    exchange(owner, other, T0 + MIN);
+    const ctx: AlertContext = {
+      photo: () => undefined,
+      trailOwner: () => undefined,
+      pinOwner: (id) => (id === 'p1' ? ownerId : undefined),
+      task: () => ({ title: 'Flag the detour', assignee: meOther }),
+    };
+    expect(alertFor(other.state, t, tBody, meOther, ctx)).toMatchObject({
+      level: 'alert',
+      kind: 'task',
+      text: 'New task for you: Flag the detour',
+      url: '/team/tasks',
+    });
+    expect(alertFor(owner.state, t, tBody, ownerId, ctx)).toBeNull(); // my own
+    const dBody = { k: 'task', id: 't1', o: ownerId, f: statusFields(true, meOther, T0 + 2 * MIN) };
+    const d = other.write(T0 + 2 * MIN, 'e.set', dBody)!;
+    exchange(owner, other, T0 + 2 * MIN);
+    expect(alertFor(owner.state, d, dBody, ownerId, ctx)).toMatchObject({
+      level: 'alert',
+      kind: 'task',
+      text: 'Done: Flag the detour',
+    });
+    const pinBody = { id: 'p1', th: 'pin:p1', tx: 'Rockfall', ll: [-70.92, 47.09] };
+    const pin = owner.write(T0 + 3 * MIN, 'msg', pinBody)!;
+    const replyBody = { id: 'r1', th: 'pin:p1', tx: 'Taking the ridge' };
+    const reply = other.write(T0 + 4 * MIN, 'msg', replyBody)!;
+    exchange(owner, other, T0 + 4 * MIN);
+    expect(alertFor(other.state, pin, pinBody, meOther, ctx)).toMatchObject({
+      level: 'badge',
+      kind: 'comment',
+      url: '/team/pin/p1',
+    });
+    expect(alertFor(owner.state, reply, replyBody, ownerId, ctx)).toMatchObject({
+      level: 'alert',
+      url: '/team/pin/p1',
+    });
+    // A reply to an unknown pin is dropped.
+    expect(alertFor(owner.state, reply, { ...replyBody, th: 'pin:zz' }, ownerId, ctx)).toBeNull();
   });
 });
