@@ -201,13 +201,21 @@ restarted`** as its own error annotation, uploads
 shard's remaining flows NOT RUN. Results from a rebooted emulator prove
 nothing either way.
 
-Before each flow attempt the runner also force-stops the app and waits (up to
-30 s, with a warning if that runs out) until WindowManager has no window of it
-left. Maestro's `launchApp` stops and restarts in one go. When the old window
-was still exiting, the new launch's `starting_reveal` transition never
-finished on the CI emulator, so UiAutomator never saw an idle UI ("Could not
-detect idle state" ~200 times). Every step then waited out its timeout, and
-`store.yaml` failed twice (runs 37616199722 and 37671698583).
+Before the first flow the runner waits for Google Play services' post-boot
+restart: until `gms.persistent` has kept one pid for 60 s, bounded at 4 min.
+That restart kills every process holding a GMS content provider, and the app
+holds GMS's FontsProvider, so the shard's first flow used to lose its app
+mid-flow.
+
+**Known open issue (catalog shard, `store.yaml`).** In about 1 run in 5, the
+app's main window never finishes its post-splash `starting_reveal`
+transition. WindowManager logs "Timed out waiting for animations to complete"
+every 5 s, UiAutomator never sees an idle UI, and every Maestro step waits out
+its timeout, so `inputText` takes ~70 s and both attempts fail (runs
+37616199722, 37671698583, 37695369794). It happens on a clean launch with no
+leftover window, so it is not a CI sequencing artefact. Look into the app's
+first draw on that path (Map tab with the map `make-map.yaml` just created,
+pdf.js WebView starting).
 
 ## Release path (`release-path.yml`)
 
