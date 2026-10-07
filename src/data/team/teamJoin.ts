@@ -16,6 +16,7 @@
  * the user cancels deletes it.
  */
 import { lanDiscoveryTag } from '@core/mesh/tag';
+import { addBreadcrumb } from '@lib/errorReporting';
 import type { DeviceKeys, TeamCrypto } from '@core/team/crypto';
 import { makeJoinProof, type InviteToken } from '@core/team/invite';
 import { TeamReplica } from '@core/team/replica';
@@ -153,6 +154,7 @@ export class JoinAttempt {
   }
 
   private fail(why: JoinFailure): void {
+    addBreadcrumb(`team join: failed (${why})`);
     this.phase = 'failed';
     this.failure = why;
     this.deps.onChange();
@@ -205,6 +207,7 @@ export class JoinAttempt {
   private check(): void {
     if (this.phase !== 'verify' && this.phase !== 'failed' && this.admitted) {
       this.phase = 'verify';
+      addBreadcrumb('team join: admitted');
     }
     this.deps.onChange();
   }

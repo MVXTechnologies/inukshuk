@@ -15,6 +15,8 @@ import type { InviteToken } from '@core/team/invite';
 import type { TeamAlert } from '@core/teamui/alerts';
 import { cleanName, nameText, SYS_PROFILE, systemMessage } from '@core/teamui/system';
 
+import { addBreadcrumb } from '@lib/errorReporting';
+
 import type { MeshTransport } from './meshTransport';
 import { DEFAULT_TEAM_PREFS, type TeamDisk, type TeamRecord } from './teamDisk';
 import { JoinAttempt } from './teamJoin';
@@ -31,6 +33,9 @@ export interface ServiceDeps {
 
 export type ServiceListener = () => void;
 export type AlertListener = (alert: TeamAlert, teamId: string) => void;
+
+/** After a join, report when no teammate link comes up within this long (the joiner flake). */
+export const FIRST_LINK_WATCH_MS = 30_000;
 
 export class TeamService {
   private keys: DeviceKeys | null = null;
@@ -310,6 +315,8 @@ export class TeamService {
       ...(attempt.replica.state.sendKeyId ? { profileKeyId: attempt.replica.state.sendKeyId } : {}),
     });
     const session = await this.activate(attempt.teamId);
+    addBreadcrumb('team join: confirmed, team session opened');
+    session.watchFirstLinkMs = FIRST_LINK_WATCH_MS;
     this.emit();
     return session;
   }

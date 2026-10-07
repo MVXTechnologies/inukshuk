@@ -7,6 +7,7 @@
  * Every write goes replica → disk (`PersistingStore`) → peers, in that order.
  */
 import { lanDiscoveryTag } from '@core/mesh/tag';
+import { addBreadcrumb, reportError } from '@lib/errorReporting';
 import { createInvite, rotateBody } from '@core/team/actions';
 import type { Json } from '@core/team/canonical';
 import type { DeviceKeys, TeamCrypto } from '@core/team/crypto';
@@ -289,6 +290,41 @@ export class TeamSession {
     return this.link !== null;
   }
 
+  /** Recent link events for diagnostics (kinds and reasons only: no ids, names or addresses). */
+  private readonly diag: string[] = [];
+  /** Set right after a join: report if no teammate link comes up within this long. */
+  watchFirstLinkMs = 0;
+
+  private note(event: string): void {
+    this.diag.push(`${Math.round((this.deps.now() % 600_000) / 1000)}s ${event}`);
+    if (this.diag.length > 16) this.diag.shift();
+    addBreadcrumb(`team link: ${event}`);
+  }
+
+  /**
+   * The joiner flake seen once on the simulator (admitted, then the team
+   * session never linked up): if no session opens within `watchFirstLinkMs`
+   * of the first mesh start after a join, report it with the link's recent
+   * events — kinds and reasons only, nothing personal.
+   */
+  private armFirstLinkWatch(): void {
+    const ms = this.watchFirstLinkMs;
+    this.watchFirstLinkMs = 0;
+    setTimeout(() => {
+      if (this.link === null) return; // stopped meanwhile (backgrounded): not this case
+      if (this.peers().some((p) => p.phase === 'open')) return;
+      const status = this.link.status();
+      reportError(
+        new Error(
+          `Team: no teammate link ${Math.round(ms / 1000)} s after joining ` +
+            `(discovered ${status.discovered}, dials ${this.link.manualDials.length}, ` +
+            `local network ${status.localNetwork}; ${this.diag.join(' | ')})`,
+        ),
+        'team-join-reconnect',
+      );
+    }, ms);
+  }
+
   // ── Mesh ─────────────────────────────────────────────────────────────────
 
   async startMesh(): Promise<void> {
@@ -311,7 +347,14 @@ export class TeamSession {
       { now: this.deps.now, tickMs: this.deps.tickMs ?? 20_000 },
     );
     this.host.start();
-    this.link = new MeshLink(transport, { tag, advertise: true, onChange: () => this.changed() });
+    this.link = new MeshLink(transport, {
+      tag,
+      advertise: true,
+      onChange: () => this.changed(),
+      onDiag: (event) => this.note(event),
+    });
+    this.note('mesh started');
+    if (this.watchFirstLinkMs > 0) this.armFirstLinkWatch();
     await this.link.start();
     this.changed();
   }
@@ -352,6 +395,7 @@ export class TeamSession {
     if (meta) meta.lastFrameAt = this.deps.now();
     switch (event.type) {
       case 'open': {
+        this.note(event.joining ? 'open (joiner)' : 'open');
         if (meta) meta.joining = event.joining;
         if (event.joining && session.safetyCode !== undefined) {
           // The core admits during the handshake, so 'admitted' may come first.
@@ -380,6 +424,7 @@ export class TeamSession {
         return;
       }
       case 'closed': {
+        this.note(`closed ${event.why.slice(0, 40)}`);
         this.meta.delete(peerId);
         this.admittedOn.delete(peerId);
         // A join attempt that ended without an admission: its code is moot.

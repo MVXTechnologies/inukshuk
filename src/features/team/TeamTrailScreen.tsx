@@ -1,5 +1,5 @@
 /**
- * A trail a teammate shared (#589): its outline, stats, photos (thumbnails;
+ * A trail a teammate shared (#589): on a small topo map, its stats, photos (thumbnails;
  * full size stays on the sharer's phone in v1) and the team's comments on the
  * trail and on each photo, with a box to add one. Opened from Shared, from a
  * comment notification, or with `?photo=` on a given photo.
@@ -12,43 +12,11 @@ import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Text } from 'react-native-paper';
-import Svg, { Circle, Polyline } from 'react-native-svg';
 
 import { MemberAvatar, Note, SectionLabel, TeamScreenFrame } from './components';
 import { actionMessage } from './messages';
 import { commentTime, TeamComments } from './TeamComments';
-
-function outline(parts: readonly [number, number][][], w: number, h: number) {
-  const all = parts.flat();
-  if (all.length === 0) return { lines: [] as string[], project: () => [0, 0] as [number, number] };
-  const lats = all.map((p) => p[1]);
-  const lngs = all.map((p) => p[0]);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  const k = Math.cos(((minLat + maxLat) / 2) * (Math.PI / 180));
-  const sx = (maxLng - minLng) * k || 1e-6;
-  const sy = maxLat - minLat || 1e-6;
-  const pad = 14;
-  const scale = Math.min((w - 2 * pad) / sx, (h - 2 * pad) / sy);
-  const ox = (w - sx * scale) / 2;
-  const oy = (h - sy * scale) / 2;
-  const project = (lng: number, lat: number): [number, number] => [
-    ox + (lng - minLng) * k * scale,
-    oy + (maxLat - lat) * scale,
-  ];
-  const lines = parts.map((part) =>
-    part
-      .map(([lng, lat]) =>
-        project(lng, lat)
-          .map((v) => v.toFixed(1))
-          .join(','),
-      )
-      .join(' '),
-  );
-  return { lines, project };
-}
+import { TeamRouteMap } from './TeamRouteMap';
 
 export function TeamTrailScreen() {
   const t = useSchemeTokens();
@@ -87,7 +55,6 @@ export function TeamTrailScreen() {
   const by = view.members.find((m) => m.id === owner);
   const W = width - 32;
   const H = 190;
-  const { lines, project } = outline(trail.parts, W, H);
   const ordinal = new Map(photos.map((p, i) => [p.id, i + 1]));
   const sel = photos.find((p) => p.id === selected) ?? null;
   const shown = sel ? comments.filter((c) => c.photoId === sel.id) : comments;
@@ -101,36 +68,14 @@ export function TeamTrailScreen() {
           {formatDistance(trail.distanceM)} · {new Date(trail.startedAt).toLocaleDateString()}
         </Text>
       </View>
-      <View style={[styles.map, { backgroundColor: t.surfaceVariant, height: H }]}>
-        <Svg width={W} height={H}>
-          {lines.map((pts, i) => (
-            <Polyline
-              key={i}
-              points={pts}
-              fill="none"
-              stroke={by?.color ?? t.ink}
-              strokeWidth={3}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-          ))}
-          {photos.map((p) => {
-            const [x, y] = project(p.lng, p.lat);
-            const on = p.id === selected;
-            return (
-              <Circle
-                key={p.id}
-                cx={x}
-                cy={y}
-                r={on ? 7 : 5}
-                fill={on ? t.ink : t.surface}
-                stroke={t.ink}
-                strokeWidth={2}
-              />
-            );
-          })}
-        </Svg>
-      </View>
+      <TeamRouteMap
+        parts={trail.parts}
+        photos={photos}
+        selected={selected}
+        color={by?.color ?? t.ink}
+        width={W}
+        height={H}
+      />
 
       {photos.length > 0 && (
         <>
@@ -212,7 +157,6 @@ export function TeamTrailScreen() {
 
 const styles = StyleSheet.create({
   by: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: -space.sm },
-  map: { borderRadius: 14, overflow: 'hidden' },
   strip: { gap: space.sm },
   thumbWrap: { borderWidth: 2, borderRadius: 12, padding: 2 },
   thumb: { width: 84, height: 84, borderRadius: 9 },

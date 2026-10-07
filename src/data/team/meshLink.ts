@@ -47,6 +47,8 @@ export class MeshLink {
        * the same single-use invite at once would race (spec §8.4).
        */
       oneAtATime?: boolean;
+      /** Diagnostics: event kinds and reasons, never addresses or ids. */
+      onDiag?: (event: string) => void;
     },
   ) {}
 
@@ -169,6 +171,7 @@ export class MeshLink {
     if (!this.running) return;
     switch (e.type) {
       case 'peer-found': {
+        this.options.onDiag?.('found');
         const id = e.service.serviceId;
         if (this.services.has(id) || this.queue.includes(id)) return;
         if (e.service.tag !== this.options.tag) return;
@@ -178,6 +181,7 @@ export class MeshLink {
         return;
       }
       case 'peer-lost': {
+        this.options.onDiag?.('lost');
         const q = this.queue.indexOf(e.serviceId);
         if (q >= 0) this.queue.splice(q, 1);
         const dial = this.services.get(e.serviceId);
@@ -188,10 +192,14 @@ export class MeshLink {
         return;
       }
       case 'error':
+        this.options.onDiag?.(`error ${e.code}`);
         this.error = { code: e.code, message: e.message };
         this.options.onChange();
         return;
       case 'disconnected':
+        this.options.onDiag?.(
+          `disconnected ${e.reason}${e.retryInMs !== null ? ' (retrying)' : ''}`,
+        );
         if (
           this.options.oneAtATime &&
           this.current !== null &&

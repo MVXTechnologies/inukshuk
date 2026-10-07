@@ -5,6 +5,7 @@
  * sessions, persistence wrapper and service; only the radio is simulated.
  */
 import { nodeCrypto } from '@core/team/testing/nodeCrypto';
+import { reportError } from '@lib/errorReporting';
 import { nobleCrypto } from '@core/team/testing/noble';
 import type { TeamCrypto } from '@core/team/crypto';
 import type { TeamAlert } from '@core/teamui/alerts';
@@ -15,6 +16,8 @@ import { LoopbackMeshHub } from './loopbackMesh';
 import { MemoryTeamDisk } from './teamDisk';
 import { TeamService } from './teamService';
 import type { CreatedInvite, TeamSession } from './teamSession';
+
+jest.mock('@lib/errorReporting', () => ({ addBreadcrumb: jest.fn(), reportError: jest.fn() }));
 
 async function until(cond: () => boolean, what: string, ms = 4000): Promise<void> {
   const end = Date.now() + ms;
@@ -256,4 +259,30 @@ describe('team mode over the loopback mesh', () => {
     await until(() => names(active(a)).includes('Julie:member'), 'A sees Julie');
     for (const p of [a, b]) await active(p).stopMesh();
   }, 20_000);
+});
+
+describe('join diagnostics', () => {
+  it('reports a session that never links up after a join, without personal data', async () => {
+    const hub = new LoopbackMeshHub();
+    const a = phone(hub);
+    const s = await a.service.createTeam({
+      name: 'Relevé MSA',
+      myName: 'Marc',
+      lifetimeMs: lifetimeMs('14d'),
+    });
+    s.watchFirstLinkMs = 20;
+    await s.startMesh();
+    await new Promise((r) => setTimeout(r, 60));
+    expect(reportError).toHaveBeenCalledTimes(1);
+    const [err, ctx] = jest.mocked(reportError).mock.calls[0]!;
+    expect(ctx).toBe('team-join-reconnect');
+    const msg = (err as Error).message;
+    expect(msg).toMatch(
+      /^Team: no teammate link 0 s after joining \(discovered 0, dials 0, local network granted; .*mesh started/,
+    );
+    expect(msg).not.toContain('Marc');
+    expect(msg).not.toContain(s.me);
+    expect(msg).not.toMatch(/10\.99\./);
+    await s.stopMesh();
+  });
 });
