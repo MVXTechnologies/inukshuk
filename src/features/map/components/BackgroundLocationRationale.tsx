@@ -59,6 +59,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
     justifyContent: 'center',
     padding: 24,
+    // Above the map's control rail, whose Android elevation otherwise draws
+    // it over this scrim (same fix as RecordingCheckPanel).
+    zIndex: 100,
+    elevation: 100,
   },
   card: { borderRadius: 28, padding: 24 },
   icon: { alignItems: 'center', marginBottom: 12 },
