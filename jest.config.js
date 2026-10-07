@@ -8,7 +8,7 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/', '<rootDir>/\\.claude/'],
   // Allow Jest to transpile the ESM-shipping RN / Expo / MapLibre packages.
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|@maplibre/.*|nanoid|proj4|fast-xml-parser))',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|@maplibre/.*|nanoid|proj4|fast-xml-parser|@noble/.*))',
   ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
@@ -29,6 +29,8 @@ module.exports = {
     // Test-only fixture helpers.
     '!src/core/geo/geopdf/testUtils.ts',
     '!src/core/terrain3d/testUtils.ts',
+    // Team protocol test doubles (Node crypto, PRNG, fixtures) — never shipped.
+    '!src/core/team/testing/**',
     '!src/core/gnss/testUtils.ts',
   ],
   coverageThreshold: {
