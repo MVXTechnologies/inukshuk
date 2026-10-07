@@ -1802,12 +1802,15 @@ export function MapScreen() {
   const teamFocus = useTeamMapFocus((s) => s.target);
   useEffect(() => {
     if (teamFocus === null || !mapLoaded) return;
-    const t = useTeamMapFocus.getState().take();
-    if (t) {
+    // Follow mode first goes off (a rendered change), else the camera's own
+    // tracking snaps straight back to my position; then the fly.
+    if (followUser) {
       setFollowUser(false);
-      zoomMapTo([t.lng, t.lat], t.zoom);
+      return;
     }
-  }, [teamFocus, mapLoaded, zoomMapTo, setFollowUser]);
+    const t = useTeamMapFocus.getState().take();
+    if (t) zoomMapTo([t.lng, t.lat], t.zoom);
+  }, [teamFocus, mapLoaded, zoomMapTo, setFollowUser, followUser]);
   const teamOn = useTeamStore((s) => s.view !== null && s.view.active && !s.view.readOnly);
   // "+" → Pin a team message: at the point chip, else the middle of the map.
   const onTeamPin = useCallback(() => {
