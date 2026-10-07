@@ -165,6 +165,37 @@ run_flow() {
   return $rc
 }
 
+# Let Google Play services finish its post-boot restart before the first
+# flow. On the google_apis image, com.google.android.gms.persistent dies
+# and restarts ~1-2 min after boot, and Android kills every process holding
+# one of its content providers. The app holds GMS's FontsProvider, so the
+# first flow of a shard lost its app mid-flow ("Killing com.inukshuk.app:
+# depends on provider com.google.android.gms/.fonts.provider.FontsProvider in
+# dying proc", run 37691418391, make-map and convert). Event-driven: wait
+# until the GMS persistent process has kept one pid for 60 s, bounded at
+# 4 min, and say how it went.
+gms_settled() {
+  local pid prev='' stable=0 waited=0
+  while [ "$waited" -lt 240 ]; do
+    pid=$(adb shell pidof com.google.android.gms.persistent 2>/dev/null | tr -d '\r')
+    if [ -n "$pid" ] && [ "$pid" = "$prev" ]; then
+      stable=$((stable + 5))
+      if [ "$stable" -ge 60 ]; then
+        echo "GMS settled (gms.persistent pid $pid stable 60 s, after ${waited}s)"
+        return 0
+      fi
+    else
+      [ -n "$prev" ] && [ "$pid" != "$prev" ] && echo "GMS restarted (pid ${prev} -> ${pid:-none}) at ${waited}s"
+      stable=0
+    fi
+    prev=$pid
+    sleep 5
+    waited=$((waited + 5))
+  done
+  echo "::warning title=E2E ($SHARD): GMS did not settle::gms.persistent pid not stable for 60 s within 4 min; the first flow may lose its app to a GMS restart"
+}
+gms_settled
+
 RC=0
 SYSTEM_BROKE=0
 SUMMARY="| Flow | Result | Time |"$'\n'"| --- | --- | --- |"
