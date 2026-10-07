@@ -57,6 +57,15 @@ appId: com.inukshuk.app
     commands:
       - tapOn: 'Not from this outing'
 - tapOn: 'Add 2 photos'
+# The outcome ("Added 2 photos", or what could not be added) — logged for
+# the record and kept as a review screenshot.
+- extendedWaitUntil:
+    visible: '(Added|No photos added|Cancelled|Stopped).*'
+    timeout: 90000
+- takeScreenshot: review-photos-added
+- copyTextFrom:
+    text: '(Added|No photos added|Cancelled|Stopped).*'
+- evalScript: "${console.log('photos-add outcome ' + maestro.copiedText)}"
 # Back on the trail: the strip shows them (cards read "Photo N of M: …").
 - extendedWaitUntil:
     visible: 'Photo 1 of [0-9]+.*'

@@ -208,6 +208,9 @@ function AddPhotosSession({
         chosen: total,
       };
       if (result.stopped) outcome.stopped = result.stopped;
+      // Each photo that could not be added is reported (its reason only:
+      // no file name, caption or place).
+      for (const f of result.failed) reportError(new Error(f.message), 'photo-import-item');
       onDone(importOutcomeMessage(outcome));
     } catch (err) {
       fail(err, 'Could not add the photos');

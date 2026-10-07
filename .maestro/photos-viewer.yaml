@@ -34,22 +34,27 @@ appId: com.inukshuk.app
 # How it was placed (by time, location, by hand…): the CI fixtures, ticked
 # from "Not from this outing", are placed by hand at the cursor.
 - assertVisible: '(Placed|Taken|From) .*'
-# Page to the second photo. A swipe that lands while the pager is still
-# settling can be taken as a pan: try again until the header moves on.
-- retry:
-    maxRetries: 3
+# Page to the second photo, when there is one (the CI fixtures can land as
+# one photo or two, depending on what the picker hands over).
+- runFlow:
+    when:
+      visible: '1 of ([2-9]|[1-9][0-9]+)'
     commands:
-      - runFlow:
-          when:
-            notVisible: '2 of [0-9]+'
+      # A swipe that lands while the pager is settling can be taken as a pan.
+      - retry:
+          maxRetries: 3
           commands:
-            - swipe:
-                start: 85%,35%
-                end: 5%,35%
-                duration: 300
-      - extendedWaitUntil:
-          visible: '2 of [0-9]+'
-          timeout: 5000
+            - runFlow:
+                when:
+                  notVisible: '2 of [0-9]+'
+                commands:
+                  - swipe:
+                      start: 85%,35%
+                      end: 5%,35%
+                      duration: 300
+            - extendedWaitUntil:
+                visible: '2 of [0-9]+'
+                timeout: 5000
 # Caption it.
 - tapOn: 'Caption'
 - extendedWaitUntil:
