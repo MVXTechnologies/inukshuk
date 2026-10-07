@@ -11,6 +11,7 @@ import {
   selectedTitle,
   sheetSubtitle,
   thumbStrip,
+  thumbsPerRow,
   toggleGroup,
 } from '@core/photos/importSheet';
 import type { PlannedPhoto } from '@core/photos/placement';
@@ -298,6 +299,9 @@ function Review({
   const { plan, index } = prepared;
   const timedTrail = index.startMs !== undefined;
   const [adjusting, setAdjusting] = useState(manualOffsetMs !== null);
+  // As many thumbnails as fit one row (the last one becomes "+N").
+  const [stripW, setStripW] = useState(0);
+  const perRow = stripW > 0 ? thumbsPerRow(stripW, THUMB, THUMB_GAP) : 6;
   const uriOf = (p: PlannedPhoto) => prepared.items.get(p.candidate.key)?.picked.uri;
   const describe = {
     byTime: () => BY_TIME_TEXT,
@@ -326,7 +330,7 @@ function Review({
           if (group.length === 0) return null;
           const keys = group.map((p) => p.candidate.key);
           const check = groupCheck(keys, selected);
-          const { shown, more } = thumbStrip(group);
+          const { shown, more } = thumbStrip(group, perRow);
           return (
             <View key={id} style={styles.group}>
               <Pressable
@@ -355,7 +359,7 @@ function Review({
                 <Text style={[styles.count, { color: t.ink }]}>{group.length}</Text>
               </Pressable>
               <Text style={[styles.groupText, { color: t.inkVariant }]}>{describe[id](group)}</Text>
-              <View style={styles.thumbs}>
+              <View style={styles.thumbs} onLayout={(e) => setStripW(e.nativeEvent.layout.width)}>
                 {shown.map((p) => {
                   const uri = uriOf(p);
                   return (
@@ -518,6 +522,7 @@ function StepButton({
 }
 
 const THUMB = 52;
+const THUMB_GAP = 6;
 
 const styles = StyleSheet.create({
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
@@ -538,7 +543,7 @@ const styles = StyleSheet.create({
   groupTitle: { flex: 1, fontSize: 17, fontWeight: '800' },
   count: { fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'] },
   groupText: { fontSize: 14, lineHeight: 20, marginLeft: 40 },
-  thumbs: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginLeft: 40, marginTop: 4 },
+  thumbs: { flexDirection: 'row', gap: THUMB_GAP, marginLeft: 40, marginTop: 4 },
   thumbBox: { width: THUMB, height: THUMB },
   thumb: { width: THUMB, height: THUMB, borderRadius: 8 },
   faded: { opacity: 0.45 },

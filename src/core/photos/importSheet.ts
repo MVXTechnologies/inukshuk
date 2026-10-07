@@ -145,6 +145,17 @@ export function clockRows(
       { key: 'manual', title: describeClock(plan.clock), detail: clockDetail(plan.clock, true) },
     ];
   }
+  // Nothing could be checked at all (common on Android, whose photo picker
+  // removes locations): one quiet row, not one "not checked" per camera.
+  if (plan.clock.samples === 0 && [...plan.cameraClocks.values()].every((c) => c.samples === 0)) {
+    return [
+      {
+        key: 'batch',
+        title: describeClock(plan.clock),
+        detail: 'No photo has both a time and a location, so their times are used as they are',
+      },
+    ];
+  }
   const all = [...plan.byTime, ...plan.byGps, ...plan.outside];
   const anonymous = all.some((p) => p.candidate.camera === undefined);
   const rows: (ClockRow & { camera?: string })[] = [];
@@ -172,6 +183,11 @@ export function clockRows(
   return rows.map(({ camera, ...row }) =>
     rows.length > 1 ? { ...row, detail: `${camera ?? 'Other photos'} · ${row.detail}` } : row,
   );
+}
+
+/** How many square thumbnails of `size` fit in one row `width` wide with `gap` between (at least 2). */
+export function thumbsPerRow(width: number, size: number, gap: number): number {
+  return Math.max(2, Math.floor((width + gap) / (size + gap)));
 }
 
 /** Thumbnails to show for a group, and the "+27" overflow. */

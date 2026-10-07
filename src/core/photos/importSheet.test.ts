@@ -12,6 +12,7 @@ import {
   selectedTitle,
   sheetSubtitle,
   thumbStrip,
+  thumbsPerRow,
   type DateFormat,
 } from './importSheet';
 import type { ImportPlan, PlannedPhoto } from './placement';
@@ -117,6 +118,13 @@ describe('group texts', () => {
     expect(thumbStrip([1, 2, 3])).toEqual({ shown: [1, 2, 3], more: 0 });
     expect(thumbStrip([1, 2, 3, 4, 5, 6, 7, 8], 6)).toEqual({ shown: [1, 2, 3, 4, 5], more: 3 });
   });
+
+  it('fits as many thumbnails as one row holds', () => {
+    // 5 × 52 + 4 × 6 = 284
+    expect(thumbsPerRow(284, 52, 6)).toBe(5);
+    expect(thumbsPerRow(283, 52, 6)).toBe(4);
+    expect(thumbsPerRow(40, 52, 6)).toBe(2);
+  });
 });
 
 describe('clockRows', () => {
@@ -180,9 +188,23 @@ describe('clockRows', () => {
       {
         key: 'batch',
         title: 'Camera clock not checked',
-        detail: 'No photo has both a time and a location',
+        detail: 'No photo has both a time and a location, so their times are used as they are',
       },
     ]);
+    // Several cameras, none checkable (Android's picker drops locations): still one row.
+    expect(
+      clockRows(
+        plan(
+          est('unknown', 0),
+          [
+            ['Canon EOS R6', est('unknown', 0)],
+            ['Pixel 8', est('unknown', 0)],
+          ],
+          [timed('a', 'Canon EOS R6'), timed('b', 'Pixel 8'), timed('c')],
+        ),
+        false,
+      ),
+    ).toHaveLength(1);
     expect(clockRows(plan(est('unknown', 2), [], [timed('a')]), false)[0]!.detail).toBe(
       'Checked on 2 photos that have a location · too few to check, times used as they are',
     );

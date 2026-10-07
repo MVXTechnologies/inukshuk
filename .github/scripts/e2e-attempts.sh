@@ -50,6 +50,17 @@ adb reverse tcp:8787 tcp:8787 || true
 
 trap 'kill $GEO_PID $CATALOG_PID 2>/dev/null; rm -f "$GEO_PAUSE"' EXIT
 
+# Trail photos (#587): the system photo picker shows what MediaStore indexed.
+# Put the fixture JPEGs (camera EXIF + GPS next to the fixed location above,
+# no capture time) in the device's Pictures and index them now, so
+# photos-add.yaml can pick them like a user would.
+adb shell mkdir -p /sdcard/Pictures/InukshukE2E || true
+for photo in .maestro/fixtures/photos/*.jpg; do
+  adb push "$photo" /sdcard/Pictures/InukshukE2E/ >/dev/null || true
+done
+adb shell content call --uri content://media --method scan_volume --arg external_primary \
+  >/dev/null 2>&1 || true
+
 RC=0
 SUMMARY="| Flow | Result | Time |"$'\n'"| --- | --- | --- |"
 # Screenshots taken from here on are this run's; anything older is stale.
