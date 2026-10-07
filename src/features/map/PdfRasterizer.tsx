@@ -15,7 +15,7 @@ import { PDFJS_POLYFILL_SOURCE } from '@core/geo/pdfjsPolyfills';
  *
  * A single hidden offscreen `WebView` (mounted once by `PdfRasterizerProvider`)
  * acts as the rendering engine. The WebView hosts a self-contained HTML document
- * with the pdf.js *legacy UMD* build inlined from app-bundled assets — it never
+ * with the pdf.js 6 *legacy* ES-module build inlined from app-bundled assets — it never
  * touches the network.
  *
  * Two ways the PDF reaches the page (#269):
