@@ -51,10 +51,14 @@ export function TeamHost() {
   // Demo builds only: a running team simulation picks up where it was (the
   // inlined flag drops this require from store builds).
   useEffect(() => {
-    if (process.env.EXPO_PUBLIC_MESH_LOOPBACK !== '1' || activeId === null) return;
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const sim = require('./sim/teamSimulation') as typeof import('./sim/teamSimulation');
-    void sim.teamSimulation.resume();
+    // The whole block is the folded condition, so the require goes with it.
+    if (process.env.EXPO_PUBLIC_MESH_LOOPBACK === '1') {
+      if (activeId !== null) {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const sim = require('./sim/teamSimulation') as typeof import('./sim/teamSimulation');
+        void sim.teamSimulation.resume();
+      }
+    }
   }, [activeId]);
 
   // The mesh: foreground, or background while recording; never during a join
