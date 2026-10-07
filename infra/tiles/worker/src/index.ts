@@ -16,6 +16,8 @@
  *                                         place search, proxied to Photon (./search.ts)
  *   POST /donors                         opt-in donor name, filed as pending in R2 (./donors.ts)
  *   POST /donor-verify/start|check      "I already donated" email code (./donorVerify.ts)
+ *   POST /error-report                  the app's crash report, filed as a GitHub issue
+ *                                         with a token kept here (./errorReport.ts)
  *   POST /route {mode, profile, points}   route snapping for the drawing tool, proxied to
  *                                         BRouter (trails) / Valhalla (roads) (./route.ts)
  *
@@ -63,6 +65,12 @@ import {
   utcDay,
   type RateLimitBinding,
 } from './guards';
+import {
+  githubIssues,
+  handleErrorReport,
+  MAX_REQUEST_BYTES as ERROR_REPORT_MAX_BYTES,
+  upstreamStatus,
+} from './errorReport';
 
 export interface Env extends SearchEnv, RouteEnv {
   BUCKET: R2Bucket;
@@ -112,9 +120,57 @@ export interface Env extends SearchEnv, RouteEnv {
   STRAVA_LIMITER?: RateLimitBinding;
   /** Code emails /donor-verify/start may send per UTC day, all addresses together (default 100). */
   VERIFY_DAILY_SEND_CAP?: string;
+  /**
+   * Error-report relay (./errorReport.ts): a fine-grained token with Issues
+   * read/write on ERROR_REPORT_REPO only (`wrangler secret put
+   * ERROR_REPORT_GITHUB_TOKEN`). Unset = POST /error-report answers 404.
+   */
+  ERROR_REPORT_GITHUB_TOKEN?: string;
+  /** `owner/name` the reports are filed in. Default MVXTechnologies/inukshuk. */
+  ERROR_REPORT_REPO?: string;
+  /** `[[ratelimits]]` binding for /error-report (per client IP, and the new-issue budget). */
+  ERROR_REPORT_LIMITER?: RateLimitBinding;
 }
 
 const donorFallbackLimit = memoryLimiter();
+/** Per-isolate floors for /error-report: per client, and new issues across all clients. */
+const reportClientFloor = floorLimiter(20, 60 * 60_000);
+const reportNewIssueFloor = floorLimiter(30, 60 * 60_000);
+const DEFAULT_ERROR_REPORT_REPO = 'MVXTechnologies/inukshuk';
+
+async function errorReport(request: Request, env: Env): Promise<Response> {
+  const token = env.ERROR_REPORT_GITHUB_TOKEN;
+  if (!token) return new Response('not found', { status: 404 });
+  const repo = env.ERROR_REPORT_REPO ?? DEFAULT_ERROR_REPORT_REPO;
+  try {
+    const result = await handleErrorReport(
+      {
+        method: request.method,
+        client: clientKey(request),
+        body:
+          request.method === 'POST' ? await readTextCapped(request, ERROR_REPORT_MAX_BYTES) : '',
+      },
+      {
+        allowClient: (client) =>
+          allowRequest(env.ERROR_REPORT_LIMITER, reportClientFloor, `report:${client}`),
+        allowNewIssue: () =>
+          allowRequest(env.ERROR_REPORT_LIMITER, reportNewIssueFloor, 'report:new-issue'),
+        ...githubIssues((url, init) => fetch(url, init), token, repo),
+      },
+    );
+    return Response.json(result.body, {
+      status: result.status,
+      headers: { 'Cache-Control': 'no-store' },
+    });
+  } catch (e) {
+    console.error('error-report relay failed', e);
+    return Response.json(
+      { ok: false, error: 'unavailable' },
+      { status: upstreamStatus(e), headers: { 'Cache-Control': 'no-store', 'Retry-After': '300' } },
+    );
+  }
+}
+
 /** Per-isolate hourly cap on verify requests per client, on top of the binding. */
 const verifyFallbackLimit = memoryLimiter(10, 60 * 60_000);
 /** Per-isolate floor for the Strava token proxy: 30 exchanges/refreshes per client per hour. */
@@ -737,6 +793,7 @@ export default {
         return Response.json({ error: 'could not save' }, { status: 500 });
       }
     }
+    if (url.pathname === '/error-report') return errorReport(request, env);
     const [, stravaKind] = STRAVA_PATH.exec(url.pathname) ?? [];
     if (stravaKind !== undefined) {
       try {

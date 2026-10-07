@@ -96,6 +96,15 @@ export function checkExtra(config, { require = [], anyOf = [] } = {}) {
     if (present.length > 0) notes.push(`extra.${present.join(', extra.')} set`);
     else warnings.push(`none of extra.${anyOf.join(', extra.')} is set`);
   }
+  // `extra` is public (every binary, every update manifest): a GitHub token in
+  // it lets anyone post, edit and close issues as its owner (security audit
+  // 2026-10). A warning, not a failure, until the relay replaces it.
+  if (isSet(extra.errorReportToken)) {
+    warnings.push(
+      'extra.errorReportToken is set: a GitHub token ships publicly in this update — ' +
+        'set ERROR_REPORT_ENDPOINT (the Worker relay) and revoke the token',
+    );
+  }
   return { ok: problems.length === 0, problems, warnings, notes };
 }
 
