@@ -180,6 +180,21 @@ describe('startReceiverStream', () => {
     expect(reportError).toHaveBeenCalledWith(expect.any(Error), 'gnss-demux');
   });
 
+  it('signals every discontinuity so the fix assembler can flush', () => {
+    const m = mockNative({ state: 'connected', deviceId: 'dev-1' });
+    const reasons: string[] = [];
+    const stream = startReceiverStream(m.native, new LineDemuxer(), {
+      onFrames: jest.fn(),
+      onDiscontinuity: (r) => reasons.push(r),
+    });
+    m.emit('onBytes', bytesEvent(b64('x'), { dropped: 3 }));
+    m.emit('onBytes', bytesEvent('%%%'));
+    m.emit('onState', linkState('reconnecting'));
+    m.emit('onBytes', bytesEvent(b64('y'), { deviceId: 'dev-2' }));
+    stream.stop();
+    expect(reasons).toEqual(['device', 'dropped', 'corrupt', 'link', 'device', 'stopped']);
+  });
+
   it('forwards errors when asked', () => {
     const m = mockNative();
     const onError = jest.fn();

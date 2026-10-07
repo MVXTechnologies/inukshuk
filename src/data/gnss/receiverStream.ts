@@ -28,9 +28,10 @@ import type {
  */
 
 /**
- * What `GnssDemuxer` (@core/gnss/stream) provides. Structural, so this
- * adapter compiles and is tested before the core lands; `new GnssDemuxer()`
- * satisfies it as is.
+ * What `GnssDemuxer` (@core/gnss/stream, PR #617) provides: `push(chunk)`
+ * returns the `StreamEvent`s the chunk completes, `reset()` drops a partial
+ * frame. Structural, so this adapter builds before #617 merges;
+ * `new GnssDemuxer()` satisfies it as is.
  */
 export interface ByteDemuxer<Frame> {
   push(chunk: Uint8Array): Frame[];
@@ -43,6 +44,11 @@ export interface ReceiverStreamHandlers<Frame> {
   /** Every link state, starting with the current one. */
   onState?(state: GnssLinkState): void;
   onError?(error: GnssErrorEvent): void;
+  /**
+   * The stream stopped being continuous (the moments the demuxer is reset).
+   * Stage 3 calls `FixAssembler.flush()` here, per the @core/gnss contract.
+   */
+  onDiscontinuity?(reason: 'link' | 'device' | 'dropped' | 'corrupt' | 'stopped'): void;
 }
 
 export interface ReceiverStreamStats {
@@ -80,9 +86,10 @@ export function startReceiverStream<Frame>(
   let connected = false;
   let stopped = false;
 
-  const reset = () => {
+  const reset = (reason: 'link' | 'device' | 'dropped' | 'corrupt' | 'stopped') => {
     demuxer.reset();
     stats.resets += 1;
+    guarded(handlers.onDiscontinuity, reason);
   };
 
   // A throwing consumer must not take the native event path down with it.
@@ -98,9 +105,8 @@ export function startReceiverStream<Frame>(
   const onState = (s: GnssLinkState) => {
     if (stopped) return;
     const isConnected = s.state === 'connected';
-    if ((connected && !isConnected) || (s.deviceId !== null && s.deviceId !== deviceId)) {
-      reset();
-    }
+    if (s.deviceId !== null && s.deviceId !== deviceId) reset('device');
+    else if (connected && !isConnected) reset('link');
     connected = isConnected;
     if (s.deviceId !== null) deviceId = s.deviceId;
     guarded(handlers.onState, s);
@@ -111,16 +117,16 @@ export function startReceiverStream<Frame>(
     const bytes = base64ToBytes(e.data);
     if (bytes === null) {
       stats.corruptChunks += 1;
-      reset();
+      reset('corrupt');
       return;
     }
     if (e.deviceId !== null && e.deviceId !== deviceId) {
       deviceId = e.deviceId;
-      reset();
+      reset('device');
     }
     if (e.dropped > 0) {
       stats.droppedBytes += e.dropped;
-      reset();
+      reset('dropped');
     }
     stats.chunks += 1;
     stats.bytes += bytes.length;
@@ -131,7 +137,7 @@ export function startReceiverStream<Frame>(
       // The core's demuxer never throws on input; a bug there must not
       // wedge the stream either.
       reportError(error, 'gnss-demux');
-      reset();
+      reset('corrupt');
       return;
     }
     if (frames.length > 0) guarded(handlers.onFrames, frames, e.deviceId ?? deviceId);
@@ -154,7 +160,7 @@ export function startReceiverStream<Frame>(
       if (stopped) return;
       stopped = true;
       for (const s of subs) s.remove();
-      reset();
+      reset('stopped');
     },
   };
 }
