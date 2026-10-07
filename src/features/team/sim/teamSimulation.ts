@@ -47,6 +47,7 @@ import {
   replyTo,
   WAYPOINT_NAMES,
 } from './responder';
+import { useTeamMapFocus } from '../map/teamMapFocus';
 import { metres, pointAlong, routesNear, stepToward } from './routes';
 import { deleteSimDisks, readJsonFile, SimBotDisk, simStateFile, writeJsonFile } from './simDisk';
 
@@ -347,6 +348,9 @@ class Simulation {
       this.save();
       this.tick = setInterval(() => this.onTick(), TICK_MS);
       this.sampleFrames();
+      // Show where they are: the map flies to the first teammate.
+      const first = this.bots[0];
+      if (first) useTeamMapFocus.getState().focus(first.pos[0], first.pos[1], 14);
       this.note('Simulation running');
     } finally {
       useSimStatus.setState({ busy: null });

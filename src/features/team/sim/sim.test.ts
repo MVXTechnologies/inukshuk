@@ -24,6 +24,10 @@ describe('simulated teammates', () => {
     expect(metres(stepToward(a, b, 100), a)).toBeCloseTo(100, 0);
     expect(stepToward(a, b, 5_000)).toEqual(b);
     expect(routesNear(null, [])).toEqual([MSA_TRAIL]);
+    const loops = routesNear([-71.2, 46.8], []);
+    expect(loops).toHaveLength(2);
+    expect(metres(loops[0]![0]!, [-71.2, 46.8])).toBeGreaterThan(300);
+    expect(metres(loops[0]![0]!, [-71.2, 46.8])).toBeLessThan(700);
     const near: [number, number][] = [a, b];
     expect(routesNear(a, [near])).toEqual([near]);
   });
