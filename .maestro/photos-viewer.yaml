@@ -31,7 +31,9 @@ appId: com.inukshuk.app
     visible: '1 of [0-9]+'
     timeout: 15000
 - assertVisible: 'Show on map'
-- assertVisible: 'Placed on the trail.*'
+# How it was placed (by time, location, by hand…): the CI fixtures, ticked
+# from "Not from this outing", are placed by hand at the cursor.
+- assertVisible: '(Placed|Taken|From) .*'
 # Page to the second photo.
 - swipe:
     start: 80%,35%
