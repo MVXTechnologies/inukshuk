@@ -594,22 +594,53 @@ export function buildHtml(sources: Omit<PdfjsSources, 'fallbacks'>): string {
     while (canvasPool.length) releaseCanvas(canvasPool.pop().canvas);
     canvasPoolPixels = 0;
   }
+  // A pooled canvas of exactly this size (any size when width/height are
+  // null), removed from the pool; null when there is none.
+  function takePooled(width, height) {
+    for (var i = canvasPool.length - 1; i >= 0; i--) {
+      var pooled = canvasPool[i];
+      if (width === null || (pooled.canvas.width === width && pooled.canvas.height === height)) {
+        canvasPool.splice(i, 1);
+        canvasPoolPixels -= pooled.canvas.width * pooled.canvas.height;
+        return pooled;
+      }
+    }
+    return null;
+  }
+  // Back to a blank canvas in its default state: reset() where the engine
+  // has it; re-setting the width does the same everywhere.
+  function blank(entry) {
+    if (typeof entry.context.reset === 'function') entry.context.reset();
+    else entry.canvas.width = entry.canvas.width;
+  }
+  function poolCanvas(canvas, context) {
+    var pixels = canvas.width * canvas.height;
+    // Small scratch canvases only; the pool never holds more than the cap.
+    if (pixels > 0 && pixels <= CANVAS_POOL_MAX_PIXELS / 4 && context) {
+      canvasPool.push({ canvas: canvas, context: context });
+      canvasPoolPixels += pixels;
+      while (canvasPoolPixels > CANVAS_POOL_MAX_PIXELS && canvasPool.length) {
+        var oldest = canvasPool.shift();
+        canvasPoolPixels -= oldest.canvas.width * oldest.canvas.height;
+        releaseCanvas(oldest.canvas);
+      }
+    } else {
+      releaseCanvas(canvas);
+    }
+  }
   function InkCanvasFactory(options) {
     this._document = (options && options.ownerDocument) || document;
   }
   InkCanvasFactory.prototype.create = function (width, height) {
     if (width <= 0 || height <= 0) throw new Error('Invalid canvas size');
-    for (var i = canvasPool.length - 1; i >= 0; i--) {
-      var pooled = canvasPool[i];
-      if (pooled.canvas.width === width && pooled.canvas.height === height) {
-        canvasPool.splice(i, 1);
-        canvasPoolPixels -= width * height;
-        // Back to a blank canvas in its default state (reset() where the
-        // engine has it; re-setting the width does the same everywhere).
-        if (typeof pooled.context.reset === 'function') pooled.context.reset();
-        else pooled.canvas.width = width;
-        return { canvas: pooled.canvas, context: pooled.context };
-      }
+    // pdf.js asks for 1x1 canvases only as placeholders for its multi-step
+    // image downscaling, which resizes them (reset) before drawing: any
+    // pooled canvas will do, and reset() then trades it for one of the right
+    // size, so a repaint allocates nothing.
+    var pooled = width === 1 && height === 1 ? takePooled(null, null) : takePooled(width, height);
+    if (pooled) {
+      blank(pooled);
+      return { canvas: pooled.canvas, context: pooled.context };
     }
     var canvas = this._document.createElement('canvas');
     canvas.width = width;
@@ -620,25 +651,24 @@ export function buildHtml(sources: Omit<PdfjsSources, 'fallbacks'>): string {
   InkCanvasFactory.prototype.reset = function (entry, width, height) {
     if (!entry || !entry.canvas) throw new Error('Canvas is not specified');
     if (width <= 0 || height <= 0) throw new Error('Invalid canvas size');
+    if (entry.canvas.width === width && entry.canvas.height === height) {
+      blank(entry);
+      return;
+    }
+    var pooled = takePooled(width, height);
+    if (pooled) {
+      poolCanvas(entry.canvas, entry.context);
+      entry.canvas = pooled.canvas;
+      entry.context = pooled.context;
+      blank(entry);
+      return;
+    }
     entry.canvas.width = width;
     entry.canvas.height = height;
   };
   InkCanvasFactory.prototype.destroy = function (entry) {
     if (!entry || !entry.canvas) throw new Error('Canvas is not specified');
-    var canvas = entry.canvas;
-    var pixels = canvas.width * canvas.height;
-    // Small scratch canvases only; the pool never holds more than the cap.
-    if (pixels > 0 && pixels <= CANVAS_POOL_MAX_PIXELS / 4 && entry.context) {
-      canvasPool.push({ canvas: canvas, context: entry.context });
-      canvasPoolPixels += pixels;
-      while (canvasPoolPixels > CANVAS_POOL_MAX_PIXELS && canvasPool.length) {
-        var oldest = canvasPool.shift();
-        canvasPoolPixels -= oldest.canvas.width * oldest.canvas.height;
-        releaseCanvas(oldest.canvas);
-      }
-    } else {
-      releaseCanvas(canvas);
-    }
+    poolCanvas(entry.canvas, entry.context);
     entry.canvas = null;
     entry.context = null;
   };

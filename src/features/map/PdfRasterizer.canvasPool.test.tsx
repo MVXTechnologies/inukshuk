@@ -186,6 +186,50 @@ it('never pools big canvases and keeps the pool under its pixel cap', async () =
   expect(firstCanvas.width).toBe(0);
 });
 
+/** pdf.js 6 `_scaleImage`, multi-step: two 1x1 placeholders resized in turn. */
+function scaleImage(factory: Factory, steps: [number, number][]) {
+  let read = factory.create(1, 1);
+  let write = factory.create(1, 1);
+  for (const [w, h] of steps) {
+    factory.reset(write, w, h);
+    expect([write.canvas?.width, write.canvas?.height]).toEqual([w, h]);
+    [read, write] = [write, read];
+  }
+  factory.destroy(write);
+  return read; // the caller paints it, then destroys it
+}
+
+it('repaints an image downscaled in steps without creating or resizing canvases', async () => {
+  const { factory, created } = await loadPage();
+  const tile = () => {
+    const out = scaleImage(factory, [
+      [512, 512],
+      [256, 256],
+    ]);
+    expect([out.canvas?.width, out.canvas?.height]).toEqual([256, 256]);
+    factory.destroy(out);
+  };
+  tile();
+  expect(created).toHaveLength(2);
+  const sizes = created.map((c) => [c.width, c.height]);
+  // Hundreds of tiles: the same two canvases, never reallocated.
+  for (let i = 0; i < 300; i++) tile();
+  expect(created).toHaveLength(2);
+  expect(created.map((c) => [c.width, c.height])).toEqual(sizes);
+  // Every reuse handed pdf.js a blank canvas.
+  expect(created.reduce((n, c) => n + c.resets, 0)).toBeGreaterThanOrEqual(600);
+});
+
+it('still gives a fresh 1x1 placeholder its real size when the pool is empty', async () => {
+  const { factory, created } = await loadPage();
+  const out = scaleImage(factory, [
+    [100, 80],
+    [50, 40],
+  ]);
+  expect([out.canvas?.width, out.canvas?.height]).toEqual([50, 40]);
+  expect(created).toHaveLength(2);
+});
+
 it('releases the pool when RN asks (background, memory warning)', async () => {
   const { window, factory, pool } = await loadPage();
   const a = factory.create(128, 128);
