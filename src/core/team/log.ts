@@ -25,6 +25,8 @@ export const MAX_FORKS = 4;
 export class OpLog {
   private readonly byId = new Map<string, SignedOp>();
   private readonly bySeq = new Map<string, Map<number, string[]>>();
+  /** Highest seq held per author, maintained incrementally. */
+  private readonly top = new Map<string, number>();
   private readonly ephemeral = new Map<string, SignedOp>();
   private loggedBytes = 0;
   /** `[firstOpId, conflictingOpId]`: both signed ops stay retrievable with `get`. */
@@ -53,6 +55,7 @@ export class OpLog {
     if (cands.length >= MAX_FORKS && op.id !== pinned) return 'full';
     cands.push(op.id);
     seqs.set(env.sq, cands);
+    this.top.set(env.au, Math.max(this.top.get(env.au) ?? 0, env.sq));
     this.byId.set(op.id, op);
     this.loggedBytes += op.bytes;
     if (cands.length > 1) {
@@ -76,8 +79,7 @@ export class OpLog {
   }
 
   maxSeq(author: string): number {
-    const seqs = this.bySeq.get(author);
-    return seqs === undefined ? 0 : Math.max(0, ...seqs.keys());
+    return this.top.get(author) ?? 0;
   }
 
   logged(): SignedOp[] {
@@ -108,6 +110,9 @@ export class OpLog {
       }
       seqs.delete(s);
     }
+    let top = 0;
+    for (const s of seqs.keys()) if (s > top) top = s;
+    this.top.set(author, top);
     return dropped;
   }
 

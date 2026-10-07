@@ -75,9 +75,11 @@ export function canonicalChain(src: CandidateSource, author: string, anchor?: An
 export function indexOps(ops: readonly SignedOp[]): CandidateSource & { authors: string[] } {
   const byId = new Map<string, SignedOp>();
   const bySeq = new Map<string, Map<number, SignedOp[]>>();
+  const top = new Map<string, number>();
   for (const op of ops) {
     if (op.env.sq === 0 || byId.has(op.id)) continue;
     byId.set(op.id, op);
+    top.set(op.env.au, Math.max(top.get(op.env.au) ?? 0, op.env.sq));
     let seqs = bySeq.get(op.env.au);
     if (!seqs) bySeq.set(op.env.au, (seqs = new Map()));
     const list = seqs.get(op.env.sq) ?? [];
@@ -88,6 +90,7 @@ export function indexOps(ops: readonly SignedOp[]): CandidateSource & { authors:
     authors: [...bySeq.keys()],
     get: (id) => byId.get(id),
     candidates: (a, s) => bySeq.get(a)?.get(s) ?? [],
-    maxSeq: (a) => Math.max(0, ...(bySeq.get(a)?.keys() ?? [])),
+    // Tracked while indexing: never spread an unbounded collection into a call (re-review #2).
+    maxSeq: (a) => top.get(a) ?? 0,
   };
 }

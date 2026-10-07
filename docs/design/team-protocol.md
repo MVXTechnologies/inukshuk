@@ -331,14 +331,25 @@ memberId|keyId)`, then the key is sealed under `kek` with a zero nonce.
 - **Removal ⇒ rotation, fail closed.**
   - A key that reached a now-removed member is unsafe, so `sendKeyId` becomes
     undefined and `needsRotation` true.
-  - **A rejected op can still hand out a key (review H1).** An earlier version
-    of this document claimed the loser of an invite race never got the key.
-    That was wrong: the losing `m.admit` was delivered to its joiner with a wrap
-    of the live key. Now every rejected control op from an active member
-    counts its wrap recipients as key holders. That covers invite races,
-    admits after a revocation or expiry, and `k.share` to a stranger. If any
-    such holder isn't an active member, the key is unsafe and the team
+  - **A rejected admission can still hand out a key (review H1).** An earlier
+    version of this document claimed the loser of an invite race never got the
+    key. That was wrong: the losing `m.admit` was delivered to its joiner with a
+    wrap of the live key.
+  - A rejected `m.admit`/`m.add` counts its wrap recipients as key holders, but
+    only when all of these hold:
+    - it lost for a race-type reason (`invite`, `exists`, `limit`, `expired`,
+      `closed`);
+    - its author could legitimately admit: an active non-guest with a verified
+      join proof against an existing invite, or an admin for `m.add`;
+    - its author held that key.
+
+    If such a holder isn't an active member, the key is unsafe and the team
     rotates.
+
+  - Every other rejected wrap-carrying op is only recorded in `wrapEvidence`
+    against its author, with no rotation. Wrap bytes are unverifiable, so
+    letting them force rotations would let a guest block all group messaging
+    (re-review #1).
   - Group-mode writes return `undefined` until an admin rotates.
   - Two admins racing removals and rotations end up with no safe key, and the
     team waits for a fresh rotation (tested).
@@ -455,7 +466,8 @@ DH = X25519(ephI, ephR)    T1 = H("hs1" ‖ hi1 ‖ ephR)
 T2 = H("hs2" ‖ T1 ‖ {id:R})    T3 = H("hs3" ‖ T2 ‖ hi3 inner − sg)
 hs-r = HKDF(DH, T1, "hs-r"),  hs-i = HKDF(DH, T1, "hs-i")   (AAD T1 / T2)
 MAC_x(id) = HMAC(HKDF(DH, T2, "confirm-x"), id)
-k_i2r, k_r2i = HKDF(DH, T3, "i2r" / "r2i");  safetyCode = HKDF(DH, T3, "safety") mod 10^6
+k_i2r, k_r2i = HKDF(DH, T3, "i2r" / "r2i")
+safetyCode = HKDF(DH, H("sas" ‖ cm ‖ nI ‖ ephI ‖ ephR), "safety") mod 10^6
 ```
 
 - Signatures bind both ephemeral keys. The identity MACs stop a relay from
@@ -467,14 +479,18 @@ k_i2r, k_r2i = HKDF(DH, T3, "i2r" / "r2i");  safetyCode = HKDF(DH, T3, "safety")
     can open a session and learn one responder's member id, because the
     responder identifies itself before the initiator does. It learns nothing
     else.
-- **Safety code (review M3).**
-  - It is derived from this session's DH secret and full transcript.
-  - The initiator commits to a nonce (`cm`) before seeing the responder's key,
-    and reveals it last.
-  - So a man in the middle holding a stolen invite cannot grind the code
-    offline. Its two sessions produce independent random codes, matching with
-    probability 10⁻⁶.
-  - The old 20-bit code over `(teamId, memberId)` is removed.
+- **Safety code (review M3, re-review #4).**
+  - It is derived from the DH secret and from values fixed before the
+    initiator's nonce is revealed: the commitment `cm`, the nonce itself, and
+    both ephemerals.
+  - It does **not** depend on the rest of `hi3`. An earlier version hashed the
+    whole transcript, so a man in the middle could vary its identity in `hi3`
+    offline to grind the code.
+  - So a man in the middle holding a stolen invite gets two independent random
+    codes, matching with probability 10⁻⁶.
+  - The handshake must finish within 30 s (`HANDSHAKE_TIMEOUT_MS`; checked on
+    `receive` and on `tick(now)`). A stalled handshake is dropped with
+    `timeout`.
 - The responder continues only with an active member, or with a joiner whose
   proof it can admit.
 - A member initiator refuses a responder that is not an active member. A
@@ -501,6 +517,12 @@ k_i2r, k_r2i = HKDF(DH, T3, "i2r" / "r2i");  safetyCode = HKDF(DH, T3, "safety")
   and live, and the newest unexpired one per author is kept.
 - **Equivocation.** Two different ops for one (author, seq) are flagged. Both
   signed ops are kept as proof (a provable equivocation); §6 says which counts.
+  - The first proof refolds once.
+  - After that, the author's further forks are stored as evidence only, and
+    folded by a single coalesced refold at most every 10 s
+    (`FORK_REFOLD_INTERVAL_MS`). A forking member cannot make peers refold per
+    op (re-review #3).
+  - An op the anchored chain pins always triggers a refold.
 - **Quarantine.** Validly signed ops from not-yet-known authors are held:
   - at most 512 ops and 1 MiB in total, and 64 per author;
   - the oldest entry is evicted first.
@@ -583,7 +605,8 @@ write to its id.
 | A member escalates privileges                        | Yes                      | The fold checks authority at each op's position                                                                                                                                                                           |
 | Removed member keeps sending                         | Yes                      | `cut` + status; past the cut, ops are refused even backdated, and not stored                                                                                                                                              |
 | Removed member rewrites old history                  | Yes (H3)                 | The cut pins the hash chain; a different op at an old seq is never canonical, and peers re-pull the real one                                                                                                              |
-| Loser of an invite race / late admit keeps the key   | Yes, after rotation (H1) | Rejected wraps count as key holders, so the key is unsafe and the team rotates                                                                                                                                            |
+| Loser of an invite race / late admit keeps the key   | Yes, after rotation (H1) | Verified, race-type rejected admissions count as key holders, so the team rotates                                                                                                                                         |
+| Guest or member spams fake wraps to force rotations  | Yes (re-review #1)       | Unverified rejected wraps are evidence only (`wrapEvidence`), never a rotation                                                                                                                                            |
 | Hostile field names (`toString`, `__proto__`…)       | Yes (H2)                 | Null-prototype dictionaries and own-property reads in every merge; fuzz-tested                                                                                                                                            |
 | MITM with a stolen invite during a join              | Detectable (M3)          | The 6-digit safety code is transcript-bound with a committed nonce: 10⁻⁶ chance to match                                                                                                                                  |
 | Small-order Ed25519 keys (forge-anything signatures) | Yes                      | Every implementation refuses small-order public keys (RFC vector test)                                                                                                                                                    |
@@ -627,6 +650,11 @@ write to its id.
   Before this change: 6.4 ms per position update, 332 ms per `data()`, and
   35 s for 20k sequential writes.
 
+- **Full rebuild of a 100k-op single-author log: 0.24 s** (`review.test.ts`,
+  budget 0.5 s). Max seqs are tracked incrementally and no unbounded collection
+  is ever spread into a call. Before re-review #2 the same rebuild took 141 s,
+  and at 200k it overflowed the stack.
+
 - **noble admission** (canonical JSON + SHA-256 + strict Ed25519 verify) costs
   0.9 ms/op under Node's JIT.
   - Hermes has no JIT, and BigInt-heavy curve code runs several times slower
@@ -639,6 +667,21 @@ write to its id.
     3. if profiling on a mid-range Android confirms it, move Ed25519 verify to
        `react-native-quick-crypto` (native, JSI), which keeps the same
        interface.
+
+## 12b. v1 rules for native and UI consumers (confirmed after the security review)
+
+These are frozen with the v1 envelope. The data layer, the mesh module and the
+UI must follow them.
+
+| Rule                         | What it means for you                                                                                                                                                                                                                                                                            |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`pv` chaining**            | Every logged op from seq 2 carries `pv` = the id of the same author's previous logged op. `OpWriter` sets it. **Persist `WriterCursor = {seq, hlc, prev}` after every write** and restore it on launch. Losing `prev` (or `seq`) forks the device's own chain, which peers treat as equivocation |
+| **`x.cc`**                   | Sealed ops carry `cc = HKDF(cek, teamId, "commit")`. Readers refuse a content key that doesn't match it. Build sealed ops only with `buildOp`                                                                                                                                                    |
+| **Payload subkey**           | Group-mode bodies are encrypted with `payloadKey(epochKey) = HKDF(epochKey, teamId, "payload")`, never the epoch key itself. Future uses of the epoch key (e.g. Nostr tags) must derive their own labelled subkey                                                                                |
+| **Cuts**                     | `m.remove {m, cut}` and admin demotions `m.update {…, cut}` use `cut = [seq, opId]` (or `[0]`), always produced with `cutFor(state, memberId)`                                                                                                                                                   |
+| **Handshake shapes**         | `hi1 {t, v, tm, e, cm}` · `hi2 {t, e, x}` · `hi3 {t, x}`. `x` is the sealed inner `{id, mc, sg}` / `{id, mc, nn, join?, sg}`. The transport moves frames as opaque bytes and never parses them                                                                                                   |
+| **`SyncSession.safetyCode`** | Six digits, set once the session is open, equal on both phones. Show it during a join for the two people to compare. There is no other safety-code API (the old `ids.safetyCode` is gone)                                                                                                        |
+| **Handshake deadline**       | Pass `now` to `initiate` (or the first `receive` sets it) and call `tick(now)` periodically. A handshake past 30 s closes with `timeout`                                                                                                                                                         |
 
 ## 13. What changes for Nostr relays (opt-in, after the MVP)
 

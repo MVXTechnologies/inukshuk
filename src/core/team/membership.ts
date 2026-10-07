@@ -59,10 +59,12 @@ import {
  * Admin cuts can only come from the owner (always authoritative), so they are
  * collected up front from the owner's chain.
  *
- * **Rejected ops can still leak a key (review H1).** An admit that loses an
- * invite race was still delivered to its joiner with a wrap of the live key.
- * Any rejected control op from an active member counts its wrap recipients
- * as key holders, so the key is unsafe and the team rotates.
+ * **Rejected admissions can still leak a key (review H1).** An admit that
+ * loses an invite race was still delivered to its joiner with a wrap of the
+ * live key. A verified admission rejected for a race-type reason, by an author
+ * holding the key, counts its wrap recipients as key holders, so the team
+ * rotates. Any other rejected wrap is evidence only (`wrapEvidence`): wrap bytes
+ * are unverifiable, and a guest must not be able to force rotations.
  */
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
@@ -163,6 +165,8 @@ export interface TeamState {
   rejected: Map<string, Rejection>;
   /** Each author's canonical chain (`chain.ts`): the version vector and what peers serve. */
   chains: Map<string, Chain>;
+  /** Rejected wrap-carrying ops that did NOT count as leaks: evidence for admins. */
+  wrapEvidence: { opId: string; author: string; why: Rejection }[];
   /** The last op folded (incremental appends must sort after it). */
   head?: SignedOp;
 }
@@ -214,6 +218,7 @@ function emptyState(teamId: string): TeamState {
     roleAt: new Map(),
     rejected: new Map(),
     chains: new Map(),
+    wrapEvidence: [],
   };
 }
 
@@ -345,7 +350,39 @@ function makeFolder(ctx: Ctx, genesis: SignedOp): Folder {
     reject(op, why);
     const kw = isRecord(op.env.b) ? parseKeyWraps(op.env.b['kw']) : undefined;
     if (kw === undefined) return;
-    for (const [m, k] of kw.w) s.keys.get(k)?.leaked.add(m);
+    if (!plausibleLeak(op, why)) {
+      // Unverified wraps (anyone can publish bytes next to a public key id):
+      // evidence against the author, never a forced rotation (re-review #1).
+      s.wrapEvidence.push({ opId: op.id, author: op.env.au, why });
+      return;
+    }
+    for (const [m, k] of kw.w) {
+      const key = s.keys.get(k);
+      if (key?.recipients.has(op.env.au)) key.leaked.add(m);
+    }
+  };
+
+  /**
+   * Only an admission that genuinely lost (a race, a revocation, expiry, a
+   * full team, a closed team) by an author who could legitimately admit can
+   * have delivered a real key to its joiner. For `m.admit` the invite must
+   * exist and the joiner's proof must verify; `m.add` must come from an admin.
+   */
+  const LEAK_REASONS: readonly Rejection[] = ['invite', 'exists', 'limit', 'expired', 'closed'];
+  const plausibleLeak = (op: SignedOp, why: Rejection): boolean => {
+    if (!LEAK_REASONS.includes(why)) return false;
+    const author = s.members.get(op.env.au);
+    if (author?.status !== 'active') return false;
+    if (op.env.t === 'm.add') return helpers.adminOk(author, op.env.sq);
+    if (op.env.t !== 'm.admit' || author.role === 'guest') return false;
+    const proof = parseJoinProof(op.env.b);
+    if (proof === undefined || !s.invites.has(proof.inv)) return false;
+    let ok = ctx.proofCache.get(op.id);
+    if (ok === undefined) {
+      ok = verifyJoinProof(ctx.c, ctx.teamId, proof);
+      ctx.proofCache.set(op.id, ok);
+    }
+    return ok;
   };
 
   function apply(op: SignedOp): void {
@@ -694,7 +731,8 @@ function resolve(
   const index = indexOps(ops);
   const all: SignedOp[] = [];
   for (const a of index.authors) {
-    for (let sq = 1; sq <= index.maxSeq(a); sq++) all.push(...index.candidates(a, sq));
+    const top = index.maxSeq(a);
+    for (let sq = 1; sq <= top; sq++) for (const op of index.candidates(a, sq)) all.push(op);
   }
   const genesis = pickGenesis(c, teamId, all);
   if (genesis === undefined) {

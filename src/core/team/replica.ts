@@ -61,6 +61,12 @@ export interface IngestReport {
 export const MAX_QUARANTINE_OPS = 512;
 export const MAX_QUARANTINE_BYTES = 1024 * 1024;
 export const MAX_QUARANTINE_PER_AUTHOR = 64;
+/**
+ * After an author's first proven equivocation, their further forks are only
+ * stored (evidence) and folded by a coalesced refold at most this often
+ * (re-review #3): a forking member cannot make every peer refold per op.
+ */
+export const FORK_REFOLD_INTERVAL_MS = 10_000;
 
 export class TeamReplica {
   readonly log = new OpLog();
@@ -74,6 +80,12 @@ export class TeamReplica {
   private readonly decoded = new Map<string, Json>();
   private readonly proofCache = new Map<string, boolean>();
   private folder: Folder | undefined;
+  /** Authors with a proven equivocation (their later forks are deferred). */
+  private readonly equivocators = new Set<string>();
+  private deferredForks = false;
+  private lastFullFold = -Infinity;
+  /** Diagnostics: how many full refolds this replica has run. */
+  fullFolds = 0;
   private entityCache: TeamData | undefined;
   /** Positions view; dropped on a new position, a refold or the first expiry. */
   private positionCache:
@@ -191,6 +203,9 @@ export class TeamReplica {
       }
     }
     for (const op of pending) this.hold(op, report);
+    if (this.deferredForks && now - this.lastFullFold >= FORK_REFOLD_INTERVAL_MS) {
+      this.refold([], now, true);
+    }
     return report;
   }
 
@@ -232,6 +247,13 @@ export class TeamReplica {
     }
     if (result === 'fork') {
       report.equivocations.push(this.log.equivocations[this.log.equivocations.length - 1]!);
+      if (this.equivocators.has(op.env.au) && op.id !== pinned) {
+        // Already proven: keep as evidence, fold later in one coalesced refold.
+        report.accepted.push(op);
+        this.deferredForks = true;
+        return;
+      }
+      this.equivocators.add(op.env.au);
     }
     report.accepted.push(op);
     if (isEphemeralType(op.env.t)) this.positionCache = undefined;
@@ -239,9 +261,9 @@ export class TeamReplica {
   }
 
   /** Fold new logged ops: append incrementally when possible, else refold once. */
-  private refold(ops: SignedOp[], now: number): void {
+  private refold(ops: SignedOp[], now: number, force = false): void {
     const sorted = ops.sort(compareOps);
-    let incremental = this.folder !== undefined;
+    let incremental = !force && this.folder !== undefined;
     if (incremental) {
       // Check the whole batch extends the fold before taking the fast path.
       const grown = new Map<string, string[]>();
@@ -274,6 +296,9 @@ export class TeamReplica {
       });
       this.state = state;
       this.folder = folder;
+      this.deferredForks = false;
+      this.lastFullFold = now;
+      this.fullFolds++;
       this.entityCache = undefined;
       this.positionCache = undefined;
       for (const m of state.members.values()) {

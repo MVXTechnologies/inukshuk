@@ -36,7 +36,8 @@ import type { IngestReport } from './replica';
  * DH = X25519(ephI, ephR)   T1 = H("hs1" ‖ hi1 ‖ ephR)
  * T2 = H("hs2" ‖ T1 ‖ {id:R})   T3 = H("hs3" ‖ T2 ‖ hi3 inner − sg)
  * hs-r / hs-i = HKDF(DH, T1|T2);  MAC_x(id) = HMAC(HKDF(DH, T2, "confirm-x"), id)
- * keys: k_i2r / k_r2i = HKDF(DH, T3);  safety code = HKDF(DH, T3, "safety") → 6 digits
+ * keys: k_i2r / k_r2i = HKDF(DH, T3)
+ * safety code = HKDF(DH, H("sas" ‖ cm ‖ nI ‖ ephI ‖ ephR), "safety") → 6 digits
  * ```
  * Each side signs a transcript holding both ephemeral keys and MACs its own
  * identity under the DH secret (SIGMA), so neither side can be impersonated
@@ -98,7 +99,14 @@ export interface SessionOptions {
   limits?: PeerLimits;
   /** Initiator only: join with this invite proof instead of as a member. */
   join?: JoinProof;
+  /** When the session started (initiator); otherwise the first received frame's time. */
+  now?: number;
+  /** The handshake must finish within this long (default {@link HANDSHAKE_TIMEOUT_MS}). */
+  handshakeTimeoutMs?: number;
 }
+
+/** A handshake that takes longer is dropped (re-review #4: no time to stall and grind). */
+export const HANDSHAKE_TIMEOUT_MS = 30_000;
 
 export const MAX_WANT_RANGES = 64;
 export const MAX_RANGE_LEN = 1024;
@@ -145,6 +153,9 @@ export class SyncSession {
   readonly guard: PeerGuard;
 
   private ephSecret: Uint8Array | undefined;
+  private ephR: string | undefined;
+  private revealed: Uint8Array | undefined;
+  private startedAt: number | undefined;
   private shared: Uint8Array | undefined;
   private commitNonce: Uint8Array | undefined;
   private hi1: Json | undefined;
@@ -184,6 +195,7 @@ export class SyncSession {
     options: SessionOptions = {},
   ): { session: SyncSession; step: Step } {
     const s = new SyncSession(c, store, 'initiator', options);
+    s.startedAt = options.now;
     s.ephSecret = c.randomBytes(KEY_BYTES);
     s.commitNonce = c.randomBytes(16);
     s.hi1 = {
@@ -201,6 +213,16 @@ export class SyncSession {
     return new SyncSession(c, store, 'responder', options);
   }
 
+  private handshakeExpired(now: number): boolean {
+    const limit = this.options.handshakeTimeoutMs ?? HANDSHAKE_TIMEOUT_MS;
+    return (
+      this.phase !== 'open' &&
+      this.phase !== 'closed' &&
+      this.startedAt !== undefined &&
+      now - this.startedAt > limit
+    );
+  }
+
   get bannedUntil(): number | undefined {
     return this.guard.bannedUntil;
   }
@@ -209,6 +231,11 @@ export class SyncSession {
   receive(frame: Uint8Array, now: number): Step {
     const step = empty();
     if (this.phase === 'closed') return step;
+    this.startedAt ??= now;
+    if (this.handshakeExpired(now)) {
+      this.fail(step, 'timeout');
+      return step;
+    }
     try {
       const admit = this.guard.admitFrame(frame.length, now);
       if (admit !== 'ok') {
@@ -242,8 +269,12 @@ export class SyncSession {
   }
 
   /** Periodic re-sync: resend our vector so the peer can pull anything it missed. */
-  tick(): Step {
+  tick(now?: number): Step {
     const step = empty();
+    if (now !== undefined && this.handshakeExpired(now)) {
+      this.fail(step, 'timeout');
+      return step;
+    }
     if (this.phase === 'open') this.sendSealed({ t: 'vv', v: this.store.versionVector() }, step);
     return step;
   }
@@ -292,6 +323,7 @@ export class SyncSession {
     this.hi1 = f as unknown as Json;
     const e = toB64u(this.c.x25519.publicKey(this.ephSecret));
     this.t1 = this.transcript1(this.hi1, e);
+    this.ephR = e;
     const id = this.store.id;
     this.t2 = this.transcript(this.t1, 'hs2', { id });
     const inner = {
@@ -311,6 +343,8 @@ export class SyncSession {
     this.shared = safeShared(this.c, this.ephSecret!, peerEph);
     if (this.shared === undefined) return this.bad(step, now, 'malformed', 'auth');
     this.t1 = this.transcript1(this.hi1!, f['e'] as string);
+    this.ephR = f['e'] as string;
+    this.revealed = this.commitNonce;
     const inner = this.openHello('hs-r', this.t1, f['x'], ['id', 'mc', 'sg']);
     if (inner === undefined || !isMemberId(inner['id'])) {
       return this.bad(step, now, 'decrypt', 'auth');
@@ -365,6 +399,7 @@ export class SyncSession {
       memberPublicKey(peer),
     );
     const nonce = fromB64uLen(inner['nn'], 16);
+    this.revealed = nonce;
     const committed = (this.hi1 as Record<string, unknown>)['cm'];
     if (
       !sigOk ||
@@ -437,7 +472,20 @@ export class SyncSession {
     const i2r = derive(this.c, shared, t3, 'i2r');
     const r2i = derive(this.c, shared, t3, 'r2i');
     [this.sendKey, this.recvKey] = this.side === 'initiator' ? [i2r, r2i] : [r2i, i2r];
-    const sas = derive(this.c, shared, t3, 'safety', new Uint8Array(0), 4);
+    // The code depends only on values fixed before the initiator's nonce is
+    // revealed (cm, both ephemerals) plus the nonce itself, not on the rest of
+    // hi3, which a man in the middle could vary offline to grind it (re-review #4).
+    const hello = this.hi1 as Record<string, unknown>;
+    const sasInput = this.c.sha256(
+      concatBytes(
+        label('sas'),
+        fromB64u(hello['cm']) ?? new Uint8Array(0),
+        this.revealed ?? new Uint8Array(0),
+        fromB64u(hello['e']) ?? new Uint8Array(0),
+        fromB64u(this.ephR) ?? new Uint8Array(0),
+      ),
+    );
+    const sas = derive(this.c, shared, sasInput, 'safety', new Uint8Array(0), 4);
     const n = (((sas[0]! << 24) >>> 0) + (sas[1]! << 16) + (sas[2]! << 8) + sas[3]!) % 1_000_000;
     this.safetyCode = n.toString().padStart(6, '0');
     this.ephSecret = undefined;
@@ -556,7 +604,7 @@ export class SyncSession {
       ) {
         return this.strike(step, 'malformed', now);
       }
-      out.push(...this.store.opsInRange(a, from as number, to as number));
+      for (const op of this.store.opsInRange(a, from as number, to as number)) out.push(op);
       if (out.length >= MAX_SERVE_OPS) break;
     }
     // Total order: membership ops precede the data that depends on them.
