@@ -223,6 +223,13 @@ describe('clockRows', () => {
 describe('importOutcomeMessage', () => {
   it('words every outcome', () => {
     expect(importOutcomeMessage({ added: 33, failed: 0, chosen: 33 })).toBe('Added 33 photos');
+    // A skipped re-pick is never silent.
+    expect(importOutcomeMessage({ added: 1, failed: 0, chosen: 1, alreadyThere: 1 })).toBe(
+      'Added 1 photo · 1 already on this trail',
+    );
+    expect(importOutcomeMessage({ added: 2, failed: 0, chosen: 2, alreadyThere: 0 })).toBe(
+      'Added 2 photos',
+    );
     expect(importOutcomeMessage({ added: 30, failed: 3, chosen: 33 })).toBe(
       'Added 30 of 33 photos · 3 could not be read',
     );
