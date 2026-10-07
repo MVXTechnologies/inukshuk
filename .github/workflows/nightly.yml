@@ -42,9 +42,23 @@ jobs:
       # audit-ci instead of raw `npm audit`: same high+ threshold, but accepted
       # advisories can be allowlisted (with reasons and exit plans) in
       # audit-ci.jsonc instead of failing the gate every night.
+      #
+      # The audits run even when an earlier step failed (`!cancelled()`): a
+      # red typecheck must not hide a new critical advisory for days.
       - name: Security audit (high+, allowlist in audit-ci.jsonc)
         id: audit
+        if: ${{ !cancelled() }}
         run: npx audit-ci@^7 --config ./audit-ci.jsonc
+      # The tile Worker is deployed from its own package (infra/tiles/worker,
+      # its own lockfile). Its runtime deps (pmtiles, fast-png) ship to
+      # Cloudflare; its dev deps (wrangler, miniflare) run on the deploying
+      # machine with Cloudflare credentials, so high+ fails here too. `npm
+      # audit` reads the lockfile only: nothing is installed.
+      - name: Security audit — tile Worker (high+)
+        id: audit-worker
+        if: ${{ !cancelled() }}
+        working-directory: infra/tiles/worker
+        run: npm audit --audit-level=high
 
   report-failure:
     needs: health

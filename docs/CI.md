@@ -3,17 +3,17 @@
 All automation lives in `.github/workflows/`. The goal is a project that builds,
 tests, and corrects itself without anyone watching.
 
-| Workflow                   | Trigger                              | What it does                                                                                   |
-| -------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| `ci.yml`                   | every push / PR                      | typecheck · lint · format-check · unit + script tests · tiles Worker · expo-doctor (advisory)  |
-| `native-build.yml`         | every PR (builds if native); nightly | real **iOS** (`xcodebuild`) + **Android** (`gradlew assembleDebug`) compiles on latest runners |
-| `e2e.yml`                  | nightly; manual                      | Maestro flows on Android emulators, in parallel shards (`.maestro/shards.json`)                |
-| `release-path.yml`         | PRs/main touching the hook; weekly   | runs the EAS `eas-build-pre-install` hook like EAS does (Android + iOS → `pod install`)        |
-| `runtime-check.yml`        | every PR; push to `main`             | compares the native runtime fingerprint with the latest store builds; warns, never fails       |
-| `nightly.yml`              | nightly; manual                      | full gate + **blocking** expo-doctor + `npm audit`; opens a tracking issue on failure          |
-| `ota-update.yml`           | push to `main` (JS/assets)           | publishes an EAS Update so installed apps self-correct                                         |
-| `release.yml`              | version tag `v*`; manual             | EAS build + auto-submit to App Store & Play Store                                              |
-| `dependabot-automerge.yml` | Dependabot PRs                       | auto-merges green minor/patch updates, except native-bearing ones (they need a store build)    |
+| Workflow                   | Trigger                              | What it does                                                                                         |
+| -------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `ci.yml`                   | every push / PR                      | typecheck · lint · format-check · unit + script tests · tiles Worker · expo-doctor (advisory)        |
+| `native-build.yml`         | every PR (builds if native); nightly | real **iOS** (`xcodebuild`) + **Android** (`gradlew assembleDebug`) compiles on latest runners       |
+| `e2e.yml`                  | nightly; manual                      | Maestro flows on Android emulators, in parallel shards (`.maestro/shards.json`)                      |
+| `release-path.yml`         | PRs/main touching the hook; weekly   | runs the EAS `eas-build-pre-install` hook like EAS does (Android + iOS → `pod install`)              |
+| `runtime-check.yml`        | every PR; push to `main`             | compares the native runtime fingerprint with the latest store builds; warns, never fails             |
+| `nightly.yml`              | nightly; manual                      | full gate + **blocking** expo-doctor + high+ audits (app, Worker); opens a tracking issue on failure |
+| `ota-update.yml`           | push to `main` (JS/assets)           | publishes an EAS Update so installed apps self-correct                                               |
+| `release.yml`              | version tag `v*`; manual             | EAS build + auto-submit to App Store & Play Store                                                    |
+| `dependabot-automerge.yml` | Dependabot PRs                       | auto-merges green minor/patch updates, except native-bearing ones (they need a store build)          |
 
 Plus `.github/dependabot.yml` (weekly npm + actions updates, grouped).
 
