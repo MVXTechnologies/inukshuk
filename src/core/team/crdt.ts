@@ -50,6 +50,21 @@ function minOf(a: Stamp | undefined, b: Stamp | undefined): Stamp | undefined {
   return compareStamp(a, b) <= 0 ? a : b;
 }
 
+/**
+ * A dictionary with no prototype: field names come from peers, and a name like
+ * `toString` or `constructor` must never resolve to `Object.prototype` (H2).
+ */
+export function dict<T>(entries: Iterable<readonly [string, T]> = []): Record<string, T> {
+  const out = Object.create(null) as Record<string, T>;
+  for (const [k, v] of entries) out[k] = v;
+  return out;
+}
+
+/** Own-property read: never falls through to a prototype. */
+export function own<T>(rec: Readonly<Record<string, T>>, key: string): T | undefined {
+  return Object.prototype.hasOwnProperty.call(rec, key) ? rec[key] : undefined;
+}
+
 /** A record of LWW fields with an optional tombstone. */
 export interface EntityState {
   fields: Record<string, Register>;
@@ -60,9 +75,9 @@ export interface EntityState {
 }
 
 export function mergeEntity(a: EntityState, b: EntityState): EntityState {
-  const fields: Record<string, Register> = { ...a.fields };
+  const fields = dict(Object.entries(a.fields));
   for (const [name, reg] of Object.entries(b.fields)) {
-    const mine = fields[name];
+    const mine = own(fields, name);
     fields[name] = mine === undefined ? reg : mergeRegister(mine, reg);
   }
   const out: EntityState = { fields };
@@ -89,11 +104,13 @@ export function isLive(e: EntityState): boolean {
 
 /** The fields visible now: those written after the newest delete. */
 export function visibleFields(e: EntityState): Record<string, Json> {
-  const out: Record<string, Json> = {};
-  for (const [name, reg] of Object.entries(e.fields)) {
-    if (e.deleted === undefined || compareStamp(reg.stamp, e.deleted) > 0) out[name] = reg.value;
-  }
-  return out;
+  // fromEntries defines own properties (no setters, no prototype lookups), and
+  // the result is an ordinary object UI code can stringify safely.
+  return Object.fromEntries(
+    Object.entries(e.fields)
+      .filter(([, reg]) => e.deleted === undefined || compareStamp(reg.stamp, e.deleted) > 0)
+      .map(([name, reg]) => [name, reg.value]),
+  );
 }
 
 /** A keyed collection of entities; merging is per key. */
@@ -111,14 +128,14 @@ export function mergeEntityMaps(a: EntityMap, b: EntityMap): Map<string, EntityS
 /** One `set` as a single-op entity state. */
 export function setOp(fields: Record<string, Json>, stamp: Stamp): EntityState {
   return {
-    fields: Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, { value: v, stamp }])),
+    fields: dict(Object.entries(fields).map(([k, v]) => [k, { value: v, stamp }] as const)),
     created: stamp,
   };
 }
 
 /** One `delete` as a single-op entity state. */
 export function deleteOp(stamp: Stamp): EntityState {
-  return { fields: {}, deleted: stamp };
+  return { fields: dict(), deleted: stamp };
 }
 
 /** Per-key LWW registers (shared positions: one register per member). */

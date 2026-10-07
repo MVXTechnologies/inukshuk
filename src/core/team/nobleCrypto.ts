@@ -26,6 +26,20 @@ import type { TeamCrypto } from './crypto';
  * Signatures are verified strictly (RFC 8032, `zip215: false`), so a signature
  * has one valid encoding. The protocol's content-addressing relies on that.
  */
+/**
+ * Refuse small-order public keys (the identity point and the other 7 torsion
+ * points). For those, a trivial signature verifies for any message under plain
+ * RFC 8032 rules, so anyone could sign as that "member". Malformed encodings
+ * count as small-order (refused).
+ */
+export function isSmallOrderKey(publicKey: Uint8Array): boolean {
+  try {
+    return ed25519.Point.fromBytes(publicKey).isSmallOrder();
+  } catch {
+    return true;
+  }
+}
+
 export function createNobleCrypto(fillRandom: (buffer: Uint8Array) => void): TeamCrypto {
   return {
     randomBytes(length) {
@@ -40,6 +54,7 @@ export function createNobleCrypto(fillRandom: (buffer: Uint8Array) => void): Tea
       publicKey: (seed) => ed25519.getPublicKey(seed),
       sign: (message, seed) => ed25519.sign(message, seed),
       verify: (signature, message, publicKey) =>
+        !isSmallOrderKey(publicKey) &&
         ed25519.verify(signature, message, publicKey, { zip215: false }),
     },
     x25519: {

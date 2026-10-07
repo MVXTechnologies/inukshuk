@@ -1,5 +1,6 @@
 import { fromB64uLen, isB64uLen } from './bytes';
-import { hasOnlyKeys, isRecord } from './canonical';
+import { hasOnlyKeys, isRecord, type Json } from './canonical';
+import { canonicalChain, indexOps, type Anchor, type Chain } from './chain';
 import { KEY_BYTES, type TeamCrypto } from './crypto';
 import { isControlType, type SignedOp } from './envelope';
 import { compareStamp, type Stamp } from './hlc';
@@ -45,14 +46,23 @@ import {
  *
  * **Backdating.** HLCs are author-chosen, so a removed or demoted member could
  * sign ops with old timestamps. Removals and admin demotions therefore carry a
- * `cut`: the target's last sequence number the remover had seen. The target's
- * ops with `sq > cut` are rejected (removal) or lose admin authority (demotion)
- * wherever their HLC sorts. Work the target did that the remover had not yet
- * received is dropped — the price of determinism without a server.
+ * `cut = [seq, opId]`: the head of the target's hash chain as the remover saw
+ * it. The target's ops with `sq > seq` are rejected (removal) or lose admin
+ * authority (demotion) wherever their HLC sorts, and at or below the cut only
+ * the chain ending at `opId` counts (`chain.ts`), so a removed member cannot
+ * slip in a different op at an old seq either (review H3). Work the target did
+ * that the remover had not yet received is dropped: the price of determinism
+ * without a server.
  *
- * Removal cuts are applied in a second pass, because a backdated op sorts
- * before the removal that disqualifies it. Admin cuts can only come from the
- * owner (always authoritative), so they are collected up front.
+ * Only canonical chain ops are folded. Removal cuts are applied in a second
+ * pass, because a backdated op sorts before the removal that disqualifies it.
+ * Admin cuts can only come from the owner (always authoritative), so they are
+ * collected up front from the owner's chain.
+ *
+ * **Rejected ops can still leak a key (review H1).** An admit that loses an
+ * invite race was still delivered to its joiner with a wrap of the live key.
+ * Any rejected control op from an active member counts its wrap recipients
+ * as key holders, so the key is unsafe and the team rotates.
  */
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
@@ -104,6 +114,8 @@ export interface KeyState {
   opId: string;
   /** Members a wrap of this key was published for. */
   recipients: Set<string>;
+  /** Anyone a wrap reached in a *rejected* op (H1): holders without membership. */
+  leaked: Set<string>;
 }
 
 export type Rejection =
@@ -120,7 +132,8 @@ export type Rejection =
   | 'closed'
   | 'invite'
   | 'limit'
-  | 'key';
+  | 'key'
+  | 'fork';
 
 export interface TeamState {
   teamId: string;
@@ -143,9 +156,15 @@ export interface TeamState {
   missingKey: string[];
   /** Valid control ops, in fold order. */
   control: SignedOp[];
-  /** Valid data and ephemeral ops, in fold order. */
+  /** Valid data ops, in fold order (ephemeral ops are checked on read). */
   data: SignedOp[];
+  /** The author's role at each data op's position (review M4: authority is positional). */
+  roleAt: Map<string, Role>;
   rejected: Map<string, Rejection>;
+  /** Each author's canonical chain (`chain.ts`): the version vector and what peers serve. */
+  chains: Map<string, Chain>;
+  /** The last op folded (incremental appends must sort after it). */
+  head?: SignedOp;
 }
 
 /** The total order every peer folds in. */
@@ -168,8 +187,8 @@ function body(op: SignedOp, keys: readonly string[]): Body | undefined {
 interface Ctx {
   c: TeamCrypto;
   teamId: string;
-  removeCuts: ReadonlyMap<string, number>;
-  adminCuts: ReadonlyMap<string, number>;
+  removeCuts: ReadonlyMap<string, Anchor>;
+  adminCuts: ReadonlyMap<string, Anchor>;
   /** Join-proof verdicts by op id (two Ed25519 verifies each; cached across recomputes). */
   proofCache: Map<string, boolean>;
 }
@@ -192,7 +211,9 @@ function emptyState(teamId: string): TeamState {
     missingKey: [],
     control: [],
     data: [],
+    roleAt: new Map(),
     rejected: new Map(),
+    chains: new Map(),
   };
 }
 
@@ -217,27 +238,48 @@ function pickGenesis(c: TeamCrypto, teamId: string, ops: readonly SignedOp[]) {
   return candidates[0];
 }
 
+/** `[0]` (nothing seen) or `[seq, opIdAtSeq]`: where the target's history is pinned. */
+export function parseCut(value: unknown): Anchor | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const [seq, id] = value as unknown[];
+  if (value.length === 1 && seq === 0) return { seq: 0, id: '', stop: true };
+  if (value.length !== 2 || !isInt(seq, 1) || !isB64uLen(id, 32)) return undefined;
+  return { seq, id: id as string, stop: true };
+}
+
+/** The cut a remover signs: the target's canonical chain head as this peer sees it. */
+export function cutFor(s: TeamState, memberId: string): Json {
+  const ids = s.chains.get(memberId)?.ids ?? [];
+  const head = ids[ids.length - 1];
+  return head === undefined ? [0] : [ids.length, head];
+}
+
 /** Admin cuts can only be signed by the owner, who is always authoritative. */
-function collectAdminCuts(owner: string, ops: readonly SignedOp[]): Map<string, number> {
-  const cuts = new Map<string, number>();
-  for (const op of ops) {
-    if (op.env.au !== owner || (op.env.t !== 'm.update' && op.env.t !== 'm.remove')) continue;
+function collectAdminCuts(owner: string, ownerOps: readonly SignedOp[]): Map<string, Anchor> {
+  const cuts = new Map<string, Anchor>();
+  for (const op of ownerOps) {
+    if (op.env.t !== 'm.update' && op.env.t !== 'm.remove') continue;
     const b = op.env.b;
-    if (!isRecord(b) || !isMemberId(b['m']) || !isInt(b['cut'])) continue;
+    const cut = isRecord(b) ? parseCut(b['cut']) : undefined;
+    if (!isRecord(b) || !isMemberId(b['m']) || b['m'] === owner || cut === undefined) continue;
     if (op.env.t === 'm.update' && (b['r'] === undefined || b['r'] === 'admin')) continue;
     const prev = cuts.get(b['m']);
-    cuts.set(b['m'], prev === undefined ? b['cut'] : Math.min(prev, b['cut']));
+    if (prev === undefined || cut.seq < prev.seq) cuts.set(b['m'], { ...cut, stop: false });
   }
   return cuts;
 }
 
-function fold(
-  ctx: Ctx,
-  genesis: SignedOp,
-  sorted: readonly SignedOp[],
-): { state: TeamState; removeCuts: Map<string, number> } {
+/** A fold in progress: apply canonical ops in total order, then finalize. Resumable. */
+export interface Folder {
+  state: TeamState;
+  removeCuts: Map<string, Anchor>;
+  apply(op: SignedOp): void;
+  finalize(): void;
+}
+
+function makeFolder(ctx: Ctx, genesis: SignedOp): Folder {
   const s = emptyState(ctx.teamId);
-  const removeCuts = new Map<string, number>();
+  const removeCuts = new Map<string, Anchor>();
   const gb = genesis.env.b as Body;
   const owner = genesis.env.au;
   s.owner = owner;
@@ -261,116 +303,120 @@ function fold(
     createdAt: genesis.stamp,
     opId: genesis.id,
     recipients: new Set([owner]),
+    leaked: new Set(),
   });
   s.keyOrder.push(k0);
   s.control.push(genesis);
+  s.head = genesis;
 
-  const reject = (op: SignedOp, why: Rejection) => s.rejected.set(op.id, why);
+  const reject = (op: SignedOp, why: Rejection) => {
+    s.rejected.set(op.id, why);
+  };
   let active = 1;
-  const activeCount = () => active;
-  const adminOk = (m: MemberState, sq: number) => {
-    if (!isAdminRole(m.role) || sq <= (m.adminFrom ?? 0)) return false;
-    const cut = ctx.adminCuts.get(m.id);
-    return m.role === 'owner' || cut === undefined || sq <= cut;
-  };
-  const groupsExist = (links: readonly GroupLink[]) => links.every((l) => s.groups.has(l.g));
-  /** Validate wraps: every recipient active (or `extra`), every key known (or `newKey`). */
-  const wrapsOk = (kw: KeyWraps, extra?: string, newKey = false) => {
-    const cov = wrapCoverage(kw);
-    for (const m of cov.members) {
-      if (m !== extra && s.members.get(m)?.status !== 'active') return false;
-    }
-    if (newKey) return cov.keyIds.size === 1 && !s.keys.has([...cov.keyIds][0]!);
-    return [...cov.keyIds].every((k) => s.keys.has(k));
-  };
-  const addRecipients = (kw: KeyWraps) => {
-    for (const [m, k] of kw.w) s.keys.get(k)?.recipients.add(m);
+  const helpers: Helpers = {
+    adminOk: (m, sq) => {
+      if (!isAdminRole(m.role) || sq <= (m.adminFrom ?? 0)) return false;
+      const cut = ctx.adminCuts.get(m.id);
+      return m.role === 'owner' || cut === undefined || sq <= cut.seq;
+    },
+    groupsExist: (links) => links.every((l) => s.groups.has(l.g)),
+    wrapsOk: (kw, extra, newKey = false) => {
+      const cov = wrapCoverage(kw);
+      for (const m of cov.members) {
+        if (m !== extra && s.members.get(m)?.status !== 'active') return false;
+      }
+      if (newKey) return cov.keyIds.size === 1 && !s.keys.has([...cov.keyIds][0]!);
+      return [...cov.keyIds].every((k) => s.keys.has(k));
+    },
+    addRecipients: (kw) => {
+      for (const [m, k] of kw.w) s.keys.get(k)?.recipients.add(m);
+    },
+    activeCount: () => active,
+    removeCuts,
   };
 
-  for (const op of sorted) {
-    if (op === genesis) continue;
+  /**
+   * H1: a rejected op from an active member may still have handed a key to
+   * someone (the loser of an invite race holds a wrap of the live key). Its
+   * recipients count as key holders, so the key is unsafe unless they are
+   * active members, which forces a rotation.
+   */
+  const rejectControl = (op: SignedOp, why: Rejection) => {
+    reject(op, why);
+    const kw = isRecord(op.env.b) ? parseKeyWraps(op.env.b['kw']) : undefined;
+    if (kw === undefined) return;
+    for (const [m, k] of kw.w) s.keys.get(k)?.leaked.add(m);
+  };
+
+  function apply(op: SignedOp): void {
+    if (op === genesis) return;
+    s.head = op;
     const { env } = op;
-    if (env.t === 'm.genesis') {
-      reject(op, 'duplicate-genesis');
-      continue;
-    }
-    if (compareOps(op, genesis) < 0) {
-      reject(op, 'before-genesis');
-      continue;
-    }
+    if (env.t === 'm.genesis') return reject(op, 'duplicate-genesis');
+    if (compareOps(op, genesis) < 0) return reject(op, 'before-genesis');
     const cut = ctx.removeCuts.get(env.au);
-    if (cut !== undefined && env.sq > cut) {
-      reject(op, 'removed');
-      continue;
-    }
+    if (cut !== undefined && env.sq > cut.seq) return reject(op, 'removed');
     const author = s.members.get(env.au);
     if (author === undefined || author.status !== 'active') {
-      reject(op, author === undefined ? 'not-member' : 'removed');
-      continue;
+      return reject(op, author === undefined ? 'not-member' : 'removed');
     }
-    if (s.closedAt !== undefined) {
-      reject(op, 'closed');
-      continue;
-    }
-    if (env.t !== 't.extend' && op.stamp.wall > s.expiresAt) {
-      reject(op, 'expired');
-      continue;
-    }
-
+    if (s.closedAt !== undefined) return rejectControl(op, 'closed');
+    if (env.t !== 't.extend' && op.stamp.wall > s.expiresAt) return rejectControl(op, 'expired');
     if (!isControlType(env.t)) {
-      // Data / ephemeral op.
-      if (!canWriteData(author.role, env.t)) {
-        reject(op, 'forbidden');
-        continue;
-      }
-      if (env.k !== undefined && !s.keys.get(env.k)?.recipients.has(env.au)) {
-        reject(op, 'key');
-        continue;
-      }
-      if (env.x !== undefined && env.x.w.some(([m]) => s.members.get(m)?.status !== 'active')) {
-        reject(op, 'unknown-target');
-        continue;
-      }
-      const aud = env.aud === undefined ? undefined : parseAudience(env.aud);
-      if (env.pr !== undefined && !canUsePriority(author, env.pr, aud, s.groups)) {
-        reject(op, 'forbidden');
-        continue;
-      }
+      const why = dataRejection(s, op, author);
+      if (why !== undefined) return reject(op, why);
       s.data.push(op);
-      continue;
+      s.roleAt.set(op.id, author.role);
+      return;
     }
-
-    const why = applyControl(ctx, s, op, author, {
-      adminOk,
-      groupsExist,
-      wrapsOk,
-      addRecipients,
-      activeCount,
-      removeCuts,
-    });
-    if (why === undefined) {
-      s.control.push(op);
-      if (env.t === 'm.add' || env.t === 'm.admit') active++;
-      else if (env.t === 'm.remove') active--;
-    } else reject(op, why);
+    const why = applyControl(ctx, s, op, author, helpers);
+    if (why !== undefined) return rejectControl(op, why);
+    s.control.push(op);
+    if (env.t === 'm.add' || env.t === 'm.admit') active++;
+    else if (env.t === 'm.remove') active--;
   }
 
-  // Key safety: the newest key is usable only if nobody it reached was removed.
-  const newest = s.keyOrder[s.keyOrder.length - 1];
-  const newestKey = newest === undefined ? undefined : s.keys.get(newest);
-  const leaked =
-    newestKey === undefined ||
-    [...newestKey.recipients].some((m) => s.members.get(m)?.status !== 'active');
-  s.needsRotation = leaked;
-  s.sendKeyId = leaked ? undefined : newest;
-  s.missingKey =
-    newestKey === undefined
-      ? []
-      : [...s.members.values()]
-          .filter((m) => m.status === 'active' && !newestKey.recipients.has(m.id))
-          .map((m) => m.id)
-          .sort();
-  return { state: s, removeCuts };
+  function finalize(): void {
+    const newest = s.keyOrder[s.keyOrder.length - 1];
+    const key = newest === undefined ? undefined : s.keys.get(newest);
+    const holders = key === undefined ? [] : [...key.recipients, ...key.leaked];
+    const unsafe = key === undefined || holders.some((m) => s.members.get(m)?.status !== 'active');
+    s.needsRotation = unsafe;
+    s.sendKeyId = unsafe ? undefined : newest;
+    s.missingKey =
+      key === undefined
+        ? []
+        : [...s.members.values()]
+            .filter((m) => m.status === 'active' && !key.recipients.has(m.id))
+            .map((m) => m.id)
+            .sort();
+  }
+
+  return { state: s, removeCuts, apply, finalize };
+}
+
+/** Why a data or ephemeral op from an active `author` is invalid at this point, if it is. */
+function dataRejection(s: TeamState, op: SignedOp, author: MemberState): Rejection | undefined {
+  const { env } = op;
+  if (!canWriteData(author.role, env.t)) return 'forbidden';
+  if (env.k !== undefined && !s.keys.get(env.k)?.recipients.has(env.au)) return 'key';
+  if (env.x !== undefined && env.x.w.some(([m]) => s.members.get(m)?.status !== 'active')) {
+    return 'unknown-target';
+  }
+  const aud = env.aud === undefined ? undefined : parseAudience(env.aud);
+  if (env.pr !== undefined && !canUsePriority(author, env.pr, aud, s.groups)) return 'forbidden';
+  return undefined;
+}
+
+/**
+ * Ephemeral ops (positions) stay out of the fold (review M2): they are checked
+ * against the current resolved state when read, with the data-op rules.
+ */
+export function admitEphemeral(s: TeamState, op: SignedOp): boolean {
+  const author = s.members.get(op.env.au);
+  if (author?.status !== 'active' || s.closedAt !== undefined) return false;
+  if (op.stamp.wall > s.expiresAt) return false;
+  return dataRejection(s, op, author) === undefined;
 }
 
 interface Helpers {
@@ -379,7 +425,7 @@ interface Helpers {
   wrapsOk: (kw: KeyWraps, extra?: string, newKey?: boolean) => boolean;
   addRecipients: (kw: KeyWraps) => void;
   activeCount: () => number;
-  removeCuts: Map<string, number>;
+  removeCuts: Map<string, Anchor>;
 }
 
 function applyControl(
@@ -465,7 +511,8 @@ function applyControl(
         return 'invalid-body';
       }
       if (role === undefined && groups === undefined) return 'invalid-body';
-      if (b['cut'] !== undefined && !isInt(b['cut'])) return 'invalid-body';
+      const cut = b['cut'] === undefined ? undefined : parseCut(b['cut']);
+      if (b['cut'] !== undefined && cut === undefined) return 'invalid-body';
       if (b['from'] !== undefined && !isInt(b['from'])) return 'invalid-body';
       const target = s.members.get(b['m']);
       if (target === undefined || target.status !== 'active') return 'unknown-target';
@@ -474,9 +521,9 @@ function applyControl(
       if (groups && !h.groupsExist(groups)) return 'unknown-target';
       if (role !== undefined && role !== target.role) {
         const demotingAdmin = target.role === 'admin' && role !== 'admin';
-        if (demotingAdmin && !isInt(b['cut'])) return 'invalid-body';
+        if (demotingAdmin && cut === undefined) return 'invalid-body';
         if (role === 'admin' && target.adminCut !== undefined) return 'forbidden';
-        if (demotingAdmin) target.adminCut = b['cut'] as number;
+        if (demotingAdmin) target.adminCut = cut!.seq;
         if (role === 'admin') target.adminFrom = (b['from'] as number | undefined) ?? 0;
         target.role = role;
       }
@@ -485,15 +532,16 @@ function applyControl(
     }
     case 'm.remove': {
       const b = body(op, ['m', 'cut']);
-      if (!b || !isMemberId(b['m']) || !isInt(b['cut'])) return 'invalid-body';
+      const cut = parseCut(b?.['cut']);
+      if (!b || !isMemberId(b['m']) || cut === undefined) return 'invalid-body';
       const target = s.members.get(b['m']);
       if (target === undefined || target.status !== 'active') return 'unknown-target';
       if (!admin || !canManage(author.role, target.role)) return 'forbidden';
       target.status = 'removed';
       target.removedAt = stamp;
-      target.removeCut = b['cut'];
-      if (target.role === 'admin') target.adminCut = b['cut'];
-      h.removeCuts.set(target.id, b['cut']);
+      target.removeCut = cut.seq;
+      if (target.role === 'admin') target.adminCut = cut.seq;
+      h.removeCuts.set(target.id, cut);
       return undefined;
     }
     case 'i.create': {
@@ -585,6 +633,7 @@ function applyControl(
         createdAt: stamp,
         opId: op.id,
         recipients: new Set(),
+        leaked: new Set(),
       });
       s.keyOrder.push(keyId);
       h.addRecipients(kw);
@@ -608,9 +657,14 @@ function applyControl(
 }
 
 /**
- * Resolve the team from every op we hold (any order, duplicates allowed).
- * Pure and deterministic. Ops must already have passed `checkEnvelope` for
- * this team.
+ * Resolve the team from every logged op we hold (any order, duplicates and
+ * forks allowed). Pure and deterministic. Ops must already have passed
+ * `checkEnvelope` for this team. Ephemeral ops are ignored here (see
+ * {@link admitEphemeral}).
+ *
+ * Only each author's canonical chain is folded (`chain.ts`). Pass A finds the
+ * valid removals; pass B anchors the removed members' chains at their cuts
+ * and refolds, so backdated or forked ops are rejected wherever they sort.
  */
 export function resolveTeam(
   c: TeamCrypto,
@@ -618,24 +672,107 @@ export function resolveTeam(
   ops: readonly SignedOp[],
   options: ResolveOptions = {},
 ): TeamState {
-  const unique = [...new Map(ops.map((op) => [op.id, op])).values()].sort(compareOps);
-  const genesis = pickGenesis(c, teamId, unique);
+  return resolve(c, teamId, ops, options).state;
+}
+
+/** {@link resolveTeam}, keeping the folder so later ops can be appended ({@link canAppend}). */
+export function resolveFolder(
+  c: TeamCrypto,
+  teamId: string,
+  ops: readonly SignedOp[],
+  options: ResolveOptions = {},
+): { state: TeamState; folder?: Folder } {
+  return resolve(c, teamId, ops, options);
+}
+
+function resolve(
+  c: TeamCrypto,
+  teamId: string,
+  ops: readonly SignedOp[],
+  options: ResolveOptions,
+): { state: TeamState; folder?: Folder } {
+  const index = indexOps(ops);
+  const all: SignedOp[] = [];
+  for (const a of index.authors) {
+    for (let sq = 1; sq <= index.maxSeq(a); sq++) all.push(...index.candidates(a, sq));
+  }
+  const genesis = pickGenesis(c, teamId, all);
   if (genesis === undefined) {
     const s = emptyState(teamId);
-    for (const op of unique) s.rejected.set(op.id, 'no-genesis');
-    return s;
+    for (const op of all) s.rejected.set(op.id, 'no-genesis');
+    return { state: s };
   }
-  const adminCuts = collectAdminCuts(genesis.env.au, unique);
-  const base = {
-    c,
-    teamId,
-    adminCuts,
-    proofCache: options.proofCache ?? new Map<string, boolean>(),
+  const owner = genesis.env.au;
+  // The owner's chain starts at the chosen genesis: a second genesis the owner
+  // signed is a fork of their chain, never an alternative history.
+  const genesisAnchor: Anchor = { seq: 1, id: genesis.id, stop: false };
+  const ownerOps = canonicalChain(index, owner, genesisAnchor).ids.map((id) => index.get(id)!);
+  const adminCuts = collectAdminCuts(owner, ownerOps);
+  const proofCache = options.proofCache ?? new Map<string, boolean>();
+
+  const run = (removeCuts: Map<string, Anchor>): Folder => {
+    const chains = new Map<string, Chain>();
+    for (const a of index.authors) {
+      const anchor = a === owner ? genesisAnchor : (removeCuts.get(a) ?? adminCuts.get(a));
+      chains.set(a, canonicalChain(index, a, anchor));
+    }
+    const canonical = new Set([...chains.values()].flatMap((ch) => ch.ids));
+    const folder = makeFolder({ c, teamId, removeCuts, adminCuts, proofCache }, genesis);
+    folder.state.chains = chains;
+    for (const op of all) {
+      if (canonical.has(op.id)) continue;
+      const cut = removeCuts.get(op.env.au);
+      folder.state.rejected.set(
+        op.id,
+        cut !== undefined && op.env.sq > cut.seq ? 'removed' : 'fork',
+      );
+    }
+    for (const op of all.filter((o) => canonical.has(o.id)).sort(compareOps)) folder.apply(op);
+    folder.finalize();
+    return folder;
   };
-  // Pass A finds the valid removals; pass B enforces their cuts on ops that sort earlier.
-  const passA = fold({ ...base, removeCuts: new Map() }, genesis, unique);
-  if (passA.removeCuts.size === 0) return passA.state; // nothing to enforce retroactively
-  return fold({ ...base, removeCuts: passA.removeCuts }, genesis, unique).state;
+  let folder = run(new Map());
+  if (folder.removeCuts.size > 0) {
+    const cuts = folder.removeCuts;
+    folder = run(cuts);
+    // Pass B's own removals are re-collected; keep enforcing pass A's (stable, see header).
+    for (const [k, v] of cuts) folder.removeCuts.set(k, v);
+  }
+  return { state: folder.state, folder };
+}
+
+/**
+ * Whether `op` can be appended to a resolved fold without refolding (review
+ * M2): it sorts after everything folded so far, extends its author's
+ * canonical chain by exactly one, and cannot change anything retroactively
+ * (no genesis, removal, role change or anchored author).
+ */
+export function canAppend(
+  state: TeamState,
+  op: SignedOp,
+  head = state.head,
+  ids: readonly string[] = state.chains.get(op.env.au)?.ids ?? [],
+): boolean {
+  const { env } = op;
+  if (head === undefined || compareOps(op, head) <= 0) return false;
+  if (env.sq === 0 || env.t === 'm.genesis' || env.t === 'm.remove' || env.t === 'm.update') {
+    return false;
+  }
+  const member = state.members.get(env.au);
+  if (member?.removeCut !== undefined || member?.adminCut !== undefined) return false;
+  return env.sq === ids.length + 1 && env.pv === ids[ids.length - 1];
+}
+
+/** Append ops that each passed {@link canAppend} (in order), then finalize once. */
+export function appendOps(folder: Folder, ops: readonly SignedOp[]): void {
+  const chains = folder.state.chains;
+  for (const op of ops) {
+    const ch = chains.get(op.env.au) ?? { ids: [], pinned: new Map<number, string>() };
+    ch.ids.push(op.id);
+    chains.set(op.env.au, ch);
+    folder.apply(op);
+  }
+  folder.finalize();
 }
 
 /** Active members, sorted by id. */

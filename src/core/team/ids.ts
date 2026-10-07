@@ -1,4 +1,4 @@
-import { concatBytes, fromB64uLen, isB64uLen, toB64u, utf8 } from './bytes';
+import { concatBytes, fromB64uLen, isB64uLen, toB64u } from './bytes';
 import { KEY_BYTES, label, type TeamCrypto } from './crypto';
 
 /**
@@ -60,13 +60,6 @@ export function isShortId(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
 }
 
-/**
- * A 6-digit code both phones show during a join so the people can compare
- * them out loud (Signal-style "safety number", short form). It commits to the
- * team and the joiner's key, so a swapped key shows a different code.
- */
-export function safetyCode(c: TeamCrypto, teamId: string, memberId: string): string {
-  const h = c.sha256(concatBytes(label('safety'), utf8(`${teamId}|${memberId}`)));
-  const n = ((h[0]! << 16) | (h[1]! << 8) | h[2]!) % 1_000_000;
-  return n.toString().padStart(6, '0');
-}
+// The join safety code lives on the sync session (`SyncSession.safetyCode`):
+// derived from the handshake's DH secret and a committed nonce, so a man in
+// the middle cannot grind it offline (review M3).

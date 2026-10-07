@@ -1,5 +1,4 @@
-import { concatBytes, toB64u, utf8 } from './bytes';
-import { label } from './crypto';
+import { toB64u, utf8 } from './bytes';
 import { canonicalize } from './canonical';
 import { makeJoinProof } from './invite';
 import { TeamReplica } from './replica';
@@ -201,38 +200,45 @@ describe('joining over the LAN', () => {
     expect(closedWhy(link.events.b)).toEqual(['auth']);
   });
 
-  it('a member relaying a handshake cannot splice in its own identity (SIGMA MAC)', () => {
+  it('identities never travel in clear, and an injected hi3 is refused', () => {
     const { w, bob } = twoMembers();
     const mallory = device();
     addMember(w.root, mallory, 'member', T0 + 3);
     const { session: a, step } = SyncSession.initiate(c, bob);
     const b = SyncSession.respond(c, w.root);
     const hi2 = b.receive(step.send[0]!, T0 + MIN).send[0]!;
-    const hi3 = JSON.parse(new TextDecoder().decode(a.receive(hi2, T0 + MIN).send[0]!)) as Record<
-      string,
-      string
-    >;
-    // Mallory re-signs Bob's hi3 as herself (she can compute T2 from the clear hi1/hi2).
-    const hi1 = JSON.parse(new TextDecoder().decode(step.send[0]!)) as Record<string, string>;
-    const h2 = JSON.parse(new TextDecoder().decode(hi2)) as Record<string, string>;
-    const t2 = c.sha256(
-      concatBytes(
-        label('hs2'),
-        utf8(canonicalize(hi1)!),
-        utf8(canonicalize({ e: h2['e'], id: h2['id'] })!),
-      ),
-    );
-    const spliced: Record<string, string> = { t: 'hi3', id: mallory.id, mc: hi3['mc']! };
-    const t3 = c.sha256(concatBytes(label('hs3'), t2, utf8(canonicalize(spliced)!)));
-    spliced['sg'] = toB64u(c.ed25519.sign(t3, mallory.keys.signSecret));
-    const r = b.receive(utf8(canonicalize(spliced)!), T0 + MIN);
+    const hi3 = a.receive(hi2, T0 + MIN).send[0]!;
+    const wire = [step.send[0]!, hi2, hi3].map((f) => new TextDecoder().decode(f)).join('');
+    expect(wire).not.toContain(bob.id);
+    expect(wire).not.toContain(w.owner.id);
+    // Mallory, on the path, replaces hi3 with her own: she can't derive the hello key.
+    const forged = { t: 'hi3', x: toB64u(c.randomBytes(200)) };
+    const r = b.receive(utf8(canonicalize(forged)!), T0 + MIN);
     expect(closedWhy(r.events)).toEqual(['auth']);
-    expect(strikes(r.events)).toEqual(['signature']);
+    expect(strikes(r.events)).toEqual(['decrypt']);
+  });
+
+  it('safety code: equal on both ends of a session, independent across a MITM’s two sessions (M3)', () => {
+    const w = newWorld();
+    const inv = invite(w.root, T0 + 1);
+    const j = device();
+    const joiner = new TeamReplica(c, w.teamId, j.keys);
+    const direct = connect(joiner, w.root, T0 + MIN, { join: makeJoinProof(c, inv.token, j.keys) });
+    expect(direct.a.safetyCode).toMatch(/^\d{6}$/);
+    expect(direct.a.safetyCode).toBe(direct.b.safetyCode);
+    // A man in the middle runs two sessions; each code is fresh randomness (1 in 10^6 to match).
+    const codes = new Set<string>();
+    for (let i = 0; i < 20; i++) {
+      const { w: w2, bob } = twoMembers();
+      const l = connect(bob, w2.root, T0 + MIN);
+      codes.add(l.a.safetyCode!);
+    }
+    expect(codes.size).toBeGreaterThan(18);
   });
 
   it('a removed member can no longer open sessions', () => {
     const { w, bob } = twoMembers();
-    w.root.control(T0 + 5, 'm.remove', { m: bob.id, cut: 0 });
+    w.root.control(T0 + 5, 'm.remove', { m: bob.id, cut: [0] });
     const link = connect(bob, w.root, T0 + MIN);
     expect(closedWhy(link.events.b)).toEqual(['not-member']);
   });

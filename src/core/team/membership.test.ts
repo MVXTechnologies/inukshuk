@@ -5,6 +5,7 @@ import { newTeamKey } from './keys';
 import {
   activeMembers,
   compareOps,
+  cutFor,
   DEFAULT_TEAM_LIFETIME_MS,
   isReadOnly,
   MAX_TEAM_LIFETIME_MS,
@@ -33,7 +34,14 @@ const msg = (r: TeamReplica, now: number, tx: string) =>
 
 /** A writer for `r`'s device whose clock starts at `wall` (to sign backdated ops). */
 const backdated = (r: TeamReplica, wall: number) =>
-  new OpWriter(c, r.keys, r.teamId, r.writer.cursor.seq, { wall, counter: 0 });
+  new OpWriter(
+    c,
+    r.keys,
+    r.teamId,
+    r.writer.cursor.seq,
+    { wall, counter: 0 },
+    r.writer.cursor.prev,
+  );
 
 describe('genesis', () => {
   it('makes the creator the owner, with a usable key and the default 14-day lifetime', () => {
@@ -64,7 +72,9 @@ describe('genesis', () => {
     const dup = new OpWriter(c, w.root.keys, w.teamId, 0, { wall: T0 + MIN, counter: 0 });
     const second = dup.control(T0 + MIN, 'm.genesis', ops(w.root)[0]!.env.b!);
     const s = resolveTeam(c, w.teamId, [...ops(w.root), second]);
-    expect(s.rejected.get(second.id)).toBe('duplicate-genesis');
+    // Same author, same seq: a fork of the owner's chain; never a second team.
+    expect(s.rejected.get(second.id)).toBe('fork');
+    expect(s.genesis?.id).toBe(ops(w.root)[0]!.id);
   });
 });
 
@@ -99,9 +109,9 @@ describe('membership by admins', () => {
     const r1 = joinReplica(w, a1, w.root, T0 + 3);
     const mint = addMember(r1, device(), 'admin', T0 + 4);
     expect(reason(r1, mint)).toBe('forbidden');
-    const demote = r1.control(T0 + 5, 'm.update', { m: a2.id, r: 'member', cut: 0 });
+    const demote = r1.control(T0 + 5, 'm.update', { m: a2.id, r: 'member', cut: [0] });
     expect(reason(r1, demote)).toBe('forbidden');
-    const kickOwner = r1.control(T0 + 6, 'm.remove', { m: w.owner.id, cut: 1 });
+    const kickOwner = r1.control(T0 + 6, 'm.remove', { m: w.owner.id, cut: [0] });
     expect(reason(r1, kickOwner)).toBe('forbidden');
   });
 
@@ -137,7 +147,7 @@ describe('removal, cuts and key rotation', () => {
     expect(msg(re, T0 + 4, 'hi from eve')).toBeDefined();
     exchange(w.root, re, T0 + 5);
 
-    w.root.control(T0 + 6, 'm.remove', { m: eve.id, cut: re.versionVector()[eve.id] ?? 0 });
+    w.root.control(T0 + 6, 'm.remove', { m: eve.id, cut: cutFor(w.root.state, eve.id) });
     expect(w.root.state.needsRotation).toBe(true);
     expect(w.root.sendKey()).toBeUndefined();
     expect(msg(w.root, T0 + 7, 'blocked')).toBeUndefined(); // fail closed
@@ -163,7 +173,7 @@ describe('removal, cuts and key rotation', () => {
     const eve = device();
     addMember(w.root, eve, 'member', T0 + 1);
     const re = joinReplica(w, eve, w.root, T0 + 2);
-    w.root.control(T0 + 10 * MIN, 'm.remove', { m: eve.id, cut: 0 });
+    w.root.control(T0 + 10 * MIN, 'm.remove', { m: eve.id, cut: [0] });
     // Eve signs a message dated before her removal, with her next seq (1 > cut 0).
     const sneaky = backdated(re, T0 + 3).data(
       T0 + 3,
@@ -186,7 +196,7 @@ describe('removal, cuts and key rotation', () => {
     const ra = joinReplica(w, adm, w.root, T0 + 2);
     const legit = addMember(ra, device(), 'member', T0 + 3); // seq 1
     exchange(w.root, ra, T0 + 4);
-    w.root.control(T0 + 10 * MIN, 'm.update', { m: adm.id, r: 'member', cut: 1 });
+    w.root.control(T0 + 10 * MIN, 'm.update', { m: adm.id, r: 'member', cut: [1, legit.id] });
     const late = backdated(ra, T0 + 5).control(
       T0 + 5,
       'm.add',
@@ -221,7 +231,7 @@ describe('removal, cuts and key rotation', () => {
       const r2 = joinReplica(w, a2, w.root, T0 + 4);
       const tRemove = removalFirst ? T0 + MIN : T0 + 2 * MIN;
       const tUpdate = removalFirst ? T0 + 2 * MIN : T0 + MIN;
-      r1.control(tRemove, 'm.remove', { m: m.id, cut: 0 });
+      r1.control(tRemove, 'm.remove', { m: m.id, cut: [0] });
       r2.control(tUpdate, 'm.update', { m: m.id, r: 'guest' });
       exchange(r1, r2, T0 + 3 * MIN);
       for (const r of [r1, r2]) expect(r.state.members.get(m.id)?.status).toBe('removed');
@@ -239,13 +249,13 @@ describe('removal, cuts and key rotation', () => {
     addMember(w.root, y, 'member', T0 + 3);
     const r1 = joinReplica(w, a1, w.root, T0 + 4);
     // Owner removes X and rotates (still including Y); admin removes Y and rotates (still including X).
-    w.root.control(T0 + MIN, 'm.remove', { m: x.id, cut: 0 });
+    w.root.control(T0 + MIN, 'm.remove', { m: x.id, cut: [0] });
     w.root.control(
       T0 + MIN + 1,
       'k.rotate',
       rotateBody(c, w.teamId, activeMembers(w.root.state)).body,
     );
-    r1.control(T0 + MIN, 'm.remove', { m: y.id, cut: 0 });
+    r1.control(T0 + MIN, 'm.remove', { m: y.id, cut: [0] });
     r1.control(T0 + MIN + 2, 'k.rotate', rotateBody(c, w.teamId, activeMembers(r1.state)).body);
     exchange(w.root, r1, T0 + 2 * MIN);
     expect(w.root.state.needsRotation).toBe(true);
@@ -368,10 +378,17 @@ describe('invites and admission', () => {
       error: 'expired',
     });
     // …and an admit stamped after expiry is refused by every peer's fold.
-    const late = new OpWriter(c, w.root.keys, w.teamId, w.root.writer.cursor.seq, {
-      wall: T0 + 2 * DAY,
-      counter: 0,
-    }).control(
+    const late = new OpWriter(
+      c,
+      w.root.keys,
+      w.teamId,
+      w.root.writer.cursor.seq,
+      {
+        wall: T0 + 2 * DAY,
+        counter: 0,
+      },
+      w.root.writer.cursor.prev,
+    ).control(
       T0 + 2 * DAY,
       'm.admit',
       admitBody(c, w.teamId, makeJoinProof(c, inv.token, j.keys), w.root.sendKey()!),
@@ -454,7 +471,7 @@ describe('determinism', () => {
     w.root.control(T0 + 5, 'g.set', { id: 'sar' });
     exchange(w.root, r1, T0 + 6);
     r1.control(T0 + 7, 'm.update', { m: bob.id, g: [{ g: 'sar', lead: true }] });
-    w.root.control(T0 + 7, 'm.remove', { m: eve.id, cut: 0 });
+    w.root.control(T0 + 7, 'm.remove', { m: eve.id, cut: [0] });
     w.root.control(T0 + 8, 'k.rotate', rotateBody(c, w.teamId, activeMembers(w.root.state)).body);
     exchange(w.root, r1, T0 + 9);
     const all = ops(w.root);

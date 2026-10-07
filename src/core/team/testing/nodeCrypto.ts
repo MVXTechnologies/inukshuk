@@ -24,6 +24,7 @@ import {
 } from 'node:crypto';
 
 import type { TeamCrypto } from '../crypto';
+import { isSmallOrderKey } from '../nobleCrypto';
 
 const ED_PKCS8 = Buffer.from('302e020100300506032b657004220420', 'hex');
 const ED_SPKI = Buffer.from('302a300506032b6570032100', 'hex');
@@ -106,7 +107,9 @@ export const nodeCrypto: TeamCrypto = {
   ed25519: {
     publicKey: (seed) => rawPublic(createPublicKey(edPriv(seed))),
     sign: (msg, seed) => u8(sign(null, msg, edPriv(seed))),
+    // OpenSSL accepts small-order keys; the protocol requires refusing them.
     verify: (sig, msg, pub) =>
+      !isSmallOrderKey(pub) &&
       verify(
         null,
         msg,

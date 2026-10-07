@@ -1,35 +1,37 @@
+import { own } from './crdt';
 import { expiresAt, isEphemeralType, type SignedOp } from './envelope';
 import { compareStamp } from './hlc';
 
 /**
  * The local op store (#589), in memory. The data layer persists the same
- * records (append-only segments per author); this class is the logic it
- * mirrors and what the sync tests run against.
+ * records; this class is the logic it mirrors.
  *
- * - **Logged ops** are keyed by id and by `(author, seq)`. A second, different
- *   op for an `(author, seq)` already held is **equivocation** (a member
- *   signing two histories): the first one stays, the pair is kept as evidence
- *   for the admins (the fix is removing that member).
- * - **Version vector** = per author, the highest `seq` such that 1…seq are all
- *   held. Gaps (relayed ops arriving out of order) are fine: the vector just
- *   doesn't advance past them, so the next sync asks again.
- * - **Ephemeral ops** (`pos`) have `seq` 0, are never in the vector, and only
- *   the newest unexpired one per (author, type) is kept.
+ * - **Logged ops** are kept by id and as *candidates* per `(author, seq)`.
+ *   Normally there is one. Two or more means the author signed two histories
+ *   (**equivocation**); every signed candidate is kept as proof, up to
+ *   {@link MAX_FORKS} per seq. Which candidate counts is decided by the
+ *   per-author hash chain (`chain.ts`), not by arrival order, so every peer
+ *   holding the same ops agrees.
+ * - **Ephemeral ops** (`pos`) have `seq` 0 and no chain. Only the newest
+ *   unexpired one per (author, type) is kept.
  */
-export type InsertResult = 'new' | 'duplicate' | 'equivocation' | 'stale';
+export type InsertResult = 'new' | 'duplicate' | 'fork' | 'stale' | 'full';
 
 export type VersionVector = Record<string, number>;
 
+/** Candidates kept per (author, seq); a pinned (chain-required) op is always admitted. */
+export const MAX_FORKS = 4;
+
 export class OpLog {
   private readonly byId = new Map<string, SignedOp>();
-  private readonly bySeq = new Map<string, Map<number, string>>();
-  private readonly vv = new Map<string, number>();
+  private readonly bySeq = new Map<string, Map<number, string[]>>();
   private readonly ephemeral = new Map<string, SignedOp>();
   private loggedBytes = 0;
-  /** `[keptOpId, conflictingOpId]` pairs. */
+  /** `[firstOpId, conflictingOpId]`: both signed ops stay retrievable with `get`. */
   readonly equivocations: [string, string][] = [];
 
-  insert(op: SignedOp, now: number): InsertResult {
+  /** `pinned`: the id the author's anchored chain requires at this seq, if known. */
+  insert(op: SignedOp, now: number, pinned?: string): InsertResult {
     const { env } = op;
     if (isEphemeralType(env.t)) {
       const exp = expiresAt(env);
@@ -43,21 +45,20 @@ export class OpLog {
     }
     if (this.byId.has(op.id)) return 'duplicate';
     let seqs = this.bySeq.get(env.au);
-    const held = seqs?.get(env.sq);
-    if (held !== undefined) {
-      this.equivocations.push([held, op.id]);
-      return 'equivocation';
-    }
     if (seqs === undefined) {
       seqs = new Map();
       this.bySeq.set(env.au, seqs);
     }
-    seqs.set(env.sq, op.id);
+    const cands = seqs.get(env.sq) ?? [];
+    if (cands.length >= MAX_FORKS && op.id !== pinned) return 'full';
+    cands.push(op.id);
+    seqs.set(env.sq, cands);
     this.byId.set(op.id, op);
     this.loggedBytes += op.bytes;
-    let top = this.vv.get(env.au) ?? 0;
-    while (seqs.has(top + 1)) top++;
-    this.vv.set(env.au, top);
+    if (cands.length > 1) {
+      this.equivocations.push([cands[0]!, op.id]);
+      return 'fork';
+    }
     return 'new';
   }
 
@@ -69,9 +70,14 @@ export class OpLog {
     return this.byId.get(id);
   }
 
-  /** Held seq for an author, if any. */
-  idAt(author: string, seq: number): string | undefined {
-    return this.bySeq.get(author)?.get(seq);
+  /** Every candidate held for one author and seq. */
+  candidates(author: string, seq: number): SignedOp[] {
+    return (this.bySeq.get(author)?.get(seq) ?? []).map((id) => this.byId.get(id)!);
+  }
+
+  maxSeq(author: string): number {
+    const seqs = this.bySeq.get(author);
+    return seqs === undefined ? 0 : Math.max(0, ...seqs.keys());
   }
 
   logged(): SignedOp[] {
@@ -87,39 +93,21 @@ export class OpLog {
     return [...this.ephemeral.values()];
   }
 
-  versionVector(): VersionVector {
-    return Object.fromEntries(
-      [...this.vv].filter(([, n]) => n > 0).sort(([a], [b]) => (a < b ? -1 : 1)),
-    );
-  }
-
-  /** Ops `from..to` (inclusive) of one author that we hold, in seq order. */
-  range(author: string, from: number, to: number): SignedOp[] {
-    const seqs = this.bySeq.get(author);
-    if (seqs === undefined) return [];
-    const out: SignedOp[] = [];
-    for (let s = Math.max(1, from); s <= to; s++) {
-      const id = seqs.get(s);
-      if (id === undefined) break; // ranges are contiguous
-      out.push(this.byId.get(id)!);
-    }
-    return out;
-  }
-
-  /** Forget a removed member's ops past their cut (never stored again either: see replica). */
+  /** Forget a removed member's ops past their cut. */
   dropAbove(author: string, cut: number): number {
     const seqs = this.bySeq.get(author);
     if (seqs === undefined) return 0;
     let dropped = 0;
-    for (const [s, id] of [...seqs]) {
+    for (const [s, ids] of [...seqs]) {
       if (s <= cut) continue;
-      const op = this.byId.get(id);
-      if (op !== undefined) this.loggedBytes -= op.bytes;
-      this.byId.delete(id);
+      for (const id of ids) {
+        const op = this.byId.get(id);
+        if (op !== undefined) this.loggedBytes -= op.bytes;
+        this.byId.delete(id);
+        dropped++;
+      }
       seqs.delete(s);
-      dropped++;
     }
-    this.vv.set(author, Math.min(this.vv.get(author) ?? 0, cut));
     return dropped;
   }
 
@@ -142,8 +130,8 @@ export function missingRanges(
 ): [string, number, number][] {
   const out: [string, number, number][] = [];
   for (const author of Object.keys(theirs).sort()) {
-    const have = mine[author] ?? 0;
-    const offer = theirs[author] ?? 0;
+    const have = own(mine, author) ?? 0;
+    const offer = own(theirs, author) ?? 0;
     if (offer > have) out.push([author, have + 1, offer]);
   }
   return out;

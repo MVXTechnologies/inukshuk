@@ -22,7 +22,7 @@ persistence, no UI and no native CSPRNG binding yet (§4.3). Research and owner 
 | Invites for SMS, link and QR (`invite.ts`)                                                                        | UI, notifications, map layer                         |
 | CRDTs and the data view (`crdt.ts`, `data.ts`, `photos.ts`)                                                       | Compaction and snapshots                             |
 | Notification routing (`notify.ts`)                                                                                |                                                      |
-| Op log and version vectors (`log.ts`), replica (`replica.ts`)                                                     |                                                      |
+| Op log, per-author hash chains and version vectors (`log.ts`, `chain.ts`), replica (`replica.ts`)                 |                                                      |
 | Sync session state machine, rate limits (`sync.ts`, `ratelimit.ts`)                                               |                                                      |
 
 Every module is pure: no React Native, Expo, timers, sockets or clocks.
@@ -169,28 +169,30 @@ in package.json:
 ### 5.2 Envelope (`envelope.ts`) — **frozen for v1**
 
 ```
-{ v:1, tm, au, sq, hc:[wallMs,counter], t,
-  b?, aud?, pr?, ttl?, k? | x?:{e, w:[[memberId, wrappedCek]…]}, n?, c?, sg }
+{ v:1, tm, au, sq, pv?, hc:[wallMs,counter], t,
+  b?, aud?, pr?, ttl?, k? | x?:{e, cc, w:[[memberId, wrappedCek]…]}, n?, c?, sg }
 ```
 
-| Field    | Meaning                                                                             |
-| -------- | ----------------------------------------------------------------------------------- |
-| `v`      | Protocol version (1)                                                                |
-| `tm`     | teamId: 16 bytes of `SHA-256(label ‖ ownerPub ‖ genesisNonce)`                      |
-| `au`     | Author memberId                                                                     |
-| `sq`     | Per-author sequence: 1, 2, 3… for logged ops, 0 for ephemeral ops                   |
-| `hc`     | HLC `[wall ms ≥ 2020, counter ≤ 65535]`                                             |
-| `t`      | Op type (§5.3)                                                                      |
-| `b`      | Control body, **in clear** (authority data every peer must check)                   |
-| `aud`    | Audience (§9), canonical form only                                                  |
-| `pr`     | Priority: 1 important, 2 urgent (`msg` only)                                        |
-| `ttl`    | Seconds, 1–86400, ephemeral ops only                                                |
-| `k`      | Group-mode key id (12-byte hash of the epoch key)                                   |
-| `x`      | Sealed mode: ephemeral X25519 key plus the content key wrapped per recipient (≤ 64) |
-| `n`, `c` | Nonce and ciphertext of the canonical-JSON body (data ops) or labels (control ops)  |
-| `sg`     | Ed25519 over `"inukshuk/team/v1/op\n" ‖ canonical(envelope − sg)`                   |
+| Field    | Meaning                                                                                                                                                                                       |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `v`      | Protocol version (1)                                                                                                                                                                          |
+| `tm`     | teamId: 16 bytes of `SHA-256(label ‖ ownerPub ‖ genesisNonce)`                                                                                                                                |
+| `au`     | Author memberId                                                                                                                                                                               |
+| `sq`     | Per-author sequence: 1, 2, 3… for logged ops, 0 for ephemeral ops                                                                                                                             |
+| `pv`     | Id of the author's previous logged op (seq − 1): a signed per-author hash chain. Required from seq 2, absent at seq 1 and on ephemeral ops                                                    |
+| `hc`     | HLC `[wall ms ≥ 2020, counter ≤ 65535]`                                                                                                                                                       |
+| `t`      | Op type (§5.3)                                                                                                                                                                                |
+| `b`      | Control body, **in clear** (authority data every peer must check)                                                                                                                             |
+| `aud`    | Audience (§9), canonical form only                                                                                                                                                            |
+| `pr`     | Priority: 1 important, 2 urgent (`msg` only)                                                                                                                                                  |
+| `ttl`    | Seconds, 1–86400, ephemeral ops only                                                                                                                                                          |
+| `k`      | Group-mode key id (12-byte hash of the epoch key). The body key is `HKDF(epochKey, teamId, "payload")`, never the epoch key itself                                                            |
+| `x`      | Sealed mode: ephemeral X25519 key `e`, key commitment `cc = HKDF(cek, teamId, "commit")`, and the content key wrapped per recipient (≤ 64). A recipient refuses a key that doesn't match `cc` |
+| `n`, `c` | Nonce and ciphertext of the canonical-JSON body (data ops) or labels (control ops)                                                                                                            |
+| `sg`     | Ed25519 over `"inukshuk/team/v1/op\n" ‖ canonical(envelope − sg)`                                                                                                                             |
 
-- **opId** = SHA-256 of those signing bytes. It is the dedupe id.
+- **opId** = SHA-256 of those signing bytes. It is the dedupe id and the `pv`
+  link of the author's next op.
 - **AEAD associated data** = `"…/aad\n" ‖ canonical(envelope − sg − c)`, so a
   ciphertext cannot be moved under another header.
 
@@ -209,21 +211,21 @@ Stateless admission (`checkEnvelope`) checks, in order:
 
 ### 5.3 Op types
 
-| Type                    | Class     | Who                                                | Body                                                                 |
-| ----------------------- | --------- | -------------------------------------------------- | -------------------------------------------------------------------- |
-| `m.genesis`             | control   | creator (becomes owner)                            | `{nonce, x, exp, kw}`, where `kw` wraps key 0 for the owner          |
-| `m.add`                 | control   | admin+                                             | `{m, x, r, g?, from?, kw}`                                           |
-| `m.admit`               | control   | member+ (an admin if the invite says `ap:'admin'`) | `{m, x, inv, ip, js, kw}` (join proof + key wrap)                    |
-| `m.update`              | control   | admin+                                             | `{m, r?, g?, cut?, from?}`; `cut` is required when demoting an admin |
-| `m.remove`              | control   | admin+                                             | `{m, cut}`                                                           |
-| `i.create` / `i.revoke` | control   | admin+                                             | `{inv, exp, max, r, g?, ap}` / `{inv}`                               |
-| `g.set` / `g.del`       | control   | admin+                                             | `{id, p?}` / `{id}`                                                  |
-| `t.extend` / `t.close`  | control   | admin+                                             | `{exp}` / `{}`                                                       |
-| `k.rotate`              | control   | admin+                                             | `{kw}` with exactly one new key                                      |
-| `k.share`               | control   | any member holding the key                         | `{kw}` re-wrapping existing keys for active members                  |
-| `e.set` / `e.del`       | data      | member+                                            | `{k:kind, id, f:{field:value}}` / `{k, id, o?}`                      |
-| `msg`                   | data      | guest+                                             | `{id, th, tx ≤ 4000, mn?}`                                           |
-| `pos`                   | ephemeral | guest+                                             | `{la, lo, ac?, el?, at}`                                             |
+| Type                    | Class     | Who                                                | Body                                                                               |
+| ----------------------- | --------- | -------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `m.genesis`             | control   | creator (becomes owner)                            | `{nonce, x, exp, kw}`, where `kw` wraps key 0 for the owner                        |
+| `m.add`                 | control   | admin+                                             | `{m, x, r, g?, from?, kw}`                                                         |
+| `m.admit`               | control   | member+ (an admin if the invite says `ap:'admin'`) | `{m, x, inv, ip, js, kw}` (join proof + key wrap)                                  |
+| `m.update`              | control   | admin+                                             | `{m, r?, g?, cut?, from?}`; `cut = [seq, opId]` is required when demoting an admin |
+| `m.remove`              | control   | admin+                                             | `{m, cut}` with `cut = [seq, opId]` (or `[0]`): the target's chain head            |
+| `i.create` / `i.revoke` | control   | admin+                                             | `{inv, exp, max, r, g?, ap}` / `{inv}`                                             |
+| `g.set` / `g.del`       | control   | admin+                                             | `{id, p?}` / `{id}`                                                                |
+| `t.extend` / `t.close`  | control   | admin+                                             | `{exp}` / `{}`                                                                     |
+| `k.rotate`              | control   | admin+                                             | `{kw}` with exactly one new key                                                    |
+| `k.share`               | control   | any member holding the key                         | `{kw}` re-wrapping existing keys for active members                                |
+| `e.set` / `e.del`       | data      | member+                                            | `{k:kind, id, f:{field:value}}` / `{k, id, o?}`                                    |
+| `msg`                   | data      | guest+                                             | `{id, th, tx ≤ 4000, mn?}`                                                         |
+| `pos`                   | ephemeral | guest+                                             | `{la, lo, ac?, el?, at}`                                                           |
 
 Byte caps:
 
@@ -270,18 +272,36 @@ Byte caps:
   concurrent role change in either order (tested both ways).
 - **Concurrent use of a single-use invite:** the first admission in the total
   order wins everywhere, and the other joiner is told "already used".
-- **Backdating defence (cuts).** HLCs are chosen by the author, so a removed
-  or demoted member could sign ops with old timestamps.
-  - `m.remove` and admin demotions carry `cut`: the target's last seq that the
-    remover had seen.
-  - The target's ops with `sq > cut` are rejected (removal) or lose admin
+- **Backdating and forking defence (cuts + chains, review H3).** HLCs are
+  chosen by the author, so a removed or demoted member could sign ops with
+  old timestamps, or a different op at an old seq.
+  - Every logged op names its predecessor (`pv`): each author's ops form a
+    signed hash chain. Only the **canonical chain** is folded (`chain.ts`).
+  - `m.remove` and admin demotions carry `cut = [seq, opId]`: the head of the
+    target's chain as the remover saw it (`cutFor`).
+  - The target's ops with `sq > seq` are rejected (removal) or lose admin
     authority (demotion), wherever their HLC sorts.
+  - At or below the cut, the chain is pinned top-down from `opId` through the
+    `pv` links. A different op at an old seq is never canonical, on any peer,
+    whatever arrived first.
+  - A peer that holds a forged op where the pinned chain needs another sees its
+    chain (and version vector) shrink, pulls the real op again, and admits it
+    even past the fork cap.
   - Work the target did that the remover had not yet received is lost. That is
     the price of determinism without a server.
   - Removal cuts are enforced in a second pass. Admin cuts can only come from
     the always-authoritative owner, so they are collected up front.
+  - The owner's chain is pinned at seq 1 to the chosen genesis, so a second
+    genesis the owner signs is a fork, never an alternative team.
   - A demoted admin cannot be re-promoted in v1.
   - A removed device cannot be re-added; it rejoins with a new key.
+- **Equivocation by an active member** (two ops for one seq): both signed ops
+  are kept as proof (at most 4 per seq). Until an admin removes the member
+  (which anchors their chain), the lowest op id wins at each seq. That is
+  deterministic for a given op set; the pushed evidence spreads both ops.
+- **Positional authority (review M4).** A data op's author role is recorded at
+  its fold position (`roleAt`). A delete made as a member stays forbidden after
+  a later promotion.
 - **Expiry and closing:**
   - `exp` defaults to genesis + 14 days (owner B6) and is capped at genesis +
     365 days.
@@ -311,6 +331,14 @@ memberId|keyId)`, then the key is sealed under `kek` with a zero nonce.
 - **Removal ⇒ rotation, fail closed.**
   - A key that reached a now-removed member is unsafe, so `sendKeyId` becomes
     undefined and `needsRotation` true.
+  - **A rejected op can still hand out a key (review H1).** An earlier version
+    of this document claimed the loser of an invite race never got the key.
+    That was wrong: the losing `m.admit` was delivered to its joiner with a wrap
+    of the live key. Now every rejected control op from an active member
+    counts its wrap recipients as key holders. That covers invite races,
+    admits after a revocation or expiry, and `k.share` to a stranger. If any
+    such holder isn't an active member, the key is unsafe and the team
+    rotates.
   - Group-mode writes return `undefined` until an admin rotates.
   - Two admins racing removals and rotations end up with no safe key, and the
     team waits for a fresh rotation (tested).
@@ -365,7 +393,7 @@ memberId|keyId)`, then the key is sealed under `kek` with a zero nonce.
 5. The joiner verifies the log it receives: the genesis must reproduce
    `teamId`, which commits to the owner key, and its peer must be an active
    member. A rogue LAN peer therefore cannot fake a team.
-6. Both phones can show `safetyCode(teamId, memberId)`, six digits, to compare
+6. Both phones can show the session's `safetyCode` (six digits, §10.1) to compare
    out loud.
 
 ### 8.3 What is secret
@@ -417,18 +445,36 @@ each phone _does_ with it.
 
 ## 10. Sync (`sync.ts`, `log.ts`, `replica.ts`)
 
-### 10.1 Handshake (SIGMA)
+### 10.1 Handshake (SIGMA, identities hidden)
 
 ```
-I → R  hi1 {v, tm, e:ephI, nn}
-R → I  hi2 {e:ephR, id:R, mc:MAC_r(R), sg:Sign_R(T2)}   T2 = H("hs2" ‖ hi1 ‖ {e,id})
-I → R  hi3 {id:I, mc:MAC_i(I), join?, sg:Sign_I(T3)}     T3 = H("hs3" ‖ T2 ‖ hi3−sg)
-DH = X25519(ephI, ephR);  MAC_x(id) = HMAC(HKDF(DH, T2, "confirm-x"), id)
-k_i2r, k_r2i = HKDF(DH, salt=T3, "i2r" / "r2i")
+I → R  hi1 {v, tm, e:ephI, cm:H("commit" ‖ nI)}
+R → I  hi2 {e:ephR, x:Seal_hs-r{id:R, mc:MAC_r(R), sg:Sign_R(T2)}}
+I → R  hi3 {x:Seal_hs-i{id:I, mc:MAC_i(I), nn:nI, join?, sg:Sign_I(T3)}}
+DH = X25519(ephI, ephR)    T1 = H("hs1" ‖ hi1 ‖ ephR)
+T2 = H("hs2" ‖ T1 ‖ {id:R})    T3 = H("hs3" ‖ T2 ‖ hi3 inner − sg)
+hs-r = HKDF(DH, T1, "hs-r"),  hs-i = HKDF(DH, T1, "hs-i")   (AAD T1 / T2)
+MAC_x(id) = HMAC(HKDF(DH, T2, "confirm-x"), id)
+k_i2r, k_r2i = HKDF(DH, T3, "i2r" / "r2i");  safetyCode = HKDF(DH, T3, "safety") mod 10^6
 ```
 
 - Signatures bind both ephemeral keys. The identity MACs stop a relay from
-  splicing its identity into someone else's session (tested).
+  splicing its identity into someone else's session.
+- **Identities are encrypted** (decided over documenting the leak). A passive
+  listener sees two ephemeral keys and the team id, never member ids or join
+  proofs (tested).
+  - **Residual:** an _active_ attacker who knows the team id (from an invite)
+    can open a session and learn one responder's member id, because the
+    responder identifies itself before the initiator does. It learns nothing
+    else.
+- **Safety code (review M3).**
+  - It is derived from this session's DH secret and full transcript.
+  - The initiator commits to a nonce (`cm`) before seeing the responder's key,
+    and reveals it last.
+  - So a man in the middle holding a stolen invite cannot grind the code
+    offline. Its two sessions produce independent random codes, matching with
+    probability 10⁻⁶.
+  - The old 20-bit code over `(teamId, memberId)` is removed.
 - The responder continues only with an active member, or with a joiner whose
   proof it can admit.
 - A member initiator refuses a responder that is not an active member. A
@@ -439,22 +485,33 @@ k_i2r, k_r2i = HKDF(DH, salt=T3, "i2r" / "r2i")
 
 ### 10.2 Anti-entropy
 
-- **Version vector** = per author, the highest contiguous seq held. Gaps are
-  fine: the next round asks again.
+- **Version vector** = per author, the length of the canonical chain held
+  (`chain.ts`). Gaps, or a fork where an anchor needs another op, shorten it,
+  and the next round asks again. A session runs at most 64 follow-up `want`
+  rounds per received vector.
 - **Pull.** Each side sends `vv`, then pulls what it lacks with `want` ranges:
   - at most 64 ranges per `want`, each at most 1024 seqs;
   - the owner and known members first, so membership arrives before the data
     that depends on it.
-- **Serving.** The serving side answers `ops` frames in the total order, up to
-  4096 ops per `want`, cut to the frame cap.
+- **Serving.** The serving side answers with its canonical chain ops, in total
+  order, up to 4096 ops per `want`, cut to the frame cap.
 - **Push.** New local or relayed ops are pushed unsolicited.
 - **Periodic re-sync.** `tick()` resends the vector.
 - **Ephemeral ops** (positions) are not in the vector. They are pushed on open
   and live, and the newest unexpired one per author is kept.
-- **Equivocation.** Two different ops for one (author, seq) are flagged. The
-  first is kept, and the pair is evidence for the admins.
-- **Quarantine.** Validly signed ops from not-yet-known authors are held: at
-  most 512 ops and 1 MiB. They are released when an admission arrives.
+- **Equivocation.** Two different ops for one (author, seq) are flagged. Both
+  signed ops are kept as proof (a provable equivocation); §6 says which counts.
+- **Quarantine.** Validly signed ops from not-yet-known authors are held:
+  - at most 512 ops and 1 MiB in total, and 64 per author;
+  - the oldest entry is evicted first.
+
+  They are released when an admission arrives.
+
+- **Clock (review M1).**
+  - Only ops the fold accepted move the local HLC, and never past now + 5 min.
+  - Acceptance still allows 24 h of skew.
+  - One far-future op therefore cannot drag honest clocks forward and get their
+    later ops refused.
 - **Relay.** Any phone relays any other's ops. The result is path-independent;
   a three-phone relay test covers it.
 
@@ -473,6 +530,13 @@ k_i2r, k_r2i = HKDF(DH, salt=T3, "i2r" / "r2i")
 - **Not strikes:** ops that are stale, expired, removed or skewed. Honest relays
   can carry those.
 - The sealed-frame fuzz and abuse tests assert rejection without exceptions.
+
+**Transport interface (for `modules/inukshuk-mesh`), unchanged by the review:**
+`SyncSession.initiate / respond / receive(frame, now) → Step / push / tick /
+close`. Frames are opaque bytes, delivered whole and in order. New: the
+read-only `session.safetyCode` after open. Changed on the wire: the `hi1`/`hi2`/
+`hi3` contents (§10.1), the envelope gains `pv` and `x.cc` (§5.2), and cuts are
+`[seq, opId]`. The transport never parses any of it.
 
 ## 11. Replicated data (`crdt.ts`, `data.ts`, `photos.ts`)
 
@@ -511,23 +575,70 @@ write to its id.
 
 ## 12. Security properties and threat model
 
-| Threat                                       | Protected?              | How / residual risk                                                                                                                                                  |
-| -------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Eavesdropper on the Wi-Fi or hotspot         | Yes                     | Session AEAD. Op bodies are encrypted end to end anyway                                                                                                              |
-| Outsider forges ops                          | Yes                     | Ed25519 on every op; invalid signatures are struck                                                                                                                   |
-| A member forges another's ops                | Yes                     | Same                                                                                                                                                                 |
-| A member escalates privileges                | Yes                     | The fold checks authority at each op's position                                                                                                                      |
-| Removed member keeps sending                 | Yes                     | `cut` + status; past the cut, ops are refused even backdated, and not stored                                                                                         |
-| Removed member reads new data                | Yes, after rotation     | Fail-closed send key. **Residual:** everything they already had stays on their phone (no remote wipe; the UI must say so)                                            |
-| Replay of ops                                | Yes                     | Content-addressed ids; per-author seq; equivocation detection                                                                                                        |
-| Replay of session frames                     | Yes                     | Counter nonces; the session dies                                                                                                                                     |
-| Clock skew                                   | Bounded                 | > 24 h ahead is refused. **Residual:** a member can backdate within the past (e.g. write into a closed or expired team's history), visible as an old stamp. Accepted |
-| Oversized or malformed payloads, floods      | Yes                     | Caps before parsing, token buckets, strikes, bans. Fuzz-tested: never throws                                                                                         |
-| Malicious member equivocates (two histories) | Detected, not prevented | Peers may diverge on that author's ops; evidence is surfaced so an admin removes them                                                                                |
-| Malicious admin                              | No (trusted role)       | Can add or remove members, rotate, close. The owner can demote them with a cut                                                                                       |
-| Lost phone                                   | Partly                  | Remove + rotate. The phone's local copy is only as safe as its lock screen and the secure store                                                                      |
-| Metadata to relays                           | Partly                  | Envelopes reveal team id, author key, type, size, timing, audience. Nostr will gift-wrap them (§13)                                                                  |
-| Forward secrecy inside an epoch              | No                      | See §7. Rotate on removal; MLS later                                                                                                                                 |
+| Threat                                               | Protected?               | How / residual risk                                                                                                                                                                                                       |
+| ---------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Eavesdropper on the Wi-Fi or hotspot                 | Yes                      | Session AEAD. Op bodies are encrypted end to end anyway                                                                                                                                                                   |
+| Outsider forges ops                                  | Yes                      | Ed25519 on every op; invalid signatures are struck                                                                                                                                                                        |
+| A member forges another's ops                        | Yes                      | Same                                                                                                                                                                                                                      |
+| A member escalates privileges                        | Yes                      | The fold checks authority at each op's position                                                                                                                                                                           |
+| Removed member keeps sending                         | Yes                      | `cut` + status; past the cut, ops are refused even backdated, and not stored                                                                                                                                              |
+| Removed member rewrites old history                  | Yes (H3)                 | The cut pins the hash chain; a different op at an old seq is never canonical, and peers re-pull the real one                                                                                                              |
+| Loser of an invite race / late admit keeps the key   | Yes, after rotation (H1) | Rejected wraps count as key holders, so the key is unsafe and the team rotates                                                                                                                                            |
+| Hostile field names (`toString`, `__proto__`…)       | Yes (H2)                 | Null-prototype dictionaries and own-property reads in every merge; fuzz-tested                                                                                                                                            |
+| MITM with a stolen invite during a join              | Detectable (M3)          | The 6-digit safety code is transcript-bound with a committed nonce: 10⁻⁶ chance to match                                                                                                                                  |
+| Small-order Ed25519 keys (forge-anything signatures) | Yes                      | Every implementation refuses small-order public keys (RFC vector test)                                                                                                                                                    |
+| Removed member reads new data                        | Yes, after rotation      | Fail-closed send key. **Residual:** everything they already had stays on their phone (no remote wipe; the UI must say so)                                                                                                 |
+| Replay of ops                                        | Yes                      | Content-addressed ids; per-author seq and hash chain; equivocation detection                                                                                                                                              |
+| Replay of session frames                             | Yes                      | Counter nonces; the session dies                                                                                                                                                                                          |
+| Clock skew                                           | Bounded                  | > 24 h ahead is refused; the local clock never leads by more than 5 min (M1). **Residual:** a member can backdate within the past (e.g. write into a closed or expired team's history), visible as an old stamp. Accepted |
+| Oversized or malformed payloads, floods              | Yes                      | Caps before parsing, token buckets, strikes, bans. Fuzz-tested: never throws                                                                                                                                              |
+| Malicious member equivocates (two histories)         | Detected, provable       | Both signed ops are kept and pushed; a deterministic rule picks one; removal anchors the chain. **Residual:** a member who signs more than 4 forks per seq can leave peers on different forks until removed               |
+| Malicious admin                                      | No (trusted role)        | Can add or remove members, rotate, close. The owner can demote them with a cut                                                                                                                                            |
+| Lost phone                                           | Partly                   | Remove + rotate. The phone's local copy is only as safe as its lock screen and the secure store                                                                                                                           |
+| Metadata to relays                                   | Partly                   | Envelopes reveal team id, author key, type, size, timing, audience. Nostr will gift-wrap them (§13). Session handshakes hide identities (§10.1)                                                                           |
+| Forward secrecy inside an epoch                      | No                       | See §7. Rotate on removal; MLS later                                                                                                                                                                                      |
+
+## 12a. Performance (review M2)
+
+- **What triggers a refold.**
+  - Positions never enter the membership fold. They are checked against the
+    current state when read, and the positions view is cached until a new
+    position, a refold, or the first expiry.
+  - A batch that only appends (each op sorts after the fold head and extends
+    its author's chain) is applied incrementally, to the fold and to the data
+    view.
+  - Anything else refolds once per batch: old ops arriving, forks, removals,
+    role changes.
+- **Budget test** (`perf.test.ts`): 500 members, 20,000 data ops from 40
+  writers, ingested in 200-op frames, then 500 positions.
+
+  Node with the OpenSSL double, 2026-10-07:
+
+  | Measure                                              | Result     | Budget |
+  | ---------------------------------------------------- | ---------- | ------ |
+  | Ingest                                               | 0.13 ms/op | < 1 ms |
+  | Position                                             | 0.13 ms/op | < 1 ms |
+  | Append + fold                                        | 0.3 ms     |        |
+  | `m.add` while building the team                      | 0.45 ms    |        |
+  | `data()` full build of 20k entities (after a refold) | ~0.5 s     |        |
+  | `data()` first read after 500 new positions          | ~12 ms     |        |
+  | `data()` after an append                             | < 0.1 ms   | < 5 ms |
+
+  Before this change: 6.4 ms per position update, 332 ms per `data()`, and
+  35 s for 20k sequential writes.
+
+- **noble admission** (canonical JSON + SHA-256 + strict Ed25519 verify) costs
+  0.9 ms/op under Node's JIT.
+  - Hermes has no JIT, and BigInt-heavy curve code runs several times slower
+    there. Expect a few ms per verified op.
+  - So a phone's first sync of a 20k-op team spends tens of seconds verifying
+    signatures.
+  - Mitigations for stage 2:
+    1. persist ops as verified, so a relaunch does not re-verify;
+    2. verify in batches off the UI thread;
+    3. if profiling on a mid-range Android confirms it, move Ed25519 verify to
+       `react-native-quick-crypto` (native, JSI), which keeps the same
+       interface.
 
 ## 13. What changes for Nostr relays (opt-in, after the MVP)
 

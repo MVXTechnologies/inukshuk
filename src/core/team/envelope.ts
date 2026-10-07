@@ -89,6 +89,8 @@ export const MAX_SEALED_RECIPIENTS = 64;
 export interface SealedKeys {
   /** Ephemeral X25519 public key. */
   e: string;
+  /** HKDF commitment to the content key (key-committing sealed mode). */
+  cc: string;
   /** `[memberId, wrapped content key]`, sorted by member id. */
   w: [string, string][];
 }
@@ -98,6 +100,8 @@ export interface Envelope {
   tm: string;
   au: string;
   sq: number;
+  /** Previous op of this author (`sq − 1`): a per-author hash chain. Logged ops with sq ≥ 2. */
+  pv?: string;
   hc: [number, number];
   t: OpType;
   b?: Json;
@@ -125,6 +129,7 @@ const ENVELOPE_KEYS = [
   'tm',
   'au',
   'sq',
+  'pv',
   'hc',
   't',
   'b',
@@ -169,8 +174,8 @@ export type RejectReason =
 export type CheckResult = { ok: true; op: SignedOp } | { ok: false; reason: RejectReason };
 
 function parseSealed(value: unknown): SealedKeys | undefined {
-  if (!isRecord(value) || !hasOnlyKeys(value, ['e', 'w'])) return undefined;
-  if (!isB64uLen(value['e'], KEY_BYTES)) return undefined;
+  if (!isRecord(value) || !hasOnlyKeys(value, ['e', 'w', 'cc'])) return undefined;
+  if (!isB64uLen(value['e'], KEY_BYTES) || !isB64uLen(value['cc'], KEY_BYTES)) return undefined;
   const w = value['w'];
   if (!Array.isArray(w) || w.length === 0 || w.length > MAX_SEALED_RECIPIENTS) return undefined;
   let prev = '';
@@ -192,6 +197,9 @@ function shapeOk(r: Record<string, unknown>, t: OpType): boolean {
   if (has('k') && !isKeyId(r['k'])) return false;
   if (has('x') && parseSealed(r['x']) === undefined) return false;
   if (has('c') !== has('n')) return false;
+  // Chain link: logged ops from seq 2 on name their predecessor; seq 1 and ephemeral ops don't.
+  const logged = !isEphemeralType(t);
+  if (logged && (r['sq'] as number) >= 2 ? !isB64uLen(r['pv'], 32) : has('pv')) return false;
   if (isControlType(t)) {
     // Clear body; optional group-encrypted labels; no audience/priority/ttl/sealing.
     if (!isRecord(r['b'])) return false;
@@ -288,6 +296,8 @@ export type Encryption =
 export interface OpDraft {
   t: OpType;
   sq: number;
+  /** Id of this author's previous logged op (required from sq 2). */
+  pv?: string;
   hlc: Hlc;
   /** Clear body (control ops). */
   b?: Json;
@@ -312,6 +322,19 @@ function sealedKey(
 const ZERO_NONCE = new Uint8Array(NONCE_BYTES);
 
 /**
+ * Key separation: the epoch key itself never encrypts; payloads use a
+ * derived subkey (later uses, e.g. Nostr tags, derive their own label).
+ */
+export function payloadKey(c: TeamCrypto, teamId: string, epochKey: Uint8Array): Uint8Array {
+  return derive(c, epochKey, utf8(teamId), 'payload');
+}
+
+/** Key commitment for sealed ops: binds the header to one content key. */
+function cekCommitment(c: TeamCrypto, teamId: string, cek: Uint8Array): string {
+  return toB64u(derive(c, cek, utf8(teamId), 'commit'));
+}
+
+/**
  * Build and sign an envelope. Throws only on programmer error (a draft the
  * protocol would reject), never on peer input — this runs on our own data.
  */
@@ -321,6 +344,7 @@ export function buildOp(c: TeamCrypto, author: Author, draft: OpDraft): SignedOp
     tm: author.teamId,
     au: memberIdOf(author.keys.signPublic),
     sq: draft.sq,
+    ...(draft.pv !== undefined ? { pv: draft.pv } : {}),
     hc: hlcToWire(draft.hlc),
     t: draft.t,
   };
@@ -334,7 +358,7 @@ export function buildOp(c: TeamCrypto, author: Author, draft: OpDraft): SignedOp
     let cek: Uint8Array;
     if (enc.mode === 'group') {
       env.k = enc.keyId;
-      cek = enc.key;
+      cek = payloadKey(c, author.teamId, enc.key);
     } else {
       cek = c.randomBytes(KEY_BYTES);
       const esk = c.randomBytes(KEY_BYTES);
@@ -346,7 +370,7 @@ export function buildOp(c: TeamCrypto, author: Author, draft: OpDraft): SignedOp
         const kek = sealedKey(c, author.teamId, shared, epk, r.id);
         return [r.id, toB64u(c.aead.seal(kek, ZERO_NONCE, cek, utf8(r.id)))];
       });
-      env.x = { e: toB64u(epk), w };
+      env.x = { e: toB64u(epk), w, cc: cekCommitment(c, author.teamId, cek) };
     }
     const nonce = c.randomBytes(NONCE_BYTES);
     env.n = toB64u(nonce);
@@ -382,8 +406,10 @@ export function openPayload(
   try {
     if (env.c === undefined) return undefined;
     let cek: Uint8Array | undefined;
-    if (env.k !== undefined) cek = keyring(env.k);
-    else if (env.x !== undefined && me !== undefined) {
+    if (env.k !== undefined) {
+      const key = keyring(env.k);
+      cek = key === undefined ? undefined : payloadKey(c, env.tm, key);
+    } else if (env.x !== undefined && me !== undefined) {
       const entry = env.x.w.find(([id]) => id === me.id);
       const epk = fromB64uLen(env.x.e, KEY_BYTES);
       if (entry === undefined || epk === undefined) return undefined;
@@ -391,6 +417,8 @@ export function openPayload(
       if (shared === undefined) return undefined;
       const kek = sealedKey(c, env.tm, shared, epk, me.id);
       cek = safeOpen(c, kek, ZERO_NONCE, fromB64u(entry[1]), utf8(me.id));
+      // A recipient-specific key that doesn't match the header's commitment is refused.
+      if (cek === undefined || cekCommitment(c, env.tm, cek) !== env.x.cc) return undefined;
     }
     if (cek?.length !== KEY_BYTES) return undefined;
     const plain = safeOpen(c, cek, fromB64u(env.n), fromB64u(env.c), aadBytes(env));

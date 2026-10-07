@@ -1,4 +1,4 @@
-import { toB64u } from './bytes';
+import { fromB64u, toB64u } from './bytes';
 import { canonicalize } from './canonical';
 import { generateDeviceKeys, safeOpen, safeShared, safeVerify } from './crypto';
 import {
@@ -8,9 +8,10 @@ import {
   expiresAt,
   MAX_OP_BYTES,
   openPayload,
+  payloadKey,
   type Envelope,
 } from './envelope';
-import { isMemberId, memberIdOf, safetyCode } from './ids';
+import { isMemberId, memberIdOf } from './ids';
 import { newTeamKey } from './keys';
 import { c, DAY, device, HOUR, T0 } from './testing/fixtures';
 import { forAll, int, pick } from './testing/prop';
@@ -49,6 +50,7 @@ describe('build → check → open', () => {
     const op = buildOp(c, author, {
       t: 'msg',
       sq: 2,
+      pv: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
       hlc,
       secret: { id: 'd', th: `dm:${bob.id}`, tx: 'psst' },
       enc: { mode: 'sealed', recipients: [{ id: bob.id, boxPublic: bob.keys.boxPublic }] },
@@ -63,12 +65,37 @@ describe('build → check → open', () => {
     // Eve copying Bob's slot under her own id still fails (the wrap is bound to Bob's id and key).
     const stolen: Envelope = {
       ...op.env,
-      x: { e: op.env.x!.e, w: [[eve.id, op.env.x!.w[0]![1]]] },
+      x: { ...op.env.x!, w: [[eve.id, op.env.x!.w[0]![1]]] },
     };
     expect(
       openPayload(c, stolen, keyring, { id: eve.id, boxSecret: eve.keys.boxSecret }),
     ).toBeUndefined();
     expect(openPayload(c, op.env, keyring)).toBeUndefined();
+  });
+
+  it('sealed mode is key-committing: a header commitment for another key is refused', () => {
+    const bob = device();
+    const op = buildOp(c, author, {
+      t: 'msg',
+      sq: 1,
+      hlc,
+      secret: { id: 'd', th: 'team', tx: 'x' },
+      enc: { mode: 'sealed', recipients: [{ id: bob.id, boxPublic: bob.keys.boxPublic }] },
+    });
+    const me = { id: bob.id, boxSecret: bob.keys.boxSecret };
+    expect(openPayload(c, op.env, keyring, me)).toBeDefined();
+    const swapped: Envelope = { ...op.env, x: { ...op.env.x!, cc: toB64u(c.randomBytes(32)) } };
+    expect(openPayload(c, swapped, keyring, me)).toBeUndefined();
+  });
+
+  it('group mode encrypts under a derived payload key, never the epoch key itself', () => {
+    const op = msgOp();
+    const raw = c.aead.open(key.key, fromB64u(op.env.n)!, fromB64u(op.env.c)!, aadBytes(op.env));
+    expect(raw).toBeUndefined();
+    const sub = payloadKey(c, teamId, key.key);
+    expect(
+      c.aead.open(sub, fromB64u(op.env.n)!, fromB64u(op.env.c)!, aadBytes(op.env)),
+    ).toBeDefined();
   });
 
   it('ephemeral ops carry a TTL and seq 0', () => {
@@ -89,6 +116,7 @@ describe('build → check → open', () => {
     const op = buildOp(c, author, {
       t: 'g.set',
       sq: 3,
+      pv: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
       hlc,
       b: { id: 'sar' },
       secret: { name: 'SAR' },
@@ -111,7 +139,13 @@ describe('adversarial envelopes are rejected, never thrown', () => {
   it('forged or altered signatures', () => {
     const other = generateDeviceKeys(c);
     expect(why(bad({ au: memberIdOf(other.signPublic) }))).toBe('signature');
-    expect(why(bad({ sq: 2 }))).toBe('signature');
+    expect(why(bad({ sq: 2, pv: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }))).toBe(
+      'signature',
+    );
+    // Chain link rules: seq 1 has no predecessor; seq ≥ 2 must name one.
+    expect(why(bad({ pv: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }))).toBe('shape');
+    expect(why(bad({ sq: 2 }))).toBe('shape');
+    expect(why(bad({ sq: 2, pv: 'short' }))).toBe('shape');
     expect(why(bad({ c: toB64u(c.randomBytes(40)) }))).toBe('signature');
     expect(why(bad({ sg: toB64u(new Uint8Array(64)) }))).toBe('signature');
     expect(why(bad({ sg: 'short' }))).toBe('signature');
@@ -230,12 +264,8 @@ describe('crypto wrappers and ids', () => {
     ).toBeUndefined();
   });
 
-  it('safety codes are 6 digits, stable, and differ per key', () => {
+  it('member ids are 32-byte keys', () => {
     const a = device();
-    const code = safetyCode(c, teamId, a.id);
-    expect(code).toMatch(/^\d{6}$/);
-    expect(safetyCode(c, teamId, a.id)).toBe(code);
-    expect(safetyCode(c, teamId, device().id)).not.toBe(code);
     expect(isMemberId(a.id)).toBe(true);
     expect(isMemberId(teamId)).toBe(false);
   });

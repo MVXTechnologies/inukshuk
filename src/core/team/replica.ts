@@ -1,23 +1,32 @@
 import { fromB64uLen } from './bytes';
 import { isRecord, type Json } from './canonical';
 import { KEY_BYTES, type DeviceKeys, type TeamCrypto } from './crypto';
-import { admitBody, OpWriter } from './actions';
-import { reduceData, type TeamData } from './data';
+import { admitBody, OpWriter, type WriterCursor } from './actions';
+import { applyDataOp, emptyData, type TeamData } from './data';
 import {
   checkEnvelope,
+  expiresAt,
   isControlType,
+  isEphemeralType,
   openPayload,
   type Encryption,
   type RejectReason,
   type SignedOp,
 } from './envelope';
-import { hlcObserve, type Hlc } from './hlc';
 import { deriveTeamId, memberIdOf, memberPublicKey } from './ids';
 import { verifyJoinProof, type JoinProof } from './invite';
 import { parseKeyWraps, unwrapKeys, type TeamKey } from './keys';
 import { OpLog, type VersionVector } from './log';
+import {
+  admitEphemeral,
+  appendOps,
+  canAppend,
+  compareOps,
+  resolveFolder,
+  type Folder,
+  type TeamState,
+} from './membership';
 import { isAdminRole, type Audience, type Priority } from './roles';
-import { resolveTeam, type TeamState } from './membership';
 
 /**
  * One device's copy of one team (#589): the op log, the resolved membership,
@@ -25,17 +34,24 @@ import { resolveTeam, type TeamState } from './membership';
  * persists `log` records, the writer cursor and the keyring (secure store)
  * and rebuilds a replica from them on launch.
  *
+ * **Cost model (review M2).** A batch of ops that only *appends* (each op sorts
+ * after the fold head and extends its author's chain) is applied
+ * incrementally: per-op fold step and, if the data view exists, per-op data
+ * merge. Anything else (old ops arriving, forks, removals, role changes)
+ * refolds once per batch. Positions never touch the fold: they are checked
+ * against the current state when the data view is read.
+ *
  * Every peer-facing method is total: hostile input yields a report, never an
  * exception.
  */
-export type IngestRejection = RejectReason | 'removed' | 'quarantine-full' | 'stale';
+export type IngestRejection = RejectReason | 'removed' | 'quarantine-full' | 'stale' | 'full';
 
 export interface IngestReport {
   /** Ops newly stored (logged or ephemeral). */
   accepted: SignedOp[];
   rejected: { reason: IngestRejection; id?: string }[];
   duplicates: number;
-  /** `[kept, conflicting]` op ids from a member who signed two histories. */
+  /** `[first, conflicting]` op ids from an author who signed two histories; both are kept. */
   equivocations: [string, string][];
   /** Validly signed ops from authors we don't know yet, held until their admission arrives. */
   quarantined: number;
@@ -44,35 +60,43 @@ export interface IngestReport {
 /** Bounds on ops from not-yet-known authors (they cost storage before anyone vouches for them). */
 export const MAX_QUARANTINE_OPS = 512;
 export const MAX_QUARANTINE_BYTES = 1024 * 1024;
+export const MAX_QUARANTINE_PER_AUTHOR = 64;
 
 export class TeamReplica {
   readonly log = new OpLog();
   readonly writer: OpWriter;
   readonly id: string;
+  /** Insertion-ordered: the oldest entry is evicted first. */
   private readonly quarantine = new Map<string, SignedOp>();
   private quarantineBytes = 0;
   private readonly keyring = new Map<string, Uint8Array>();
   private readonly unwrapped = new Set<string>();
   private readonly decoded = new Map<string, Json>();
   private readonly proofCache = new Map<string, boolean>();
-  private dataCache: TeamData | undefined;
+  private folder: Folder | undefined;
+  private entityCache: TeamData | undefined;
+  /** Positions view; dropped on a new position, a refold or the first expiry. */
+  private positionCache:
+    { state: TeamState; validUntil: number; view: TeamData['positions'] } | undefined;
+  private now = 0;
   state: TeamState;
 
   constructor(
     private readonly c: TeamCrypto,
     readonly teamId: string,
     readonly keys: DeviceKeys,
-    cursor?: { seq: number; hlc: Hlc },
+    cursor?: WriterCursor,
   ) {
-    this.writer = new OpWriter(c, keys, teamId, cursor?.seq ?? 0, cursor?.hlc);
+    this.writer = new OpWriter(c, keys, teamId, cursor?.seq ?? 0, cursor?.hlc, cursor?.prev);
     this.id = memberIdOf(keys.signPublic);
-    this.state = resolveTeam(c, teamId, []);
+    this.state = resolveFolder(c, teamId, []).state;
   }
 
   /** Import keys from the secure store (or the creator's first key). */
   addKey(key: TeamKey): void {
     this.keyring.set(key.keyId, key.key);
-    this.dataCache = undefined;
+    this.entityCache = undefined;
+    this.positionCache = undefined;
   }
 
   key(keyId: string): Uint8Array | undefined {
@@ -90,12 +114,21 @@ export class TeamReplica {
     return this.state.members.get(memberId)?.status === 'active';
   }
 
+  /** Per author, the length of the canonical chain held (`chain.ts`). */
   versionVector(): VersionVector {
-    return this.log.versionVector();
+    const out: VersionVector = Object.create(null) as VersionVector;
+    for (const a of [...this.state.chains.keys()].sort()) {
+      const n = this.state.chains.get(a)!.ids.length;
+      if (n > 0) out[a] = n;
+    }
+    // Ops held before the genesis resolves still count, so a joiner can relay.
+    return out;
   }
 
+  /** Canonical ops `from..to` of one author. */
   opsInRange(author: string, from: number, to: number): SignedOp[] {
-    return this.log.range(author, from, to);
+    const ids = this.state.chains.get(author)?.ids ?? [];
+    return ids.slice(Math.max(0, from - 1), Math.max(0, to)).map((id) => this.log.get(id)!);
   }
 
   liveEphemeral(now: number): SignedOp[] {
@@ -114,6 +147,7 @@ export class TeamReplica {
 
   /** Admit a batch of untrusted envelopes. Total. */
   ingest(raws: readonly unknown[], now: number): IngestReport {
+    this.now = Math.max(this.now, now);
     const report: IngestReport = {
       accepted: [],
       rejected: [],
@@ -121,8 +155,8 @@ export class TeamReplica {
       equivocations: [],
       quarantined: 0,
     };
-    let changed = false;
-    // Ops whose author is admitted earlier in this same batch: retried after a recompute.
+    const fresh: SignedOp[] = [];
+    // Ops whose author is admitted earlier in this same batch: retried after the fold.
     const pending: SignedOp[] = [];
     for (const raw of raws) {
       const check = checkEnvelope(this.c, raw, { teamId: this.teamId, now });
@@ -137,77 +171,134 @@ export class TeamReplica {
         continue;
       }
       const known = member !== undefined || (op.env.t === 'm.genesis' && this.isOurGenesis(op));
-      if (known) changed = this.store(op, now, report) || changed;
+      if (known) this.store(op, now, report, fresh);
       else pending.push(op);
     }
-    // Storing ops can admit authors (an admit in this batch, or in the quarantine): iterate.
-    for (let round = 0; round < 8 && changed; round++) {
-      this.recompute(now);
-      changed = false;
+    // Folding can admit authors (an admit in this batch, or in the quarantine): iterate.
+    for (let round = 0; round < 8 && fresh.length > 0; round++) {
+      this.refold(fresh.splice(0), now);
       for (let i = pending.length - 1; i >= 0; i--) {
         const op = pending[i]!;
         if (!this.state.members.has(op.env.au)) continue;
         pending.splice(i, 1);
-        changed = this.store(op, now, report) || changed;
+        this.store(op, now, report, fresh);
       }
       for (const [id, op] of this.quarantine) {
         if (!this.state.members.has(op.env.au)) continue;
         this.quarantine.delete(id);
         this.quarantineBytes -= op.bytes;
-        changed = this.store(op, now, report) || changed;
+        this.store(op, now, report, fresh);
       }
     }
     for (const op of pending) this.hold(op, report);
     return report;
   }
 
-  /** Park a validly signed op from an author we don't know yet (bounded). */
+  /** Park a validly signed op from an author we don't know yet (bounded, oldest evicted). */
   private hold(op: SignedOp, report: IngestReport): void {
     if (this.quarantine.has(op.id) || this.log.has(op.id)) {
       report.duplicates++;
-    } else if (
-      this.quarantine.size >= MAX_QUARANTINE_OPS ||
-      this.quarantineBytes + op.bytes > MAX_QUARANTINE_BYTES
-    ) {
+      return;
+    }
+    const mine = [...this.quarantine.values()].filter((q) => q.env.au === op.env.au).length;
+    if (mine >= MAX_QUARANTINE_PER_AUTHOR || op.bytes > MAX_QUARANTINE_BYTES) {
       report.rejected.push({ reason: 'quarantine-full', id: op.id });
+      return;
+    }
+    while (
+      this.quarantine.size > 0 &&
+      (this.quarantine.size >= MAX_QUARANTINE_OPS ||
+        this.quarantineBytes + op.bytes > MAX_QUARANTINE_BYTES)
+    ) {
+      const [oldId, old] = this.quarantine.entries().next().value as [string, SignedOp];
+      this.quarantine.delete(oldId);
+      this.quarantineBytes -= old.bytes;
+    }
+    this.quarantine.set(op.id, op);
+    this.quarantineBytes += op.bytes;
+    report.quarantined++;
+  }
+
+  private store(op: SignedOp, now: number, report: IngestReport, fresh: SignedOp[]): void {
+    const pinned = this.state.chains.get(op.env.au)?.pinned.get(op.env.sq);
+    const result = this.log.insert(op, now, pinned);
+    if (result === 'duplicate') {
+      report.duplicates++;
+      return;
+    }
+    if (result === 'stale' || result === 'full') {
+      report.rejected.push({ reason: result, id: op.id });
+      return;
+    }
+    if (result === 'fork') {
+      report.equivocations.push(this.log.equivocations[this.log.equivocations.length - 1]!);
+    }
+    report.accepted.push(op);
+    if (isEphemeralType(op.env.t)) this.positionCache = undefined;
+    else fresh.push(op);
+  }
+
+  /** Fold new logged ops: append incrementally when possible, else refold once. */
+  private refold(ops: SignedOp[], now: number): void {
+    const sorted = ops.sort(compareOps);
+    let incremental = this.folder !== undefined;
+    if (incremental) {
+      // Check the whole batch extends the fold before taking the fast path.
+      const grown = new Map<string, string[]>();
+      let head = this.state.head;
+      for (const op of sorted) {
+        const ids = grown.get(op.env.au) ?? [...(this.state.chains.get(op.env.au)?.ids ?? [])];
+        if (!canAppend(this.state, op, head, ids)) {
+          incremental = false;
+          break;
+        }
+        ids.push(op.id);
+        grown.set(op.env.au, ids);
+        head = op;
+      }
+    }
+    if (incremental) {
+      appendOps(this.folder!, sorted);
+      this.state = this.folder!.state;
+      if (this.entityCache) {
+        for (const op of sorted) {
+          // roleAt holds exactly the data ops the fold accepted.
+          if (this.state.roleAt.has(op.id)) {
+            applyDataOp(this.entityCache, this.state, op, (o) => this.decode(o));
+          }
+        }
+      }
     } else {
-      this.quarantine.set(op.id, op);
-      this.quarantineBytes += op.bytes;
-      report.quarantined++;
+      const { state, folder } = resolveFolder(this.c, this.teamId, this.log.logged(), {
+        proofCache: this.proofCache,
+      });
+      this.state = state;
+      this.folder = folder;
+      this.entityCache = undefined;
+      this.positionCache = undefined;
+      for (const m of state.members.values()) {
+        if (m.removeCut !== undefined) this.log.dropAbove(m.id, m.removeCut);
+      }
     }
+    // Only accepted ops move our clock, and never far past our own (review M1).
+    for (const op of sorted) {
+      if (!this.state.rejected.has(op.id)) this.writer.observe(op.stamp, now);
+    }
+    this.unwrapNewKeys();
   }
 
-  private store(op: SignedOp, now: number, report: IngestReport): boolean {
-    const result = this.log.insert(op, now);
-    if (result === 'new') {
-      report.accepted.push(op);
-      this.writer.observe(hlcObserve(this.writer.cursor.hlc, op.stamp, now));
-      return true;
-    }
-    if (result === 'duplicate') report.duplicates++;
-    else if (result === 'stale') report.rejected.push({ reason: 'stale', id: op.id });
-    else report.equivocations.push(this.log.equivocations[this.log.equivocations.length - 1]!);
-    return false;
-  }
-
-  private recompute(now: number): void {
-    this.state = resolveTeam(
-      this.c,
-      this.teamId,
-      [...this.log.logged(), ...this.log.liveEphemeral(now)],
-      { proofCache: this.proofCache },
-    );
-    this.dataCache = undefined;
-    for (const m of this.state.members.values()) {
-      if (m.removeCut !== undefined) this.log.dropAbove(m.id, m.removeCut);
-    }
+  private unwrapNewKeys(): void {
     const me = { id: this.id, boxSecret: this.keys.boxSecret };
     for (const op of this.state.control) {
       if (this.unwrapped.has(op.id)) continue;
       this.unwrapped.add(op.id);
       const kw = isRecord(op.env.b) ? parseKeyWraps(op.env.b['kw']) : undefined;
       if (kw === undefined || !kw.w.some(([m]) => m === this.id)) continue;
-      for (const k of unwrapKeys(this.c, this.teamId, kw, me)) this.keyring.set(k.keyId, k.key);
+      for (const k of unwrapKeys(this.c, this.teamId, kw, me)) {
+        this.keyring.set(k.keyId, k.key);
+        this.entityCache = undefined;
+        this.positionCache = undefined;
+      }
     }
   }
 
@@ -230,9 +321,29 @@ export class TeamReplica {
     return openPayload(this.c, op.env, (k) => this.keyring.get(k));
   }
 
-  data(): TeamData {
-    this.dataCache ??= reduceData(this.state, (op) => this.decode(op));
-    return this.dataCache;
+  /**
+   * The data view. Entities are maintained incrementally; positions are
+   * recomputed from the (≤ one per member) live ephemeral ops on each read.
+   */
+  data(now = this.now): TeamData {
+    if (this.entityCache === undefined) {
+      const fresh = emptyData();
+      for (const op of this.state.data) applyDataOp(fresh, this.state, op, (o) => this.decode(o));
+      this.entityCache = fresh;
+    }
+    const cached = this.positionCache;
+    if (cached === undefined || cached.state !== this.state || now >= cached.validUntil) {
+      const scratch = emptyData();
+      let validUntil = Infinity;
+      for (const op of this.log.liveEphemeral(now)) {
+        if (!admitEphemeral(this.state, op)) continue;
+        applyDataOp(scratch, this.state, op, (o) => this.decode(o));
+        validUntil = Math.min(validUntil, expiresAt(op.env) ?? Infinity);
+      }
+      this.positionCache = { state: this.state, validUntil, view: scratch.positions };
+    }
+    this.entityCache.positions = this.positionCache!.view;
+    return this.entityCache;
   }
 
   // ── Local authoring ───────────────────────────────────────────────────────

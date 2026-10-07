@@ -69,8 +69,16 @@ export function hlcTick(last: Hlc, now: number): Hlc {
  * Advance the local clock past a remote stamp we accepted. Callers must have
  * refused remote stamps beyond the skew bound first ({@link isTooFarAhead}).
  */
-export function hlcObserve(last: Hlc, remote: Hlc, now: number): Hlc {
+/**
+ * How far past its own wall clock a device lets a peer's stamp push its HLC
+ * (review M1). Acceptance still allows {@link MAX_FUTURE_SKEW_MS}; only the
+ * local clock's lead is bounded.
+ */
+export const MAX_CLOCK_LEAD_MS = 5 * 60 * 1000;
+
+export function hlcObserve(last: Hlc, remote: Hlc, now: number, maxLeadMs = Infinity): Hlc {
   const n = sanitizeNow(now);
+  if (remote.wall > n + maxLeadMs) remote = { wall: n + maxLeadMs, counter: 0 };
   const wall = Math.max(last.wall, remote.wall, n);
   let counter: number;
   if (wall === last.wall && wall === remote.wall)

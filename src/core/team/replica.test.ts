@@ -1,5 +1,5 @@
 import { createTeam, OpWriter } from './actions';
-import { MAX_QUARANTINE_OPS, TeamReplica } from './replica';
+import { MAX_QUARANTINE_OPS, MAX_QUARANTINE_PER_AUTHOR, TeamReplica } from './replica';
 import {
   addMember,
   allEnvs,
@@ -61,10 +61,21 @@ describe('TeamReplica', () => {
       strangers.map((o) => o.env),
       T0 + 2,
     );
-    expect(r.quarantined).toBe(MAX_QUARANTINE_OPS);
-    expect(r.rejected.filter((x) => x.reason === 'quarantine-full')).toHaveLength(10);
+    // Oldest entries are evicted; the store never grows past the bound.
+    expect(r.quarantined).toBe(MAX_QUARANTINE_OPS + 10);
     expect(w.root.quarantineSize).toBe(MAX_QUARANTINE_OPS);
     expect(w.root.log.size).toBe(1);
+    expect(w.root.ingest([strangers[0]!.env], T0 + 3).quarantined).toBe(1); // was evicted
+    // One stranger cannot fill the quarantine on its own.
+    const one = new OpWriter(c, device().keys, w.teamId);
+    const flood = Array.from({ length: MAX_QUARANTINE_PER_AUTHOR + 5 }, (_, i) =>
+      one.control(T0 + 10 + i, 'g.set', { id: `x${i}` }),
+    );
+    const f = w.root.ingest(
+      flood.map((o) => o.env),
+      T0 + 20,
+    );
+    expect(f.rejected.filter((x) => x.reason === 'quarantine-full')).toHaveLength(5);
   });
 
   it('quarantined ops are released once their author is admitted', () => {
@@ -91,7 +102,7 @@ describe('TeamReplica', () => {
     expect(rg.admit(makeJoinProof(c, inv.token, device().keys), T0 + 4)).toEqual({
       error: 'not-allowed',
     });
-    w.root.control(T0 + 5, 'm.remove', { m: g.id, cut: 0 });
+    w.root.control(T0 + 5, 'm.remove', { m: g.id, cut: [0] });
     expect(w.root.admit(makeJoinProof(c, inv.token, device().keys), T0 + 6)).toEqual({
       error: 'rotation-pending',
     });
@@ -109,10 +120,17 @@ describe('TeamReplica', () => {
     expect(w.root.ingest([op.env], T0 + 2).duplicates).toBe(1);
     const pos = w.root.position(T0 + 3, { la: 0, lo: 0, at: T0 }, 1)!;
     expect(w.root.ingest([pos.env], T0 + 10_000).rejected[0]?.reason).toBe('stale');
-    const twin = new OpWriter(c, w.root.keys, w.teamId, op.env.sq - 1, {
-      wall: T0 + 5,
-      counter: 0,
-    }).data(
+    const twin = new OpWriter(
+      c,
+      w.root.keys,
+      w.teamId,
+      op.env.sq - 1,
+      {
+        wall: T0 + 5,
+        counter: 0,
+      },
+      op.env.pv,
+    ).data(
       T0 + 5,
       'msg',
       { id: 'b', th: 'team', tx: 'other history' },

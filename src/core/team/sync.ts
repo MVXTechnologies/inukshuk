@@ -1,4 +1,5 @@
-import { concatBytes, fromB64uLen, isB64uLen, toB64u, utf8, utf8Decode } from './bytes';
+import { concatBytes, fromB64u, fromB64uLen, isB64uLen, toB64u, utf8, utf8Decode } from './bytes';
+import { dict } from './crdt';
 import { canonicalize, hasOnlyKeys, isRecord, parseJson, type Json } from './canonical';
 import {
   derive,
@@ -27,20 +28,28 @@ import type { IngestReport } from './replica';
  * calls {@link SyncSession.receive}; every frame to send comes back in a
  * {@link Step}. No timers, sockets or clocks inside — `now` is passed in.
  *
- * ## Handshake (3 frames, SIGMA-style)
+ * ## Handshake (3 frames, SIGMA-style, identities hidden)
  * ```
- * I → R  hi1 {v, tm, e:ephI, nn:nonce}
- * R → I  hi2 {e:ephR, id:R, mc:MAC_r(R), sg:Sign_R(T2)}   T2 = H("hs2" ‖ hi1 ‖ {e,id})
- * I → R  hi3 {id:I, mc:MAC_i(I), join?, sg:Sign_I(T3)}     T3 = H("hs3" ‖ T2 ‖ hi3−sg)
- * DH = X25519(ephI, ephR);  MAC_x(id) = HMAC(HKDF(DH, T2, "confirm-x"), id)
- * keys:  k_i2r / k_r2i = HKDF(DH, salt=T3, "i2r"/"r2i")
+ * I → R  hi1 {v, tm, e:ephI, cm:H("commit" ‖ nI)}
+ * R → I  hi2 {e:ephR, x:Seal(hs-r){id:R, mc:MAC_r(R), sg:Sign_R(T2)}}
+ * I → R  hi3 {x:Seal(hs-i){id:I, mc:MAC_i(I), nn:nI, join?, sg:Sign_I(T3)}}
+ * DH = X25519(ephI, ephR)   T1 = H("hs1" ‖ hi1 ‖ ephR)
+ * T2 = H("hs2" ‖ T1 ‖ {id:R})   T3 = H("hs3" ‖ T2 ‖ hi3 inner − sg)
+ * hs-r / hs-i = HKDF(DH, T1|T2);  MAC_x(id) = HMAC(HKDF(DH, T2, "confirm-x"), id)
+ * keys: k_i2r / k_r2i = HKDF(DH, T3);  safety code = HKDF(DH, T3, "safety") → 6 digits
  * ```
  * Each side signs a transcript holding both ephemeral keys and MACs its own
  * identity under the DH secret (SIGMA), so neither side can be impersonated
- * and a relay cannot splice its identity into someone else's session. The responder only talks on to an active member, or to a joiner
- * whose invite proof it can turn into an `m.admit`. After the handshake every
- * frame is XChaCha20-Poly1305 with a per-direction counter nonce: frames
- * cannot be read, altered, replayed or reordered by anyone on the Wi-Fi.
+ * and a relay cannot splice its identity into someone else's session.
+ * Identities and join proofs travel encrypted: a passive listener sees two
+ * ephemeral keys and the team id. The initiator commits to a nonce (`cm`)
+ * before seeing the responder's key and reveals it last, so a man in the
+ * middle holding an invite cannot grind the 6-digit safety code offline: each
+ * of its two sessions yields an independent random code (1 in 10^6 to match).
+ * The responder only talks on to an active member, or to a joiner whose
+ * invite proof it can turn into an `m.admit`. After the handshake every frame
+ * is XChaCha20-Poly1305 with a per-direction counter nonce: frames cannot be
+ * read, altered, replayed or reordered by anyone on the Wi-Fi.
  *
  * ## Sync (anti-entropy)
  * Both sides send their version vector. Each side *pulls* what it lacks with
@@ -94,6 +103,8 @@ export interface SessionOptions {
 export const MAX_WANT_RANGES = 64;
 export const MAX_RANGE_LEN = 1024;
 export const MAX_OPS_PER_FRAME = 1024;
+/** Follow-up `want` rounds per received vector. */
+export const MAX_WANT_ROUNDS = 64;
 /** Ops served per `want` (the requester asks again for the rest). */
 export const MAX_SERVE_OPS = 4096;
 /** Room left in a frame for the JSON around the ops and the AEAD tag. */
@@ -105,10 +116,15 @@ function clear(obj: Json): Uint8Array {
   return utf8(canonicalize(obj)!);
 }
 
-function parseFrame(bytes: Uint8Array): Record<string, unknown> | undefined {
+function parseFrameObject(bytes: Uint8Array): Record<string, unknown> | undefined {
   const text = utf8Decode(bytes);
   const value = text === undefined ? undefined : parseJson(text);
-  return isRecord(value) && typeof value['t'] === 'string' ? value : undefined;
+  return isRecord(value) ? value : undefined;
+}
+
+function parseFrame(bytes: Uint8Array): Record<string, unknown> | undefined {
+  const value = parseFrameObject(bytes);
+  return value !== undefined && typeof value['t'] === 'string' ? value : undefined;
 }
 
 function counterNonce(n: number): Uint8Array {
@@ -129,8 +145,16 @@ export class SyncSession {
   readonly guard: PeerGuard;
 
   private ephSecret: Uint8Array | undefined;
+  private shared: Uint8Array | undefined;
+  private commitNonce: Uint8Array | undefined;
   private hi1: Json | undefined;
+  private t1: Uint8Array | undefined;
   private t2: Uint8Array | undefined;
+  /**
+   * Six digits both people can compare out loud after the handshake (review
+   * M3): derived from this session's DH secret and full transcript.
+   */
+  safetyCode: string | undefined;
   private sendKey: Uint8Array | undefined;
   private recvKey: Uint8Array | undefined;
   private sendCounter = 0;
@@ -138,6 +162,8 @@ export class SyncSession {
   private peerVv: VersionVector | undefined;
   /** Ranges we asked for and have not fully received: author → highest wanted seq. */
   private outstanding = new Map<string, number>();
+  /** `want` rounds since the peer's last vector (bounds re-requests while chains re-pin). */
+  private wantRounds = 0;
   /** Whether we still need to confirm the peer's membership (we joined before knowing the team). */
   private peerUnverified = false;
 
@@ -159,12 +185,13 @@ export class SyncSession {
   ): { session: SyncSession; step: Step } {
     const s = new SyncSession(c, store, 'initiator', options);
     s.ephSecret = c.randomBytes(KEY_BYTES);
+    s.commitNonce = c.randomBytes(16);
     s.hi1 = {
       t: 'hi1',
       v: 1,
       tm: store.teamId,
       e: toB64u(c.x25519.publicKey(s.ephSecret)),
-      nn: toB64u(c.randomBytes(16)),
+      cm: toB64u(s.commitment(s.commitNonce)),
     };
     return { session: s, step: { send: [clear(s.hi1)], events: [] } };
   }
@@ -235,8 +262,9 @@ export class SyncSession {
   private onHandshake(frame: Uint8Array, now: number, step: Step): void {
     const f = parseFrame(frame);
     if (f === undefined) return this.strike(step, 'malformed', now);
-    if (f['t'] === 'bye')
+    if (f['t'] === 'bye') {
       return this.finish(step, typeof f['why'] === 'string' ? f['why'].slice(0, 64) : 'bye');
+    }
     if (this.phase === 'await-hi1' && f['t'] === 'hi1') return this.onHi1(f, now, step);
     if (this.phase === 'await-hi2' && f['t'] === 'hi2') return this.onHi2(f, now, step);
     if (this.phase === 'await-hi3' && f['t'] === 'hi3') return this.onHi3(f, now, step);
@@ -244,132 +272,176 @@ export class SyncSession {
     this.fail(step, 'protocol');
   }
 
+  private bad(step: Step, now: number, reason: StrikeReason, why: string): void {
+    this.strike(step, reason, now);
+    this.fail(step, why);
+  }
+
   private onHi1(f: Record<string, unknown>, now: number, step: Step): void {
-    if (!hasOnlyKeys(f, ['t', 'v', 'tm', 'e', 'nn']) || f['v'] !== 1 || !isTeamId(f['tm'])) {
-      this.strike(step, 'malformed', now);
-      return this.fail(step, 'malformed');
+    if (!hasOnlyKeys(f, ['t', 'v', 'tm', 'e', 'cm']) || f['v'] !== 1 || !isTeamId(f['tm'])) {
+      return this.bad(step, now, 'malformed', 'malformed');
     }
     if (f['tm'] !== this.store.teamId) return this.fail(step, 'team');
     const peerEph = fromB64uLen(f['e'], KEY_BYTES);
-    if (peerEph === undefined || !isB64uLen(f['nn'], 16)) {
-      this.strike(step, 'malformed', now);
-      return this.fail(step, 'malformed');
+    if (peerEph === undefined || !isB64uLen(f['cm'], 32)) {
+      return this.bad(step, now, 'malformed', 'malformed');
     }
-    this.hi1 = f as unknown as Json;
     this.ephSecret = this.c.randomBytes(KEY_BYTES);
-    const shared = safeShared(this.c, this.ephSecret, peerEph);
-    if (shared === undefined) {
-      this.strike(step, 'malformed', now);
-      return this.fail(step, 'auth');
-    }
+    this.shared = safeShared(this.c, this.ephSecret, peerEph);
+    if (this.shared === undefined) return this.bad(step, now, 'malformed', 'auth');
+    this.hi1 = f as unknown as Json;
     const e = toB64u(this.c.x25519.publicKey(this.ephSecret));
+    this.t1 = this.transcript1(this.hi1, e);
     const id = this.store.id;
-    this.t2 = this.transcript2(this.hi1, e, id);
-    const sg = toB64u(this.c.ed25519.sign(this.t2, this.store.keys.signSecret));
-    const mc = this.identityMac(shared, this.t2, id, 'r');
-    step.send.push(clear({ t: 'hi2', e, id, mc, sg }));
+    this.t2 = this.transcript(this.t1, 'hs2', { id });
+    const inner = {
+      id,
+      mc: this.identityMac(this.t2, id, 'r'),
+      sg: toB64u(this.c.ed25519.sign(this.t2, this.store.keys.signSecret)),
+    };
+    step.send.push(clear({ t: 'hi2', e, x: this.sealHello('hs-r', this.t1, inner) }));
     this.phase = 'await-hi3';
   }
 
   private onHi2(f: Record<string, unknown>, now: number, step: Step): void {
-    if (!hasOnlyKeys(f, ['t', 'e', 'id', 'mc', 'sg']) || !isMemberId(f['id'])) {
-      this.strike(step, 'malformed', now);
-      return this.fail(step, 'malformed');
-    }
     const peerEph = fromB64uLen(f['e'], KEY_BYTES);
-    const t2 = this.transcript2(this.hi1!, f['e'] as string, f['id']);
-    if (!safeVerify(this.c, fromB64uLen(f['sg'], SIG_BYTES), t2, memberPublicKey(f['id']))) {
-      this.strike(step, 'signature', now);
-      return this.fail(step, 'auth');
+    if (!hasOnlyKeys(f, ['t', 'e', 'x']) || peerEph === undefined) {
+      return this.bad(step, now, 'malformed', 'malformed');
     }
-    const shared = peerEph && safeShared(this.c, this.ephSecret!, peerEph);
-    if (shared === undefined || f['mc'] !== this.identityMac(shared, t2, f['id'], 'r')) {
-      this.strike(step, 'signature', now);
-      return this.fail(step, 'auth');
+    this.shared = safeShared(this.c, this.ephSecret!, peerEph);
+    if (this.shared === undefined) return this.bad(step, now, 'malformed', 'auth');
+    this.t1 = this.transcript1(this.hi1!, f['e'] as string);
+    const inner = this.openHello('hs-r', this.t1, f['x'], ['id', 'mc', 'sg']);
+    if (inner === undefined || !isMemberId(inner['id'])) {
+      return this.bad(step, now, 'decrypt', 'auth');
+    }
+    const peer = inner['id'];
+    const t2 = this.transcript(this.t1, 'hs2', { id: peer });
+    const sigOk = safeVerify(
+      this.c,
+      fromB64uLen(inner['sg'], SIG_BYTES),
+      t2,
+      memberPublicKey(peer),
+    );
+    if (!sigOk || inner['mc'] !== this.identityMac(t2, peer, 'r')) {
+      return this.bad(step, now, 'signature', 'auth');
     }
     // A joiner cannot check membership yet (it has no log); a member can and must.
     const knowsTeam = this.store.state.owner !== undefined;
-    if (knowsTeam && !this.store.isActiveMember(f['id'])) return this.fail(step, 'peer-not-member');
-    if (f['id'] === this.store.id) return this.fail(step, 'self');
+    if (knowsTeam && !this.store.isActiveMember(peer)) return this.fail(step, 'peer-not-member');
+    if (peer === this.store.id) return this.fail(step, 'self');
     const join = this.options.join;
     const myId = join ? join.m : this.store.id;
-    // SIGMA's MAC: binds my identity to the DH secret, so a relay cannot swap in its own.
-    const hi3: Record<string, Json> = {
-      t: 'hi3',
+    const inner3: Record<string, Json> = {
       id: myId,
-      mc: this.identityMac(shared, t2, myId, 'i'),
+      mc: this.identityMac(t2, myId, 'i'),
+      nn: toB64u(this.commitNonce!),
     };
-    if (join) hi3['join'] = join as unknown as Json;
-    const t3 = this.transcript3(t2, hi3);
-    hi3['sg'] = toB64u(this.c.ed25519.sign(t3, this.store.keys.signSecret));
-    step.send.push(clear(hi3));
-    this.deriveKeys(shared, t3);
-    this.peer = f['id'];
+    if (join) inner3['join'] = join as unknown as Json;
+    const t3 = this.transcript(t2, 'hs3', inner3);
+    inner3['sg'] = toB64u(this.c.ed25519.sign(t3, this.store.keys.signSecret));
+    step.send.push(clear({ t: 'hi3', x: this.sealHello('hs-i', t2, inner3) }));
+    this.deriveKeys(t3);
+    this.peer = peer;
     this.peerUnverified = !knowsTeam;
     this.open(step, join !== undefined, now);
   }
 
   private onHi3(f: Record<string, unknown>, now: number, step: Step): void {
-    if (!hasOnlyKeys(f, ['t', 'id', 'mc', 'join', 'sg']) || !isMemberId(f['id'])) {
-      this.strike(step, 'malformed', now);
-      return this.fail(step, 'malformed');
+    if (!hasOnlyKeys(f, ['t', 'x'])) return this.bad(step, now, 'malformed', 'malformed');
+    const inner = this.openHello('hs-i', this.t2!, f['x'], ['id', 'mc', 'nn', 'join', 'sg']);
+    if (inner === undefined || !isMemberId(inner['id'])) {
+      return this.bad(step, now, 'decrypt', 'auth');
     }
-    const unsigned = Object.fromEntries(Object.entries(f).filter(([k]) => k !== 'sg')) as Record<
-      string,
-      Json
-    >;
-    const t3 = this.transcript3(this.t2!, unsigned);
-    if (!safeVerify(this.c, fromB64uLen(f['sg'], SIG_BYTES), t3, memberPublicKey(f['id']))) {
-      this.strike(step, 'signature', now);
-      return this.fail(step, 'auth');
+    const peer = inner['id'];
+    const unsigned = Object.fromEntries(
+      Object.entries(inner).filter(([k]) => k !== 'sg'),
+    ) as Record<string, Json>;
+    const t3 = this.transcript(this.t2!, 'hs3', unsigned);
+    const sigOk = safeVerify(
+      this.c,
+      fromB64uLen(inner['sg'], SIG_BYTES),
+      t3,
+      memberPublicKey(peer),
+    );
+    const nonce = fromB64uLen(inner['nn'], 16);
+    const committed = (this.hi1 as Record<string, unknown>)['cm'];
+    if (
+      !sigOk ||
+      inner['mc'] !== this.identityMac(this.t2!, peer, 'i') ||
+      nonce === undefined ||
+      toB64u(this.commitment(nonce)) !== committed
+    ) {
+      return this.bad(step, now, 'signature', 'auth');
     }
-    const peerEph = fromB64uLen((this.hi1 as Record<string, unknown>)['e'], KEY_BYTES);
-    const shared = peerEph && safeShared(this.c, this.ephSecret!, peerEph);
-    if (shared === undefined || f['mc'] !== this.identityMac(shared, this.t2!, f['id'], 'i')) {
-      this.strike(step, 'signature', now);
-      return this.fail(step, 'auth');
-    }
-    if (f['id'] === this.store.id) return this.fail(step, 'self');
-    if (f['join'] !== undefined) {
-      const raw = f['join'];
+    if (peer === this.store.id) return this.fail(step, 'self');
+    if (inner['join'] !== undefined) {
+      const raw = inner['join'];
       const proof =
         isRecord(raw) && hasOnlyKeys(raw, JOIN_PROOF_KEYS) ? parseJoinProof(raw) : undefined;
-      if (proof === undefined || proof.m !== f['id']) {
-        this.strike(step, 'malformed', now);
-        return this.fail(step, 'malformed');
+      if (proof === undefined || proof.m !== peer) {
+        return this.bad(step, now, 'malformed', 'malformed');
       }
       if (!this.store.isActiveMember(proof.m)) {
         const res = this.store.admit(proof, now);
         if ('error' in res) return this.fail(step, `join-${res.error}`);
         step.events.push({ type: 'admitted', member: proof.m, op: res.op });
       }
-    } else if (!this.store.isActiveMember(f['id'])) {
+    } else if (!this.store.isActiveMember(peer)) {
       return this.fail(step, 'not-member');
     }
-    this.deriveKeys(shared, t3);
-    this.peer = f['id'];
-    this.open(step, f['join'] !== undefined, now);
+    this.deriveKeys(t3);
+    this.peer = peer;
+    this.open(step, inner['join'] !== undefined, now);
   }
 
-  private transcript2(hi1: Json, e: string, id: string): Uint8Array {
-    return this.c.sha256(concatBytes(label('hs2'), clear(hi1), clear({ e, id })));
+  /** T1 binds the hello and the responder's ephemeral key. */
+  private transcript1(hi1: Json, e: string): Uint8Array {
+    return this.c.sha256(concatBytes(label('hs1'), clear(hi1), utf8(e)));
   }
 
-  private transcript3(t2: Uint8Array, hi3: Json): Uint8Array {
-    return this.c.sha256(concatBytes(label('hs3'), t2, clear(hi3)));
+  private transcript(prev: Uint8Array, name: string, part: Json): Uint8Array {
+    return this.c.sha256(concatBytes(label(name), prev, clear(part)));
+  }
+
+  private commitment(nonce: Uint8Array): Uint8Array {
+    return this.c.sha256(concatBytes(label('commit'), nonce));
+  }
+
+  /** Identities travel encrypted under keys only the two ephemeral keys' owners derive. */
+  private sealHello(name: string, salt: Uint8Array, inner: Json): string {
+    const key = derive(this.c, this.shared!, salt, name);
+    return toB64u(this.c.aead.seal(key, new Uint8Array(NONCE_BYTES), clear(inner), salt));
+  }
+
+  private openHello(
+    name: string,
+    salt: Uint8Array,
+    x: unknown,
+    keys: readonly string[],
+  ): Record<string, unknown> | undefined {
+    const key = derive(this.c, this.shared!, salt, name);
+    const plain = safeOpen(this.c, key, new Uint8Array(NONCE_BYTES), fromB64u(x), salt);
+    const inner = plain === undefined ? undefined : parseFrameObject(plain);
+    return inner !== undefined && hasOnlyKeys(inner, keys) ? inner : undefined;
   }
 
   /** SIGMA's identity MAC: proves the signer of this side also holds the DH secret. */
-  private identityMac(shared: Uint8Array, t2: Uint8Array, id: string, side: 'i' | 'r'): string {
-    const key = derive(this.c, shared, t2, `confirm-${side}`);
+  private identityMac(t2: Uint8Array, id: string, side: 'i' | 'r'): string {
+    const key = derive(this.c, this.shared!, t2, `confirm-${side}`);
     return toB64u(this.c.hmacSha256(key, utf8(id)));
   }
 
-  private deriveKeys(shared: Uint8Array, t3: Uint8Array): void {
+  private deriveKeys(t3: Uint8Array): void {
+    const shared = this.shared!;
     const i2r = derive(this.c, shared, t3, 'i2r');
     const r2i = derive(this.c, shared, t3, 'r2i');
     [this.sendKey, this.recvKey] = this.side === 'initiator' ? [i2r, r2i] : [r2i, i2r];
+    const sas = derive(this.c, shared, t3, 'safety', new Uint8Array(0), 4);
+    const n = (((sas[0]! << 24) >>> 0) + (sas[1]! << 16) + (sas[2]! << 8) + sas[3]!) % 1_000_000;
+    this.safetyCode = n.toString().padStart(6, '0');
     this.ephSecret = undefined;
+    this.shared = undefined;
   }
 
   private open(step: Step, joining: boolean, now: number): void {
@@ -425,7 +497,7 @@ export class SyncSession {
     if (!hasOnlyKeys(f, ['t', 'v']) || !isRecord(v) || Object.keys(v).length > 4096) {
       return this.strike(step, 'malformed', now);
     }
-    const vv: VersionVector = {};
+    const vv = dict<number>();
     for (const [author, n] of Object.entries(v)) {
       if (!isMemberId(author) || !Number.isSafeInteger(n) || (n as number) < 1) {
         return this.strike(step, 'malformed', now);
@@ -434,6 +506,7 @@ export class SyncSession {
     }
     this.peerVv = vv;
     this.outstanding.clear();
+    this.wantRounds = 0;
     this.requestMissing(step);
   }
 
@@ -497,6 +570,8 @@ export class SyncSession {
     }
     const solicited = f['re'] === 1;
     const admitted: unknown[] = [];
+    /** Highest seq the peer served per author in this frame. */
+    const served = new Map<string, number>();
     let overRate = false;
     for (const raw of o as unknown[]) {
       const env = isRecord(raw) ? raw : undefined;
@@ -511,6 +586,8 @@ export class SyncSession {
         overRate = true;
         continue;
       }
+      if (asked)
+        served.set(author as string, Math.max(served.get(author as string) ?? 0, sq as number));
       admitted.push(raw);
     }
     if (overRate) this.strike(step, 'rate', now);
@@ -533,10 +610,16 @@ export class SyncSession {
     }
     if (solicited) {
       const vv = this.store.versionVector();
-      for (const [a, to] of [...this.outstanding])
-        if ((vv[a] ?? 0) >= to) this.outstanding.delete(a);
+      for (const [a, to] of [...this.outstanding]) {
+        // Done when we hold it, or when the peer served it all and our chain still
+        // falls short (an anchored chain re-pinning: ask again from our new head).
+        if ((vv[a] ?? 0) >= to || (served.get(a) ?? 0) >= to) this.outstanding.delete(a);
+      }
       // Ask for the next slice once this round is in (a peer that sends nothing stalls only itself).
-      if (this.outstanding.size === 0) this.requestMissing(step);
+      if (this.outstanding.size === 0 && this.wantRounds < MAX_WANT_ROUNDS) {
+        this.wantRounds++;
+        this.requestMissing(step);
+      }
     }
   }
 

@@ -26,6 +26,18 @@ describe.each<[string, TeamCrypto]>([
     expect(c.ed25519.verify(sig, new Uint8Array([1]), pub)).toBe(false);
   });
 
+  it('refuses small-order public keys (identity-point forgery)', () => {
+    // A = identity, R = identity, S = 0 satisfies [S]B = R + [k]A for every message.
+    const identity = hex('0100000000000000000000000000000000000000000000000000000000000000');
+    const forged = concatBytes(identity, new Uint8Array(32));
+    for (const msg of [utf8('anything'), new Uint8Array(0)]) {
+      expect(c.ed25519.verify(forged, msg, identity)).toBe(false);
+    }
+    // An order-8 torsion point as the key is refused too.
+    const torsion = hex('c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a');
+    expect(c.ed25519.verify(forged, utf8('x'), torsion)).toBe(false);
+  });
+
   it('X25519, RFC 7748 §6.1', () => {
     const a = hex('77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a');
     const b = hex('5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb');
