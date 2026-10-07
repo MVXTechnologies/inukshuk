@@ -146,7 +146,8 @@ function StatusCard({ onClose }: { onClose: () => void }) {
             filled={mine === id}
             testID={`team-status-${id}`}
             onPress={() => {
-              const err = teamService()?.active?.setMyStatus(id) ?? 'not-member';
+              const session = teamService()?.active;
+              const err = session ? session.setMyStatus(id) : 'not-member';
               useTeamStore.getState().refresh();
               if (err) setError(actionMessage(err));
               else onClose();
