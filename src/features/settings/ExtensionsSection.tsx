@@ -1,6 +1,7 @@
 /**
  * Settings → Extensions: layers you add to the map on purpose, each installed
- * on its own (`@core/map/extensions`): Geodetic points and Tide stations.
+ * on its own (`@core/map/extensions`): Geodetic points, Tide stations and
+ * Climbing crags (`@features/climbing/ClimbingExtension`).
  *
  * Geodetic points (`@core/map/geodeticStyle`):
  * - not installed: what it is, and "Get";
@@ -13,6 +14,8 @@ import { coverageRows, coverageSummary, formatCount } from '@core/geodetic/cover
 import { formatBytes } from '@core/format';
 import { geodeticTilesUrl, tideTilesUrl } from '@data/basemapTiles';
 import { TideExtension } from './TideExtension';
+import { cragTilesUrl } from '@data/climbing';
+import { ClimbingExtension } from '../climbing/ClimbingExtension';
 import { useGeodeticStore } from '@state/geodeticStore';
 import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
@@ -32,7 +35,7 @@ import {
 
 export function ExtensionsSection() {
   const tokens = useSchemeTokens();
-  if (geodeticTilesUrl() === null && tideTilesUrl() === null) {
+  if (geodeticTilesUrl() === null && tideTilesUrl() === null && cragTilesUrl() === null) {
     return (
       <View style={styles.pad}>
         <Text variant="bodySmall" style={{ color: tokens.inkVariant }}>
@@ -45,6 +48,7 @@ export function ExtensionsSection() {
     <>
       {geodeticTilesUrl() !== null && <GeodeticExtension />}
       {tideTilesUrl() !== null && <TideExtension />}
+      {cragTilesUrl() !== null && <ClimbingExtension />}
     </>
   );
 }

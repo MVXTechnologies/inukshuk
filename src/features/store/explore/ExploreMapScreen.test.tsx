@@ -46,12 +46,16 @@ interface Captured {
     onPress: (e: unknown) => void;
   };
   footprint?: boolean;
+  crags?: { onPress: (e: unknown) => void };
 }
 const mockCaptured: Captured = {};
 const mockEaseTo = jest.fn();
 const mockFitBounds = jest.fn();
 type MockProps = { children?: import('react').ReactNode; id?: string } & Record<string, unknown>;
 const mockView = { bounds: [-72, 46, -70, 48], zoom: 7, center: [-71, 47] };
+// What the crag layer "renders" (Explore → Climbing reads rendered features).
+let mockRenderedCrags: unknown[] = [];
+let mockCragTiles: string | null = null;
 
 jest.mock('@maplibre/maplibre-react-native', () => {
   const React = jest.requireActual<typeof import('react')>('react');
@@ -59,7 +63,10 @@ jest.mock('@maplibre/maplibre-react-native', () => {
   return {
     Map: React.forwardRef(function MockMap(props: MockProps, ref) {
       mockCaptured.map = props as never;
-      React.useImperativeHandle(ref, () => ({ getViewState: async () => mockView }));
+      React.useImperativeHandle(ref, () => ({
+        getViewState: async () => mockView,
+        queryRenderedFeatures: async () => mockRenderedCrags,
+      }));
       return <View>{props.children}</View>;
     }),
     Camera: React.forwardRef(function MockCamera(_props: MockProps, ref) {
@@ -72,9 +79,20 @@ jest.mock('@maplibre/maplibre-react-native', () => {
       if (props.id === 'explore-footprint') mockCaptured.footprint = true;
       return <View>{props.children}</View>;
     }),
+    VectorSource: function MockVectorSource(props: MockProps) {
+      if (props.id === 'explore-crags') mockCaptured.crags = props as never;
+      return <View>{props.children}</View>;
+    },
+    Images: () => null,
     Layer: () => null,
   };
 });
+jest.mock('@data/climbing', () => ({ cragTilesUrl: () => mockCragTiles }));
+jest.mock('@features/climbing/climbingActions', () => ({
+  CragDownloadError: class extends Error {},
+  downloadCrag: jest.fn(),
+  estimateCragMap: () => 6_400_000,
+}));
 jest.mock('@features/map/mapStyle', () => ({ buildOsmStyle: () => ({ version: 8 }) }));
 jest.mock('@data/basemapTiles', () => ({
   vectorBasemapOption: () => ({ tiles: [], dark: false, glyphs: 'https://glyphs.test' }),
@@ -128,6 +146,9 @@ beforeEach(() => {
   seedCatalog(fixtureIndex({ shards: [HERE, EAST] }));
   shardMock.mockResolvedValue({ items: [], fromCache: false, warnings: [] });
   useSettingsStore.setState({ lastKnownPosition: QUEBEC, units: 'metric' });
+  mockCragTiles = null;
+  mockRenderedCrags = [];
+  delete mockCaptured.crags;
 });
 
 async function mapScreen(initialFilter: ExploreFilter = {}, fromList = false) {
@@ -455,5 +476,71 @@ describe('activity points: catalog sheets and link-out places (Sépaq, zecs)', (
     expect(box[1]).toBeCloseTo(QUEBEC.latitude);
     expect(box[3]).toBeCloseTo(48.634);
     expect(options.duration).toBe(400);
+  });
+});
+
+describe('Explore → Climbing', () => {
+  const crag = (
+    i: string,
+    n: string,
+    lng: number,
+    lat: number,
+    extra: Record<string, unknown> = {},
+  ) => ({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [lng, lat] },
+    properties: {
+      i,
+      n,
+      r: 37,
+      s: 10,
+      b: '4,20,7,6',
+      g0: 4,
+      g1: 22,
+      st: 3,
+      src: 1,
+      rg: 'Charlevoix',
+      v: 'a',
+      ...extra,
+    },
+  });
+
+  it('lists the crags in view and opens a crag card with Download and Topo', async () => {
+    mockCragTiles = 'https://tiles.test/crags/{z}/{x}/{y}.mvt';
+    mockRenderedCrags = [
+      crag('ob-1', 'Palissades de Charlevoix', -71.1, 46.9),
+      crag('ob-1', 'Palissades de Charlevoix', -71.1, 46.9),
+      crag('ob-2', 'Val-Bélair', -71.5, 46.85, { a: 2, r: 61 }),
+    ];
+    const view = await mapScreen({ activity: 'climbing' });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 400));
+    });
+    await settle();
+    expect(view.getByText('2 CRAGS IN THIS AREA · 98 ROUTES')).toBeTruthy();
+    expect(view.getByPlaceholderText('Filter these crags')).toBeTruthy();
+    expect(view.queryByTestId('explore-map-empty')).toBeNull();
+    await fireEvent.press(view.getByTestId('crag-row-ob-1'));
+    expect(view.getByTestId('crag-card')).toBeTruthy();
+    expect(view.getByText('Download · 6 MB')).toBeTruthy();
+    expect(view.getByText('Access unknown · check FQME')).toBeTruthy();
+    expect(view.getByText('Route data: OpenBeta (CC0)')).toBeTruthy();
+    await fireEvent.press(view.getByTestId('crag-card-topo'));
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/climbing/[uid]', params: { uid: 'ob-1' } });
+    // A closed crag is never offered for download.
+    await act(async () => {
+      mockCaptured.crags?.onPress({
+        stopPropagation: jest.fn(),
+        nativeEvent: { features: [crag('ob-2', 'Val-Bélair', -71.5, 46.85, { a: 2 })] },
+      });
+    });
+    expect(view.getByText('Access closed')).toBeTruthy();
+    expect(view.queryByTestId('crag-card-primary')).toBeNull();
+  });
+
+  it('is not offered before the crag tiles are published', async () => {
+    const view = await mapScreen({ activity: 'climbing' });
+    expect(mockCaptured.crags).toBeUndefined();
+    expect(view.getByPlaceholderText('Filter these maps')).toBeTruthy();
   });
 });

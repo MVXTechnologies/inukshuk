@@ -17,7 +17,7 @@
  * became an extension (`tidesInstalledAt` defaults to 0, not installed).
  */
 
-export type ExtensionKey = 'geodetic' | 'tides';
+export type ExtensionKey = 'geodetic' | 'tides' | 'climbing';
 
 export interface ExtensionsState {
   /** Extensions whose tiles are published (the others are not offered). */
@@ -26,22 +26,32 @@ export interface ExtensionsState {
   showGeodetic: boolean;
   tidesInstalledAt: number;
   showTideStations: boolean;
+  /** Climbing crags (absent on callers that predate it: not installed). */
+  climbingInstalledAt?: number;
+  showClimbing?: boolean;
 }
 
 export const EXTENSION_LABEL: Record<ExtensionKey, string> = {
   geodetic: 'Geodetic points',
   tides: 'Tide stations',
+  climbing: 'Climbing crags',
 };
 
+function installedAt(s: ExtensionsState, k: ExtensionKey): number {
+  if (k === 'geodetic') return s.geodeticInstalledAt;
+  if (k === 'tides') return s.tidesInstalledAt;
+  return s.climbingInstalledAt ?? 0;
+}
+
 export function installedExtensions(s: ExtensionsState): ExtensionKey[] {
-  return s.available.filter((k) =>
-    k === 'geodetic' ? s.geodeticInstalledAt > 0 : s.tidesInstalledAt > 0,
-  );
+  return s.available.filter((k) => installedAt(s, k) > 0);
 }
 
 export function extensionShown(s: ExtensionsState, k: ExtensionKey): boolean {
   if (!installedExtensions(s).includes(k)) return false;
-  return k === 'geodetic' ? s.showGeodetic : s.showTideStations;
+  if (k === 'geodetic') return s.showGeodetic;
+  if (k === 'tides') return s.showTideStations;
+  return s.showClimbing ?? false;
 }
 
 /** Where the overlays sheet's Extensions row goes; null = no row (nothing published). */

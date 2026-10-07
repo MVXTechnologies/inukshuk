@@ -224,6 +224,18 @@ export interface Settings {
   /** The overlays sheet's last tab (`@core/map/overlayTabs`), reopened next time. */
   overlaysTab: OverlayTab;
   /**
+   * Settings → Extensions → Climbing crags (`@core/map/climbingStyle`): epoch
+   * ms of the install (0 = not installed). The first crag download installs it
+   * by itself (owner decision Q3-A), so a saved crag is on the map at once.
+   */
+  climbingInstalledAt: number;
+  /** The Climbing crags switch (Settings → Extensions, overlays menu). */
+  showClimbing: boolean;
+  /** "Show every crag": streamed worldwide (on) or only the saved ones (off, the default). */
+  climbingShowAll: boolean;
+  /** Climbing grades: 'auto' = YDS in North America, French elsewhere (Q5-A). */
+  climbingGradeSystem: 'auto' | 'yds' | 'french';
+  /**
    * How much the shaded relief deepens when the map is tilted (#480) — the
    * Topology menu's "3D relief" row. Rides on the hillshade: with Shading
    * None there is nothing to deepen.
@@ -340,6 +352,10 @@ const DEFAULTS: Settings = {
   tidesInstalledAt: 0,
   showTideStations: true,
   overlaysTab: 'map',
+  climbingInstalledAt: 0,
+  showClimbing: true,
+  climbingShowAll: false,
+  climbingGradeSystem: 'auto',
   tiltRelief: DEFAULT_TILT_RELIEF,
   betaTerrain3d: false,
   errorReporting: true,
@@ -428,6 +444,10 @@ function snapshot(s: SettingsState): Settings {
     tidesInstalledAt,
     showTideStations,
     overlaysTab,
+    climbingInstalledAt,
+    showClimbing,
+    climbingShowAll,
+    climbingGradeSystem,
     tiltRelief,
     betaTerrain3d,
     errorReporting,
@@ -483,6 +503,10 @@ function snapshot(s: SettingsState): Settings {
     tidesInstalledAt,
     showTideStations,
     overlaysTab,
+    climbingInstalledAt,
+    showClimbing,
+    climbingShowAll,
+    climbingGradeSystem,
     tiltRelief,
     betaTerrain3d,
     errorReporting,
@@ -548,6 +572,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       }
       if (!isPeakDensity(next.peakDensity)) next.peakDensity = DEFAULT_PEAK_DENSITY;
       if (!isTiltRelief(next.tiltRelief)) next.tiltRelief = DEFAULT_TILT_RELIEF;
+      if (!['auto', 'yds', 'french'].includes(next.climbingGradeSystem)) {
+        next.climbingGradeSystem = 'auto';
+      }
       // See-through white is a slider stop (0–4) now; the feature's first cut
       // stored names, which the ladder's typeof check would DROP against the
       // numeric default. Recover the raw value: a stop is kept, the names

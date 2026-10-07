@@ -77,7 +77,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { ActivityIndicator, Icon, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Icon, Snackbar, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ExploreFilterBar } from './ExploreFilterBar';
@@ -87,6 +87,14 @@ import { itemFacets } from './facetsAdapter';
 import { useCatalogDownloadFlow } from './useCatalogDownloadFlow';
 import { useLinkOutCollections } from './useLinkOutCollections';
 import { openExternalLink } from '@lib/openLink';
+import { cragTilesUrl } from '@data/climbing';
+import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
+import {
+  CragFacetChips,
+  ExploreCragLayers,
+  ExploreCragSheet,
+  useExploreCrags,
+} from '@features/climbing/ExploreCrags';
 
 /**
  * Explore on a map (#447, board `MapView.dc.html`): the loaded catalog AND the
@@ -163,7 +171,7 @@ export function ExploreMapScreen({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { height: screenHeight } = useWindowDimensions();
+  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
 
   const status = useCatalogStore((s) => s.status);
   const index = useCatalogStore((s) => s.index);
@@ -225,6 +233,36 @@ export function ExploreMapScreen({
   // Cluster counts need glyphs: only the vector style declares them.
   const countFont =
     vector === null ? null : vector.glyphs ? STONE_FONTS_ATKINSON.bold : STONE_FONTS_NOTO.bold;
+
+  // Explore → Climbing: the crag layer, its chips and its sheet (`@features/climbing`).
+  const climbing = filter.activity === 'climbing' && cragTilesUrl() !== null;
+  const snack = useTimedSnackbar(4500);
+  const crags = useExploreCrags({
+    enabled: climbing,
+    mapRef,
+    text,
+    centre: bounds === null ? position : boundsCenter(bounds),
+  });
+  const { refresh: refreshCrags } = crags;
+  // Rendered crags change after the camera settles and after a chip or the
+  // filter field narrows the layer: read them again once the frame has drawn.
+  useEffect(() => {
+    if (!climbing || bounds === null) return;
+    const id = setTimeout(
+      () => refreshCrags(insets.top + 130, screenHeight * (1 - SHEET_FRACTION), screenWidth),
+      350,
+    );
+    return () => clearTimeout(id);
+  }, [
+    climbing,
+    bounds,
+    crags.layerFilter,
+    text,
+    refreshCrags,
+    insets.top,
+    screenHeight,
+    screenWidth,
+  ]);
 
   const category = categoryForKind(filter.kind);
   const fullFilter = useMemo(() => ({ ...filter, text }), [filter, text]);
@@ -457,6 +495,7 @@ export function ExploreMapScreen({
         onPress={() => {
           Keyboard.dismiss();
           setSelectedRef(null);
+          crags.select(null);
         }}
       >
         <Camera ref={cameraRef} initialViewState={initialViewState} />
@@ -505,6 +544,7 @@ export function ExploreMapScreen({
             paint={pointPaint as never}
           />
         </GeoJSONSource>
+        <ExploreCragLayers state={crags} text={text} font={countFont} />
       </Map>
 
       {/* Top chrome: back, filter field, list toggle; then the filter chips. */}
@@ -523,9 +563,11 @@ export function ExploreMapScreen({
             <TextInput
               value={text}
               onChangeText={setText}
-              placeholder="Filter these maps"
+              placeholder={climbing ? 'Filter these crags' : 'Filter these maps'}
               placeholderTextColor={t.inkMuted}
-              accessibilityLabel="Filter the maps on this map"
+              accessibilityLabel={
+                climbing ? 'Filter the crags on this map' : 'Filter the maps on this map'
+              }
               returnKeyType="search"
               onSubmitEditing={() => Keyboard.dismiss()}
               autoCorrect={false}
@@ -547,8 +589,10 @@ export function ExploreMapScreen({
           items={items}
           sources={index?.sources ?? []}
           placeCounts={placeCounts}
+          extraActivities={cragTilesUrl() !== null ? { climbing: 'crags' } : undefined}
         />
-        {(pending > 0 || loadingShards) && (
+        {climbing && <CragFacetChips state={crags} />}
+        {!climbing && (pending > 0 || loadingShards) && (
           <Pressable
             onPress={() => searchThisArea()}
             disabled={loadingShards}
@@ -565,7 +609,7 @@ export function ExploreMapScreen({
       </View>
 
       {/* The checked activity has nothing to draw: say so, never a blank map. */}
-      {empty !== null && selected === undefined && (
+      {empty !== null && selected === undefined && !climbing && (
         <View
           pointerEvents="box-none"
           style={[styles.emptyWrap, { bottom: screenHeight * SHEET_FRACTION + space.xl }]}
@@ -639,13 +683,21 @@ export function ExploreMapScreen({
           },
           // The list sheet keeps one height whatever it lists (#459); the
           // selected-map card sizes to itself — it shows no "in this area".
-          selected !== undefined
-            ? { maxHeight: screenHeight * SHEET_FRACTION }
+          selected !== undefined || (climbing && crags.selected !== null)
+            ? { maxHeight: screenHeight * (climbing ? 0.62 : SHEET_FRACTION) }
             : { height: screenHeight * SHEET_FRACTION },
         ]}
       >
         <View style={[styles.handle, { backgroundColor: t.outlineVariant }]} />
-        {selected !== undefined ? (
+        {climbing && selected === undefined ? (
+          <ExploreCragSheet
+            state={crags}
+            position={position}
+            units={units}
+            loading={bounds === null}
+            onSnack={snack.show}
+          />
+        ) : selected !== undefined ? (
           <View style={styles.selected}>
             {selected.kind === 'map' ? (
               <Pressable
@@ -814,6 +866,13 @@ export function ExploreMapScreen({
         )}
       </View>
       {flow.overlays}
+      <Snackbar
+        visible={snack.message !== null}
+        onDismiss={snack.dismiss}
+        duration={Number.POSITIVE_INFINITY}
+      >
+        {snack.message}
+      </Snackbar>
     </View>
   );
 }

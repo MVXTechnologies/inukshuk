@@ -1,6 +1,7 @@
 import { countFacets, isExploreFilterEmpty, type ExploreFilter } from '@core/catalog/exploreFacets';
 import type { PlaceFacetCounts } from '@core/catalog/explorePoints';
 import type { CatalogItem, CatalogSource } from '@core/catalog/schema';
+import type { CatalogActivity } from '@core/catalog/taxonomy';
 import {
   CATALOG_ACTIVITIES,
   CATALOG_ACTIVITY_LABELS,
@@ -43,6 +44,8 @@ interface Option {
   count: number;
   /** How many of `count` are link-out places rather than maps. */
   places: number;
+  /** Shown instead of the count when it is not a number of maps ("crags"). */
+  countText?: string;
   apply: (filter: ExploreFilter) => ExploreFilter;
 }
 
@@ -62,6 +65,7 @@ export function ExploreFilterBar({
   items,
   sources,
   placeCounts,
+  extraActivities,
 }: {
   filter: ExploreFilter;
   onChange: (next: ExploreFilter) => void;
@@ -70,6 +74,11 @@ export function ExploreFilterBar({
   sources: readonly CatalogSource[];
   /** Link-out places per Type / Activity, where the screen shows places too. */
   placeCounts?: PlaceFacetCounts | undefined;
+  /**
+   * Activities offered even with no map or place, and what they show instead
+   * of a count: Climbing brings its own crag layer (`@features/climbing`).
+   */
+  extraActivities?: Partial<Record<CatalogActivity, string>> | undefined;
 }) {
   const [open, setOpen] = useState<Facet | null>(null);
   const counts = useMemo(() => countFacets(items, itemFacets), [items]);
@@ -98,13 +107,20 @@ export function ExploreFilterBar({
           apply: (f: ExploreFilter) => ({ ...f, kind: k }),
         })).filter((o) => o.count > 0);
       case 'activity':
-        return CATALOG_ACTIVITIES.map((a) => ({
-          key: a,
-          label: CATALOG_ACTIVITY_LABELS[a],
-          count: (counts.activities[a] ?? 0) + (placeCounts?.activities[a] ?? 0),
-          places: placeCounts?.activities[a] ?? 0,
-          apply: (f: ExploreFilter) => ({ ...f, activity: a }),
-        })).filter((o) => o.count > 0);
+        return (
+          CATALOG_ACTIVITIES.map((a) => ({
+            key: a,
+            label: CATALOG_ACTIVITY_LABELS[a],
+            count: (counts.activities[a] ?? 0) + (placeCounts?.activities[a] ?? 0),
+            places: placeCounts?.activities[a] ?? 0,
+            apply: (f: ExploreFilter) => ({ ...f, activity: a }),
+            ...(extraActivities?.[a] !== undefined ? { countText: extraActivities[a] } : {}),
+          }))
+            .filter((o) => o.count > 0 || o.countText !== undefined)
+            // Activities with their own layer (Climbing: crags) lead: they are
+            // there wherever the map is, whatever the catalog has loaded.
+            .sort((a, b) => Number(b.countText !== undefined) - Number(a.countText !== undefined))
+        );
       case 'terrain':
         return CATALOG_TERRAINS.filter((v) => (counts.terrains[v] ?? 0) > 0).map((v) => ({
           key: v,
@@ -184,10 +200,18 @@ export function ExploreFilterBar({
           {openOptions.map((option) => (
             <FilterChip
               key={option.key}
-              label={`${option.label} · ${option.count.toLocaleString('en-US')}`}
-              accessibilityLabel={`${option.label}, ${option.count} ${
-                option.places > 0 ? 'maps and places' : 'maps'
+              label={`${option.label} · ${
+                option.count === 0 && option.countText !== undefined
+                  ? option.countText
+                  : option.count.toLocaleString('en-US')
               }`}
+              accessibilityLabel={
+                option.count === 0 && option.countText !== undefined
+                  ? `${option.label}, ${option.countText}`
+                  : `${option.label}, ${option.count} ${
+                      option.places > 0 ? 'maps and places' : 'maps'
+                    }`
+              }
               on={false}
               onPress={() => {
                 setOpen(null);

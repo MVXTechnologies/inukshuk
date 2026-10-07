@@ -102,6 +102,11 @@ describe('type filter', () => {
       maps: 2,
       waypoints: 2,
       areas: 0,
+      climbing: 0,
+    });
+    expect(typeCounts({ trails: 0, maps: 0, waypoints: 0, climbing: 2 })).toMatchObject({
+      all: 2,
+      climbing: 2,
     });
     expect(typeCounts({ trails: 1, maps: 0, waypoints: 0, areas: 3 })).toMatchObject({
       all: 4,

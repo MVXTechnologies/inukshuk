@@ -12,6 +12,7 @@
  * Pure.
  */
 
+import type { SavedCrag } from '@core/climbing/saved';
 import type { Area, MapDocument, TrackSummary, Waypoint } from '@core/models';
 
 import { folderItemCount, type FolderGrouping } from './folders';
@@ -35,7 +36,8 @@ export type LibraryListItem =
   | { kind: 'map'; key: string; map: MapDocument; divider: boolean }
   | { kind: 'track'; key: string; track: TrackSummary; divider: boolean }
   | { kind: 'waypoint'; key: string; waypoint: Waypoint; divider: boolean }
-  | { kind: 'area'; key: string; area: Area; divider: boolean };
+  | { kind: 'area'; key: string; area: Area; divider: boolean }
+  | { kind: 'crag'; key: string; crag: SavedCrag; divider: boolean };
 
 export interface LibraryListInput {
   maps: readonly MapDocument[];
@@ -66,6 +68,10 @@ export interface LibraryListInput {
   sortedAreas?: readonly Area[];
   /** Whether the type chip shows areas (defaults to off when absent). */
   showAreas?: boolean;
+  /** Saved crags, by name — the "Climbing" shelf (owner decision Q9-A). */
+  crags?: readonly SavedCrag[];
+  /** Whether the type chip shows the Climbing shelf (defaults to off when absent). */
+  showClimbing?: boolean;
 }
 
 type Row = Extract<LibraryListItem, { kind: 'map' | 'track' | 'waypoint' }>;
@@ -97,7 +103,40 @@ const empty = (key: string, title: string, description: string): LibraryListItem
 /** The Library's list items, in display order (see the module comment). */
 export function libraryListItems(input: LibraryListInput): LibraryListItem[] {
   const items = input.hasFolders ? folderItems(input) : typeItems(input);
-  return [...items, ...areaItems(input, items.length === 0)];
+  const areas = areaItems(input, items.length === 0);
+  return [...items, ...areas, ...cragItems(input, items.length + areas.length === 0)];
+}
+
+/**
+ * The Climbing shelf: crags saved for offline (Explore → Climbing), after
+ * everything else, by name. Hidden while there are none, unless its chip
+ * asked; a trail search or filter stands it down like Maps.
+ */
+function cragItems(input: LibraryListInput, first: boolean): LibraryListItem[] {
+  const crags = [...(input.crags ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+  if (!input.showClimbing || input.narrowed) return [];
+  if (crags.length === 0 && input.effectiveType !== 'climbing') return [];
+  const items: LibraryListItem[] = [
+    {
+      kind: 'header',
+      key: 'header:climbing',
+      section: 'climbing',
+      title: 'Climbing',
+      count: crags.length ? `(${crags.length})` : '',
+      first,
+    },
+  ];
+  if (input.collapsed.climbing) return items;
+  if (crags.length === 0) {
+    items.push(
+      empty('climbing', 'No crags yet', 'Download one from Explore › Climbing to keep its topo'),
+    );
+    return items;
+  }
+  crags.forEach((crag, i) => {
+    items.push({ kind: 'crag', key: `crag:${crag.uid}`, crag, divider: i > 0 });
+  });
+  return items;
 }
 
 /**

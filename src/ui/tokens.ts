@@ -118,6 +118,8 @@ export interface SchemeTokens {
     heading: string;
     /** Satellite/info accent. */
     info: string;
+    /** Climbing crags: granite ochre (badges, the crag accent; owner decision Q8-A). */
+    crag: string;
   };
   /** The Library (After-Library.html, After-Empty.html). */
   library: {
@@ -305,6 +307,7 @@ export const lightScheme: SchemeTokens = {
     descent: palette.granite,
     heading: palette.puck,
     info: palette.puck,
+    crag: '#A8641C',
   },
   library: {
     thumb: '#F7F2E8',
@@ -454,6 +457,7 @@ export const darkScheme: SchemeTokens = {
     descent: palette.granite,
     heading: '#8CC4F0',
     info: '#8CC4F0',
+    crag: '#E0A458',
   },
   library: {
     // Stone night keeps the thumbnail dark: a paper tile per row would glare.
@@ -608,6 +612,7 @@ export const sunlightScheme: SchemeTokens = {
     descent: '#555555',
     heading: '#1565C0',
     info: '#1565C0',
+    crag: '#8A4F12',
   },
   library: {
     thumb: palette.white,
@@ -761,6 +766,7 @@ export const nightScheme: SchemeTokens = {
     descent: '#CC2E24',
     heading: NIGHT_INK,
     info: NIGHT_INK,
+    crag: NIGHT_INK,
   },
   library: {
     thumb: '#1A0000',

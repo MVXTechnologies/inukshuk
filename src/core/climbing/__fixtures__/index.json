@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "generated": "2026-10-05T21:25:21Z",
+  "details": "fixture",
+  "attribution": "OpenBeta (CC0) · © OpenStreetMap contributors (ODbL) · camptocamp.org (CC BY-SA)",
+  "cols": ["i", "n", "lng", "lat", "rg", "cc", "r"],
+  "rows": [
+    ["c2c-999001", "Palissades de Charlevoix", -69.97129, 47.91996, "", "", 40],
+    [
+      "ob-3cc73e1b93bd4f39",
+      "St-Alban Ice & Mixed",
+      -72.07947,
+      46.70981,
+      "Quebec Ice, Mixed & Alpine › Portneuf",
+      "",
+      18
+    ],
+    [
+      "ob-42285a78679d7b89",
+      "Pont-Rouge",
+      -71.70185,
+      46.72732,
+      "Quebec Ice, Mixed & Alpine › Portneuf",
+      "",
+      30
+    ],
+    [
+      "ob-4fc135895023b6da",
+      "Val-Bélair",
+      -71.51071,
+      46.85118,
+      "Quebec City, Charlevoix, Portneuf",
+      "",
+      61
+    ],
+    ["ob-73f38626da051606", "Weir", -74.52917, 45.94512, "Laurentides", "", 230],
+    [
+      "ob-856b8c421c8e84ef",
+      "Bras-du-Nord Valley",
+      -71.86403,
+      47.00744,
+      "Quebec Ice, Mixed & Alpine › Portneuf",
+      "",
+      17
+    ],
+    [
+      "ob-989a80250dc451b9",
+      "Lac Long",
+      -72.09942,
+      46.81376,
+      "Quebec City, Charlevoix, Portneuf",
+      "",
+      155
+    ]
+  ],
+  "aliases": {
+    "osm-r11839901": "ob-73f38626da051606",
+    "osm-r11839902": "ob-73f38626da051606",
+    "osm-r11839903": "ob-73f38626da051606",
+    "osm-r11840256": "ob-73f38626da051606",
+    "osm-r11841024": "ob-73f38626da051606",
+    "osm-r11844138": "ob-73f38626da051606",
+    "osm-r11845022": "ob-73f38626da051606",
+    "osm-r11864923": "ob-73f38626da051606",
+    "osm-r11864924": "ob-73f38626da051606",
+    "osm-r11865206": "ob-73f38626da051606",
+    "osm-r11876741": "ob-73f38626da051606",
+    "osm-r11876780": "ob-73f38626da051606",
+    "osm-r11889282": "ob-73f38626da051606",
+    "osm-w867292570": "ob-73f38626da051606",
+    "osm-w867292572": "ob-73f38626da051606",
+    "osm-w867765399": "ob-73f38626da051606",
+    "osm-w868484675": "ob-73f38626da051606",
+    "osm-w868484800": "ob-73f38626da051606",
+    "osm-w868731574": "ob-73f38626da051606",
+    "osm-w870330604": "ob-73f38626da051606",
+    "osm-w870330605": "ob-73f38626da051606",
+    "osm-w871469130": "ob-73f38626da051606",
+    "osm-w871469132": "ob-73f38626da051606",
+    "osm-w871469133": "ob-73f38626da051606",
+    "osm-w871469134": "ob-73f38626da051606",
+    "osm-w871469138": "ob-73f38626da051606",
+    "osm-w871469139": "ob-73f38626da051606",
+    "osm-w871469140": "ob-73f38626da051606"
+  }
+}

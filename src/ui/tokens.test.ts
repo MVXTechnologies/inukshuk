@@ -100,6 +100,8 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
     ['heading needle on surface', t.data.heading, t.surface, GRAPHIC],
     ['heading needle on elevation 2', t.data.heading, t.elevation.level2, GRAPHIC],
     ['info accent on surface', t.data.info, t.surface, GRAPHIC],
+    ['crag accent on surface', t.data.crag, t.surface, GRAPHIC],
+    ['crag accent on background', t.data.crag, t.background, GRAPHIC],
     ['ascent on surface', t.data.ascent, t.surface, GRAPHIC],
     ['descent on surface', t.data.descent, t.surface, GRAPHIC],
     // Control borders.

@@ -91,7 +91,10 @@ export function TypeFilterChips({
         accessibilityLabel="Filter by type"
         style={styles.chipScroll}
       >
-        {LIBRARY_TYPE_FILTERS.map(({ id, label }) => (
+        {LIBRARY_TYPE_FILTERS.filter(
+          // The Climbing shelf's chip waits for a saved crag.
+          ({ id }) => id !== 'climbing' || counts.climbing > 0 || value === 'climbing',
+        ).map(({ id, label }) => (
           <Chip
             key={id}
             label={label}

@@ -1,0 +1,8 @@
+{
+  "_doc": "Records removed at build on request (a rights holder, a closure, an error). ob: OpenBeta climb UUIDs; ob_paths: OpenBeta area paths 'Country/State/Region/Area[/Crag]' (the whole subtree); osm: 'node/123' | 'way/123' | 'relation/123'; c2c: camptocamp waypoint ids; crags: published crag uids or aliases (ob-…, osm-…, c2c-…). Takes effect at the next climbing.sh build.",
+  "ob": [],
+  "ob_paths": [],
+  "osm": [],
+  "c2c": [],
+  "crags": []
+}

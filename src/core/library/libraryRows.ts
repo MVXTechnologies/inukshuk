@@ -73,7 +73,7 @@ export function trailCaption(startedAt: number, typeName: string | null, nowMs: 
 }
 
 /** The Library's type chips. */
-export type LibraryTypeFilter = 'all' | 'trails' | 'maps' | 'waypoints' | 'areas';
+export type LibraryTypeFilter = 'all' | 'trails' | 'maps' | 'waypoints' | 'areas' | 'climbing';
 
 export const LIBRARY_TYPE_FILTERS: readonly { id: LibraryTypeFilter; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -81,6 +81,8 @@ export const LIBRARY_TYPE_FILTERS: readonly { id: LibraryTypeFilter; label: stri
   { id: 'maps', label: 'Maps' },
   { id: 'waypoints', label: 'Waypoints' },
   { id: 'areas', label: 'Areas' },
+  // Saved crags (Explore → Climbing). The chip shows only once there is one.
+  { id: 'climbing', label: 'Climbing' },
 ];
 
 /** Whether items of `kind` are listed under the `filter` chip. */
@@ -95,7 +97,15 @@ export function typeCounts(counts: {
   waypoints: number;
   /** Drawn areas (#503); absent counts as none. */
   areas?: number;
+  /** Saved crags (the Climbing shelf); absent counts as none. */
+  climbing?: number;
 }): Record<LibraryTypeFilter, number> {
   const areas = counts.areas ?? 0;
-  return { ...counts, areas, all: counts.trails + counts.maps + counts.waypoints + areas };
+  const climbing = counts.climbing ?? 0;
+  return {
+    ...counts,
+    areas,
+    climbing,
+    all: counts.trails + counts.maps + counts.waypoints + areas + climbing,
+  };
 }

@@ -107,8 +107,12 @@ interface PackMeta {
   includes?: ExtensionKind[];
 }
 
-/** Extensions that can add a companion pack to an offline region. */
-export type ExtensionKind = 'geodetic';
+/**
+ * Extensions that own companion packs: geodetic points (one per offline
+ * region downloaded before the install) and climbing crags (each saved crag's
+ * 2 km crag & approach map, `companionOf` = the crag's uid).
+ */
+export type ExtensionKind = 'geodetic' | 'climbing';
 
 /** An extension's companion pack, as the extension's settings list it. */
 export interface CompanionPack {

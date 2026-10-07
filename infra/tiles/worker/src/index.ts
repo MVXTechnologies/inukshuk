@@ -12,6 +12,9 @@
  *   GET /trails/v1/index.json             long-distance trail index (trails-v1.index.json)
  *   GET /trails/v1/d/{version}/{id}.json  one trail's detail, range-read from
  *                                         trails-{version}.details.bin (../nas/trails.sh)
+ *   GET /climbing/v1/index.json           crag search index; /climbing/v1/d/{version}/{uid}.json
+ *                                         one crag's topo (../nas/climbing.sh, ./details.ts)
+ *                                         — crags.pmtiles itself is a plain archive (/crags/…)
  *   GET /search?q=&lang=&alt=&lat=&lon=&limit=
  *                                         place search, proxied to Photon (./search.ts)
  *   POST /donors                         opt-in donor name, filed as pending in R2 (./donors.ts)
@@ -36,6 +39,7 @@ import {
 import { decodeBudgetFrom } from './contourGrid';
 import { contourR2Key } from './contourMath';
 import { CONTOUR_MAX_ZOOM, contourTile } from './contours';
+import { detailKeys, detailRoute, type DetailRoute } from './details';
 import { handleSearch, type SearchEnv } from './search';
 import { isProjGridPath, PROJ_GRID_UPLOAD_KEY, serveProjGrids, type GridBucket } from './projGrids';
 import { handleDonor, memoryLimiter } from './donors';
@@ -252,8 +256,6 @@ const CONTOUR_PATH = /^\/contours\/(\d{1,2})\/(\d+)\/(\d+)\.mvt$/;
 const GLYPH_PATH = /^\/fonts\/([^/]+)\/(\d+-\d+)\.pbf$/;
 const UPLOAD_PATH =
   /^\/_upload\/([a-z0-9_-]+\.(?:pmtiles|index\.json|details\.bin|offsets\.json))$/;
-const TRAILS_INDEX_PATH = /^\/trails\/v1\/index\.json$/;
-const TRAILS_DETAIL_PATH = /^\/trails\/v1\/d\/([a-z0-9_-]{1,40})\/(r\d{1,12})\.json$/;
 const STRAVA_PATH = /^\/strava\/(token|refresh)$/;
 
 /** Directories and headers, shared across requests handled by this isolate. */
@@ -496,9 +498,8 @@ async function serve(
     });
   }
 
-  if (TRAILS_INDEX_PATH.test(url.pathname) || TRAILS_DETAIL_PATH.test(url.pathname)) {
-    return serveTrails(env, url, cors);
-  }
+  const details = detailRoute(url.pathname);
+  if (details !== null) return serveDetails(env, details, cors);
 
   if (isProjGridPath(url.pathname)) {
     return serveProjGrids(env.BUCKET as unknown as GridBucket, request, url.pathname, cors);
@@ -508,60 +509,61 @@ async function serve(
 }
 
 /**
- * Long-distance trails (#467, built monthly by ../nas/trails.sh):
+ * Index + packed-details datasets (./details.ts): long-distance trails (#467,
+ * ../nas/trails.sh) and climbing crags (../nas/climbing.sh), each built monthly:
  *
- * - `/trails/v1/index.json` is the object `trails-v1.index.json`, replaced in
- *   place each month (short cache: the app switches within hours);
- * - `/trails/v1/d/{version}/{id}.json` is one trail's slice of
- *   `trails-{version}.details.bin`, found through `trails-{version}.offsets.json`
- *   ({id: [offset, length]}). The version is in the URL, so a detail never
- *   changes once published and caches for a month.
+ * - `/{dataset}/v1/index.json` is the object `{dataset}-v1.index.json`, replaced
+ *   in place each month (short cache: the app switches within hours);
+ * - `/{dataset}/v1/d/{version}/{id}.json` is one item's slice of
+ *   `{dataset}-{version}.details.bin`, found through
+ *   `{dataset}-{version}.offsets.json` ({id: [offset, length]}). The version is
+ *   in the URL, so a detail never changes once published and caches for a month.
  *
  * One details object instead of tens of thousands of small ones keeps the
  * monthly upload to three files (the index goes up last, so the switch-over
  * is atomic: the index never names a version whose files aren't there yet).
  */
-const TRAILS_INDEX_CACHE = 'public, max-age=21600';
-const TRAILS_DETAIL_CACHE = 'public, max-age=2592000, immutable';
+const DETAILS_INDEX_CACHE = 'public, max-age=21600';
+const DETAILS_DETAIL_CACHE = 'public, max-age=2592000, immutable';
 const OFFSETS_TTL_MS = 60 * 60_000;
-const trailOffsets = new Map<string, { at: number; offsets: Record<string, [number, number]> }>();
+const detailOffsets = new Map<string, { at: number; offsets: Record<string, [number, number]> }>();
 
-async function offsetsFor(
-  env: Env,
-  version: string,
-): Promise<Record<string, [number, number]> | null> {
-  const hit = trailOffsets.get(version);
+async function offsetsFor(env: Env, key: string): Promise<Record<string, [number, number]> | null> {
+  const hit = detailOffsets.get(key);
   if (hit && Date.now() - hit.at < OFFSETS_TTL_MS) return hit.offsets;
-  const object = await env.BUCKET.get(`trails-${version}.offsets.json`);
+  const object = await env.BUCKET.get(key);
   if (object === null) return null;
   const offsets = await object.json<Record<string, [number, number]>>();
-  trailOffsets.set(version, { at: Date.now(), offsets });
+  detailOffsets.set(key, { at: Date.now(), offsets });
   return offsets;
 }
 
-async function serveTrails(env: Env, url: URL, cors: Record<string, string>): Promise<Response> {
+async function serveDetails(
+  env: Env,
+  route: DetailRoute,
+  cors: Record<string, string>,
+): Promise<Response> {
   const json = { ...cors, 'Content-Type': 'application/json; charset=utf-8' };
-  if (TRAILS_INDEX_PATH.test(url.pathname)) {
-    const object = await env.BUCKET.get('trails-v1.index.json');
+  if (route.kind === 'index') {
+    const object = await env.BUCKET.get(detailKeys(route.dataset).index);
     if (object === null) return new Response('not found', { status: 404, headers: cors });
     return new Response(object.body, {
-      headers: { ...json, 'Cache-Control': TRAILS_INDEX_CACHE, ETag: object.httpEtag },
+      headers: { ...json, 'Cache-Control': DETAILS_INDEX_CACHE, ETag: object.httpEtag },
     });
   }
-  const [, version, id] = TRAILS_DETAIL_PATH.exec(url.pathname) ?? [];
-  if (version === undefined || id === undefined) {
-    return new Response('not found', { status: 404, headers: cors });
-  }
-  const entry = (await offsetsFor(env, version))?.[id];
+  const keys = detailKeys(route.dataset, route.version);
+  const entry = (await offsetsFor(env, keys.offsets))?.[route.id];
   if (entry === undefined) return new Response('not found', { status: 404, headers: cors });
   const [offset, length] = entry;
-  const object = await env.BUCKET.get(`trails-${version}.details.bin`, {
+  const object = await env.BUCKET.get(keys.details, {
     range: { offset, length },
   });
   if (object === null || !('body' in object)) {
     return new Response('not found', { status: 404, headers: cors });
   }
-  return new Response(object.body, { headers: { ...json, 'Cache-Control': TRAILS_DETAIL_CACHE } });
+  return new Response(object.body, {
+    headers: { ...json, 'Cache-Control': DETAILS_DETAIL_CACHE },
+  });
 }
 
 /** Constant-time string comparison for the upload token. */

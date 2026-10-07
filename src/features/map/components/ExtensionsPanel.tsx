@@ -14,7 +14,7 @@ import { TideLegend } from './TideLegend';
 /**
  * Map overlays › Extensions tab (`@core/map/extensions`): each installed
  * extension's switch and legend — Geodetic points with its filter funnel and
- * badge — then "Get more extensions" (Settings → Extensions). With none
+ * badge, Climbing crags with "Show every crag" — then "Get more extensions" (Settings → Extensions). With none
  * installed, a short empty state and a button to Settings → Extensions.
  */
 export function ExtensionsPanel({
@@ -33,6 +33,7 @@ export function ExtensionsPanel({
   const set = useSettingsStore((s) => s.set);
   const geodeticFilter = useSettingsStore((s) => s.geodeticFilter);
   const filterCount = activeFilterCount(geodeticFilter);
+  const climbingShowAll = useSettingsStore((s) => s.climbingShowAll);
   const toSettings = () => {
     onClose();
     router.push({ pathname: '/settings', params: { open: 'extensions' } });
@@ -92,6 +93,25 @@ export function ExtensionsPanel({
           onToggle={() => set('showTideStations', !ext.showTideStations)}
           below={<TideLegend disabled={!ext.showTideStations} />}
         />
+      )}
+      {installed.includes('climbing') && (
+        <>
+          <SwitchRow
+            icon="terrain"
+            label="Climbing crags"
+            hint={climbingShowAll ? 'Every crag · saved ones filled' : 'Your saved crags'}
+            value={ext.showClimbing === true}
+            onToggle={() => set('showClimbing', ext.showClimbing !== true)}
+          />
+          <SwitchRow
+            icon="earth"
+            label="Show every crag"
+            hint="Streamed worldwide, like the base map"
+            value={climbingShowAll}
+            disabled={ext.showClimbing !== true}
+            onToggle={() => set('climbingShowAll', !climbingShowAll)}
+          />
+        </>
       )}
       <NavRow
         icon="puzzle-plus-outline"

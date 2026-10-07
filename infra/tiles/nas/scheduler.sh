@@ -1,7 +1,8 @@
 #!/bin/sh
-# Monthly trigger for refresh.sh (base map) then peaks.sh (named summits), and
-# a weekly geodetic.sh (geodetic points: picks up newly harvested Québec
-# datasheets and newly fetched sources, then re-uploads). Runs as a small
+# Monthly trigger for refresh.sh (base map) then peaks.sh (named summits), a
+# weekly geodetic.sh (geodetic points: picks up newly harvested Québec
+# datasheets and newly fetched sources, then re-uploads), and a monthly
+# climbing.sh (climbing crags, third Thursday; see below). Runs as a small
 # always-on container because user crontabs are disabled on the UGREEN NAS
 # (see compose.yaml). Checks hourly. The monthly jobs run once on the 1st from
 # 03:00; geodetic runs once per ISO week on Monday from 04:00, never on the
@@ -13,6 +14,7 @@ set -u
 apk add --no-cache python3 curl >/dev/null
 STAMP="$HOME/inukshuk-tiles/work/.last-refresh"
 GEO_STAMP="$HOME/inukshuk-tiles/work/.last-geodetic"
+CLIMB_STAMP="$HOME/inukshuk-tiles/work/.last-climbing"
 while true; do
   if [ "$(date +%d)" = "01" ] && [ "$(date +%H)" -ge 3 ] && [ "$(cat "$STAMP" 2>/dev/null)" != "$(date +%Y-%m)" ]; then
     date +%Y-%m > "$STAMP"
@@ -32,6 +34,18 @@ while true; do
     G="$HOME/inukshuk-tiles/infra/nas/geodetic.sh"
     "$G" fetch >>"$HOME/inukshuk-tiles/work/geodetic/logs/weekly-fetch.log" 2>&1 &
     "$G" build >>"$HOME/inukshuk-tiles/work/geodetic/logs/weekly-build.log" 2>&1 &
+  fi
+  # Climbing crags (climbing.sh): monthly, on the third Thursday (the 15th–21st),
+  # from 03:00 — never the 1st (base map + peaks), never a Monday (geodetic's
+  # weekly start), and it waits an hour at a time while a geodetic build holds
+  # its lock (that build wants most of the NAS's RAM).
+  if [ "$(date +%u)" = "4" ] && [ "$(date +%d)" -ge 15 ] && [ "$(date +%d)" -le 21 ] && [ "$(date +%H)" -ge 3 ] \
+    && [ "$(cat "$CLIMB_STAMP" 2>/dev/null)" != "$(date +%Y-%m)" ] && [ -x "$HOME/inukshuk-tiles/infra/nas/climbing.sh" ] \
+    && [ ! -d "$HOME/inukshuk-tiles/work/geodetic/.build.lock" ]; then
+    date +%Y-%m > "$CLIMB_STAMP"
+    echo "$(date) climbing starting (log: work/climbing/logs/monthly.log)"
+    "$HOME/inukshuk-tiles/infra/nas/climbing.sh" >>"$HOME/inukshuk-tiles/work/climbing/logs/monthly.log" 2>&1 \
+      && echo "$(date) climbing done" || echo "$(date) climbing FAILED"
   fi
   sleep 3600
 done

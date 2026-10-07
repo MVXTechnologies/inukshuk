@@ -142,6 +142,7 @@ export default function RootLayout() {
                   {/* Convert: coordinates, heights, epochs, chart datum (pinned PROJ pipelines). */}
                   <Stack.Screen name="convert" />
                   <Stack.Screen name="convert-selftest" />
+                  <Stack.Screen name="climbing/[uid]" />
                 </Stack>
                 <ImportFeedbackSnackbar />
                 <PdfRecoverySnackbar />

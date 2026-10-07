@@ -83,6 +83,8 @@ export function PlaceSearchSheet({
   );
 
   const showLocalSection = search.local.length > 0;
+  const cragHits = search.local.filter((r) => r.place.source === 'crag');
+  const localHits = search.local.filter((r) => r.place.source !== 'crag');
   const localOnly =
     search.status === 'offline' || search.status === 'local-only' || search.status === 'failed';
 
@@ -188,15 +190,25 @@ export function PlaceSearchSheet({
           hasLocal={showLocalSection}
         />
 
+        {/* Climbing crags lead (DESIGN §6.6): a climber typing "Weir" means the crag. */}
+        {cragHits.length > 0 && (
+          <>
+            <SectionTitle>Climbing crags</SectionTitle>
+            {cragHits.map((r) => (
+              <ResultRow key={r.place.id} ranked={r} units={units} onPress={pick} />
+            ))}
+          </>
+        )}
+
         {!localOnly &&
           search.online.map((r) => (
             <ResultRow key={r.place.id} ranked={r} units={units} onPress={pick} />
           ))}
 
-        {showLocalSection && (
+        {localHits.length > 0 && (
           <>
             <SectionTitle>On this device</SectionTitle>
-            {search.local.map((r) => (
+            {localHits.map((r) => (
               <ResultRow key={r.place.id} ranked={r} units={units} onPress={pick} />
             ))}
           </>

@@ -123,6 +123,7 @@ import { tideStationAt } from './tideTap';
 import { bottomCardSlotFree } from '@core/map/bottomCardSlot';
 import { useChsStations } from './hooks/useChs';
 import { geodeticImages } from './geodeticImages';
+import { useClimbingMap } from '@features/climbing/useClimbingMap';
 import { overlayAnchor } from '@core/map/layerSlots';
 import { PuckLayers } from './components/PuckLayers';
 import { NightExitPill } from '@features/display/NightExitPill';
@@ -555,6 +556,10 @@ export function MapScreen() {
   const tideTiles = tidesInstalled && showTideStations ? tideTilesUrl() : null;
   /** Canadian stations: fetched live from CHS by the phone and kept on it (never our tiles). */
   const chsStations = useChsStations(tideTiles !== null, offlineOnly);
+  /** Settings → Extensions → Climbing crags: the saved crags (and every crag, when asked). */
+  const climbingMap = useClimbingMap({ dark: theme.dark, mapLoaded });
+  const climbingStyle = climbingMap.styleOption;
+  const climbingMaskBounds = climbingMap.maskBounds;
   /** How much that shading deepens when the map is tilted — "3D relief", #480. */
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const betaTerrain3d = useSettingsStore((s) => s.betaTerrain3d);
@@ -867,9 +872,11 @@ export function MapScreen() {
         ? {
             rasterMaxZoom: offlinePackMaxZoom(offlineRegions, basemap),
             downloadedMask: {
-              data: buildDownloadedMask(
-                offlineRegions.filter((r) => r.basemap === basemap).map((r) => r.bounds),
-              ),
+              data: buildDownloadedMask([
+                ...offlineRegions.filter((r) => r.basemap === basemap).map((r) => r.bounds),
+                // A saved crag's 2 km map is downloaded too (`@features/climbing`).
+                ...(basemap === 'map' ? climbingMaskBounds : []),
+              ]),
               color: theme.dark ? theme.colors.background : '#FFFFFF',
             },
           }
@@ -888,6 +895,11 @@ export function MapScreen() {
         : {}),
       ...(tideTiles !== null && editorStyle === null
         ? { tides: { tiles: tideTiles, dark: theme.dark, chs: chsStations, ...geodeticGlyphs() } }
+        : {}),
+      // Climbing crags (Settings → Extensions): saved crags, and every crag
+      // with "Show every crag" on. Not in the map maker.
+      ...(climbingStyle !== null && editorStyle === null
+        ? { climbing: { ...climbingStyle, ...geodeticGlyphs() } }
         : {}),
     };
     // While the map maker is open the base raster becomes the source the
@@ -935,6 +947,8 @@ export function MapScreen() {
     geodeticFilters,
     tideTiles,
     chsStations,
+    climbingStyle,
+    climbingMaskBounds,
   ]);
 
   // Native 3D terrain (docs/plans/native-terrain.md): with "3D relief" on and
@@ -1942,6 +1956,19 @@ export function MapScreen() {
         );
         setGeodeticMark(null);
         setTideStation(null);
+        climbingMap.close();
+        return;
+      }
+
+      // Climbing crags (Settings → Extensions): under the waypoint pins and
+      // the chip, above the geodetic marks (DESIGN §6.4 tap priority).
+      if (await climbingMap.tap(map, px, py)) {
+        drawingRef.current.closeAreaCard();
+        setPointAt(null);
+        setViewWp(null);
+        setForecastAt(null);
+        setGeodeticMark(null);
+        setTideStation(null);
         return;
       }
 
@@ -1954,6 +1981,7 @@ export function MapScreen() {
           setViewWp(null);
           setForecastAt(null);
           setGeodeticMark(null);
+          climbingMap.close();
           setTideStation(station);
           return;
         }
@@ -1984,6 +2012,7 @@ export function MapScreen() {
           setForecastAt(null);
           geodeticRecenterRef.current = mark;
           setTideStation(null);
+          climbingMap.close();
           setGeodeticMark(mark);
           return;
         }
@@ -2072,9 +2101,10 @@ export function MapScreen() {
           // a fresh chip as before.
           // A survey-mark card is up: this tap only closes it (#258's rule —
           // the chip never drops in the same tap that dismisses a card).
-          if (geodeticMark !== null || tideStation !== null) {
+          if (geodeticMark !== null || tideStation !== null || climbingMap.selected !== null) {
             setGeodeticMark(null);
             setTideStation(null);
+            climbingMap.close();
             return;
           }
           setPointAt(
@@ -2086,8 +2116,10 @@ export function MapScreen() {
       setForecastAt(null); // ... and the forecast card
       setGeodeticMark(null); // ... and the survey-mark card
       setTideStation(null); // ... and the tide-station card
+      climbingMap.close(); // ... and the crag card
     },
     [
+      climbingMap,
       geodeticTiles,
       geodeticMark,
       tideTiles,
@@ -2783,6 +2815,7 @@ export function MapScreen() {
                 />
               </GeoJSONSource>
             )}
+            {climbingMap.images}
             {geodeticTiles !== null && geodeticMark !== null && (
               <GeoJSONSource
                 id="geodetic-selected"
@@ -3440,6 +3473,7 @@ export function MapScreen() {
               marine: marineActive,
               geodetic: geodeticTiles !== null,
               tides: tideTiles !== null,
+              climbing: climbingStyle !== null,
             })}
             bottom={
               // The bottom column's own lift, same precedence as its style.
@@ -3605,6 +3639,24 @@ export function MapScreen() {
             />
           </View>
         )}
+        {/* Climbing crags: the tapped crag's card. Same bottom-card slot
+          rules as the waypoint viewer. */}
+        {cardSlotFree &&
+          climbingMap.selected !== null &&
+          geodeticMark === null &&
+          tideStation === null &&
+          viewWaypoint === null && (
+            <View
+              style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+              pointerEvents="box-none"
+              testID="crag-card-dock"
+            >
+              {climbingMap.card({
+                floating: recordingPanelUp,
+                onNavigate: (to) => setDestination(to),
+              })}
+            </View>
+          )}
 
         {/* ECCC forecast card (weather long-press): nearest citypage forecast +
           the gridded value under the finger. Same bottom-card slot rules as

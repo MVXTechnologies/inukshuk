@@ -1,0 +1,134 @@
+# Climbing crags e2e (Explore → Climbing), on real crags from the live
+# crags.pmtiles (OpenBeta + OpenStreetMap) around Québec City and at Weir:
+# - Explore's map with the Climbing activity lists the crags in view; Lac
+#   Long's card offers Download and Topo; its topo shows the grade chart
+#   (OpenBeta gives no wall order), never a guessed wall;
+# - Weir's topo draws its walls from the OSM route starts ("Generated · not
+#   to scale"), with the safety line; downloading it (topo + 2 km map) turns
+#   the extension on and puts Weir on the Library's Climbing shelf;
+# - then Weir is deleted and the extension removed, so other flows see the
+#   default state.
+#
+# Needs the network (tiles, topos). iOS merges a row's texts into one
+# accessibility string: row matches are wildcard regexes.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- setLocation:
+    latitude: 46.8139
+    longitude: -71.2082
+- tapOn:
+    text: 'Explore(, tab.*)?'
+    retryTapIfNoChange: true
+- tapOn: 'See maps near you on a map'
+- extendedWaitUntil:
+    visible: 'Filter by activity'
+    timeout: 20000
+- tapOn: 'Filter by activity'
+# Climbing leads the activities: its crags are everywhere, catalog or not.
+- tapOn: 'Climbing, crags'
+- extendedWaitUntil:
+    visible: '.*CRAGS? IN THIS AREA.*'
+    timeout: 30000
+- assertVisible: 'Filter these crags'
+- tapOn: 'Filter these crags'
+- inputText: 'lac long'
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: 'Lac Long, .*routes.*'
+    timeout: 15000
+- tapOn: 'Lac Long, .*routes.*'
+- extendedWaitUntil:
+    visible:
+      id: 'crag-card'
+    timeout: 10000
+- assertVisible: '.*Access unknown · check FQME.*'
+- assertVisible: '.*OpenBeta \(CC0\).*'
+- tapOn:
+    id: 'crag-card-topo'
+- extendedWaitUntil:
+    visible:
+      id: 'crag-grade-chart'
+    timeout: 20000
+- assertVisible: 'Wall order unknown'
+- assertNotVisible:
+    id: 'crag-wall-diagram'
+- tapOn: 'Back'
+- tapOn: 'Close'
+# Weir: OSM's route starts give the wall order — the generated diagram.
+- openLink: 'inukshuk://climbing/ob-73f38626da051606'
+- extendedWaitUntil:
+    visible:
+      id: 'crag-wall-diagram'
+    timeout: 20000
+- assertVisible: 'Generated · not to scale'
+- assertVisible: 'Black and White · .*'
+# Download: routes + diagrams + the 2 km crag map.
+- tapOn:
+    id: 'crag-topo-download'
+- extendedWaitUntil:
+    visible:
+      id: 'crag-download-confirm'
+    timeout: 10000
+- assertVisible: '.*Map of the crag & approach.*'
+- tapOn:
+    id: 'crag-download-confirm-button'
+- extendedWaitUntil:
+    visible:
+      id: 'crag-topo-saved'
+    timeout: 240000
+- scrollUntilVisible:
+    element: '.*Route information can be wrong.*'
+    direction: DOWN
+    timeout: 30000
+- tapOn: 'Back'
+# Back out of Explore's map to the tabs.
+- repeat:
+    times: 3
+    while:
+      notVisible: 'Library(, tab.*)?'
+    commands:
+      - tapOn: 'Back'
+# The Library's Climbing shelf.
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Weir, climbing crag saved offline'
+    timeout: 15000
+# Leave it as it was: delete the crag, remove the extension.
+- tapOn: 'More for Weir'
+- tapOn: 'Delete'
+- tapOn: 'Delete'
+- assertNotVisible: 'Weir, climbing crag saved offline'
+- tapOn: 'Settings'
+- scrollUntilVisible:
+    element: 'Extensions.*'
+    direction: DOWN
+    centerElement: true
+- tapOn: 'Extensions.*'
+- scrollUntilVisible:
+    element: 'Remove Climbing crags extension'
+    direction: DOWN
+- tapOn: 'Remove Climbing crags extension'
+- tapOn: 'Remove'
+- tapOn: 'Back'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true

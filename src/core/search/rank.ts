@@ -96,6 +96,7 @@ const TYPE_BANDS: Readonly<Record<PlaceType, number>> = {
   track: BAND_TRAIL,
   map: BAND_TRAIL,
   longTrail: BAND_TRAIL,
+  crag: BAND_TRAIL,
 };
 
 /**

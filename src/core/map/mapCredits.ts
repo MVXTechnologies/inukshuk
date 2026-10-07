@@ -26,7 +26,8 @@ export interface MapCreditLine {
     | 'weather'
     | 'marine'
     | 'geodetic'
-    | 'tides';
+    | 'tides'
+    | 'climbing';
   /** The section label ("Base map", "Routing"). */
   label: string;
   /** The © line itself. */
@@ -53,6 +54,8 @@ export interface MapCreditsInput {
   geodetic?: boolean;
   /** Tide stations (Overlays → Tide stations) drawn on the map. */
   tides?: boolean;
+  /** Climbing crags (Settings → Extensions, Explore → Climbing) drawn on the map. */
+  climbing?: boolean;
 }
 
 export const OSM_COPYRIGHT_URL = 'https://www.openstreetmap.org/copyright';
@@ -173,6 +176,16 @@ export function mapCredits(input: MapCreditsInput): MapCreditLine[] {
         'doi:10.17183/MAREE_COURANTS_RAM (Licence Ouverte 2.0) · © Kartverket (CC BY 4.0) · ' +
         '出典：気象庁 (JMA) · Canada: contains data of the Canadian Hydrographic Service (DFO), ' +
         'fetched live by this device · Not for navigation',
+    });
+  }
+  if (input.climbing) {
+    lines.push({
+      id: 'climbing',
+      label: 'Climbing crags',
+      credit:
+        'OpenBeta (CC0) · route starts © OpenStreetMap contributors (ODbL) · ' +
+        'camptocamp.org (CC BY-SA)',
+      link: OSM_LINK,
     });
   }
   if (input.marine) {

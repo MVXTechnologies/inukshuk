@@ -35,3 +35,5 @@ modules/inukshuk-proj/prebuilt/
 modules/inukshuk-proj/assets/
 scripts/convert-extra-references.json
 src/core/convert/fixtures/
+# Climbing pipeline test fixtures: real Overpass/OpenBeta answers, kept compact.
+infra/tiles/nas/climbing/fixtures/

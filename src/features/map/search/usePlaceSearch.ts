@@ -7,6 +7,8 @@ import { fetchPlaces, PlaceSearchError, type PlaceSearchFailure } from '@data/pl
 import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { useLongTrailsStore } from '@state/longTrailsStore';
+import { useClimbingStore } from '@state/climbingStore';
+import { useSettingsStore } from '@state/settingsStore';
 import { useEffect, useMemo, useState } from 'react';
 
 /**
@@ -66,6 +68,10 @@ function useLocalSources(): LocalSearchSources {
   const maps = useLibraryStore((s) => s.maps);
   const catalog = useCatalogStore((s) => s.items);
   const trailIndex = useLongTrailsStore((s) => s.index);
+  // Crags: the world index once the climbing extension is installed, else
+  // the saved ones (they are on the phone either way).
+  const cragIndex = useClimbingStore((s) => s.searchIndex);
+  const savedCrags = useClimbingStore((s) => s.saved);
   return useMemo(
     () => ({
       waypoints,
@@ -73,8 +79,17 @@ function useLocalSources(): LocalSearchSources {
       maps: maps.map((m) => ({ id: m.id, name: m.name, bbox: mapBbox(m) })),
       catalog,
       longTrails: trailIndex?.trails ?? [],
+      crags:
+        cragIndex ??
+        savedCrags.map((c) => ({
+          uid: c.uid,
+          name: c.name,
+          lng: c.lng,
+          lat: c.lat,
+          ...(c.region !== null ? { region: c.region } : {}),
+        })),
     }),
-    [waypoints, tracks, maps, catalog, trailIndex],
+    [waypoints, tracks, maps, catalog, trailIndex, cragIndex, savedCrags],
   );
 }
 
@@ -96,6 +111,11 @@ export function usePlaceSearch({
   const sources = useLocalSources();
   const classified = classifyQuery(query);
   const text = classified.kind === 'text' ? classified.text : null;
+  const climbing = useSettingsStore((s) => s.climbingInstalledAt > 0);
+  // The crag index loads on the first search, not at launch (it is ~2 MB).
+  useEffect(() => {
+    if (text !== null && climbing) void useClimbingStore.getState().loadSearchIndex();
+  }, [text, climbing]);
   const near = origin ?? bias;
   // Rounded so a moving GPS fix does not refire the search every second.
   const nearKey = near === null ? '' : `${near.latitude.toFixed(2)},${near.longitude.toFixed(2)}`;

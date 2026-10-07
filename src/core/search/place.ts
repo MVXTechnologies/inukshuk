@@ -11,7 +11,8 @@ export type PlaceSource =
   | 'track'
   | 'map'
   | 'catalog'
-  | 'longTrail';
+  | 'longTrail'
+  | 'crag';
 
 /** One search result, whatever produced it. */
 export interface Place {
