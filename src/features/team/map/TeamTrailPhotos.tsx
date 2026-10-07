@@ -17,6 +17,7 @@ import {
 import { useExtensionPrefs } from '@features/extensions/prefs';
 import { photoResizer } from '@features/photos/photoResizer';
 import { usePhotoCard } from '@features/photos/PhotoBottomCard';
+import { useTeamPick } from './TeamPick';
 import { TrailPhotoLayers } from '@features/photos/TrailPhotoLayers';
 import { useTeamStore } from '@state/teamStore';
 import { useEffect, useMemo } from 'react';
@@ -122,7 +123,13 @@ export function TeamTrailPhotos({
       deferPress={deferPress}
       onPhotoPress={(ids) => {
         const p = wanted.find((x) => x.id === ids[0]);
-        if (p)
+        if (p && useTeamPick.getState().purpose !== null) {
+          useTeamPick.getState().choose({
+            anchor: { kind: 'photo', owner: p.owner, id: p.id },
+            label: p.caption ? `Photo · ${p.caption}` : 'A shared photo',
+            at: [p.lng, p.lat],
+          });
+        } else if (p)
           usePhotoCard
             .getState()
             .show({ kind: 'team', owner: p.owner, trackId: p.trackId, photoId: p.id });

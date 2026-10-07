@@ -26,6 +26,7 @@ import { useTeamMapFocus } from './teamMapFocus';
 import { useTeamSheet, useTeamSignalMode } from './teamMode';
 import { usePhotoCard } from '@features/photos/PhotoBottomCard';
 import { TeamPinCard } from './TeamPinCard';
+import { useTeamPick } from './TeamPick';
 import { TeamPinComposer, usePinDraft } from './TeamPinComposer';
 
 export type TeamMapHit =
@@ -107,6 +108,7 @@ export function TeamMapOverlay({
   const sheet = useTeamSheet((s) => s.sheet);
   const signal = useTeamSignalMode();
   const photoCard = usePhotoCard((s) => s.target);
+  const picking = useTeamPick((s) => s.purpose !== null);
   if (installedAt === 0 || !show || view === null) return null;
 
   const member = hit?.kind === 'member' ? positions.find((p) => p.id === hit.id) : undefined;
@@ -127,6 +129,7 @@ export function TeamMapOverlay({
     <>
       {/* The team button never covers a card: any card, sheet or popup hides it. */}
       {signal &&
+        !picking &&
         cardSlotFree &&
         draft === null &&
         hit === null &&

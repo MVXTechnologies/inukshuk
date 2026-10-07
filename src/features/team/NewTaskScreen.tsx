@@ -16,6 +16,7 @@ import { Button, Text, TextInput } from 'react-native-paper';
 
 import { MemberAvatar, SectionLabel, TeamScreenFrame } from './components';
 import { actionMessage } from './messages';
+import { useTeamPick } from './map/TeamPick';
 import { useAnchorLookup } from './useAnchorLookup';
 
 type Place = 'given' | 'here' | 'none';
@@ -38,9 +39,15 @@ export function NewTaskScreen() {
   const view = useTeamStore((s) => s.view);
   const look = useAnchorLookup();
   const given = anchorFromParams(params);
-  const [title, setTitle] = useState('');
-  const [assignee, setAssignee] = useState<string | null>(null);
-  const [place, setPlace] = useState<Place>(given ? 'given' : 'here');
+  // Back from "Attach to…": what was typed before.
+  const draft = params['resume'] === '1' ? useTeamPick.getState().draft : null;
+  const [title, setTitle] = useState(draft?.title ?? '');
+  const [assignee, setAssignee] = useState<string | null>(
+    draft?.assignee ?? (typeof params['to'] === 'string' ? params['to'] : null),
+  );
+  const [place, setPlace] = useState<Place>(
+    given ? 'given' : params['ak'] === 'none' ? 'none' : 'here',
+  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   if (view === null) return <TeamScreenFrame title="New task">{null}</TeamScreenFrame>;
@@ -71,6 +78,10 @@ export function NewTaskScreen() {
     { id: 'here', label: 'Where I am' },
     { id: 'none', label: 'No place' },
   ];
+  const attach = () => {
+    useTeamPick.getState().start('task', { title, assignee });
+    router.navigate('/');
+  };
 
   return (
     <TeamScreenFrame
@@ -155,6 +166,14 @@ export function NewTaskScreen() {
           );
         })}
       </View>
+      <Button
+        mode="outlined"
+        icon="map-marker-plus-outline"
+        onPress={attach}
+        testID="team-task-attach"
+      >
+        Attach to… a trail, a photo or the map
+      </Button>
       {error !== null && (
         <Text variant="bodySmall" style={{ color: t.status.gpsLostInk }}>
           {error}

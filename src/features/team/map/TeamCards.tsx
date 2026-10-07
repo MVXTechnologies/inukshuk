@@ -17,6 +17,7 @@ import { Button, Icon, IconButton, Text } from 'react-native-paper';
 import { MemberAvatar } from '../components';
 import { actionMessage } from '../messages';
 import { usePinDraft } from './TeamPinComposer';
+import { useTeamPick } from './TeamPick';
 import { useTeamSheet, type TeamSheet } from './teamMode';
 
 const STATUS_ICON: Record<StatusId, string> = {
@@ -464,8 +465,20 @@ export function TeamFab({ bottom }: { bottom: number }) {
     [
       'bell-ring-outline',
       'Notify someone',
-      () => open({ kind: 'notify', at: null }),
+      () => {
+        close();
+        useTeamPick.getState().start('notify');
+      },
       'team-fab-notify',
+    ],
+    [
+      'map-marker-account-outline',
+      'Message pin',
+      () => {
+        close();
+        useTeamPick.getState().start('pin');
+      },
+      'team-fab-pin',
     ],
     ...(guest
       ? []

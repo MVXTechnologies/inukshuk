@@ -136,6 +136,8 @@ import { useTeamMapFocus } from '@features/team/map/teamMapFocus';
 import { usePinDraft } from '@features/team/map/TeamPinComposer';
 import { TeamTrailPhotos } from '@features/team/map/TeamTrailPhotos';
 import { useTeamSheet, useTeamSignalMode } from '@features/team/map/teamMode';
+import { TeamPickOverlay, useTeamPick } from '@features/team/map/TeamPick';
+import { useTrailPhotosStore } from '@state/trailPhotosStore';
 import { PhotoBottomCard, usePhotoCard } from '../photos/PhotoBottomCard';
 import { useTeamStore } from '@state/teamStore';
 import {
@@ -452,6 +454,28 @@ export function MapScreen() {
   // A photo tap opens the bottom card (owner 2026-10-07: not another page);
   // the full-screen viewer is its expanded state.
   const openPhoto = useCallback((trackId: string, photoId: string) => {
+    if (useTeamPick.getState().purpose !== null) {
+      // Picking: my photo, by its team copy when shared, else its place.
+      const shared = useTeamStore.getState().photos.find((p) => p.id === photoId);
+      const own = useTrailPhotosStore
+        .getState()
+        .byTrack[trackId]?.photos.find((p) => p.id === photoId);
+      const at: [number, number] | null = shared
+        ? [shared.lng, shared.lat]
+        : own
+          ? [own.lngLat[0], own.lngLat[1]]
+          : null;
+      if (at === null) return;
+      const caption = shared?.caption ?? own?.caption;
+      useTeamPick.getState().choose({
+        anchor: shared
+          ? { kind: 'photo', owner: shared.owner, id: shared.id }
+          : { kind: 'point', lng: at[0], lat: at[1] },
+        label: caption ? `Photo · ${caption}` : 'A photo',
+        at,
+      });
+      return;
+    }
     usePhotoCard.getState().show({ kind: 'own', trackId, photoId });
   }, []);
   // Team signal mode (#589): taps on the map signal the team.
@@ -1921,6 +1945,50 @@ export function MapScreen() {
         return;
       }
       const [px, py] = point;
+
+      // Team pick mode ("Attach to…"): a photo, a pin, a trail point or a
+      // place; nothing else answers the tap until it is confirmed or cancelled.
+      if (useTeamPick.getState().purpose !== null) {
+        if (photoTap !== null && Date.now() - photoTap.at < PHOTO_TAP_FRESH_MS) {
+          photoTap.run();
+          return;
+        }
+        const markHit = await hitTestTeamMarks(map, px, py);
+        if (markHit?.kind === 'bubble') {
+          const ph = markHit.mark.photo;
+          useTeamPick.getState().choose({
+            anchor: { kind: 'photo', owner: ph.owner, id: ph.id },
+            label: ph.caption ? `Photo · ${ph.caption}` : 'A shared photo',
+            at: [ph.lng, ph.lat],
+          });
+          return;
+        }
+        if (markHit?.kind === 'pin') {
+          const p = markHit.mark;
+          useTeamPick.getState().choose({
+            anchor: { kind: 'pin', owner: p.owner, id: p.id },
+            label: 'A pin',
+            at: [p.lng, p.lat],
+          });
+          return;
+        }
+        if (lngLatArr) {
+          const near = showTrackOverlays
+            ? trackHeat.heatAt(
+                { lng: lngLatArr[0], lat: lngLatArr[1] },
+                TRAIL_HIT_PX * (metersPerPixel(scaleAt?.zoom ?? 16, lngLatArr[1]) ?? 0),
+                false,
+              )
+            : { trackIds: [], hot: false };
+          const name = tracks.find((tr) => tr.id === near.trackIds[0])?.name;
+          useTeamPick.getState().choose({
+            anchor: { kind: 'point', lat: lngLatArr[1], lng: lngLatArr[0] },
+            label: name ? `On ${name}` : 'This place on the map',
+            at: [lngLatArr[0], lngLatArr[1]],
+          });
+        }
+        return;
+      }
 
       // The open chip, measured up front: routeMapTap puts it ahead of the
       // pins because it is drawn over every one of them. It used to be asked
@@ -3563,6 +3631,10 @@ export function MapScreen() {
             onNavigate={(latitude, longitude) => setDestination({ latitude, longitude })}
           />
         )}
+        <TeamPickOverlay
+          top={insets.top + 8}
+          cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+        />
         {/* A tapped photo's bottom card (app-wide, owner 2026-10-07). */}
         <View style={waypointCardDockStyle(recordingPanelUp, panelHeight)} pointerEvents="box-none">
           <PhotoBottomCard />
