@@ -7,7 +7,7 @@
     "@dr.pogodin/react-native-static-server": "^0.28.0",
     "@expo/vector-icons": "^15.0.2",
     "@kingstinct/react-native-healthkit": "^16.0.0",
-    "@maplibre/maplibre-react-native": "^11.4.0",
+    "@maplibre/maplibre-react-native": "^11.5.0",
     "@noble/ciphers": "2.4.0",
     "@noble/curves": "2.4.0",
     "@noble/hashes": "2.4.0",
