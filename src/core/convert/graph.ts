@@ -382,9 +382,19 @@ function route(
 ): void {
   const path = framePath(w.frame, target);
   if (!path) {
+    // WGS 84 as such is only defined to about ±2 m (EPSG's datum ensemble),
+    // so no survey-grade operation ties it to a national datum: point to the
+    // precise frame that does exist (Canada: ITRF2020 through NAD83(CSRS)).
+    const wgs = w.frame === 'wgs84' || target === 'wgs84';
+    const other = w.frame === 'wgs84' ? target : w.frame;
+    const hint = !wgs
+      ? ''
+      : framePath(other, 'itrf2020')
+        ? ': WGS 84 is only defined to about ±2 m. For GNSS-grade work pick ITRF2020 at the observation epoch'
+        : ': WGS 84 is only defined to about ±2 m';
     return refuse(
       'unvalidated-pair',
-      `No validated conversion between ${FRAMES[w.frame].name} and ${FRAMES[target].name}`,
+      `No validated conversion between ${FRAMES[w.frame].name} and ${FRAMES[target].name}${hint}`,
     );
   }
   for (let i = 1; i < path.length; i++) {
@@ -628,7 +638,11 @@ export function resolveHeight(id: string, ctx: PlanContext = {}): HeightSystem |
 }
 
 function heightAllowedOn(sys: HeightSystem, frame: FrameId): boolean {
-  if (sys.kind !== 'ellipsoidal') return true;
+  return sys.kind !== 'ellipsoidal' || ellipsoidalHeightOn(frame);
+}
+
+/** Whether a frame has ellipsoidal heights at all (classical, pre-GNSS frames don't). */
+export function ellipsoidalHeightOn(frame: FrameId): boolean {
   // An ellipsoidal height of these frames isn't something anyone publishes.
   return ![
     'nad83-ca',
