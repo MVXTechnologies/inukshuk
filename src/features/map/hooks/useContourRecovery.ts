@@ -19,6 +19,7 @@ import {
   type TileLines,
   type TileOnScreen,
 } from '@core/map/contourRecovery';
+import { tileFetchUrl } from '@data/basemapTiles';
 import { useCallback, useEffect, useState } from 'react';
 
 /** The settled camera, as `onRegionDidChange` reports it. */
@@ -81,7 +82,8 @@ async function fetchTileBytes(url: string): Promise<Uint8Array> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    // The template host is the cache key; the request goes where the Worker lives.
+    const res = await fetch(tileFetchUrl(url), { signal: controller.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return new Uint8Array(await res.arrayBuffer());
   } finally {

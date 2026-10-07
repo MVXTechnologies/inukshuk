@@ -5,6 +5,7 @@ import {
   planCorridorDownload,
   type CorridorPlan,
 } from '@core/trails/corridor';
+import { trailPackPrefix } from '@core/trails/packIds';
 import type { TrailDetail } from '@core/trails/schema';
 import { stageDisplayName } from '@core/trails/stages';
 import { assessFreeSpaceForWrite } from '@data/diskSpace';
@@ -28,8 +29,8 @@ import { useSettingsStore } from '@state/settingsStore';
 
 export type TrailDownloadTarget = number | null;
 
-export const trailPackPrefix = (trailId: string, stage: TrailDownloadTarget) =>
-  `trail-${trailId}-${stage === null ? 'all' : `s${stage + 1}`}-`;
+// The id scheme lives in core: the offline-maps health check groups by it too.
+export { trailPackPrefix };
 
 /** A stable key for "this stage of this trail" (the download in progress). */
 export const trailDownloadKey = (trailId: string, stage: TrailDownloadTarget) =>
