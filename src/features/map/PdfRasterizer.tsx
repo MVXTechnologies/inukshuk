@@ -716,16 +716,19 @@ export function buildHtml(sources: Omit<PdfjsSources, 'fallbacks'>): string {
       function finish() {
         if (done) return;
         done = true;
-        clearTimeout(timer);
-        window.removeEventListener('error', finish);
+        if (timer !== null) clearTimeout(timer);
+        try {
+          window.removeEventListener('error', finish);
+        } catch (e) {}
         window.__inkWorkerLoaded = undefined;
         resolve(hasMainThreadWorker());
       }
-      timer = setTimeout(finish, MAIN_THREAD_WORKER_TIMEOUT_MS);
-      // A module that throws while evaluating reports to window.onerror.
-      window.addEventListener('error', finish);
-      window.__inkWorkerLoaded = finish;
       try {
+        // A module that throws while evaluating reports to window.onerror.
+        window.addEventListener('error', finish);
+        window.__inkWorkerLoaded = finish;
+        // Armed last: a failed setup must not leave a timer behind.
+        timer = setTimeout(finish, MAIN_THREAD_WORKER_TIMEOUT_MS);
         var script = document.createElement('script');
         script.type = 'module';
         script.text = WORKER_SOURCE + '\\n;window.__inkWorkerLoaded && window.__inkWorkerLoaded();';
