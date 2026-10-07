@@ -576,6 +576,74 @@ export function buildHtml(sources: Omit<PdfjsSources, 'fallbacks'>): string {
     return bytes;
   }
 
+  // pdf.js' scratch canvases (image downscaling steps, groups, masks),
+  // pooled by size. pdf.js 6 creates and destroys one per image per paint;
+  // 3.11 reused its few cached ones. A scanned sheet is hundreds of image
+  // tiles, each downscaled through two or three canvases on every repaint of
+  // a held page, and creating a canvas (and its backing store) is what made
+  // those tiles ~2x slower than 3.11 on WebKit. Same pixels: a reused canvas
+  // is reset to a blank, default-state one before pdf.js gets it.
+  var CANVAS_POOL_MAX_PIXELS = 8 * 1024 * 1024;
+  var canvasPool = [];
+  var canvasPoolPixels = 0;
+  function releaseCanvas(canvas) {
+    canvas.width = 0;
+    canvas.height = 0;
+  }
+  function clearCanvasPool() {
+    while (canvasPool.length) releaseCanvas(canvasPool.pop().canvas);
+    canvasPoolPixels = 0;
+  }
+  function InkCanvasFactory(options) {
+    this._document = (options && options.ownerDocument) || document;
+  }
+  InkCanvasFactory.prototype.create = function (width, height) {
+    if (width <= 0 || height <= 0) throw new Error('Invalid canvas size');
+    for (var i = canvasPool.length - 1; i >= 0; i--) {
+      var pooled = canvasPool[i];
+      if (pooled.canvas.width === width && pooled.canvas.height === height) {
+        canvasPool.splice(i, 1);
+        canvasPoolPixels -= width * height;
+        // Back to a blank canvas in its default state (reset() where the
+        // engine has it; re-setting the width does the same everywhere).
+        if (typeof pooled.context.reset === 'function') pooled.context.reset();
+        else pooled.canvas.width = width;
+        return { canvas: pooled.canvas, context: pooled.context };
+      }
+    }
+    var canvas = this._document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    // As pdf.js' own factory with enableHWA: not willReadFrequently.
+    return { canvas: canvas, context: canvas.getContext('2d', { willReadFrequently: false }) };
+  };
+  InkCanvasFactory.prototype.reset = function (entry, width, height) {
+    if (!entry || !entry.canvas) throw new Error('Canvas is not specified');
+    if (width <= 0 || height <= 0) throw new Error('Invalid canvas size');
+    entry.canvas.width = width;
+    entry.canvas.height = height;
+  };
+  InkCanvasFactory.prototype.destroy = function (entry) {
+    if (!entry || !entry.canvas) throw new Error('Canvas is not specified');
+    var canvas = entry.canvas;
+    var pixels = canvas.width * canvas.height;
+    // Small scratch canvases only; the pool never holds more than the cap.
+    if (pixels > 0 && pixels <= CANVAS_POOL_MAX_PIXELS / 4 && entry.context) {
+      canvasPool.push({ canvas: canvas, context: entry.context });
+      canvasPoolPixels += pixels;
+      while (canvasPoolPixels > CANVAS_POOL_MAX_PIXELS && canvasPool.length) {
+        var oldest = canvasPool.shift();
+        canvasPoolPixels -= oldest.canvas.width * oldest.canvas.height;
+        releaseCanvas(oldest.canvas);
+      }
+    } else {
+      releaseCanvas(canvas);
+    }
+    entry.canvas = null;
+    entry.context = null;
+  };
+  window.__pdfCanvasPool = { factory: InkCanvasFactory, clear: clearCanvasPool, size: function () { return canvasPool.length; } };
+
   // pdf.js asks the page for its wasm decoders (useWorkerFetch: false) instead
   // of fetching them by URL, so JPEG 2000 and JBIG2 decode in served and
   // inline mode alike. Nothing else is bundled: standard fonts and CMaps fall
@@ -700,7 +768,11 @@ export function buildHtml(sources: Omit<PdfjsSources, 'fallbacks'>): string {
     clearTimeout(h.timer);
     Promise.resolve().then(function () { return h.task.destroy(); }).catch(function () {});
   }
-  window.__pdfDropHeld = dropHeld;
+  // RN: background or memory warning. The pooled canvases go too.
+  window.__pdfDropHeld = function () {
+    dropHeld();
+    clearCanvasPool();
+  };
 
   function renderOnce(id, pageIndex, targetWidthPx, input, attempt, crop, nativePage, look) {
     var holdKey = input.url && look && typeof look.hold === 'string' && look.hold ? look.hold : null;
@@ -732,6 +804,7 @@ export function buildHtml(sources: Omit<PdfjsSources, 'fallbacks'>): string {
       // 3.11's time. With it, WebKit matches or beats 3.11 and its pixels
       // (identical on the 1987 USGS scan); Chromium is unchanged.
       enableHWA: true,
+      CanvasFactory: InkCanvasFactory,
     };
     if (wasmUrl) common.wasmUrl = wasmUrl;
     var params;

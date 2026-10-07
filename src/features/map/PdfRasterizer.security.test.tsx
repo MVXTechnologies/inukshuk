@@ -148,6 +148,7 @@ it('opens every document without eval, worker fetches or scripting (served, inli
     expect(params.useWorkerFetch).toBe(false);
     expect(params.isImageDecoderSupported).toBe(false);
     expect(params.enableHWA).toBe(true);
+    expect(typeof params.CanvasFactory).toBe('function');
     expect(typeof params.BinaryDataFactory).toBe('function');
     expect(params.enableScripting).not.toBe(true);
   }
