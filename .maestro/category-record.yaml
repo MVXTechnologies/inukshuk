@@ -120,6 +120,16 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     notVisible: 'Stop recording'
     timeout: 15000
+# #587: right after the first save, the one-time "Add photos from this
+# outing?" prompt (10 s) sits at the bottom, over the tab bar. Let it go
+# before any tab tap, or the tap lands on it.
+- runFlow:
+    when:
+      visible: 'Add photos from this outing.*'
+    commands:
+      - extendedWaitUntil:
+          notVisible: 'Add photos from this outing.*'
+          timeout: 20000
 - assertVisible: 'Map actions'
 # …and the Library gained exactly one trail: movement was real, so a discard
 # here is a failure.

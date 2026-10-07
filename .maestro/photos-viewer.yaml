@@ -1,0 +1,56 @@
+# Trail photos e2e (#587): open a trail photo in the full-screen viewer, page
+# to the next one, caption it, and close.
+#
+# Portability notes:
+# - Runs after photos-add.yaml (the newest trail has at least two photos).
+# - The strip's cards are "Photo N of M: <caption or time>"; the viewer's
+#   header is "N of M" and its controls carry a11y labels ("Close", "Show on
+#   map", "Caption", "Share photo", "More photo actions").
+# - The caption dialog is user-initiated (a Paper Dialog is fine there).
+appId: com.inukshuk.app
+---
+- launchApp
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- assertVisible: 'Recorded trails.*'
+- tapOn: '.* — open trail view, long-press to select'
+- extendedWaitUntil:
+    visible: 'Trail layers'
+    timeout: 30000
+- tapOn: 'Overview'
+- scrollUntilVisible:
+    element: 'Photo 1 of [0-9]+.*'
+    direction: DOWN
+    timeout: 15000
+- tapOn: 'Photo 1 of [0-9]+.*'
+- extendedWaitUntil:
+    visible: '1 of [0-9]+'
+    timeout: 15000
+- assertVisible: 'Show on map'
+- assertVisible: 'Placed on the trail.*'
+# Page to the second photo.
+- swipe:
+    direction: LEFT
+    start: 80%,35%
+    end: 10%,35%
+- extendedWaitUntil:
+    visible: '2 of [0-9]+'
+    timeout: 10000
+# Caption it.
+- tapOn: 'Caption'
+- extendedWaitUntil:
+    visible: 'Save'
+    timeout: 10000
+- inputText: 'Lichen glade'
+- tapOn: 'Save'
+- extendedWaitUntil:
+    visible: 'Lichen glade'
+    timeout: 10000
+- tapOn: 'Close'
+- extendedWaitUntil:
+    visible: 'Trail layers'
+    timeout: 15000

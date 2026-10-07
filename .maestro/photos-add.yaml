@@ -1,0 +1,64 @@
+# Trail photos e2e (#587): Add photos to a saved trail through the system
+# photo picker, see the sheet's groups, add them, and find them in the
+# Overview's "Photos and waypoints" strip.
+#
+# Portability notes:
+# - Android only: it drives Android's Photo Picker. e2e-attempts.sh pushes
+#   .maestro/fixtures/photos/*.jpg (camera EXIF + a GPS position next to the
+#   CI location, no capture time) into Pictures and indexes them, so they are
+#   the newest items, first in the picker's grid.
+# - Runs after category-record.yaml (needs a saved trail: the newest is the
+#   top card).
+# - Whether the picker keeps the photos' GPS decides their group: "By
+#   location only" (checked by default) when it does, "Not from this outing"
+#   (unchecked) when it removes it, as Android 14+ does for apps without
+#   ACCESS_MEDIA_LOCATION. The flow ticks the latter when it is there.
+# - Copies are made by the hidden WebView resize worker: allow time.
+appId: com.inukshuk.app
+---
+- launchApp:
+    permissions:
+      location: allow
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- assertVisible: 'Recorded trails.*'
+- tapOn: '.* — open trail view, long-press to select'
+- extendedWaitUntil:
+    visible: 'Trail layers'
+    timeout: 30000
+- tapOn: 'Overview'
+- scrollUntilVisible:
+    element: 'Add photos'
+    direction: DOWN
+    timeout: 15000
+- tapOn: 'Add photos'
+# Android's Photo Picker: tick the two newest photos (the fixtures), then Add.
+- extendedWaitUntil:
+    visible: 'Photo taken on.*'
+    timeout: 30000
+- tapOn:
+    text: 'Photo taken on.*'
+    index: 0
+- tapOn:
+    text: 'Photo taken on.*'
+    index: 1
+- tapOn: 'Add \(2\)'
+# The sheet: two photos, sorted into groups.
+- extendedWaitUntil:
+    visible: '2 photos selected.*'
+    timeout: 60000
+- runFlow:
+    when:
+      visible: 'Not from this outing'
+    commands:
+      - tapOn: 'Not from this outing'
+- tapOn: 'Add 2 photos'
+# Back on the trail: the strip shows them (cards read "Photo N of M: …").
+- extendedWaitUntil:
+    visible: 'Photo 1 of [0-9]+.*'
+    timeout: 90000
+- assertVisible: 'Photos and waypoints · [0-9]+.*'
