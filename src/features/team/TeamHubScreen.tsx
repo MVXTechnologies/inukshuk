@@ -51,6 +51,16 @@ const SimulatedTeammates: ComponentType | null =
     : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
 
+// Demo builds only: the live team simulation. The flag is inlined at build
+// time, so a store build's bundle never contains the simulation (Metro folds
+// the condition and drops the require).
+/* eslint-disable @typescript-eslint/no-require-imports */
+const SimulationPanel: ComponentType | null =
+  process.env.EXPO_PUBLIC_MESH_LOOPBACK === '1'
+    ? (require('./sim/SimulationPanel') as typeof import('./sim/SimulationPanel')).SimulationPanel
+    : null;
+/* eslint-enable @typescript-eslint/no-require-imports */
+
 /** "3 open · 1 for you", or how to start. */
 export function tasksLine(tasks: readonly TeamTask[], me: string): string {
   const open = tasks.filter((x) => !x.done);
@@ -483,6 +493,7 @@ export function TeamHubScreen() {
         encrypted; only members can read them. Someone removed keeps what they already received.
       </Note>
       {SimulatedTeammates && <SimulatedTeammates />}
+      {SimulationPanel && <SimulationPanel />}
     </TeamScreenFrame>
   );
 }

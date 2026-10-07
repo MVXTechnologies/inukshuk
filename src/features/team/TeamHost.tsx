@@ -48,6 +48,15 @@ export function TeamHost() {
     if (last) service.activate(last.teamId).catch((e) => reportError(e, 'team-open'));
   }, [enabled, loaded, activeId]);
 
+  // Demo builds only: a running team simulation picks up where it was (the
+  // inlined flag drops this require from store builds).
+  useEffect(() => {
+    if (process.env.EXPO_PUBLIC_MESH_LOOPBACK !== '1' || activeId === null) return;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const sim = require('./sim/teamSimulation') as typeof import('./sim/teamSimulation');
+    void sim.teamSimulation.resume();
+  }, [activeId]);
+
   // The mesh: foreground, or background while recording; never during a join
   // (the join owns the transport).
   const foreground = appState === 'active';
