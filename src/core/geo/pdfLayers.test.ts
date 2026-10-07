@@ -116,7 +116,7 @@ describe('planLayers', () => {
   });
 });
 
-describe('optional-content visibility (pdf.js 3.11 semantics)', () => {
+describe('optional-content visibility (pdf.js OptionalContentConfig semantics)', () => {
   beforeEach(() => filter.set({ on: true, off: false, on2: true, off2: false }));
   afterAll(() => filter.set(null));
 
@@ -172,36 +172,45 @@ describe('optional-content visibility (pdf.js 3.11 semantics)', () => {
 });
 
 describe('operator filter', () => {
-  const OPS: PdfOpsLike = {
-    beginMarkedContent: 1,
-    beginMarkedContentProps: 2,
-    endMarkedContent: 3,
-    paintXObject: 4,
-    beginInlineImage: 5,
-    shadingFill: 6,
-  };
+  const OPS: PdfOpsLike = { paintXObject: 4, endInlineImage: 5, shadingFill: 6 };
+  const BMC = 1;
+  const BDC = 2;
+  const EMC = 3;
   const FILL = 7;
-  class Name {
-    constructor(readonly name: string) {}
-  }
   const hiddenImagery = { type: 'OCMD' as const, ids: ['ortho', 'images'], policy: 'AllOn' };
 
-  beforeEach(() => filter.set({ ortho: false, images: false, contours: true }));
+  beforeEach(() => filter.set({ ortho: false, images: false, contours: true }, OPS));
   afterAll(() => filter.set(null));
 
-  /** Feed ops the way the patched evaluator does; returns the ops it drops. */
-  function run(ops: (number | [number, unknown] | { oc: unknown })[]): number[] {
-    const list = {};
+  type Step = number | { oc: unknown } | { tag: 'ignored' };
+  /**
+   * Feed ops the way the patched evaluator does, tracking marked-content
+   * depth the way pdf.js 6 does (`y` in getOperatorList): every BDC and BMC
+   * opens a level, every EMC closes one unless already at 0, and a parsed
+   * `/OC` section is pushed at the level it opened. `{ tag: 'ignored' }` is
+   * an operator pdf.js skips without touching the depth (a BMC/EMC with a
+   * dictionary argument). Returns the indexes of the dropped ops.
+   */
+  function run(steps: Step[], key: object = {}): number[] {
+    let level = 0;
     const dropped: number[] = [];
-    ops.forEach((op, index) => {
-      if (typeof op === 'object' && !Array.isArray(op)) {
-        // An /OC section: pdf.js calls op() then, once parsed, push().
-        filter.op(list, OPS.beginMarkedContentProps, [new Name('OC')], OPS, Name);
-        filter.push(list, op.oc as never);
+    steps.forEach((step, index) => {
+      if (typeof step === 'object' && 'oc' in step) {
+        filter.op(key, BDC, level);
+        level += 1;
+        filter.push(key, step.oc as never, level);
         return;
       }
-      const [fn, args] = Array.isArray(op) ? op : [op, null];
-      if (filter.op(list, fn, args, OPS, Name)) dropped.push(index);
+      if (typeof step === 'object') {
+        filter.op(key, EMC, level);
+        return;
+      }
+      if (filter.op(key, step, level)) {
+        dropped.push(index);
+        return;
+      }
+      if (step === BMC || step === BDC) level += 1;
+      else if (step === EMC && level > 0) level -= 1;
     });
     return dropped;
   }
@@ -211,14 +220,14 @@ describe('operator filter', () => {
       OPS.paintXObject, // 0: outside any section
       { oc: hiddenImagery }, // 1
       OPS.paintXObject, // 2
-      OPS.beginInlineImage, // 3
+      OPS.endInlineImage, // 3
       OPS.shadingFill, // 4
       FILL, // 5: vector paint stays (pdf.js hides it at paint time)
-      OPS.endMarkedContent, // 6
+      EMC, // 6
       OPS.paintXObject, // 7: after the section
       { oc: { type: 'OCG', id: 'contours' } }, // 8
       OPS.paintXObject, // 9: visible section
-      OPS.endMarkedContent, // 10
+      EMC, // 10
     ]);
     expect(dropped).toEqual([2, 3, 4]);
   });
@@ -226,44 +235,66 @@ describe('operator filter', () => {
   it('hides everything nested inside a hidden section, whatever the inner sections say', () => {
     const dropped = run([
       { oc: hiddenImagery },
-      OPS.beginMarkedContent,
-      [OPS.beginMarkedContentProps, [new Name('Span'), null]],
+      BMC,
+      BDC, // a non-/OC tag: visible on its own
       { oc: { type: 'OCG', id: 'contours' } },
       OPS.paintXObject, // 4
-      OPS.endMarkedContent,
-      OPS.endMarkedContent,
-      OPS.endMarkedContent,
+      EMC,
+      EMC,
+      EMC,
       OPS.paintXObject, // 8: still inside the hidden section
-      OPS.endMarkedContent,
+      EMC,
       OPS.paintXObject, // 10
     ]);
     expect(dropped).toEqual([4, 8]);
   });
 
-  it('survives unbalanced end-of-section operators', () => {
-    expect(run([OPS.endMarkedContent, OPS.endMarkedContent, OPS.paintXObject])).toEqual([]);
-  });
-
-  it('keeps a section whose tag pdf.js drops out of the nesting, as pdf.js does', () => {
-    // pdf.js ignores a BDC whose tag is not a name, so its EMC closes the
-    // enclosing hidden section: what follows is visible again.
+  it('forgets a closed hidden section when a sibling opens at the same depth', () => {
     const dropped = run([
       { oc: hiddenImagery },
-      [OPS.beginMarkedContentProps, ['not-a-name', null]],
-      OPS.endMarkedContent,
-      OPS.paintXObject,
+      EMC,
+      BDC, // a non-/OC section at depth 1 again: nothing hidden in it
+      OPS.paintXObject, // 3
+      EMC,
+      BMC,
+      OPS.shadingFill, // 6
     ]);
     expect(dropped).toEqual([]);
   });
 
-  it('drops nothing while no map is installed', () => {
+  it('survives unbalanced end-of-section operators', () => {
+    expect(run([EMC, EMC, OPS.paintXObject])).toEqual([]);
+  });
+
+  it('follows pdf.js depth when pdf.js ignores an operator', () => {
+    // A BMC/EMC with a dictionary argument is skipped by pdf.js without
+    // changing its depth; the hidden section is still open after it.
+    const dropped = run([{ oc: hiddenImagery }, { tag: 'ignored' }, OPS.paintXObject]);
+    expect(dropped).toEqual([2]);
+  });
+
+  it('keeps the state of each getOperatorList call apart (form XObjects nest)', () => {
+    const page = {};
+    const form = {};
+    run([{ oc: { type: 'OCG', id: 'contours' } }], page);
+    // The form's own content opens a hidden section at ITS depth 1...
+    expect(run([{ oc: hiddenImagery }, OPS.paintXObject, EMC], form)).toEqual([1]);
+    // ...which says nothing about the page's depth-1 section.
+    expect(filter.op(page, OPS.paintXObject, 1)).toBe(false);
+  });
+
+  it('drops nothing while no map is installed, or without the op codes', () => {
     filter.set(null);
-    expect(run([{ oc: hiddenImagery }, OPS.paintXObject, OPS.endMarkedContent])).toEqual([]);
+    expect(run([{ oc: hiddenImagery }, OPS.paintXObject, EMC])).toEqual([]);
+    filter.set({ ortho: false, images: false });
+    expect(run([{ oc: hiddenImagery }, OPS.paintXObject, EMC])).toEqual([]);
   });
 
   it('never throws into pdf.js', () => {
-    expect(filter.op(null as never, OPS.paintXObject, null, OPS, Name)).toBe(false);
-    expect(() => filter.push(null as never, hiddenImagery)).not.toThrow();
+    expect(filter.op(null as never, OPS.paintXObject, 1)).toBe(false);
+    expect(filter.op({}, OPS.paintXObject, Number.NaN)).toBe(false);
+    expect(() => filter.push(null as never, hiddenImagery, 1)).not.toThrow();
+    expect(() => filter.push({}, hiddenImagery, 0)).not.toThrow();
     const hostile = {
       get type(): string {
         throw new Error('boom');
@@ -284,8 +315,16 @@ describe('runtime installation', () => {
     new Function('globalThis', PDF_LAYER_RUNTIME_SOURCE)(root);
     const installed = root.__inkOC as typeof filter;
     expect(listeners).toHaveLength(1);
-    listeners[0]?.({ data: { inukshukOptionalContent: { a: false } } });
+    listeners[0]?.({
+      data: {
+        inukshukOptionalContent: { a: false },
+        inukshukOps: { paintXObject: 4, endInlineImage: 5, shadingFill: 6 },
+      },
+    });
     expect(installed.visible({ type: 'OCG', id: 'a' })).toBe(false);
+    const key = {};
+    installed.push(key, { type: 'OCG', id: 'a' }, 1);
+    expect(installed.op(key, 4, 1)).toBe(true);
     // pdf.js' own messages (and junk) leave the map alone.
     listeners[0]?.({ data: { targetName: 'worker', action: 'GetOperatorList' } });
     listeners[0]?.({ data: 'string' });

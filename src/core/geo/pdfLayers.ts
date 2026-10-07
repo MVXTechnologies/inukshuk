@@ -5,10 +5,11 @@
  * groups (OCGs): "Orthoimage", "Shaded Relief", "Contours", "Transportation"…
  * A Portland West, ME sheet (58 MB) holds ~107 Mpx of orthoimage JPEG strips
  * and a single 105 Mpx shaded-relief JPEG, BOTH hidden by the document's own
- * default layer state. pdf.js 3.11 honours that state only when painting: its
- * worker still decodes every hidden image while building the operator list.
- * Measured in Node on that sheet, that is ~4.5 s of JPEG decoding (and a
- * transient ~300 MB RGB buffer for the relief) for pixels nobody sees.
+ * default layer state. pdf.js (3.11 and 6.x alike) honours that state only
+ * when painting: its worker still decodes every hidden image while building
+ * the operator list. Measured in Node on that sheet with 3.11, that was
+ * ~4.5 s of JPEG decoding (and a transient ~300 MB RGB buffer for the relief)
+ * for pixels nobody sees.
  *
  * Two pieces live here, both as plain ES5 **source text**: the rasterizer runs
  * them inside the WebView page and the pdf.js worker, and Hermes cannot turn
@@ -71,36 +72,35 @@ export type PdfOptionalContent =
       expression?: unknown[] | null;
     };
 
-/** One operator list (an opaque object the filter keeps its stack on). */
-export type PdfOperatorListLike = object;
+/**
+ * The per-call key the filter keeps its section state on: pdf.js' content
+ * stream preprocessor, which is new for every `getOperatorList` call (a form
+ * XObject's content is a nested call with its own). An opaque object here.
+ */
+export type PdfOperatorListKey = object;
 
 export interface PdfOptionalContentFilter {
-  /** Install the final visibility map; `null` disables filtering. */
-  set(visibility: Record<string, boolean> | null): void;
+  /**
+   * Install the final visibility map, and the codes of the operators that may
+   * be dropped inside hidden content (pdf.js' own `OPS`); `null` disables
+   * filtering.
+   */
+  set(visibility: Record<string, boolean> | null, ops?: PdfOpsLike | null): void;
   visible(group: PdfOptionalContent | null | undefined): boolean;
   /**
-   * Called for every content-stream operator before pdf.js handles it.
-   * Tracks marked-content nesting and returns true when the operator paints
-   * inside hidden content and can be dropped.
+   * Called for every content-stream operator before pdf.js handles it, with
+   * pdf.js' own marked-content depth at that point. Returns true when the
+   * operator paints inside hidden content and can be dropped.
    */
-  op(
-    list: PdfOperatorListLike,
-    fn: number,
-    args: unknown,
-    ops: PdfOpsLike,
-    nameCtor: unknown,
-  ): boolean;
-  /** Called when pdf.js adds an `/OC` marked-content section. */
-  push(list: PdfOperatorListLike, group: PdfOptionalContent | null | undefined): void;
+  op(key: PdfOperatorListKey, fn: number, level: number): boolean;
+  /** Called when pdf.js adds a parsed `/OC` section that opened depth `level`. */
+  push(key: PdfOperatorListKey, group: PdfOptionalContent | null | undefined, level: number): void;
 }
 
-/** The subset of pdf.js' `OPS` enum the filter reads. */
+/** The operators the filter may drop: everything that fetches or decodes. */
 export interface PdfOpsLike {
-  beginMarkedContent: number;
-  beginMarkedContentProps: number;
-  endMarkedContent: number;
   paintXObject: number;
-  beginInlineImage: number;
+  endInlineImage: number;
   shadingFill: number;
 }
 
@@ -150,7 +150,7 @@ export const PDF_LAYER_RUNTIME_SOURCE = String.raw`(function (root) {
     return { visibility: visibility, changed: changed, drawnChanged: drawnChanged };
   }
 
-  // Mirrors pdf.js 3.11 OptionalContentConfig: unknown groups and malformed
+  // Mirrors pdf.js' OptionalContentConfig.isVisible: unknown groups and malformed
   // input count as visible, so the filter can only ever drop content pdf.js
   // itself would hide.
   var vis = null;
@@ -187,43 +187,46 @@ export const PDF_LAYER_RUNTIME_SOURCE = String.raw`(function (root) {
     if (policy === 'AllOff') { for (k = 0; k < ids.length; k++) if (vis[ids[k]]) return false; return true; }
     return true;
   }
-  function stack(list) {
-    if (!list.__inkOC) list.__inkOC = [];
-    return list.__inkOC;
-  }
-  function hidden(list) {
-    var s = list.__inkOC;
-    if (!s) return false;
-    for (var i = 0; i < s.length; i++) if (!s[i]) return true;
-    return false;
+  // Section visibility per getOperatorList call, indexed by the depth the
+  // section opened: open[d] is false when the section that brought pdf.js'
+  // marked-content depth to d is hidden. pdf.js' own depth counter is the
+  // source of truth, so a tag it ignores, or an EMC it skips, can never put
+  // this out of step with it. Entries deeper than the current depth belong
+  // to sections that have closed and are discarded.
+  var drop = null;
+  function sections(key, level) {
+    var s = key.__inkOC;
+    if (!s) { s = []; key.__inkOC = s; }
+    if (s.length > level + 1) s.length = level + 1;
+    return s;
   }
   var filter = {
-    set: function (v) { vis = v && typeof v === 'object' ? v : null; },
+    set: function (v, ops) {
+      vis = v && typeof v === 'object' ? v : null;
+      drop = null;
+      if (vis !== null && ops && typeof ops === 'object') {
+        drop = {};
+        var names = ['paintXObject', 'endInlineImage', 'shadingFill'];
+        for (var i = 0; i < names.length; i++) {
+          if (typeof ops[names[i]] === 'number') drop[ops[names[i]]] = true;
+        }
+      }
+    },
     visible: function (group) {
       try { return visible(group); } catch (e) { return true; }
     },
-    push: function (list, group) {
-      try { stack(list).push(visible(group)); } catch (e) {}
-    },
-    op: function (list, fn, args, OPS, NameCtor) {
+    push: function (key, group, level) {
       try {
-        if (fn === OPS.beginMarkedContent) { stack(list).push(true); return false; }
-        if (fn === OPS.beginMarkedContentProps) {
-          // /OC sections are pushed once pdf.js has parsed them (push());
-          // pdf.js drops a BDC whose tag is not a name, so do we.
-          var tag = args && args[0];
-          if (tag instanceof NameCtor && tag.name !== 'OC') stack(list).push(true);
-          return false;
-        }
-        if (fn === OPS.endMarkedContent) {
-          var s = list.__inkOC;
-          if (s && s.length) s.pop();
-          return false;
-        }
-        if (vis === null) return false;
-        if (fn === OPS.paintXObject || fn === OPS.beginInlineImage || fn === OPS.shadingFill) {
-          return hidden(list);
-        }
+        if (typeof level !== 'number' || level < 1) return;
+        sections(key, level)[level] = visible(group);
+      } catch (e) {}
+    },
+    op: function (key, fn, level) {
+      try {
+        if (typeof level !== 'number' || level < 0) return false;
+        var s = sections(key, level);
+        if (vis === null || drop === null || drop[fn] !== true) return false;
+        for (var i = 1; i < s.length; i++) if (s[i] === false) return true;
       } catch (e) {}
       return false;
     },
@@ -239,7 +242,7 @@ export const PDF_LAYER_RUNTIME_SOURCE = String.raw`(function (root) {
     root.addEventListener('message', function (event) {
       var data = event && event.data;
       if (data && typeof data === 'object' && Object.prototype.hasOwnProperty.call(data, 'inukshukOptionalContent')) {
-        filter.set(data.inukshukOptionalContent);
+        filter.set(data.inukshukOptionalContent, data.inukshukOps);
       }
     });
   }

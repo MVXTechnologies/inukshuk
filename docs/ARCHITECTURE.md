@@ -49,7 +49,7 @@ four stages:
      against hostile input (clamped xref counts, bounded FlateDecode output).
 
 2. **Rasterize the page** (`features/map/PdfRasterizer`). A hidden offscreen
-   WebView runs **bundled pdf.js** (`isEvalSupported: false`) to render the
+   WebView runs **bundled pdf.js 6** (ES modules, no eval; the page's CSP forbids it) to render the
    page to a PNG, and reports the page size in points. The page and the PDF
    are both served from the app's loopback server (`data/localServer.ts`,
    root = the document directory) so pdf.js range-fetches only the bytes the

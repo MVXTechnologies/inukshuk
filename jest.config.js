@@ -32,6 +32,7 @@ module.exports = {
     // Team protocol test doubles (Node crypto, PRNG, fixtures) — never shipped.
     '!src/core/team/testing/**',
     '!src/core/gnss/testUtils.ts',
+    '!src/core/geo/pdfjsRealm.testUtils.ts',
   ],
   coverageThreshold: {
     // Pure logic in src/core is the safety-critical part — hold it to a high bar.

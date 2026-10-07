@@ -1,5 +1,5 @@
 /**
- * The raster-orientation contract against real pdf.js 3.11.174 (#487).
+ * The raster-orientation contract against real pdf.js (the shipped 6.x build, #487).
  *
  * The overlay corners the parser computes are the geographic positions of the
  * page box's user-space corners; they only land right if the rasterizer puts
@@ -9,8 +9,7 @@
  * PDF_RASTER_ROTATION })` actually does, and shows that leaving the rotation
  * to pdf.js would NOT (it applies `/Rotate` by default).
  */
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { loadPdfjsRealm } from '../pdfjsRealm.testUtils';
 import { PDF_RASTER_ROTATION, normalizePageRotation, rasterPixelOfPagePoint } from './orientation';
 import { buildClassicPdf } from './testUtils';
 
@@ -24,38 +23,13 @@ interface Page {
   view: number[];
   getViewport(params: { scale: number; rotation?: number }): Viewport;
 }
-interface Pdfjs {
-  getDocument(params: object): {
-    promise: Promise<{ getPage(n: number): Promise<Page>; destroy(): Promise<void> }>;
-  };
+interface PdfjsTask {
+  promise: Promise<{ getPage(n: number): Promise<Page> }>;
+  destroy(): Promise<void>;
 }
-
-const WORKER_ASSET = readFileSync(
-  join(__dirname, '../../../../assets/pdfjs/pdf.worker.legacy.min.js.pdfjs'),
-  'utf8',
-);
-
-function loadPdfjs(): Pdfjs {
-  const module = { exports: {} as { WorkerMessageHandler?: unknown } };
-  new Function('module', 'exports', WORKER_ASSET)(module, module.exports);
-  (globalThis as { pdfjsWorker?: unknown }).pdfjsWorker = module.exports;
-  let pdfjs: Pdfjs | undefined;
-  jest.isolateModules(() => {
-    pdfjs = jest.requireActual<Pdfjs>('pdfjs-dist/legacy/build/pdf.js');
-  });
-  return pdfjs!;
-}
-
-beforeEach(() => {
-  jest.spyOn(console, 'log').mockImplementation(() => undefined);
-});
-afterEach(() => {
-  jest.restoreAllMocks();
-  delete (globalThis as { pdfjsWorker?: unknown }).pdfjsWorker;
-});
 
 async function openPage(pageDict: string): Promise<{ page: Page; close: () => Promise<void> }> {
-  const pdfjs = loadPdfjs();
+  const { pdfjs } = await loadPdfjsRealm();
   const bytes = buildClassicPdf(
     [
       '<< /Type /Catalog /Pages 2 0 R >>',
@@ -64,9 +38,9 @@ async function openPage(pageDict: string): Promise<{ page: Page; close: () => Pr
     ],
     1,
   );
-  const doc = await pdfjs.getDocument({ data: bytes, isEvalSupported: false, verbosity: 0 })
-    .promise;
-  return { page: await doc.getPage(1), close: () => doc.destroy() };
+  const task = pdfjs.getDocument({ data: bytes, verbosity: 0 }) as unknown as PdfjsTask;
+  const doc = await task.promise;
+  return { page: await doc.getPage(1), close: () => task.destroy() };
 }
 
 describe.each([0, 90, 180, 270, -90])('/Rotate %p', (rotate) => {
