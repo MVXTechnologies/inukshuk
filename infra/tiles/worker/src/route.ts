@@ -37,6 +37,8 @@
  * so it is unit-tested in Node (`route.test.ts`).
  */
 
+import { readTextCapped } from './guards';
+
 export type RouteMode = 'trail' | 'road';
 export type RouteProfile = 'hike' | 'foot' | 'bike' | 'car';
 export type RouteEngine = 'brouter' | 'valhalla';
@@ -589,8 +591,9 @@ function jsonError(
 }
 
 async function readBody(request: Request): Promise<unknown> {
-  const text = await request.text();
-  if (text.length > MAX_BODY_BYTES) throw new RouteError(400, 'bad_request', 'body too large');
+  // Capped while reading: the check used to run after buffering the whole body.
+  const text = await readTextCapped(request, MAX_BODY_BYTES);
+  if (text === null) throw new RouteError(400, 'bad_request', 'body too large');
   try {
     return JSON.parse(text) as unknown;
   } catch {

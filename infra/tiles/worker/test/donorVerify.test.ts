@@ -57,6 +57,17 @@ function world() {
 }
 
 describe('start', () => {
+  it('stops minting codes once the global send budget is spent, storing and sending nothing', async () => {
+    const w = world();
+    let budget = 1;
+    w.deps.allowSend = async () => budget-- > 0;
+    expect((await w.call('start', { email: 'a@b.ca' })).status).toBe(202);
+    const res = await w.call('start', { email: 'other@b.ca' });
+    expect(res).toEqual({ status: 429, body: { ok: false, error: 'try again later' } });
+    expect(w.sent.map((s) => s.email)).toEqual(['a@b.ca']);
+    expect(w.store.size).toBe(1);
+  });
+
   it('emails a code and stores only hashes, never the address or the code', async () => {
     const w = world();
     const res = await w.call('start', { email: '  Anne@Example.org ' });

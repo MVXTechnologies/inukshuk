@@ -49,6 +49,13 @@ export interface VerifyDeps {
   /** Six random digits. */
   code(): string;
   sendCode(email: string, code: string): Promise<boolean>;
+  /**
+   * Global budget of code emails (all addresses, all clients), checked before
+   * a code is minted: per-IP and per-address limits don't stop someone with
+   * many addresses and many IPs from spending the mail provider's daily quota
+   * (and the sending domain's reputation). Absent = no global budget.
+   */
+  allowSend?(now: number): Promise<boolean>;
   now(): number;
 }
 
@@ -112,6 +119,7 @@ export async function handleVerify(req: VerifyRequest, deps: VerifyDeps): Promis
   if (req.route === 'start') {
     const starts = (pending?.starts ?? []).filter((t) => now - t < HOUR_MS);
     if (starts.length >= MAX_STARTS_PER_HOUR) return limited;
+    if (deps.allowSend !== undefined && !(await deps.allowSend(now))) return limited;
     const code = deps.code();
     await deps.put(key, {
       proof: await deps.hmac(`code:${email}|${code}`),
