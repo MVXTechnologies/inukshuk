@@ -7,7 +7,7 @@
  */
 import type { TrackPhoto } from '@core/photos/model';
 import { trailUrl } from '@core/teamui/alerts';
-import { useTeamStore } from '@state/teamStore';
+import { teamService, useTeamStore } from '@state/teamStore';
 import { useTrailPhotosStore } from '@state/trailPhotosStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -99,8 +99,17 @@ export function PhotoBottomCard() {
           km: null,
         };
   const said = threads.get(target.photoId) ?? [];
-  const last = said.length > 0 ? said[said.length - 1] : undefined;
-  const author = last ? view?.members.find((m) => m.id === last.author)?.name : undefined;
+  const lastComment =
+    said.length > 0 ? teamService()?.active?.photoComments(target.photoId).at(-1) : undefined;
+  const last = lastComment
+    ? {
+        text: lastComment.text,
+        name:
+          lastComment.author === view?.me
+            ? 'You'
+            : (view?.members.find((m) => m.id === lastComment.author)?.name ?? 'A teammate'),
+      }
+    : undefined;
   const sub = [
     photo.takenAt ? formatPhotoWhen(photo.takenAt) : null,
     photo.km !== null ? `km ${photo.km.toFixed(1)}` : null,
@@ -139,7 +148,7 @@ export function PhotoBottomCard() {
           ) : null}
           {last && (
             <Text variant="bodySmall" style={{ color: t.ink }} numberOfLines={1}>
-              {`${author ?? 'A teammate'}: …`}
+              {`${last.name}: ${last.text}`}
             </Text>
           )}
         </View>
