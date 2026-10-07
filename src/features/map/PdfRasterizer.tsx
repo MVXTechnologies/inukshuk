@@ -726,6 +726,12 @@ export function buildHtml(sources: Omit<PdfjsSources, 'fallbacks'>): string {
       // tile of a scanned sheet repainted in ~1 s instead of ~40 ms (desktop
       // WebKit 26, USGS 1987 HTMC). pdf.js' own decoder is what 3.11 used.
       isImageDecoderSupported: false,
+      // pdf.js' scratch canvases (image downscaling, groups) without
+      // willReadFrequently, as 3.11 made them: WebKit copies between
+      // CPU-backed canvases slowly, so scanned-sheet detail tiles cost 3-4x
+      // 3.11's time. With it, WebKit matches or beats 3.11 and its pixels
+      // (identical on the 1987 USGS scan); Chromium is unchanged.
+      enableHWA: true,
     };
     if (wasmUrl) common.wasmUrl = wasmUrl;
     var params;
