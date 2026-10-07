@@ -131,6 +131,10 @@ import { RecordingPanel } from './components/RecordingPanel';
 import { ReceiverFollow } from '@features/gnss/ReceiverFollow';
 import { ReceiverMapOverlay } from '@features/gnss/ReceiverMapOverlay';
 import { useGnssStore } from '@state/gnssStore';
+import { pendingAsTrackPhotos } from '@core/photos/capture';
+import { CapturedPhotoToast } from '../photos/CapturedPhotoToast';
+import { TrailPhotoLayers } from '../photos/TrailPhotoLayers';
+import { useRecordingPhoto } from '../photos/useRecordingPhoto';
 import { TrailInspectPanel } from './components/TrailInspectPanel';
 import { TipButton } from '@features/support/TipButton';
 import { TipBubble } from '@features/support/TipBubble';
@@ -1048,6 +1052,15 @@ export function MapScreen() {
   const [panelHeight, setPanelHeight] = useState(0);
   const [gloveLockRequested, setGloveLocked] = useState(false);
   const lastAccuracyM = useRecorderStore((s) => s.lastAccuracyM);
+  // The Photo button (#587): captures join the recording; their circles ride
+  // the live line.
+  const recordingPhoto = useRecordingPhoto(showSnack);
+  const recPhotos = useRecorderStore((s) => s.photos);
+  const recPhotoSession = useRecorderStore((s) => s.photoSessionId);
+  const liveTrailPhotos = useMemo(
+    () => (recPhotoSession === null ? [] : pendingAsTrackPhotos(recPhotos, recPhotoSession)),
+    [recPhotos, recPhotoSession],
+  );
 
   // #90 — location lost mid-recording: auto-pause, but only on a SUSTAINED
   // loss (debounced in the hook; transient watch re-subscription and the
@@ -2791,6 +2804,9 @@ export function MapScreen() {
                 {LIVE_TRAIL_LAYERS}
               </GeoJSONSource>
             )}
+            {liveTrailPhotos.length > 0 && (
+              <TrailPhotoLayers id="rec-live" photos={liveTrailPhotos} />
+            )}
 
             {/* Waypoint pins (saved standalone ones always; live ones while a
               recording session is up). Visual only — tap handling is done at
@@ -3352,7 +3368,15 @@ export function MapScreen() {
               gloveLocked={gloveLocked}
               onGloveLockChange={setGloveLocked}
               onHeightChange={setPanelHeight}
+              onPhoto={recordingPhoto.capture}
+              photoCount={recPhotos.length}
+              photoBusy={recordingPhoto.busy}
             />
+          </View>
+        )}
+        {recordingPanelUp && recordingPhoto.toast && (
+          <View style={waypointCardDockStyle(true, panelHeight)} pointerEvents="box-none">
+            <CapturedPhotoToast toast={recordingPhoto.toast} onUndo={recordingPhoto.undo} />
           </View>
         )}
 

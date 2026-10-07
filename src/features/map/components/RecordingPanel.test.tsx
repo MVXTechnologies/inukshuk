@@ -74,6 +74,51 @@ describe('RecordingPanel', () => {
     expect(screen.getByText('GAIN')).toBeOnTheScreen();
   });
 
+  it('has no Photo button unless the screen offers one', async () => {
+    await renderPanel();
+    expect(screen.queryByTestId('recording-photo-button')).toBeNull();
+  });
+
+  it('shows the Photo button between Mark and Stop, with its count (#587)', async () => {
+    const onPhoto = jest.fn();
+    await renderPanel({ onPhoto, photoCount: 7 });
+    const button = screen.getByLabelText('Take a photo, 7 photos so far');
+    expect(screen.getByText('Photo')).toBeOnTheScreen();
+    expect(screen.getByText('7', { includeHiddenElements: true })).toBeOnTheScreen();
+    await fireEvent.press(button);
+    expect(onPhoto).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes photos while paused, but not while one is being copied', async () => {
+    const onPhoto = jest.fn();
+    await renderPanel({ status: 'paused', onPhoto });
+    await fireEvent.press(screen.getByLabelText('Take a photo'));
+    expect(onPhoto).toHaveBeenCalledTimes(1);
+    await screen.rerender(
+      <SafeAreaProvider initialMetrics={METRICS}>
+        <PaperProvider>
+          <RecordingPanel
+            status="paused"
+            stats={stats}
+            elapsedS={1}
+            liveSpeedMps={0}
+            gpsQuality="good"
+            onPause={jest.fn()}
+            onResume={jest.fn()}
+            onStop={jest.fn()}
+            onMark={jest.fn()}
+            onPhoto={onPhoto}
+            photoBusy
+            gloveLocked={false}
+            onGloveLockChange={jest.fn()}
+          />
+        </PaperProvider>
+      </SafeAreaProvider>,
+    );
+    await fireEvent.press(screen.getByLabelText('Take a photo'));
+    expect(onPhoto).toHaveBeenCalledTimes(1);
+  });
+
   it('minimizes to the mini overlay and comes back', async () => {
     await renderPanel();
     await fireEvent.press(screen.getByLabelText('Minimize to a small overlay'));
