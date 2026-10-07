@@ -53,7 +53,8 @@ function walk(bot: Bot, center: { latitude: number; longitude: number }, seed: n
   });
   let step = 0;
   const share = () => {
-    const a = seed + step++ / 12;
+    // ~11 m per 5 s: a brisk walk round a ~900 m loop.
+    const a = seed + step++ / 40;
     session.sharePosition({
       latitude: center.latitude + 0.004 * Math.sin(a),
       longitude: center.longitude + 0.006 * Math.cos(a * 0.8),

@@ -64,7 +64,19 @@ function waypointsGeoJson(shares: TeamShares): FeatureCollection {
   };
 }
 
-export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
+/** Chained `afterId`s keep the team's layers in order, all above the style. */
+const afterOf = (id: string | undefined): { afterId?: string } =>
+  id === undefined ? {} : { afterId: id };
+
+export function TeamMapLayers({
+  glyphs,
+  topLayerId,
+}: {
+  glyphs: string | undefined;
+  /** The style's top-most layer: the team draws above it (base labels included). */
+  topLayerId: string | undefined;
+}) {
+  const top = topLayerId;
   const { installedAt, show } = useExtensionPrefs('team');
   const view = useTeamStore((s) => s.view);
   const positions = useTeamStore((s) => s.positions);
@@ -88,6 +100,7 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
       <Layer
         key="halo"
         id="team-member-halo"
+        {...afterOf(top)}
         type="circle"
         filter={['==', ['get', 'band'], 'fresh']}
         paint={{
@@ -100,6 +113,7 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
       <Layer
         key="dot"
         id={TEAM_MEMBER_LAYER}
+        {...afterOf('team-member-halo')}
         type="circle"
         paint={{
           'circle-radius': 9,
@@ -116,6 +130,7 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
             <Layer
               key="initials"
               id="team-member-initials"
+              {...afterOf(TEAM_MEMBER_LAYER)}
               type="symbol"
               layout={{
                 'text-field': ['get', 'initials'],
@@ -129,6 +144,7 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
             <Layer
               key="label"
               id="team-member-label"
+              {...afterOf('team-member-initials')}
               type="symbol"
               layout={{
                 'text-field': ['get', 'label'],
@@ -150,7 +166,7 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
           ]
         : []),
     ],
-    [font, ink, halo, paper, leadRing, onAvatar],
+    [font, ink, halo, paper, leadRing, onAvatar, top],
   );
 
   const waypointLayers = useMemo(
@@ -158,6 +174,7 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
       <Layer
         key="wpt"
         id={TEAM_WAYPOINT_LAYER}
+        {...afterOf(top)}
         type="circle"
         paint={{
           'circle-radius': 6,
@@ -172,6 +189,7 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
             <Layer
               key="wpt-label"
               id="team-waypoint-label"
+              {...afterOf(TEAM_WAYPOINT_LAYER)}
               type="symbol"
               minzoom={12}
               layout={{
@@ -187,7 +205,7 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
           ]
         : []),
     ],
-    [font, ink, halo, paper],
+    [font, ink, halo, paper, top],
   );
 
   const trackLayers = useMemo(
@@ -221,14 +239,16 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
           {trackLayers}
         </GeoJSONSource>
       )}
-      {shares.waypoints.length > 0 && (
-        <GeoJSONSource id="team-waypoints" data={points}>
-          {waypointLayers}
-        </GeoJSONSource>
-      )}
+      {/* Members mount first: each group chains up from the style's top layer, so
+        the later group lands under it (teammates over shared waypoints). */}
       {positions.length > 0 && (
         <GeoJSONSource id="team-members" data={people}>
           {memberLayers}
+        </GeoJSONSource>
+      )}
+      {shares.waypoints.length > 0 && (
+        <GeoJSONSource id="team-waypoints" data={points}>
+          {waypointLayers}
         </GeoJSONSource>
       )}
     </>

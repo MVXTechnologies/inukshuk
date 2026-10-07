@@ -2875,7 +2875,10 @@ export function MapScreen() {
               still); the cone tracks the smoothed compass instead. */}
             <HeadingCone location={location} />
             {/* Team mode (#589): teammates' positions, shared waypoints and trails. */}
-            <TeamMapLayers glyphs={style.glyphs} />
+            <TeamMapLayers
+              glyphs={style.glyphs}
+              topLayerId={style.layers[style.layers.length - 1]?.id}
+            />
             {/* Revamp puck, replacing MapLibre's default one (children do):
               halo, ring and dot in the scheme's puck tokens, plus the amber
               uncertainty ring on a weak signal while recording. */}
