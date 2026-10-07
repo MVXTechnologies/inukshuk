@@ -1,18 +1,22 @@
-import { TideLegend } from '../../map/components/TideLegend';
+import { EXTENSIONS } from '@core/extensions/registry';
+
 import { SwitchRow } from '../../map/components/mapSheet';
 import { setExtensionPrefs, useExtensionPrefs } from '../prefs';
 
-/** Map overlays › Extensions › Tide stations: its switch and legend. */
+/**
+ * Map overlays › Extensions › Tide stations: one row, its switch and its
+ * summary (the gauge symbols are in Settings › Extensions, in its details).
+ */
 export function TidePanelEntry() {
   const { show } = useExtensionPrefs('tides');
+  const { label, summary } = EXTENSIONS.tides;
   return (
     <SwitchRow
       icon="waves"
-      label="Tide stations"
-      hint="Gauges, tidal levels, chart datum"
+      label={label}
+      hint={summary}
       value={show}
       onToggle={() => setExtensionPrefs('tides', { show: !show })}
-      below={<TideLegend disabled={!show} />}
     />
   );
 }

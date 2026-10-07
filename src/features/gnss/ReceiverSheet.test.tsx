@@ -111,7 +111,10 @@ describe('the receiver on the map', () => {
     expect(screen.getByText(/^Frame unknown/)).toBeTruthy();
     expect(screen.getByText('As received')).toBeTruthy();
     await fireEvent.press(screen.getByText('Receiver settings'));
-    expect(mockPush).toHaveBeenCalledWith('/settings');
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/settings',
+      params: { open: 'extensions', ext: 'gnss' },
+    });
     expect(useGnssStore.getState().sheetOpen).toBe(false);
   });
 

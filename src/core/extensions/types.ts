@@ -38,9 +38,7 @@ export type ExtensionPrefsMap = Record<AnyExtensionKey, ExtensionPrefs>;
  * called and how a fresh install starts. Its `show` is the extension's own
  * on/off switch (for the receiver: "use the receiver"); `offline` is unused.
  */
-export interface DeviceExtensionDescriptor {
-  label: string;
-  teaser: string;
+export interface DeviceExtensionDescriptor extends ExtensionIdentity {
   defaults: Pick<ExtensionPrefs, 'show' | 'offline'>;
 }
 
@@ -78,11 +76,35 @@ export interface ExtensionCredit {
   osmLink?: boolean;
 }
 
-export interface ExtensionDescriptor<I extends ExtensionStyleInput = ExtensionStyleInput> {
+/**
+ * The longest `summary`, in characters: what the collapsed Settings →
+ * Extensions row shows uncut on a 411-dp phone (Pixel 6) beside "Get"
+ * (measured on the CI review screenshots, 2026-10-07: 37 characters were cut).
+ */
+export const EXTENSION_SUMMARY_MAX = 32;
+
+/**
+ * What every extension is called, map or device extension alike. Every
+ * extension descriptor type extends this, so registering one without a
+ * `summary` fails the type check (the registries' `satisfies`).
+ */
+export interface ExtensionIdentity {
   /** Its name everywhere: Settings, the overlays row, credits ("Geodetic points"). */
   label: string;
   /** What it adds, lower case, for "Get survey marks, tide stations…". */
   teaser: string;
+  /**
+   * Its one-line pitch in the collapsed Settings → Extensions row and the
+   * overlays row ("Survey marks and benchmarks"): sentence case, no
+   * full stop, one line of at most `EXTENSION_SUMMARY_MAX` characters (the
+   * registry test checks it).
+   */
+  summary: string;
+}
+
+export interface ExtensionDescriptor<
+  I extends ExtensionStyleInput = ExtensionStyleInput,
+> extends ExtensionIdentity {
   dataset: DatasetId;
   /** The switches a fresh install starts from (`installedAt` is always 0). */
   defaults: Pick<ExtensionPrefs, 'show' | 'offline'>;

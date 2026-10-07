@@ -18,6 +18,7 @@ import {
 import type {
   DeviceExtensionDescriptor,
   ExtensionDescriptor,
+  ExtensionIdentity,
   ExtensionPrefs,
   StyleInputOf,
 } from './types';
@@ -37,9 +38,7 @@ export const DEVICE_EXTENSIONS = {
 } satisfies Record<DeviceExtensionKey, DeviceExtensionDescriptor>;
 
 /** What every extension, map or device, has: its name, its teaser, its first switches. */
-export interface ExtensionBasics {
-  label: string;
-  teaser: string;
+export interface ExtensionBasics extends ExtensionIdentity {
   defaults: Pick<ExtensionPrefs, 'show' | 'offline'>;
   legacySettings?: ExtensionDescriptor['legacySettings'];
 }

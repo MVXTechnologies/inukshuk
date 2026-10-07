@@ -5,7 +5,8 @@
 # (the E2E APK sets it in .github/workflows/e2e.yml) or a debug build; store
 # builds never list it.
 #
-# Settings → Extensions → "Get External GNSS receiver" → Receiver → connect
+# Settings → Extensions → "Get External GNSS receiver" → its row's details →
+# Receiver → connect
 # the simulated receiver → the map's receiver chip goes to "RTK fixed" → its
 # sheet shows the position with how it was computed and "Frame unknown"
 # (no caster declares a frame here, owner A5) → Remove leaves the default.
@@ -58,14 +59,21 @@ appId: com.inukshuk.app
           element: '.*External GNSS receiver.*'
           direction: DOWN
           timeout: 5000
-# Start from "not installed" whatever a previous run left.
+# Start from "not installed" whatever a previous run left. Each extension is
+# a collapsed one-line row: Get before the install, its switch after; the
+# receiver rows and Remove are in its details (tap the row).
 - scrollUntilVisible:
-    element: '(Get External GNSS receiver|Remove External GNSS receiver extension)'
+    element: '(Get External GNSS receiver|Use the external receiver)'
     direction: DOWN
 - runFlow:
     when:
-      visible: 'Remove External GNSS receiver extension'
+      visible: 'Use the external receiver'
     commands:
+      - tapOn:
+          id: 'extension-row-gnss'
+      - scrollUntilVisible:
+          element: 'Remove External GNSS receiver extension'
+          direction: DOWN
       - tapOn: 'Remove External GNSS receiver extension'
       - tapOn: 'Remove'
 - scrollUntilVisible:
@@ -73,8 +81,14 @@ appId: com.inukshuk.app
     direction: DOWN
 - tapOn: 'Get External GNSS receiver'
 - extendedWaitUntil:
-    visible:
+    visible: 'Use the external receiver'
+    timeout: 10000
+- tapOn:
+    id: 'extension-row-gnss'
+- scrollUntilVisible:
+    element:
       id: 'gnss-receiver-row'
+    direction: DOWN
     timeout: 10000
 - tapOn:
     id: 'gnss-receiver-row'
@@ -145,6 +159,9 @@ appId: com.inukshuk.app
           element: '.*External GNSS receiver.*'
           direction: DOWN
           timeout: 5000
+# Every visit starts collapsed: expand it to reach Remove.
+- tapOn:
+    id: 'extension-row-gnss'
 - scrollUntilVisible:
     element: 'Remove External GNSS receiver extension'
     direction: DOWN

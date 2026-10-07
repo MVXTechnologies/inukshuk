@@ -302,10 +302,11 @@ describe('Extensions tab', () => {
     });
   });
 
-  it('geodetic: a switch with its legend', async () => {
+  it('geodetic: one row, its switch and its summary (the legend lives in Settings)', async () => {
     setExtensions({ geodetic: { installedAt: 1, show: true } });
     await renderMenu();
-    expect(screen.getByLabelText('Geodetic points legend')).toBeTruthy();
+    expect(screen.getByText('Survey marks and benchmarks').props.numberOfLines).toBe(1);
+    expect(screen.queryByLabelText('Geodetic points legend')).toBeNull();
     await fireEvent.press(screen.getByLabelText('Geodetic points'));
     expect(useSettingsStore.getState().extensions.geodetic.show).toBe(false);
   });
@@ -328,12 +329,13 @@ describe('Extensions tab', () => {
     expect(useSettingsStore.getState().geodeticFilter.types).toContain('gnss');
   });
 
-  it('tide stations: its own switch and legend once installed', async () => {
+  it('tide stations: its own one-line row once installed', async () => {
     setExtensions({ tides: { installedAt: 1, show: true } });
     await renderMenu();
     expect(screen.queryByLabelText('Geodetic points')).toBeNull();
     expect(checked('Tide stations')).toBe(true);
-    expect(screen.getByLabelText('Gauge symbols legend')).toBeTruthy();
+    expect(screen.getByText('Tide gauges and tidal levels').props.numberOfLines).toBe(1);
+    expect(screen.queryByLabelText('Gauge symbols legend')).toBeNull();
     await fireEvent.press(screen.getByLabelText('Tide stations'));
     expect(useSettingsStore.getState().extensions.tides.show).toBe(false);
   });

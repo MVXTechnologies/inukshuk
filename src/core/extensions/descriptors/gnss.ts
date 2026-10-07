@@ -9,6 +9,7 @@ import type { DeviceExtensionDescriptor } from '../types';
 export const GNSS_EXTENSION: DeviceExtensionDescriptor = {
   label: 'External GNSS receiver',
   teaser: 'a GNSS receiver',
+  summary: 'External receiver · RTK to cm',
   // Installed = in use: its switch is "Use the receiver".
   defaults: { show: true, offline: false },
 };

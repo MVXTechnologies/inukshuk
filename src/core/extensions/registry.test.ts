@@ -8,6 +8,7 @@ import {
   extensionDescriptor,
   EXTENSIONS,
 } from './registry';
+import { EXTENSION_SUMMARY_MAX } from './types';
 
 const TILES = 'https://tiles.example/{z}/{x}/{y}.mvt';
 
@@ -27,6 +28,19 @@ describe('the extension registry', () => {
     unique(
       all.flatMap((d) => (d.legacySettings ? Object.values(d.legacySettings) : [])) as string[],
     );
+  });
+
+  it('every extension, map or device, has a one-line summary that fits the compact row', () => {
+    for (const key of ALL_EXTENSION_KEYS) {
+      const { summary } = extensionBasics(key);
+      expect(summary.trim()).toBe(summary);
+      expect(summary.length).toBeGreaterThan(0);
+      expect(summary.length).toBeLessThanOrEqual(EXTENSION_SUMMARY_MAX);
+      expect(summary).not.toContain('\n');
+      expect(summary.endsWith('.')).toBe(false);
+    }
+    const summaries = ALL_EXTENSION_KEYS.map((k) => extensionBasics(k).summary);
+    expect(new Set(summaries).size).toBe(summaries.length);
   });
 
   it("every descriptor's style block is self-contained: its layers name only its sources", () => {

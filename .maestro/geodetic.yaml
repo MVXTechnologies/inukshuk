@@ -1,6 +1,7 @@
-# Geodetic points extension e2e: Settings → Extensions → Get installs it,
-# the installed rows appear (layer switch, offline, coverage, remove), and the
-# overlays sheet's Extensions tab then carries the "Geodetic points" switch.
+# Geodetic points extension e2e: Settings → Extensions → Get installs it
+# from its collapsed one-line row (the switch takes Get's place), tapping the
+# row expands its details (offline, coverage, remove), and the overlays
+# sheet's Extensions tab then carries the "Geodetic points" switch.
 # Leaves the extension removed again so other flows see the default state.
 #
 # iOS merges a row's title + subtitle into one accessibility string, so row
@@ -48,11 +49,14 @@ appId: com.inukshuk.app
       - extendedWaitUntil:
           visible: 'Geodetic points.*'
           timeout: 5000
-# Start from "not installed" whatever a previous run left.
+# Start from "not installed" whatever a previous run left (installed, the
+# collapsed row shows its switch instead of Get).
 - runFlow:
     when:
-      visible: 'Coverage & sources.*'
+      visible: 'Show geodetic points'
     commands:
+      - tapOn:
+          id: 'extension-row-geodetic'
       - scrollUntilVisible:
           element: 'Remove Geodetic points extension'
           direction: DOWN
@@ -62,11 +66,21 @@ appId: com.inukshuk.app
     element: 'Get Geodetic points'
     direction: DOWN
 - tapOn: 'Get Geodetic points'
+# Get works from the collapsed row, which stays collapsed.
+- extendedWaitUntil:
+    visible: 'Show geodetic points'
+    timeout: 10000
+- assertNotVisible: 'Coverage & sources.*'
+# Tapping the row expands its details.
+- tapOn:
+    id: 'extension-row-geodetic'
 - extendedWaitUntil:
     visible: 'Coverage & sources.*'
     timeout: 10000
 - assertVisible: 'Offline in your regions.*'
-- assertVisible: 'Remove Geodetic points extension'
+- scrollUntilVisible:
+    element: 'Remove Geodetic points extension'
+    direction: DOWN
 - tapOn: 'Back'
 - tapOn:
     text: 'Map(, tab.*)?'
@@ -96,12 +110,18 @@ appId: com.inukshuk.app
     commands:
       - runFlow:
           when:
-            notVisible: 'Coverage & sources.*'
+            notVisible: 'Geodetic points.*'
           commands:
             - tapOn: 'Extensions.*'
       - extendedWaitUntil:
-          visible: 'Coverage & sources.*'
+          visible: 'Geodetic points.*'
           timeout: 5000
+# Every visit starts collapsed: expand it to reach Remove.
+- tapOn:
+    id: 'extension-row-geodetic'
+- extendedWaitUntil:
+    visible: 'Coverage & sources.*'
+    timeout: 5000
 - scrollUntilVisible:
     element: 'Remove Geodetic points extension'
     direction: DOWN
