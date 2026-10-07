@@ -130,10 +130,10 @@ export function TeamMapOverlay({
               </View>
             ))}
           </View>
-          <Text variant="labelLarge" style={{ color: t.ink }} numberOfLines={1}>
+          <Text variant="labelLarge" style={[styles.chipName, { color: t.ink }]} numberOfLines={1}>
             {view.name}
           </Text>
-          <Text variant="labelMedium" style={{ color: t.inkVariant }}>
+          <Text variant="labelMedium" style={{ color: t.inkVariant }} numberOfLines={1}>
             {!meshRunning
               ? '· not syncing'
               : others === 0
@@ -228,6 +228,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     maxWidth: '100%',
   },
+  chipName: { flexShrink: 1 },
   faces: { flexDirection: 'row' },
   face: { borderWidth: 2, borderRadius: 14 },
   overlap: { marginLeft: -10 },

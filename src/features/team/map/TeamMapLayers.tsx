@@ -134,12 +134,14 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
                 'text-size': 12,
                 'text-offset': [0, 1.5],
                 'text-anchor': 'top',
-                'text-optional': true,
+                // A handful of teammates: always labelled, never culled by the base map's labels.
+                'text-allow-overlap': true,
+                'text-ignore-placement': true,
               }}
               paint={{
                 'text-color': ink,
                 'text-halo-color': halo,
-                'text-halo-width': 1.5,
+                'text-halo-width': 2,
                 'text-opacity': ['match', ['get', 'band'], 'stale', 0.7, 1],
               }}
             />,

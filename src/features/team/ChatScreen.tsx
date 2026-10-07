@@ -19,6 +19,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
@@ -160,7 +161,12 @@ export function ChatScreen() {
         )}
         {canWrite && (
           <View style={[styles.composer, { borderTopColor: t.outlineVariant }]}>
-            <View style={styles.chips}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chips}
+              keyboardShouldPersistTaps="handled"
+            >
               {choices.map((c) => (
                 <Pressable
                   key={c.id}
@@ -183,7 +189,7 @@ export function ChatScreen() {
                   </Text>
                 </Pressable>
               ))}
-            </View>
+            </ScrollView>
             <View style={styles.row}>
               <IconButton
                 icon={
@@ -253,7 +259,7 @@ const styles = StyleSheet.create({
   tag: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
   empty: { textAlign: 'center', paddingVertical: space.xl },
   composer: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.sm, gap: space.xs },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
+  chips: { flexDirection: 'row', gap: space.xs },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   chipText: { fontSize: 12, fontWeight: '600' },
   row: { flexDirection: 'row', alignItems: 'center' },
