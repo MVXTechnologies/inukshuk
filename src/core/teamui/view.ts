@@ -93,6 +93,8 @@ export interface ChatMessage {
   /** "Admins", "Trail crew leads"… null = the whole team. */
   audience: string | null;
   mentionsMe: boolean;
+  /** How the core routes it to me (unread counts only `badge` and `alert`). */
+  delivery: 'none' | 'silent' | 'badge' | 'alert';
 }
 
 export interface TeamView {
@@ -293,6 +295,13 @@ export function messageDelivery(
 const mentionsOf = (fields: Record<string, Json>): string[] =>
   Array.isArray(fields['mn']) ? fields['mn'].filter((m): m is string => typeof m === 'string') : [];
 
+/** Messages that count as unread: routed `badge` or `alert`, newer than `lastReadAt`. */
+export function unreadCount(messages: readonly ChatMessage[], lastReadAt: number): number {
+  return messages.filter(
+    (m) => !m.mine && m.at > lastReadAt && (m.delivery === 'badge' || m.delivery === 'alert'),
+  ).length;
+}
+
 export function buildTeamView(input: ViewInput): TeamView {
   const { state, data, me, now, labels } = input;
   const profiles = profileNames(data);
@@ -368,6 +377,16 @@ export function buildTeamView(input: ViewInput): TeamView {
       priority: rec.pr ?? 0,
       audience: audienceLabel(rec.aud, (g) => gNames.get(g) ?? 'Group', nameFor),
       mentionsMe: mentions.includes(me),
+      delivery: messageDelivery(
+        state,
+        {
+          owner: rec.owner,
+          ...(rec.aud ? { aud: rec.aud } : {}),
+          ...(rec.pr ? { pr: rec.pr } : {}),
+          mentions,
+        },
+        me,
+      ),
     });
   }
   messages.sort((a, b) => compareStamp(a.stamp, b.stamp));

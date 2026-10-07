@@ -1,0 +1,703 @@
+/**
+ * One team on this phone, open (#589): the replica restored from disk, every
+ * team action, and — while the mesh runs — one sync session per connected
+ * teammate. Platform-free apart from the transport it is handed, so the
+ * two-peer tests run it over the loopback hub.
+ *
+ * Every write goes replica → disk (`PersistingStore`) → peers, in that order.
+ */
+import { lanDiscoveryTag } from '@core/mesh/tag';
+import { createInvite, rotateBody } from '@core/team/actions';
+import type { Json } from '@core/team/canonical';
+import type { DeviceKeys, TeamCrypto } from '@core/team/crypto';
+import type { SignedOp } from '@core/team/envelope';
+import { encodeInvite, type InviteToken, type NetHint } from '@core/team/invite';
+import { activeMembers, cutFor } from '@core/team/membership';
+import { TeamReplica } from '@core/team/replica';
+import type { Audience, GroupLink, Priority, Role } from '@core/team/roles';
+import { SyncSession, type SessionEvent } from '@core/team/sync';
+import { alertFor, type TeamAlert } from '@core/teamui/alerts';
+import { extendedExpiry } from '@core/teamui/lifetime';
+import { inviteExpiresAt, ipv4Tuple, type InviteChoice } from '@core/teamui/invites';
+import { teammatePositions, type TeammatePosition } from '@core/teamui/positions';
+import {
+  teamShares,
+  trackFields,
+  waypointFields,
+  type ShareableTrack,
+  type ShareableWaypoint,
+  type TeamShares,
+} from '@core/teamui/shares';
+import {
+  cleanName,
+  nameText,
+  SYS_LEAVE,
+  SYS_PROFILE,
+  SYS_TEAM,
+  systemMessage,
+} from '@core/teamui/system';
+import { buildTeamView, TEAM_THREAD, unreadCount, type TeamView } from '@core/teamui/view';
+import { isPrivateIPv4, parseIPv4 } from '@core/mesh/hotspot';
+
+import { MeshLink, type MeshLinkStatus } from './meshLink';
+import { MeshSessionHost, type FrameStep } from './meshSessions';
+import type { MeshPeer, MeshTransport } from './meshTransport';
+import { PersistingStore } from './persistingStore';
+import type { TeamDisk, TeamRecord } from './teamDisk';
+
+export interface SessionDeps {
+  c: TeamCrypto;
+  disk: TeamDisk;
+  transport: MeshTransport | null;
+  now: () => number;
+  /** A fresh short id (messages, entities, groups). */
+  newId: () => string;
+  /** Something the UI shows changed. */
+  onChange: () => void;
+  /** A teammate's message routed `badge` or `alert` to me. */
+  onAlert: (alert: TeamAlert) => void;
+  /** Re-sync period for open sessions (ms); 0 in tests that tick by hand. */
+  tickMs?: number;
+}
+
+export interface PeerStatus {
+  peerId: string;
+  memberId: string | null;
+  direction: 'in' | 'out';
+  host: string;
+  phase: string;
+  /** A joiner using an invite (responder side). */
+  joining: boolean;
+  safetyCode: string | null;
+  connectedAt: number;
+  lastFrameAt: number;
+  bytesIn: number;
+  bytesOut: number;
+}
+
+/** A join that happened through this phone: its safety code to compare out loud. */
+export interface JoinNotice {
+  peerId: string;
+  code: string;
+  at: number;
+  /** Set once admitted. */
+  memberId: string | null;
+}
+
+/** An action that could not run; `null` means it ran. */
+export type ActionError =
+  | 'read-only'
+  | 'not-allowed'
+  | 'rotation-pending'
+  | 'not-member'
+  | 'invalid'
+  | 'too-large'
+  | 'no-change';
+
+const empty = <E>(): FrameStep<E> => ({ send: [], events: [] });
+
+/** Position ops live this long (the protocol caps ephemeral ops at 24 h). */
+export const POSITION_TTL_S = 6 * 3600;
+
+/** A team invite ready to share: its payload, and the QR text with the network hint. */
+export interface CreatedInvite {
+  token: InviteToken;
+  /** For SMS and links (never the network hint). */
+  payload: string;
+  /** For the QR code shown in person (may carry this phone's address). */
+  qrPayload: string;
+}
+
+interface PeerMeta {
+  connectedAt: number;
+  lastFrameAt: number;
+  joining: boolean;
+}
+
+export class TeamSession {
+  readonly store: PersistingStore;
+  private link: MeshLink | null = null;
+  private host: MeshSessionHost<SessionEvent, SyncSession> | null = null;
+  private readonly meta = new Map<string, PeerMeta>();
+  readonly joinNotices: JoinNotice[] = [];
+  private cachedView: { at: number; view: TeamView } | null = null;
+  private dirty = true;
+  private profileCheckBusy = false;
+
+  private constructor(
+    private readonly deps: SessionDeps,
+    readonly replica: TeamReplica,
+    public record: TeamRecord,
+  ) {
+    this.store = new PersistingStore(replica, deps.disk);
+    this.store.onStored = (ops) => this.afterStored(ops, null);
+  }
+
+  /**
+   * Restore a team from disk. The writer resumes from the LATER of the saved
+   * cursor and this device's own chain in the log (a crash between the op
+   * append and the cursor save must not make it reuse a seq).
+   */
+  static async open(deps: SessionDeps, record: TeamRecord, keys: DeviceKeys): Promise<TeamSession> {
+    const [envs, saved] = await Promise.all([
+      deps.disk.loadOps(record.teamId),
+      deps.disk.loadCursor(record.teamId),
+    ]);
+    const now = deps.now();
+    let replica = new TeamReplica(deps.c, record.teamId, keys, saved ?? undefined);
+    replica.autoRotate = true;
+    replica.ingest(envs, now);
+    const mine = replica.opsInRange(replica.id, 1, Number.MAX_SAFE_INTEGER);
+    const head = mine[mine.length - 1];
+    if (head !== undefined && mine.length > (saved?.seq ?? 0)) {
+      const hlc =
+        saved && saved.hlc.wall > head.stamp.wall
+          ? saved.hlc
+          : { wall: head.stamp.wall, counter: head.stamp.counter };
+      replica = new TeamReplica(deps.c, record.teamId, keys, {
+        seq: mine.length,
+        hlc,
+        prev: head.id,
+      });
+      replica.ingest(envs, now);
+      deps.disk.saveCursor(record.teamId, replica.writer.cursor);
+    }
+    const session = new TeamSession(deps, replica, record);
+    session.store.flush(now);
+    return session;
+  }
+
+  get teamId(): string {
+    return this.replica.teamId;
+  }
+
+  get me(): string {
+    return this.replica.id;
+  }
+
+  // ── Views ────────────────────────────────────────────────────────────────
+
+  view(): TeamView {
+    const now = this.deps.now();
+    if (!this.dirty && this.cachedView !== null && now - this.cachedView.at < 30_000) {
+      return this.cachedView.view;
+    }
+    const view = buildTeamView({
+      state: this.replica.state,
+      data: this.replica.data(now),
+      me: this.me,
+      now,
+      labels: (op) => this.replica.labels(op),
+    });
+    this.cachedView = { at: now, view };
+    this.dirty = false;
+    return view;
+  }
+
+  unread(): number {
+    return unreadCount(this.view().messages, this.record.lastReadAt);
+  }
+
+  shares(): TeamShares {
+    return teamShares(this.replica.data(this.deps.now()));
+  }
+
+  positions(): TeammatePosition[] {
+    const now = this.deps.now();
+    return teammatePositions(this.replica.data(now).positions, this.view().members, now);
+  }
+
+  peers(): PeerStatus[] {
+    if (this.host === null || this.deps.transport === null) return [];
+    let stats: ReturnType<MeshTransport['stats']> | null = null;
+    try {
+      stats = this.deps.transport.stats();
+    } catch {
+      stats = null;
+    }
+    return this.host.peers().map(({ peer, session }) => {
+      const s = stats?.peers.find((p) => p.peerId === peer.peerId);
+      const m = this.meta.get(peer.peerId);
+      return {
+        peerId: peer.peerId,
+        memberId: session.peer ?? null,
+        direction: peer.direction,
+        host: peer.host,
+        phase: session.phase,
+        joining: m?.joining ?? false,
+        safetyCode: session.safetyCode ?? null,
+        connectedAt: m?.connectedAt ?? 0,
+        lastFrameAt: m?.lastFrameAt ?? 0,
+        bytesIn: s?.bytesIn ?? 0,
+        bytesOut: s?.bytesOut ?? 0,
+      };
+    });
+  }
+
+  meshStatus(): MeshLinkStatus | null {
+    return this.link?.status() ?? null;
+  }
+
+  get meshRunning(): boolean {
+    return this.link !== null;
+  }
+
+  // ── Mesh ─────────────────────────────────────────────────────────────────
+
+  async startMesh(): Promise<void> {
+    const transport = this.deps.transport;
+    if (transport === null || this.link !== null) return;
+    const tag = lanDiscoveryTag(this.teamId, (d) => this.deps.c.sha256(d));
+    this.host = new MeshSessionHost<SessionEvent, SyncSession>(
+      transport,
+      {
+        initiate: (peer) => {
+          this.touch(peer, false);
+          return SyncSession.initiate(this.deps.c, this.store, { now: this.deps.now() });
+        },
+        respond: (peer) => {
+          this.touch(peer, false);
+          return SyncSession.respond(this.deps.c, this.store);
+        },
+      },
+      (peerId, event, session) => this.onSessionEvent(peerId, event, session),
+      { now: this.deps.now, tickMs: this.deps.tickMs ?? 20_000 },
+    );
+    this.host.start();
+    this.link = new MeshLink(transport, { tag, advertise: true, onChange: () => this.changed() });
+    await this.link.start();
+    this.changed();
+  }
+
+  async stopMesh(): Promise<void> {
+    const link = this.link;
+    const host = this.host;
+    this.link = null;
+    this.host = null;
+    host?.stop('bye');
+    this.meta.clear();
+    await link?.stop();
+    this.changed();
+  }
+
+  /** Hotspot fallback: dial a typed address (retries until the mesh stops). */
+  dial(host: string, port: number): boolean {
+    return this.link?.dial(host, port) != null;
+  }
+
+  /** Run the periodic sync now (tests, and after returning to the foreground). */
+  tick(): void {
+    this.host?.forEachOpen((s) => s.tick(this.deps.now()));
+  }
+
+  private touch(peer: MeshPeer, joining: boolean): void {
+    const now = this.deps.now();
+    const prev = this.meta.get(peer.peerId);
+    this.meta.set(peer.peerId, {
+      connectedAt: prev?.connectedAt ?? now,
+      lastFrameAt: now,
+      joining: joining || (prev?.joining ?? false),
+    });
+  }
+
+  private onSessionEvent(peerId: string, event: SessionEvent, session: SyncSession): void {
+    const meta = this.meta.get(peerId);
+    if (meta) meta.lastFrameAt = this.deps.now();
+    switch (event.type) {
+      case 'open': {
+        if (meta) meta.joining = event.joining;
+        if (event.joining && session.safetyCode !== undefined) {
+          this.joinNotices.unshift({
+            peerId,
+            code: session.safetyCode,
+            at: this.deps.now(),
+            memberId: null,
+          });
+          this.joinNotices.splice(5);
+        }
+        this.dropDuplicate(peerId, session);
+        this.changed();
+        return;
+      }
+      case 'ingested':
+        // Persisted by the store already; relay to everyone else.
+        this.afterStored(event.report.accepted, peerId);
+        return;
+      case 'admitted': {
+        const notice = this.joinNotices.find((n) => n.peerId === peerId);
+        if (notice) notice.memberId = event.member;
+        this.gossip([event.op], peerId);
+        this.changed();
+        return;
+      }
+      case 'closed':
+        this.meta.delete(peerId);
+        this.changed();
+        return;
+      default:
+        return;
+    }
+  }
+
+  /**
+   * Two phones that discover each other both dial: keep exactly one link per
+   * pair, the one the lower member id initiated (both sides agree).
+   */
+  private dropDuplicate(peerId: string, session: SyncSession): void {
+    const host = this.host;
+    const other = session.peer;
+    if (host === null || other === undefined) return;
+    const twins = host
+      .peers()
+      .filter((p) => p.session.peer === other && p.session.phase === 'open');
+    if (twins.length < 2) return;
+    const lowerIsMe = this.me < other;
+    for (const t of twins) {
+      const initiatedByMe = t.session.side === 'initiator';
+      const keep = initiatedByMe === lowerIsMe;
+      if (!keep && t.peer.peerId !== undefined) host.close(t.peer.peerId, 'duplicate');
+    }
+    void peerId;
+  }
+
+  private gossip(ops: readonly SignedOp[], except: string | null): void {
+    if (ops.length === 0 || this.host === null) return;
+    this.host.forEachOpen((s, peer) => (peer.peerId === except ? empty() : s.push(ops)));
+  }
+
+  private afterStored(ops: readonly SignedOp[], from: string | null): void {
+    if (ops.length === 0) return;
+    this.dirty = true;
+    this.gossip(ops, from);
+    if (from !== null) {
+      for (const op of ops) {
+        const alert = alertFor(this.replica.state, op, this.replica.decode(op), this.me);
+        if (alert) this.deps.onAlert(alert);
+      }
+    }
+    this.changed();
+    // A new key (a rotation, or our first key after a join): re-post what the
+    // members admitted later can't read otherwise.
+    if (ops.some((op) => op.env.t === 'k.rotate' || op.env.t === 'm.admit')) {
+      this.republishIfNewKey();
+    }
+  }
+
+  private changed(): void {
+    this.dirty = true;
+    this.deps.onChange();
+  }
+
+  // ── Actions ──────────────────────────────────────────────────────────────
+
+  private guardWrite(): ActionError | null {
+    const view = this.view();
+    if (!view.active) return 'not-member';
+    if (view.readOnly) return 'read-only';
+    return null;
+  }
+
+  /** Run a local mutation through the persisting store; the store gossips it. */
+  private run<T>(fn: () => T, ephemeral?: (r: T) => SignedOp | undefined): T {
+    return this.store.track(() => {
+      const result = fn();
+      const op = ephemeral?.(result);
+      return { result, accepted: op ? [op] : [] };
+    }).result;
+  }
+
+  private writeMsg(
+    body: Json,
+    options: { aud?: Audience; pr?: Priority } = {},
+  ): ActionError | null {
+    const op = this.run(() => this.replica.write(this.deps.now(), 'msg', body, options));
+    return op === undefined ? 'rotation-pending' : null;
+  }
+
+  sendMessage(
+    text: string,
+    options: { aud?: Audience; pr?: Priority; mentions?: string[] } = {},
+  ): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const tx = text.trim();
+    if (tx.length === 0) return 'invalid';
+    if (tx.length > 4000) return 'too-large';
+    const self = this.replica.state.members.get(this.me);
+    if (options.pr === 2 && !(self && (self.role === 'admin' || self.role === 'owner'))) {
+      // The core lets group leads send urgent to their subtree too; v1's UI
+      // offers urgent to admins only (simpler to explain).
+      return 'not-allowed';
+    }
+    const body: Record<string, Json> = { id: this.deps.newId(), th: TEAM_THREAD, tx };
+    if (options.mentions && options.mentions.length > 0) body['mn'] = options.mentions;
+    const extra: { aud?: Audience; pr?: Priority } = {};
+    if (options.aud) extra.aud = options.aud;
+    if (options.pr) extra.pr = options.pr;
+    const err = this.writeMsg(body, extra);
+    if (err === null) this.markRead();
+    return err;
+  }
+
+  /** My display name in this team (re-posted as `sys:profile`). */
+  setMyName(raw: string): ActionError | null {
+    const name = cleanName(raw);
+    if (name === null) return 'invalid';
+    const err = this.writeMsg(systemMessage(this.deps.newId(), SYS_PROFILE, nameText(name)));
+    if (err !== null) return err;
+    this.updateRecord({ myName: name, profileKeyId: this.replica.state.sendKeyId });
+    return null;
+  }
+
+  /**
+   * After a new team key: re-post my name (and, for admins, the team's name)
+   * under it, so members admitted after the rotation can read them.
+   */
+  republishIfNewKey(): void {
+    if (this.profileCheckBusy) return;
+    const keyId = this.replica.state.sendKeyId;
+    const view = this.view();
+    if (keyId === undefined || !view.active || view.readOnly) return;
+    this.profileCheckBusy = true;
+    try {
+      if (this.record.profileKeyId !== keyId && this.record.myName) {
+        const ok = this.writeMsg(
+          systemMessage(this.deps.newId(), SYS_PROFILE, nameText(this.record.myName)),
+        );
+        if (ok === null) this.updateRecord({ profileKeyId: keyId });
+      }
+      if (view.isAdmin && this.record.teamNameKeyId !== keyId) {
+        const ok = this.writeMsg(systemMessage(this.deps.newId(), SYS_TEAM, nameText(view.name)));
+        if (ok === null) this.updateRecord({ teamNameKeyId: keyId });
+      }
+    } finally {
+      this.profileCheckBusy = false;
+    }
+  }
+
+  sharePosition(fix: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number | null;
+    altitude?: number | null;
+    at: number;
+  }): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    if (!this.record.prefs.sharePosition) return 'not-allowed';
+    const pos: Record<string, Json> = {
+      la: Math.round(fix.latitude * 1e6) / 1e6,
+      lo: Math.round(fix.longitude * 1e6) / 1e6,
+      at: Math.floor(fix.at),
+    };
+    if (typeof fix.accuracy === 'number' && Number.isFinite(fix.accuracy) && fix.accuracy >= 0) {
+      pos['ac'] = Math.round(fix.accuracy);
+    }
+    if (typeof fix.altitude === 'number' && Number.isFinite(fix.altitude)) {
+      pos['el'] = Math.round(fix.altitude);
+    }
+    const op = this.run(
+      () => this.replica.position(this.deps.now(), pos, POSITION_TTL_S),
+      (r) => r,
+    );
+    return op === undefined ? 'rotation-pending' : null;
+  }
+
+  private canEditShared(): boolean {
+    const role = this.replica.state.members.get(this.me)?.role;
+    return role !== undefined && role !== 'guest';
+  }
+
+  shareWaypoint(w: ShareableWaypoint): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    if (!this.canEditShared()) return 'not-allowed';
+    const id = this.deps.newId();
+    const op = this.run(() =>
+      this.replica.write(this.deps.now(), 'e.set', {
+        k: 'wpt',
+        id,
+        f: waypointFields(w, this.me, this.deps.now()),
+      }),
+    );
+    return op === undefined ? 'rotation-pending' : null;
+  }
+
+  deleteWaypoint(id: string): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    if (!this.canEditShared()) return 'not-allowed';
+    const op = this.run(() => this.replica.write(this.deps.now(), 'e.del', { k: 'wpt', id }));
+    return op === undefined ? 'rotation-pending' : null;
+  }
+
+  shareTrack(t: ShareableTrack): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    if (!this.canEditShared()) return 'not-allowed';
+    const f = trackFields(t);
+    if (f === null) return 'too-large';
+    const op = this.run(() =>
+      this.replica.write(this.deps.now(), 'e.set', { k: 'track', id: this.deps.newId(), f }),
+    );
+    return op === undefined ? 'rotation-pending' : null;
+  }
+
+  deleteTrack(id: string, owner: string): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const op = this.run(() =>
+      this.replica.write(this.deps.now(), 'e.del', { k: 'track', id, o: owner }),
+    );
+    return op === undefined ? 'rotation-pending' : null;
+  }
+
+  // ── Admin actions ────────────────────────────────────────────────────────
+
+  private control(t: Parameters<TeamReplica['control']>[1], b: Json, secret?: Json): string {
+    const op = this.run(() => this.replica.control(this.deps.now(), t, b, secret));
+    return op.id;
+  }
+
+  /** Did the fold accept the op we just wrote? */
+  private accepted(opId: string): boolean {
+    return !this.replica.state.rejected.has(opId);
+  }
+
+  setRole(memberId: string, role: Role): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const target = this.replica.state.members.get(memberId);
+    if (target === undefined || target.status !== 'active') return 'invalid';
+    if (target.role === role) return 'no-change';
+    const b: Record<string, Json> = { m: memberId, r: role };
+    // Demoting an admin pins their chain (spec §6 cuts); always via cutFor.
+    if (target.role === 'admin' && role !== 'admin')
+      b['cut'] = cutFor(this.replica.state, memberId);
+    if (role === 'admin') b['from'] = this.replica.state.chains.get(memberId)?.ids.length ?? 0;
+    return this.accepted(this.control('m.update', b)) ? null : 'not-allowed';
+  }
+
+  /** Remove a member, then rotate the team key at once (removal fails closed). */
+  removeMember(memberId: string): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const id = this.control('m.remove', { m: memberId, cut: cutFor(this.replica.state, memberId) });
+    if (!this.accepted(id)) return 'not-allowed';
+    return this.rotateKey();
+  }
+
+  rotateKey(): ActionError | null {
+    const view = this.view();
+    if (!view.isAdmin) return 'not-allowed';
+    if (view.readOnly) return 'read-only';
+    const { body } = rotateBody(this.deps.c, this.teamId, activeMembers(this.replica.state));
+    const id = this.control('k.rotate', body);
+    if (!this.accepted(id)) return 'not-allowed';
+    this.republishIfNewKey();
+    return null;
+  }
+
+  /** "+N days" (an expired team is revived; capped a year after the founding). */
+  extend(days: number): ActionError | null {
+    const view = this.view();
+    if (!view.isAdmin) return 'not-allowed';
+    if (view.closed) return 'read-only';
+    const exp = extendedExpiry(view.expiresAt, days, this.deps.now(), view.maxExpiresAt);
+    if (exp === null) return 'no-change';
+    return this.accepted(this.control('t.extend', { exp })) ? null : 'not-allowed';
+  }
+
+  /** End the team for everyone (read-only from now on). */
+  closeTeam(): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    if (!this.view().isAdmin) return 'not-allowed';
+    return this.accepted(this.control('t.close', {})) ? null : 'not-allowed';
+  }
+
+  createGroup(rawName: string, parent?: string): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const name = cleanName(rawName);
+    if (name === null) return 'invalid';
+    if (this.replica.sendKey() === undefined) return 'rotation-pending';
+    const b: Record<string, Json> = { id: this.deps.newId() };
+    if (parent !== undefined) b['p'] = parent;
+    return this.accepted(this.control('g.set', b, { name })) ? null : 'not-allowed';
+  }
+
+  /** v1 UI: one group per member (the protocol allows 16), lead or not; null = none. */
+  setMemberGroup(memberId: string, group: string | null, lead: boolean): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const g: GroupLink[] = group === null ? [] : [lead ? { g: group, lead: true } : { g: group }];
+    const id = this.control('m.update', { m: memberId, g: g as unknown as Json });
+    return this.accepted(id) ? null : 'not-allowed';
+  }
+
+  /**
+   * An admin's invite: `i.create` in the log, the token to share. The QR
+   * also carries this phone's LAN address (QR only, never SMS or links).
+   */
+  createInvite(choice: InviteChoice): CreatedInvite | ActionError {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const view = this.view();
+    if (!view.isAdmin) return 'not-allowed';
+    const now = this.deps.now();
+    const inv = createInvite(this.deps.c, this.teamId, {
+      expiresAt: inviteExpiresAt(choice, now, view.expiresAt),
+      maxUses: choice.uses,
+      role: choice.role,
+      approve: choice.approve,
+    });
+    if (!this.accepted(this.control('i.create', inv.body))) return 'not-allowed';
+    const net = this.netHint();
+    const token: InviteToken = net ? { ...inv.token, net } : inv.token;
+    return {
+      token,
+      payload: encodeInvite(token, 'link'),
+      qrPayload: encodeInvite(token, 'qr'),
+    };
+  }
+
+  /** This phone's private LAN address and listening port, for the QR's hint. */
+  private netHint(): NetHint | undefined {
+    const transport = this.deps.transport;
+    const port = this.link?.status().port;
+    if (transport === null || port == null) return undefined;
+    try {
+      for (const i of transport.networkInfo().interfaces) {
+        const v = parseIPv4(i.address);
+        const host = ipv4Tuple(i.address);
+        if (v !== null && host !== null && isPrivateIPv4(v)) return { host, port };
+      }
+    } catch {
+      return undefined;
+    }
+    return undefined;
+  }
+
+  /** Tell the admins I deleted the team from this phone (they should remove me). */
+  announceLeave(): void {
+    if (this.guardWrite() !== null) return;
+    this.writeMsg(systemMessage(this.deps.newId(), SYS_LEAVE, {}));
+  }
+
+  // ── Local prefs ──────────────────────────────────────────────────────────
+
+  markRead(): void {
+    const latest = this.view().messages.reduce((m, msg) => Math.max(m, msg.at), 0);
+    if (latest > this.record.lastReadAt) this.updateRecord({ lastReadAt: latest });
+  }
+
+  /** Local record changes (prefs, read marker): the service persists the index. */
+  onRecordChange: ((record: TeamRecord) => void) | null = null;
+
+  updateRecord(patch: Partial<TeamRecord>): void {
+    this.record = { ...this.record, ...patch, prefs: { ...this.record.prefs, ...patch.prefs } };
+    this.onRecordChange?.(this.record);
+    this.changed();
+  }
+}
