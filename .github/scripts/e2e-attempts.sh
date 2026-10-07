@@ -39,9 +39,35 @@ mapfile -t FLOWS <<< "$PLAN"
 # - one fix per GEO_TICK seconds (5 s, was 2 s): a recording only needs a
 #   fresh fix to keep flowing — the flows' own setLocation/travel steps make
 #   the movement — and fewer fixes means fewer status reports to race.
+#
+# The gate alone was not enough (run 37686186144: the same Watchdog kill in
+# make-map). The deadlock is inside the emulator's GNSS stack — GMS holds a
+# GnssStatus listener, and GnssNative.stop() reports status synchronously
+# while that listener's lock is taken by a delivery — so the fixes no longer
+# go through the GNSS HAL at all. `adb emu geo fix` fed the emulated GNSS
+# chip; the feed now sets the location of a shell-owned TEST provider named
+# `gps` (`cmd location providers set-test-provider-location`). While a test
+# provider shadows `gps`, the real GnssLocationProvider is never started or
+# stopped, so the deadlocking path is never entered. Apps (and GMS's fused
+# provider) still receive the fixes as `gps` locations. If Maestro's own mock
+# providers replace or remove it between sessions, the next tick re-adds it.
 GEO_RUN=$(mktemp -u)
 GEO_TICK=5
 APP_ID=com.inukshuk.app
+adb shell appops set com.android.shell android:mock_location allow || true
+geo_send() {
+  local where="$1,$2"
+  adb shell cmd location providers set-test-provider-location gps --location "$where" >/dev/null 2>&1 && return 0
+  adb shell cmd location providers add-test-provider gps --requiresSatellite >/dev/null 2>&1 || true
+  adb shell cmd location providers set-test-provider-enabled gps true >/dev/null 2>&1 || true
+  adb shell cmd location providers set-test-provider-location gps --location "$where" >/dev/null 2>&1 || true
+}
+geo_send 46.8139 -71.2082
+if adb shell cmd location providers set-test-provider-location gps --location 46.8139,-71.2082; then
+  echo "gps test provider active: fixes bypass the emulated GNSS HAL"
+else
+  echo "::error title=E2E infra ($SHARD)::could not install the gps test provider; the location feed is down"
+fi
 (
   prev_pid=''
   point=0
@@ -50,9 +76,9 @@ APP_ID=com.inukshuk.app
     pid=$(adb shell pidof "$APP_ID" 2>/dev/null | tr -d '\r')
     if [ -e "$GEO_RUN" ] && [ -n "$pid" ] && [ "$pid" = "$prev_pid" ]; then
       if [ "$point" = 0 ]; then
-        adb emu geo fix -71.2082 46.8139 >/dev/null 2>&1 || true
+        geo_send 46.8139 -71.2082
       else
-        adb emu geo fix -71.2075 46.8145 >/dev/null 2>&1 || true
+        geo_send 46.8145 -71.2075
       fi
       point=$((1 - point))
     fi

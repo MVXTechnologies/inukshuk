@@ -189,7 +189,12 @@ handler on foreground thread (android.fg) for 68s") and every later adb or
 Maestro call breaks ("Broken pipe", "Device server died"). A fix is now sent
 only while a flow is running (never across transitions or installs), only
 once the app process has lived a full tick unchanged (a launch, force-stop or
-relaunch pauses it), and every 5 s instead of 2 s. If `system_server` still
+relaunch pauses it), and every 5 s instead of 2 s. Gating alone still left
+one deadlock in nine runs (37686186144), so fixes no longer go through the
+emulated GNSS chip (`adb emu geo fix`). They now set the location of a
+shell-owned `gps` **test provider** (`cmd location providers
+set-test-provider-location`), which shadows the real GnssLocationProvider,
+so the deadlocking start/stop path is never entered. If `system_server` still
 restarts, the runner reports **`E2E infra: emulator system_server
 restarted`** as its own error annotation, uploads
 `logcat-system-server-restart-*.txt`, does not retry the flow, and marks the
