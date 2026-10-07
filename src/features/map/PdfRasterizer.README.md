@@ -448,13 +448,21 @@ supported range has. The page was rendered end to end in WebKit 16.4
 inline, and on the iOS 27 simulator. `pdfjsPolyfills.test.ts` runs each
 polyfill in a realm where the native method was removed.
 
-**Known gap: Chromium ≤ 112/113.** V8 in those versions aborts the
-worker (renderer crash, in pdf.js' `_simpleFontToUnicode`) on the fonts of
-2024 US Topo sheets; other sheets render. Chromium 115 is fine. Android
-System WebView updates through the Play Store (Android 8/9 get up to 138), so
-this only reaches devices whose WebView never updates, such as the stock
-WebView 113 of the API 34 emulator image. pdf.js 3.11 rendered those sheets
-there.
+**Known gap: Chromium ≤ 112/113.** V8 11.3 and older miscompiles part of
+pdf.js 6's worker. TurboFan optimizes `promiseBody` (getOperatorList /
+getTextContent), and the renderer then aborts with a V8 fatal error at
+`_simpleFontToUnicode`. This happens nondeterministically, on the fonts of
+2024 US Topo sheets; other sheets render.
+
+- With `--no-turbofan` or `--jitless`, every run renders.
+- Stock pdf.js 6 (no worker patch, no polyfills, `useWasm:false`) crashes the
+  same way, so no polyfill or capability check avoids it.
+- Chromium 114 is fine.
+
+Android System WebView updates through the Play Store (Android 8/9 get up to
+138), so this only reaches devices whose WebView never updates, such as the
+stock WebView 113 of the API 34 emulator image. pdf.js 3.11 rendered those
+sheets there.
 
 **JPEG 2000 on iOS.** pdf.js 6's `openjpeg.wasm` uses two relaxed-SIMD
 instructions, which no WKWebView supports (iOS 26.3 simulator: "relaxed simd
