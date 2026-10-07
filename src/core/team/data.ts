@@ -14,7 +14,15 @@ import type { SignedOp } from './envelope';
 import { isMemberId, isShortId } from './ids';
 import type { TeamState } from './membership';
 import { isAdminRole, parseAudience, type Audience } from './roles';
-import { authorizeRecord, RECORD_KINDS, type RecordKind, vertexTrail } from './records';
+import {
+  authorizeRecord,
+  emptyIndex,
+  RECORD_KINDS,
+  reindex,
+  type RecordIndex,
+  type RecordKind,
+  vertexTrail,
+} from './records';
 import { isTaskStatusUpdate, validTaskFields } from './tasks';
 
 /**
@@ -189,13 +197,15 @@ export interface TeamData {
   positions: Map<string, Register<PosBody & Record<string, Json>>>;
   /** Ops we could not decrypt (missing key, not a sealed recipient) or whose body was invalid. */
   skipped: { id: string; why: 'undecryptable' | 'invalid' | 'forbidden' }[];
+  /** Counters for constant-time record authorization (`records.ts`). */
+  index: RecordIndex;
 }
 
 /** Decrypts one op's body (the replica caches this). */
 export type Decode = (op: SignedOp) => Json | undefined;
 
 export function emptyData(): TeamData {
-  return { entities: new Map(), positions: new Map(), skipped: [] };
+  return { entities: new Map(), positions: new Map(), skipped: [], index: emptyIndex() };
 }
 
 /**
@@ -220,10 +230,12 @@ export function reduceData(
 export function applyDataOp(out: TeamData, state: TeamState, op: SignedOp, decode: Decode): void {
   const merge = (key: string, rec: Omit<EntityRecord, 'state'>, patch: EntityState) => {
     const prev = out.entities.get(key);
-    out.entities.set(
-      key,
-      prev ? { ...prev, state: mergeEntity(prev.state, patch) } : { ...rec, state: patch },
-    );
+    const next = prev
+      ? { ...prev, state: mergeEntity(prev.state, patch) }
+      : { ...rec, state: patch };
+    out.entities.set(key, next);
+    if (next.kind === 'trl' || next.kind === 'tve' || next.kind === 'sos')
+      reindex(out.index, next, prev?.state);
   };
   const { env, stamp } = op;
   // Authority is the author's role at the op's position in the fold (review M4).
@@ -263,7 +275,7 @@ export function applyDataOp(out: TeamData, state: TeamState, op: SignedOp, decod
         const r = authorizeRecord(
           { kind: b.k as RecordKind, id: b.id, o: b.o, f: b.f, author: env.au, role },
           (kind, id, o) => out.entities.get(entityKey(kind as EntityKind, id, o)),
-          (kind, o) => [...out.entities.values()].filter((e) => e.kind === kind && e.owner === o),
+          out.index,
           stamp.wall,
         );
         if (r === 'invalid') break;

@@ -203,8 +203,77 @@ export interface RecordWrite {
 }
 
 type Lookup = (kind: string, id: string, owner?: string) => { state: EntityState } | undefined;
-/** Every record of a kind owned by `owner` (rare kinds only: the SOS limit). */
-type Scan = (kind: string, owner: string) => { id: string; state: EntityState }[];
+
+/**
+ * Counters the fold keeps as it goes (review: no scans per write), so each
+ * record write is authorized in constant time:
+ * - per trail (`owner:trail`): its base length (decoded once), its vertex
+ *   records, live inserted vertices and deleted base vertices;
+ * - per member: their open SOS ids and the newest resolve time of theirs.
+ */
+export interface RecordIndex {
+  baseLen: Map<string, number>;
+  vtx: Map<string, { total: number; liveInserted: number; deletedBase: number }>;
+  sosOpen: Map<string, Set<string>>;
+  sosLastResolved: Map<string, number>;
+}
+
+export function emptyIndex(): RecordIndex {
+  return { baseLen: new Map(), vtx: new Map(), sosOpen: new Map(), sosLastResolved: new Map() };
+}
+
+/** Work done by the index (decodes): the linear-time regression test counts it. */
+export const indexWork = { decodes: 0 };
+
+function vertexClass(id: string, state: EntityState | undefined) {
+  if (state === undefined) return { liveInserted: 0, deletedBase: 0 };
+  const alive = isLive(state);
+  if (BASE_VERTEX.test(id))
+    return { liveInserted: 0, deletedBase: !alive && state.deleted !== undefined ? 1 : 0 };
+  return { liveInserted: alive && state.fields['k'] !== undefined ? 1 : 0, deletedBase: 0 };
+}
+
+/** Keep the index in step with one merged record (`before` = its state before the op). */
+export function reindex(
+  idx: RecordIndex,
+  rec: { kind: string; id: string; owner?: string | undefined; state: EntityState },
+  before: EntityState | undefined,
+): void {
+  const owner = rec.owner;
+  if (owner === undefined) return;
+  if (rec.kind === 'trl') {
+    const key = `${owner}:${rec.id}`;
+    const base = rec.state.fields['base']?.value;
+    if (!idx.baseLen.has(key) && typeof base === 'string') {
+      indexWork.decodes++;
+      idx.baseLen.set(key, decodeLine(base, MAX_TRAIL_VERTICES)?.length ?? 0);
+    }
+  } else if (rec.kind === 'tve') {
+    const tr = vertexTrail(rec.id);
+    if (tr === null) return;
+    const key = `${owner}:${tr}`;
+    const c = idx.vtx.get(key) ?? { total: 0, liveInserted: 0, deletedBase: 0 };
+    const a = vertexClass(rec.id, before);
+    const b = vertexClass(rec.id, rec.state);
+    if (before === undefined) c.total++;
+    c.liveInserted += b.liveInserted - a.liveInserted;
+    c.deletedBase += b.deletedBase - a.deletedBase;
+    idx.vtx.set(key, c);
+  } else if (rec.kind === 'sos') {
+    const open = idx.sosOpen.get(owner) ?? new Set<string>();
+    const alive = isLive(rec.state);
+    const res = alive ? visibleFields(rec.state)['res'] === true : false;
+    if (alive && !res) open.add(rec.id);
+    else open.delete(rec.id);
+    idx.sosOpen.set(owner, open);
+    const resReg = rec.state.fields['res'];
+    if (alive && res && resReg !== undefined)
+      idx.sosLastResolved.set(
+        owner,
+        Math.max(idx.sosLastResolved.get(owner) ?? 0, resReg.stamp.wall),
+      );
+  }
+}
 
 /** After an SOS is resolved, its raiser waits this long before raising another. */
 export const SOS_COOLDOWN_MS = 60_000;
@@ -219,7 +288,7 @@ const live = (r: { state: EntityState } | undefined): r is { state: EntityState 
 export function authorizeRecord(
   w: RecordWrite,
   get: Lookup,
-  scan: Scan = () => [],
+  idx: RecordIndex = emptyIndex(),
   wall = 0,
 ): { owner: string | undefined } | 'invalid' | 'forbidden' {
   const { kind, id, f, author, role } = w;
@@ -252,21 +321,11 @@ export function authorizeRecord(
       if (!live(trail)) return 'forbidden';
       // A new inserted vertex: within the trail's caps.
       if (!BASE_VERTEX.test(id) && get('tve', id, to) === undefined) {
-        const mine = scan('tve', to).filter((e) => vertexTrail(e.id) === f['tr']);
-        if (mine.length >= MAX_VERTEX_RECORDS) return 'forbidden';
-        const baseText = visibleFields(trail.state)['base'];
-        const base =
-          typeof baseText === 'string'
-            ? (decodeLine(baseText, MAX_TRAIL_VERTICES)?.length ?? 0)
-            : 0;
-        let liveCount = base;
-        for (const e of mine) {
-          const alive = isLive(e.state);
-          if (BASE_VERTEX.test(e.id)) {
-            if (!alive && e.state.deleted !== undefined) liveCount--;
-          } else if (alive) liveCount++;
-        }
-        if (liveCount >= MAX_LIVE_VERTICES) return 'forbidden';
+        const key = `${to}:${f['tr'] as string}`;
+        const c = idx.vtx.get(key) ?? { total: 0, liveInserted: 0, deletedBase: 0 };
+        if (c.total >= MAX_VERTEX_RECORDS) return 'forbidden';
+        const live = (idx.baseLen.get(key) ?? 0) + c.liveInserted - c.deletedBase;
+        if (live >= MAX_LIVE_VERTICES) return 'forbidden';
       }
       return { owner: to };
     }
@@ -287,13 +346,9 @@ export function authorizeRecord(
       if (prev === undefined) {
         if (!has(f, 'la') || !has(f, 'lo')) return 'invalid';
         // Spam guard: one open SOS per member, and a cooldown after a resolve.
-        for (const other of scan('sos', owner)) {
-          if (!isLive(other.state)) continue;
-          const of = visibleFields(other.state);
-          if (of['res'] !== true) return 'forbidden';
-          const rat = other.state.fields['res']?.stamp.wall ?? 0;
-          if (wall - rat < SOS_COOLDOWN_MS) return 'forbidden';
-        }
+        if ((idx.sosOpen.get(owner)?.size ?? 0) > 0) return 'forbidden';
+        const last = idx.sosLastResolved.get(owner);
+        if (last !== undefined && wall - last < SOS_COOLDOWN_MS) return 'forbidden';
       }
       return { owner };
     }

@@ -4,6 +4,8 @@ import { resolveTeam } from './membership';
 import {
   authorizeRecord,
   baseKey,
+  emptyIndex,
+  indexWork,
   decodeLine,
   KEY,
   keyBetween,
@@ -451,37 +453,61 @@ describe('review regressions (records)', () => {
         created: { wall: 1, counter: 0, node: 'x' },
       },
     } as never;
+    const to = device().id;
     const write = (id: string) => ({
       kind: 'tve' as const,
       id,
       o: undefined,
-      f: { to: device().id, tr: 't1', la: 1, lo: 1, k: 'm' },
+      f: { to, tr: 't1', la: 1, lo: 1, k: 'm' },
       author: 'a',
       role: 'member' as const,
     });
-    const many = (n: number, alive: boolean) =>
-      Array.from({ length: n }, (_, i) => ({
-        id: `t1_x${i}`,
-        state: alive
-          ? ({
-              fields: { k: { value: 'm', stamp: { wall: 2, counter: i, node: 'x' } } },
-              created: { wall: 2, counter: i, node: 'x' },
-            } as never)
-          : ({ fields: {}, deleted: { wall: 3, counter: i, node: 'x' } } as never),
-      }));
     const get = (kind: string) => (kind === 'trl' ? live : undefined);
+    const idx = (liveInserted: number, total: number, deletedBase = 0) => {
+      const i = emptyIndex();
+      i.baseLen.set(`${to}:t1`, 3);
+      i.vtx.set(`${to}:t1`, { total, liveInserted, deletedBase });
+      return i;
+    };
     // 3 base points + 1996 live inserts = 1999: one more fits; at 2000, no more.
-    expect(authorizeRecord(write('t1_new'), get, () => many(MAX_LIVE_VERTICES - 4, true))).toEqual({
-      owner: expect.any(String),
+    expect(authorizeRecord(write('t1_new'), get, idx(MAX_LIVE_VERTICES - 4, 1996))).toEqual({
+      owner: to,
     });
-    expect(authorizeRecord(write('t1_new'), get, () => many(MAX_LIVE_VERTICES - 3, true))).toBe(
+    expect(authorizeRecord(write('t1_new'), get, idx(MAX_LIVE_VERTICES - 3, 1997))).toBe(
       'forbidden',
     );
-    // Deleted inserts still count toward the record cap.
-    expect(authorizeRecord(write('t1_new'), get, () => many(MAX_VERTEX_RECORDS, false))).toBe(
-      'forbidden',
-    );
+    // Deleted vertices still count toward the record cap.
+    expect(authorizeRecord(write('t1_new'), get, idx(0, MAX_VERTEX_RECORDS))).toBe('forbidden');
   });
+
+  it('review re-check: the fold keeps counters, so a long trail rebuilds in linear work', () => {
+    const { w, bob, rb, sync } = crew();
+    rb.write(T0 + MIN, 'e.set', { k: 'trl', id: 't1', f: { name: 'L', base: LINE } });
+    let prev = baseKey(2);
+    for (let i = 0; i < 600; i++) {
+      const k = keyBetween(prev, null)!;
+      rb.write(T0 + 2 * MIN + i, 'e.set', {
+        k: 'tve',
+        id: `t1_i${i}`,
+        f: { to: bob.id, tr: 't1', la: 1, lo: 1, k },
+      });
+      prev = k;
+    }
+    sync(T0 + 10 * MIN);
+    const ops = [...w.root.log.logged()];
+    indexWork.decodes = 0;
+    const started = Date.now();
+    const d = reduceData(resolveTeam(c, w.teamId, ops), (op) => w.root.decode(op));
+    // Work: the base is decoded once for the whole rebuild, not once per vertex.
+    expect(indexWork.decodes).toBe(1);
+    expect(d.index.vtx.get(`${bob.id}:t1`)).toEqual({
+      total: 600,
+      liveInserted: 600,
+      deletedBase: 0,
+    });
+    // A generous wall-clock ceiling (the old per-write scans were quadratic).
+    expect(Date.now() - started).toBeLessThan(5_000);
+  }, 60_000);
 
   it('PoC S1 (review #2): twenty guest writes to an open SOS raise one alarm', () => {
     const { w, rg, sync } = crew();

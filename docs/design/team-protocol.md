@@ -697,7 +697,9 @@ value of its own last edit; "editing" presence is an ordinary message.
 Keys are canonical (base-36, at most 256 characters, never ending in `0`),
 so two different keys always have room between them; `keyBetween` returns
 null when there is none within the bound (the app then says the point can't
-be added there) and never an out-of-order key (property test). Edits whose
+be added there; the editing UI then re-keys by delete and re-insert, and
+says so if it can't) and never an out-of-order key (property test). Honest
+end-appends run out after about 1,500 points at one end. Edits whose
 fields name another trail than their key are ignored, never applied as
 deletions.
 
@@ -711,7 +713,12 @@ badge (the raiser: "Your SOS was resolved"). Spam guard: a member holds at most 
 and raises the next one at least 60 s after their last was resolved (by the
 resolution's stamp, which its writer chooses within the clock-skew bound);
 only the creating write alerts, so re-writing an open SOS's place doesn't
-re-alert. The raiser's live position is the
+re-alert. Accepted residual (review): the cooldown reads the resolution's own stamp,
+and a raiser can toggle resolve/reopen; the per-device limit of one alarm
+per raiser per 5 minutes bounds that to about twelve alarms an hour. The fold
+authorizes these writes in constant time from counters it keeps (per trail:
+base length, vertex records, live inserts, deleted base points; per member:
+open SOS ids, newest resolve), never by scanning. The raiser's live position is the
 ordinary position register.
 
 A resolved SOS opens again only with the whole trio (`res: false, rby: null, rat: null`); that write alerts like a raise. Each phone also caps SOS alarms at one per raiser per 5 minutes (more update the banner).
