@@ -29,6 +29,7 @@ module.exports = {
     // Test-only fixture helpers.
     '!src/core/geo/geopdf/testUtils.ts',
     '!src/core/terrain3d/testUtils.ts',
+    '!src/core/gnss/testUtils.ts',
   ],
   coverageThreshold: {
     // Pure logic in src/core is the safety-critical part — hold it to a high bar.
@@ -37,6 +38,14 @@ module.exports = {
       functions: 80,
       lines: 80,
       statements: 80,
+    },
+    // The external-receiver core parses untrusted bytes from radios and casters:
+    // every line and branch is exercised (fuzzed streams included).
+    './src/core/gnss/': {
+      branches: 100,
+      functions: 100,
+      lines: 100,
+      statements: 100,
     },
   },
   clearMocks: true,

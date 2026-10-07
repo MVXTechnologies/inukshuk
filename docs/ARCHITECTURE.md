@@ -308,6 +308,17 @@ Field operators rely on it, so **PROJ never chooses an operation**:
   `openConvert` + the `core/convert/prefill` builders (map chip, geodetic and
   tide cards, map-actions row, deep link).
 
+## External GNSS receivers (#588)
+
+- Stage 1 (pure core, `core/gnss`): NMEA / UBX / RTCM 3 framing over
+  arbitrary byte chunks (`stream.ts`, fuzz-tested), fix assembly, the quality
+  state machine and the phone-GPS standby policy (`quality.ts`), the NTRIP
+  v1/v2 protocol (`ntrip.ts`, `sourcetable.ts`) and the output datum
+  (`datum.ts`), which plans every datum change through `core/convert` and is
+  gated by official-tool vectors (`fixtures/datum-vectors.json`, also run on
+  the host PROJ). Module boundaries for the native transport and the UI:
+  `src/core/gnss/README.md`.
+
 ## Error reporting ("no silent fails")
 
 - Capture: a chained `ErrorUtils` global handler (fatal + non-fatal), Hermes'
