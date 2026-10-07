@@ -29,7 +29,17 @@ on:
   # fingerprint prevents. A fix for an older binary is published by running
   # this workflow on a branch cut from that binary's release tag (see
   # docs/DEPLOYMENT.md § Field updates without a store release).
+  # `platform`: a hotfix branch can match one platform's store runtime but
+  # not the other's (2.3.0: iOS build 18 predates #581, Android vc63 does
+  # not). Publish only the platform the branch exists for, so it never
+  # supersedes main's update on the other one.
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to publish
+        type: choice
+        options: [all, ios, android]
+        default: all
 
 jobs:
   guard:
@@ -95,4 +105,6 @@ jobs:
           --require "$REQUIRED_EXTRA"
           --any-of errorReportEndpoint,errorReportToken
       - name: Publish OTA update to the production channel
-        run: eas update --auto --branch production --environment production --non-interactive
+        env:
+          PLATFORM: ${{ inputs.platform || 'all' }}
+        run: eas update --auto --branch production --environment production --platform "$PLATFORM" --non-interactive
