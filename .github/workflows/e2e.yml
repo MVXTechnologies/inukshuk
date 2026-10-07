@@ -138,6 +138,10 @@ jobs:
           # The GNSS module's simulated receiver (#588) for .maestro/gnss.yaml:
           # E2E builds only (plugins/withGnss.js), never a store build.
           GNSS_FAKE_DEVICE: '1'
+          # The in-memory team mesh (#589) for .maestro/team*.yaml: simulated
+          # teammates' phones inside the app. E2E builds only; store builds never
+          # set it (src/data/team/index.ts).
+          EXPO_PUBLIC_MESH_LOOPBACK: '1'
 
       - name: Save Gradle dependencies (main only)
         if: steps.gradle-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'

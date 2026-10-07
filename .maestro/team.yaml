@@ -1,0 +1,181 @@
+# Team mode e2e (#589), founder side, on the loopback mesh: a build made with
+# EXPO_PUBLIC_MESH_LOOPBACK=1 (the E2E APK sets it in .github/workflows/e2e.yml)
+# runs simulated teammates' phones inside the app over an in-memory LAN, with
+# the real protocol (join, safety code, sync, removal and key rotation).
+#
+# Settings → Extensions → Get Team mode → Create a team → share my position →
+# Invite (QR) → a simulated teammate joins with it (safety code on the admin's
+# screen) → their message reaches the chat → I reply → remove them (the key
+# rotates at once) → the team chip on the map → leave the team.
+#
+# Settings rows merge title + subtitle on iOS: their matches are wildcard
+# regexes (maestro-ios-tap-traps). The accordion opener is guarded.
+appId: com.inukshuk.app
+---
+- launchApp:
+    permissions:
+      location: allow
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- setLocation:
+    latitude: 47.0745
+    longitude: -70.9065
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Settings'
+    timeout: 15000
+- tapOn: 'Settings'
+- scrollUntilVisible:
+    element: 'Extensions.*'
+    direction: DOWN
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: '.*Team mode.*'
+          commands:
+            - tapOn: 'Extensions.*'
+      - scrollUntilVisible:
+          element: '.*Team mode.*'
+          direction: DOWN
+          timeout: 5000
+- scrollUntilVisible:
+    element: '(Get Team mode|Remove Team mode extension)'
+    direction: DOWN
+- runFlow:
+    when:
+      visible: 'Get Team mode'
+    commands:
+      - tapOn: 'Get Team mode'
+- scrollUntilVisible:
+    element:
+      id: 'team-create-row'
+    direction: DOWN
+- tapOn:
+    id: 'team-create-row'
+# Create.
+- extendedWaitUntil:
+    visible:
+      id: 'team-create-screen'
+    timeout: 10000
+- tapOn:
+    id: 'team-create-name'
+- inputText: 'Releve MSA'
+- tapOn:
+    id: 'team-create-myname'
+- eraseText: 40
+- inputText: 'Marc'
+- hideKeyboard
+- tapOn:
+    id: 'team-create-ends-14d'
+- tapOn:
+    id: 'team-create-submit'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 15000
+- assertVisible: 'Releve MSA'
+- assertVisible: '.*Off · nobody in the team sees where you are.*'
+- takeScreenshot: team-hub-new
+# Share my position (opt-in).
+- tapOn:
+    id: 'team-share-switch'
+- assertVisible: '.*On while you record.*'
+# Invite: the QR code.
+- tapOn:
+    id: 'team-invite-button'
+- extendedWaitUntil:
+    visible:
+      id: 'team-invite-create'
+    timeout: 5000
+- tapOn:
+    id: 'team-invite-create'
+- extendedWaitUntil:
+    visible:
+      id: 'team-invite-qr'
+    timeout: 5000
+- assertVisible: '.*Single use · 48 hours · joins as member.*'
+- takeScreenshot: team-invite-qr
+- tapOn:
+    id: 'team-invite-done'
+# A simulated phone joins with a fresh invite; the admin sees its safety code.
+- scrollUntilVisible:
+    element:
+      id: 'team-sim-add'
+    direction: DOWN
+- tapOn:
+    id: 'team-sim-add'
+- scrollUntilVisible:
+    element: '.*Julie Tremblay.*'
+    direction: UP
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: 'team-join-notice'
+    timeout: 10000
+- takeScreenshot: team-hub-joined
+# Chat: her hello arrives; I reply.
+- tapOn:
+    id: 'team-chat-button'
+- extendedWaitUntil:
+    visible: '.*Bonjour, ici Julie Tremblay.*'
+    timeout: 15000
+- tapOn:
+    id: 'team-chat-input'
+- inputText: 'Depart 9 h au P2'
+- tapOn:
+    id: 'team-chat-send'
+- extendedWaitUntil:
+    visible: '.*Depart 9 h au P2.*'
+    timeout: 5000
+- takeScreenshot: team-chat
+- tapOn: 'Back'
+# Remove her: the key rotates at once (no "must be rotated" banner).
+- tapOn:
+    id: 'team-member-Julie Tremblay'
+- extendedWaitUntil:
+    visible:
+      id: 'team-member-screen'
+    timeout: 5000
+- tapOn:
+    id: 'team-member-remove'
+- tapOn: 'Remove'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 5000
+- assertVisible: '.*Removed.*'
+- assertNotVisible:
+    id: 'team-needs-rotation'
+# The team chip on the map.
+- tapOn: 'Back'
+- tapOn: 'Back'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: 'team-map-chip'
+    timeout: 10000
+- takeScreenshot: team-map
+# Leave the team (deletes it from this phone).
+- tapOn:
+    id: 'team-map-chip'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 5000
+- scrollUntilVisible:
+    element: 'Leave team'
+    direction: DOWN
+- tapOn: 'Leave team'
+- tapOn: 'Leave'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-hub-screen'
+    timeout: 10000
