@@ -1,5 +1,16 @@
 import { shouldPersistPosition } from '@core/geo/lastKnownPosition';
 import type { LatLng, TrackPoint } from '@core/models';
+import {
+  SIGNAL_PROBE_TIMEOUT_MS,
+  WATCHDOG_TICK_MS,
+  classifyLocationProbe,
+  isDeviceSettingsRejection,
+  isFreshFix,
+  isWatchSilent,
+  locationLossMessage,
+  needsSignalProbe,
+  type LocationLossKind,
+} from '@core/recording/locationWatchdog';
 import { isBackgroundFeedConfirmed, toTrackPoint } from '@lib/backgroundLocation';
 import { reportError } from '@lib/errorReporting';
 import { useRecorderStore } from '@state/recorderStore';
@@ -49,11 +60,24 @@ export interface LocationTracking {
   lastFix: TrackPoint | null;
   permission: LocationPermission;
   /**
-   * Set when the OS refused to start the position watch even though permission
-   * was granted — in practice "device location is switched off" (expo-location
-   * rejects with "unsatisfied device settings"). null while the watch is fine.
+   * Why location is unavailable although permission is granted: device
+   * location switched off, no GPS signal while recording, or the OS refusing
+   * the watch. null while location is fine. See `@core/recording/locationWatchdog`.
    */
+  unavailableKind: LocationLossKind | null;
+  /** The banner text for {@link unavailableKind}; null while location is fine. */
   unavailableReason: string | null;
+}
+
+/** Resolve `promise`, or null after `ms` (the promise is left to settle on its own). */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise.finally(() => clearTimeout(timer)),
+    new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), ms);
+    }),
+  ]);
 }
 
 /**
@@ -71,7 +95,26 @@ export function useLocationTracking(): LocationTracking {
   const [location, setLocation] = useState<LatLng | null>(null);
   const [lastFix, setLastFix] = useState<TrackPoint | null>(null);
   const [permission, setPermission] = useState<LocationPermission>('undetermined');
-  const [unavailableReason, setUnavailableReason] = useState<string | null>(null);
+  const [unavailableKind, setUnavailableKind] = useState<LocationLossKind | null>(null);
+  // Mirrors `unavailableKind` for the watchdog, which runs outside render.
+  const lossRef = useRef<LocationLossKind | null>(null);
+  const setLoss = useCallback((kind: LocationLossKind | null) => {
+    lossRef.current = kind;
+    setUnavailableKind(kind);
+  }, []);
+  // #324 — when the watch last proved itself alive (went live, delivered a
+  // fix, or a probe got a fresh fix); null while no watch is live. The
+  // watchdog below probes a watch that has been silent for too long.
+  const lastAliveAtRef = useRef<number | null>(null);
+  const probingRef = useRef(false);
+  const mountedRef = useRef(true);
+  // The watchdog only judges the foreground watch while it is in front; in
+  // the background the recording is fed by the background task.
+  const foregroundRef = useRef(
+    AppState.currentState !== 'background' && AppState.currentState !== 'inactive',
+  );
+  // The watchdog probe, reachable from the watch effect (declared below it).
+  const probeRef = useRef<(force?: boolean) => Promise<void>>(async () => undefined);
   const minDisplacement = useSettingsStore((s) => s.minDisplacementM);
   // Bumped on every foreground so permission + device-location availability are
   // re-checked and the position watch is re-established. #90: permission or
@@ -100,6 +143,7 @@ export function useLocationTracking(): LocationTracking {
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
+      foregroundRef.current = state === 'active';
       if (state === 'active') setRecheck((n) => n + 1);
       // Going to background/inactive: flush the latest fix so the next cold
       // start opens the map where the user last was (not null island).
@@ -144,18 +188,28 @@ export function useLocationTracking(): LocationTracking {
         // HIGH_ACCURACY criteria (no network provider, stale/absent GMS — CI
         // emulator images, de-Googled phones). A Balanced watch still gets
         // GPS fixes there, which beats banner-and-nothing.
-        const watch = async (accuracy: Location.Accuracy) =>
+        //
+        // Play services' "turn on device location" dialog is offered once:
+        // the first watch of the first run. Neither the fallback nor a re-run
+        // (each foreground, each retry) raises it again (#324): the dialog
+        // churns AppState, whose `active` re-ran this effect, which raised the
+        // dialog again and superseded the watch that would have reported the
+        // refusal. With location off, a dialog-less watch subscribes and stays
+        // silent; the watchdog below asks the device whether location is on.
+        const watch = async (accuracy: Location.Accuracy, mayShowUserSettingsDialog: boolean) =>
           Location.watchPositionAsync(
             {
               accuracy,
               timeInterval: 1000,
               distanceInterval: Math.max(1, minDisplacement),
+              mayShowUserSettingsDialog,
             },
             (loc) => onFix(loc),
           );
         const onFix = (loc: Location.LocationObject) => {
           const fix = toTrackPoint(loc);
-          setUnavailableReason(null);
+          lastAliveAtRef.current = Date.now();
+          setLoss(null);
           const pos = { latitude: fix.latitude, longitude: fix.longitude };
           locationRef.current = pos;
           setLocation(pos);
@@ -173,12 +227,14 @@ export function useLocationTracking(): LocationTracking {
             persistPosition(pos);
           }
         };
+        let settingsRefused = false;
         try {
-          sub = await watch(Location.Accuracy.BestForNavigation);
+          sub = await watch(Location.Accuracy.BestForNavigation, recheck === 0);
         } catch (err) {
-          if (cancelled) return;
-          if (!(err instanceof Error && /device settings/i.test(err.message))) throw err;
-          sub = await watch(Location.Accuracy.Balanced);
+          // A superseded rejection goes to the outer handler (see there).
+          if (cancelled || !isDeviceSettingsRejection(err)) throw err;
+          settingsRefused = true;
+          sub = await watch(Location.Accuracy.Balanced, false);
         }
         if (cancelled) {
           sub.remove();
@@ -187,15 +243,25 @@ export function useLocationTracking(): LocationTracking {
         // The watch is live again — clear any stale failure NOW instead of on
         // the first fix. With a distance filter a stationary user may not get
         // a fix for minutes, and #116's auto-pause reads this as "location
-        // still lost", instantly re-pausing every resume.
-        setUnavailableReason(null);
+        // still lost", instantly re-pausing every resume. Silence from here
+        // on is the watchdog's to judge.
+        lastAliveAtRef.current = Date.now();
+        setLoss(null);
+        // The dialog was refused (or could not be satisfied): say at once
+        // whether that left location off, rather than after a silent spell.
+        if (settingsRefused) void probeRef.current(true);
       } catch (err) {
-        if (cancelled) return;
-        setUnavailableReason(
-          err instanceof Error && /device settings/i.test(err.message)
-            ? 'Location is turned off — switch it on to see your position.'
-            : "Couldn't start location updates.",
-        );
+        if (cancelled) {
+          // #324: a re-run superseded this watch while it waited, typically
+          // on Play services' location dialog, whose own AppState churn
+          // caused the re-run. Its refusal used to be dropped here, so a
+          // switched-off location was never reported. It may be stale by
+          // now, so it is not trusted as is: ask the device instead.
+          if (isDeviceSettingsRejection(err)) void probeRef.current(true);
+          return;
+        }
+        lastAliveAtRef.current = null;
+        setLoss(isDeviceSettingsRejection(err) ? 'off' : 'error');
         // Keep trying: device location can come back without an AppState
         // change (quick-settings toggle), and a recording that auto-paused on
         // the loss needs the watch alive again before resume can stick.
@@ -208,7 +274,77 @@ export function useLocationTracking(): LocationTracking {
       if (retryTimer) clearTimeout(retryTimer);
       sub?.remove();
     };
-  }, [minDisplacement, recheck, persistPosition]);
+  }, [minDisplacement, recheck, persistPosition, setLoss]);
 
-  return { location, lastFix, permission, unavailableReason };
+  /**
+   * #324 — the watchdog. A subscribed watch that has gone silent is probed:
+   * device location off → `off`; on, but no fresh fix within the probe
+   * timeout while recording → `no-signal`. A stationary user (the distance
+   * filter withholds their fixes) passes the probe and is left alone. `force`
+   * asks about device location even when the watch is not known to be silent
+   * (a superseded watch rejection).
+   */
+  const probe = useCallback(
+    async (force = false) => {
+      if (probingRef.current || !mountedRef.current) return;
+      if (!foregroundRef.current) return;
+      const current = lossRef.current;
+      const silent = isWatchSilent(lastAliveAtRef.current, Date.now());
+      if (!force && !silent && current !== 'off') return;
+      probingRef.current = true;
+      try {
+        const { locationServicesEnabled } = await Location.getProviderStatusAsync();
+        if (!mountedRef.current) return;
+        if (!locationServicesEnabled) {
+          setLoss('off');
+          return;
+        }
+        if (current === 'off') {
+          // Back on: re-establish the watch; its go-live clears the loss.
+          setRecheck((n) => n + 1);
+          return;
+        }
+        const recording = useRecorderStore.getState().status === 'recording';
+        if (!silent || !needsSignalProbe(recording, current)) return;
+        const startedAt = Date.now();
+        const loc = await withTimeout(
+          Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.High,
+            mayShowUserSettingsDialog: false,
+          }).catch(() => null),
+          SIGNAL_PROBE_TIMEOUT_MS,
+        );
+        if (!mountedRef.current) return;
+        // A fix the watch delivered meanwhile has already settled it.
+        if ((lastAliveAtRef.current ?? 0) > startedAt) return;
+        const freshFix = loc !== null && isFreshFix(loc.timestamp, Date.now());
+        if (freshFix) lastAliveAtRef.current = Date.now();
+        setLoss(classifyLocationProbe({ servicesEnabled: true, freshFix }));
+      } catch {
+        // A failed status query proves nothing either way.
+      } finally {
+        probingRef.current = false;
+      }
+    },
+    [setLoss],
+  );
+  useEffect(() => {
+    probeRef.current = probe;
+  }, [probe]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (permission !== 'granted') return;
+    const timer = setInterval(() => void probeRef.current(), WATCHDOG_TICK_MS);
+    return () => clearInterval(timer);
+  }, [permission]);
+
+  const unavailableReason = unavailableKind === null ? null : locationLossMessage(unavailableKind);
+  return { location, lastFix, permission, unavailableKind, unavailableReason };
 }

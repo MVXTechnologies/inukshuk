@@ -1,4 +1,9 @@
 import { LAST_POSITION_WRITE_INTERVAL_MS } from '@core/geo/lastKnownPosition';
+import {
+  FIX_STALE_MS,
+  SIGNAL_PROBE_TIMEOUT_MS,
+  WATCHDOG_TICK_MS,
+} from '@core/recording/locationWatchdog';
 import * as storage from '@data/storage';
 import { isBackgroundFeedConfirmed } from '@lib/backgroundLocation';
 import { reportError } from '@lib/errorReporting';
@@ -29,10 +34,12 @@ jest.mock('@lib/backgroundLocation', () => ({
 }));
 jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));
 jest.mock('expo-location', () => ({
-  Accuracy: { BestForNavigation: 6, Balanced: 3 },
+  Accuracy: { BestForNavigation: 6, High: 4, Balanced: 3 },
   requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
   getForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
   watchPositionAsync: jest.fn(),
+  getProviderStatusAsync: jest.fn(async () => ({ locationServicesEnabled: true })),
+  getCurrentPositionAsync: jest.fn(),
 }));
 
 let deliver: Location.LocationCallback;
@@ -68,6 +75,11 @@ beforeEach(() => {
     deliver = callback;
     return { remove: jest.fn() };
   });
+  jest
+    .mocked(Location.getProviderStatusAsync)
+    .mockResolvedValue({ locationServicesEnabled: true } as Location.LocationProviderStatus);
+  // A probe that never answers: no fix to be had.
+  jest.mocked(Location.getCurrentPositionAsync).mockImplementation(() => new Promise(() => {}));
 });
 
 afterEach(() => {
@@ -167,5 +179,135 @@ describe('camera persistence cannot interrupt recording (audit A22)', () => {
     });
     expect(useRecorderStore.getState().points).toHaveLength(0);
     expect(result.current.location?.latitude).toBe(46.8);
+  });
+});
+
+describe('location loss while the watch stays subscribed (#324)', () => {
+  const settingsRefusal = () =>
+    new Error('Location request failed due to unsatisfied device settings');
+  const servicesEnabled = (on: boolean) =>
+    jest
+      .mocked(Location.getProviderStatusAsync)
+      .mockResolvedValue({ locationServicesEnabled: on } as Location.LocationProviderStatus);
+  /** Let the silent watch go stale and the watchdog run its probes. */
+  const silence = async (ms: number) => {
+    await act(async () => {
+      jest.advanceTimersByTime(ms);
+    });
+  };
+
+  it('reports location off when a live watch goes silent with location switched off', async () => {
+    const { result } = await renderHook(useLocationTracking);
+    await act(async () => deliver(fix()));
+    servicesEnabled(false);
+    await silence(FIX_STALE_MS + WATCHDOG_TICK_MS);
+    expect(result.current.unavailableKind).toBe('off');
+    expect(result.current.unavailableReason).toMatch(/turned off/);
+    // The silence is not judged by a fix probe: location off is the answer.
+    expect(Location.getCurrentPositionAsync).not.toHaveBeenCalled();
+  });
+
+  it('reports no signal while recording when location is on but no fix can be had', async () => {
+    const { result } = await renderHook(useLocationTracking);
+    await act(async () => deliver(fix()));
+    await silence(FIX_STALE_MS + WATCHDOG_TICK_MS);
+    expect(result.current.unavailableKind).toBeNull(); // still probing
+    await silence(SIGNAL_PROBE_TIMEOUT_MS);
+    expect(result.current.unavailableKind).toBe('no-signal');
+    // The next fix ends the dropout.
+    await act(async () => deliver(fix(46.81)));
+    expect(result.current.unavailableKind).toBeNull();
+  });
+
+  it('leaves a stationary recorder alone: the probe gets a fresh fix', async () => {
+    jest
+      .mocked(Location.getCurrentPositionAsync)
+      .mockImplementation(async () => ({ ...fix(), timestamp: Date.now() }));
+    const { result } = await renderHook(useLocationTracking);
+    await act(async () => deliver(fix()));
+    await silence(FIX_STALE_MS * 3);
+    expect(Location.getCurrentPositionAsync).toHaveBeenCalled();
+    expect(result.current.unavailableKind).toBeNull();
+    // The probe's fix only proves the signal; it is not recorded.
+    expect(useRecorderStore.getState().points).toHaveLength(1);
+  });
+
+  it('never probes for a fix when not recording (a silent idle map is a still user)', async () => {
+    useRecorderStore.getState().discard();
+    const { result } = await renderHook(useLocationTracking);
+    await act(async () => deliver(fix()));
+    await silence(FIX_STALE_MS * 3);
+    expect(Location.getProviderStatusAsync).toHaveBeenCalled();
+    expect(Location.getCurrentPositionAsync).not.toHaveBeenCalled();
+    expect(result.current.unavailableKind).toBeNull();
+  });
+
+  it('does not probe while the app is in the background', async () => {
+    await renderHook(useLocationTracking);
+    await act(async () => deliver(fix()));
+    await act(async () => changeAppState?.('background'));
+    servicesEnabled(false);
+    await silence(FIX_STALE_MS * 3);
+    expect(Location.getProviderStatusAsync).not.toHaveBeenCalled();
+  });
+
+  it('re-establishes the watch once location is switched back on', async () => {
+    const { result } = await renderHook(useLocationTracking);
+    await act(async () => deliver(fix()));
+    servicesEnabled(false);
+    await silence(FIX_STALE_MS + WATCHDOG_TICK_MS);
+    expect(result.current.unavailableKind).toBe('off');
+    const watches = jest.mocked(Location.watchPositionAsync).mock.calls.length;
+    servicesEnabled(true);
+    await silence(WATCHDOG_TICK_MS);
+    expect(Location.watchPositionAsync).toHaveBeenCalledTimes(watches + 1);
+    expect(result.current.unavailableKind).toBeNull();
+  });
+
+  it('Play-services dialog churn: a superseded refusal still reports location off', async () => {
+    // Run 1 raises the "turn on device location" dialog and waits on it.
+    let refuse!: (err: Error) => void;
+    jest.mocked(Location.watchPositionAsync).mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          refuse = reject;
+        }),
+    );
+    servicesEnabled(false);
+    const { result } = await renderHook(useLocationTracking);
+    expect(jest.mocked(Location.watchPositionAsync).mock.calls[0]?.[0]).toMatchObject({
+      mayShowUserSettingsDialog: true,
+    });
+    // The dialog churns AppState: `active` re-runs the watch effect…
+    await act(async () => changeAppState?.('background'));
+    await act(async () => changeAppState?.('active'));
+    // …whose watch must not raise the dialog again; it subscribes silently.
+    expect(jest.mocked(Location.watchPositionAsync).mock.calls[1]?.[0]).toMatchObject({
+      mayShowUserSettingsDialog: false,
+    });
+    expect(result.current.unavailableKind).toBeNull();
+    // The user declines: run 1's refusal lands after it was superseded.
+    await act(async () => refuse(settingsRefusal()));
+    expect(result.current.unavailableKind).toBe('off');
+  });
+
+  it('a refused dialog falls back without raising it again, and says location is off', async () => {
+    jest.mocked(Location.watchPositionAsync).mockRejectedValueOnce(settingsRefusal());
+    servicesEnabled(false);
+    const { result } = await renderHook(useLocationTracking);
+    await act(async () => {});
+    expect(Location.watchPositionAsync).toHaveBeenCalledTimes(2);
+    expect(jest.mocked(Location.watchPositionAsync).mock.calls[1]?.[0]).toMatchObject({
+      accuracy: Location.Accuracy.Balanced,
+      mayShowUserSettingsDialog: false,
+    });
+    expect(result.current.unavailableKind).toBe('off');
+  });
+
+  it('a refusal on a device that cannot do high accuracy, location on, is no loss', async () => {
+    jest.mocked(Location.watchPositionAsync).mockRejectedValueOnce(settingsRefusal());
+    const { result } = await renderHook(useLocationTracking);
+    await act(async () => {});
+    expect(result.current.unavailableKind).toBeNull();
   });
 });
