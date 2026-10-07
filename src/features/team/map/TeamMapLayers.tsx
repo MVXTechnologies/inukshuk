@@ -25,9 +25,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { FeatureCollection } from 'geojson';
 import { useMemo } from 'react';
 
-export const TEAM_MEMBER_LAYER = 'team-member-dot';
-export const TEAM_WAYPOINT_LAYER = 'team-waypoint-dot';
-export const TEAM_TAP_LAYERS = [TEAM_MEMBER_LAYER, TEAM_WAYPOINT_LAYER];
+import { TEAM_MEMBER_LAYER, TEAM_WAYPOINT_LAYER } from './layerIds';
 
 const MARKERS_ANCHOR = overlayAnchor('markers');
 const LINES_ANCHOR = overlayAnchor('trailLines');

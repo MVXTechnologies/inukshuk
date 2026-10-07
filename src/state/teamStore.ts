@@ -81,22 +81,24 @@ export const useTeamStore = create<TeamStore>((set) => ({
   dismissBanner: () => set({ banner: null }),
 }));
 
-let wired = false;
+let wired: TeamService | null = null;
+let unwire: (() => void) | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 
 /** Connect the store to the service (once, from `TeamHost`). Returns the service. */
 export function wireTeamStore(): TeamService | null {
   const service = appTeamService();
-  if (service === null || wired) return service;
-  wired = true;
-  service.subscribe(() => {
+  if (service === null || wired === service) return service;
+  unwire?.();
+  wired = service;
+  const offChange = service.subscribe(() => {
     if (timer !== null) return;
     timer = setTimeout(() => {
       timer = null;
       useTeamStore.getState().refresh();
     }, 250);
   });
-  service.onAlert((alert) => {
+  const offAlert = service.onAlert((alert) => {
     const view = service.active?.view();
     const author = view?.members.find((m) => m.id === alert.author);
     useTeamStore.setState({
@@ -108,6 +110,10 @@ export function wireTeamStore(): TeamService | null {
       },
     });
   });
+  unwire = () => {
+    offChange();
+    offAlert();
+  };
   void service.load().then(() => {
     loadedFlag = true;
     useTeamStore.getState().refresh();

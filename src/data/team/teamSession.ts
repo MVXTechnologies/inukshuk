@@ -347,23 +347,33 @@ export class TeamSession {
 
   /**
    * Two phones that discover each other both dial: keep exactly one link per
-   * pair, the one the lower member id initiated (both sides agree).
+   * pair. Both sides prefer the link the lower member id initiated, so they
+   * agree; among links of the same kind the oldest stays. A joiner's session
+   * is never deduplicated (it may arrive twice — QR hint and discovery — and
+   * closing one mid-admission would only slow the join).
    */
   private dropDuplicate(peerId: string, session: SyncSession): void {
     const host = this.host;
     const other = session.peer;
-    if (host === null || other === undefined) return;
+    if (host === null || other === undefined || this.meta.get(peerId)?.joining) return;
     const twins = host
       .peers()
-      .filter((p) => p.session.peer === other && p.session.phase === 'open');
+      .filter(
+        (p) =>
+          p.session.peer === other &&
+          p.session.phase === 'open' &&
+          !(this.meta.get(p.peer.peerId)?.joining ?? false),
+      );
     if (twins.length < 2) return;
     const lowerIsMe = this.me < other;
-    for (const t of twins) {
-      const initiatedByMe = t.session.side === 'initiator';
-      const keep = initiatedByMe === lowerIsMe;
-      if (!keep && t.peer.peerId !== undefined) host.close(t.peer.peerId, 'duplicate');
-    }
-    void peerId;
+    const preferred = (t: (typeof twins)[number]) =>
+      (t.session.side === 'initiator') === lowerIsMe ? 0 : 1;
+    const age = (t: (typeof twins)[number]) => this.meta.get(t.peer.peerId)?.connectedAt ?? 0;
+    const ranked = [...twins].sort(
+      (a, b) =>
+        preferred(a) - preferred(b) || age(a) - age(b) || (a.peer.peerId < b.peer.peerId ? -1 : 1),
+    );
+    for (const t of ranked.slice(1)) host.close(t.peer.peerId, 'duplicate');
   }
 
   private gossip(ops: readonly SignedOp[], except: string | null): void {

@@ -20,7 +20,7 @@ import { create } from 'zustand';
 
 import { MemberAvatar, ROLE_LABEL } from '../components';
 import { openPeers } from '../syncLine';
-import { TEAM_TAP_LAYERS } from './TeamMapLayers';
+import { TEAM_TAP_LAYERS } from './layerIds';
 
 export type TeamMapHit = { kind: 'member'; id: string } | { kind: 'waypoint'; id: string };
 
