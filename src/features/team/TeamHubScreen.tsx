@@ -10,6 +10,7 @@ import { parseHostPort } from '@core/teamui/invites';
 import { MESH_LOOPBACK } from '@data/team';
 import { reportError } from '@lib/errorReporting';
 import { teamService, useTeamStore } from '@state/teamStore';
+import type { TeamTask } from '@core/team/tasks';
 import { HeaderAction } from '@ui/components/ScreenHeader';
 import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -42,6 +43,14 @@ const SHARE_INTERVALS = [
 /** A join's safety code stays up this long on the admitting phone. */
 const JOIN_NOTICE_MS = 3 * 60_000;
 
+/** "3 open · 1 for you", or how to start. */
+export function tasksLine(tasks: readonly TeamTask[], me: string): string {
+  const open = tasks.filter((x) => !x.done);
+  if (tasks.length === 0) return 'None · +task @name in a comment, or add one';
+  const mine = open.filter((x) => x.assignee === me).length;
+  return `${open.length} open${mine > 0 ? ` · ${mine} for you` : ''}`;
+}
+
 export function TeamHubScreen() {
   const t = useSchemeTokens();
   const router = useRouter();
@@ -54,6 +63,7 @@ export function TeamHubScreen() {
   const meshRunning = useTeamStore((s) => s.meshRunning);
   const unread = useTeamStore((s) => s.unread);
   const shares = useTeamStore((s) => s.shares);
+  const tasks = useTeamStore((s) => s.tasks);
   const notices = useTeamStore((s) => s.joinNotices);
   const [address, setAddress] = useState('');
   const [showDial, setShowDial] = useState(false);
@@ -339,6 +349,15 @@ export function TeamHubScreen() {
         ))}
       </View>
 
+      <List.Item
+        title="Tasks"
+        description={tasksLine(tasks, view.me)}
+        left={(p) => <List.Icon {...p} icon="checkbox-marked-outline" />}
+        right={(p) => <List.Icon {...p} icon="chevron-right" />}
+        onPress={() => router.push('/team/tasks' as never)}
+        style={styles.listItem}
+        testID="team-tasks-row"
+      />
       <List.Item
         title="Groups"
         description={

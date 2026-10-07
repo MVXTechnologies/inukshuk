@@ -131,6 +131,12 @@ import { RecordingPanel } from './components/RecordingPanel';
 import { ReceiverFollow } from '@features/gnss/ReceiverFollow';
 import { ReceiverMapOverlay } from '@features/gnss/ReceiverMapOverlay';
 import { TeamMapLayers } from '@features/team/map/TeamMapLayers';
+import { hitTestTeamMarks, useTeamMapMarks } from '@features/team/map/TeamMapMarks';
+import { useTeamMapFocus } from '@features/team/map/teamMapFocus';
+import { usePinDraft } from '@features/team/map/TeamPinComposer';
+import { TeamTrailPhotos } from '@features/team/map/TeamTrailPhotos';
+import { trailUrl as teamTrailUrl } from '@core/teamui/alerts';
+import { useTeamStore } from '@state/teamStore';
 import {
   hitTestTeam,
   TeamMapOverlay,
@@ -439,6 +445,7 @@ export function MapScreen() {
   const zoomMapTo = useCallback((center: [number, number], zoom: number) => {
     cameraRef.current?.easeTo({ center, zoom, duration: 400 });
   }, []);
+
   const openPhoto = useCallback(
     (trackId: string, photoId: string) => router.push(photoViewerHref(trackId, photoId) as never),
     [router],
@@ -603,6 +610,7 @@ export function MapScreen() {
   // What the trail lines and heatmap are built for (#494): the settled
   // viewport plus a margin, sticky across small moves (see useCullRegion).
   const cullRegion = useCullRegion(settledBounds, scaleAt?.zoom ?? null);
+  const teamMarks = useTeamMapMarks(scaleAt?.zoom ?? null);
   const { inspectId, inspectTrack, inspectPoints, markerAt, setMarkerAt, inspect } =
     useTrailInspection(tracks);
   // Which trail is "selected": a tap-selected heat spot (the carousel) wins,
@@ -1780,6 +1788,40 @@ export function MapScreen() {
 
   // "+" actions menu → Add waypoint: compose a standalone waypoint at the
   // current GPS position (created on Done, see composeWaypointAt).
+  // Team mode (#589): "show on the map" from a task or a pin notification.
+  const teamFocus = useTeamMapFocus((s) => s.target);
+  useEffect(() => {
+    if (teamFocus === null || !mapLoaded) return;
+    const t = useTeamMapFocus.getState().take();
+    if (t) {
+      setFollowUser(false);
+      zoomMapTo([t.lng, t.lat], t.zoom);
+    }
+  }, [teamFocus, mapLoaded, zoomMapTo, setFollowUser]);
+  const teamOn = useTeamStore((s) => s.view !== null && s.view.active && !s.view.readOnly);
+  // "+" → Pin a team message: at the point chip, else the middle of the map.
+  const onTeamPin = useCallback(() => {
+    void (async () => {
+      let at: [number, number] | null = pointAt ? [pointAt.longitude, pointAt.latitude] : null;
+      if (at === null && mapLoaded) {
+        try {
+          const vs = await mapRef.current?.getViewState();
+          if (vs !== undefined) at = [vs.center[0], vs.center[1]];
+        } catch {
+          // map mid-teardown — fall back to my position.
+        }
+      }
+      if (at === null && location) at = [location.longitude, location.latitude];
+      if (at === null) {
+        showSnack('Move the map to the place first');
+        return;
+      }
+      setPointAt(null);
+      useTeamMapSelection.getState().select(null);
+      usePinDraft.getState().open(at[0], at[1]);
+    })();
+  }, [pointAt, mapLoaded, location, showSnack]);
+
   const onAddWaypoint = useCallback(() => {
     if (!location) {
       showSnack('Waiting for a GPS fix before dropping a waypoint');
@@ -1978,6 +2020,28 @@ export function MapScreen() {
         return;
       }
 
+      // Team mode (#589): a pin, a comment bubble or a task on the map.
+      const markHit = await hitTestTeamMarks(map, px, py);
+      if (markHit !== null) {
+        drawingRef.current.closeAreaCard();
+        setPointAt(null);
+        setViewWp(null);
+        setForecastAt(null);
+        setExtensionHit(null);
+        if (markHit.kind === 'pin') {
+          useTeamMapSelection
+            .getState()
+            .select({ kind: 'pin', owner: markHit.mark.owner, id: markHit.mark.id });
+        } else if (markHit.kind === 'bubble') {
+          const ph = markHit.mark.photo;
+          const me = useTeamStore.getState().view?.me ?? '';
+          router.push(teamTrailUrl(ph.owner, ph.trackId, me, ph.id) as never);
+        } else {
+          router.push('/team/tasks' as never);
+        }
+        return;
+      }
+
       // Team mode (#589): a teammate's dot or a shared waypoint, above the
       // map extensions (they are what the user is looking for on a team map).
       const teamHit = await hitTestTeam(map, px, py);
@@ -2112,6 +2176,7 @@ export function MapScreen() {
       setExtensionHit(null); // ... and an extension's card
     },
     [
+      router,
       shownExtensions,
       extensionHit,
       visiblePins,
@@ -2938,6 +3003,15 @@ export function MapScreen() {
               glyphs={style.glyphs}
               topLayerId={style.layers[style.layers.length - 1]?.id}
             />
+            {/* Team mode (#589): teammates' trail photos (the trail-photo
+              layers), then comment bubbles, pins and tasks (visual Markers,
+              hit-tested in onMapPress). */}
+            <TeamTrailPhotos
+              drawnTrackIds={drawnTrackIds}
+              minZoom={mainPhotos.minZoom}
+              deferPress={deferPhotoPress}
+            />
+            {teamMarks}
             {/* Revamp puck, replacing MapLibre's default one (children do):
               halo, ring and dot in the scheme's puck tokens, plus the amber
               uncertainty ring on a weak signal while recording. */}
@@ -3114,6 +3188,7 @@ export function MapScreen() {
                     // Drawing (#502/#503) taps the flat 2D map; "Draw" asks
                     // route or area first.
                     onDraw: drawing.openChooser,
+                    onTeamPin: teamOn ? onTeamPin : undefined,
                     // Convert (appended last): type a coordinate you have not tapped.
                     onConvert: () => openConvert(router),
                   }

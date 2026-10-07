@@ -21,8 +21,13 @@ import { create } from 'zustand';
 import { MemberAvatar, ROLE_LABEL } from '../components';
 import { openPeers } from '../syncLine';
 import { TEAM_TAP_LAYERS } from './layerIds';
+import { TeamPinCard } from './TeamPinCard';
+import { TeamPinComposer, usePinDraft } from './TeamPinComposer';
 
-export type TeamMapHit = { kind: 'member'; id: string } | { kind: 'waypoint'; id: string };
+export type TeamMapHit =
+  | { kind: 'member'; id: string }
+  | { kind: 'waypoint'; id: string }
+  | { kind: 'pin'; owner: string; id: string };
 
 export const useTeamMapSelection = create<{
   hit: TeamMapHit | null;
@@ -88,6 +93,8 @@ export function TeamMapOverlay({
   const unread = useTeamStore((s) => s.unread);
   const positions = useTeamStore((s) => s.positions);
   const shares = useTeamStore((s) => s.shares);
+  const pins = useTeamStore((s) => s.pins);
+  const draft = usePinDraft((s) => s.at);
   const meshRunning = useTeamStore((s) => s.meshRunning);
   const hit = useTeamMapSelection((s) => s.hit);
   const select = useTeamMapSelection((s) => s.select);
@@ -106,6 +113,8 @@ export function TeamMapOverlay({
       ? { lat: wpt.lat, lon: wpt.lon }
       : null;
   const rb = target && here ? rangeAndBearing(here, target) : null;
+  const pin =
+    hit?.kind === 'pin' ? pins.find((p) => p.owner === hit.owner && p.id === hit.id) : undefined;
 
   return (
     <>
@@ -144,7 +153,17 @@ export function TeamMapOverlay({
         </Pressable>
       </View>
 
-      {cardSlotFree && (member || wpt) && (
+      {draft !== null && (
+        <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
+          <TeamPinComposer onPinned={(owner, id) => select({ kind: 'pin', owner, id })} />
+        </View>
+      )}
+      {draft === null && cardSlotFree && pin && (
+        <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
+          <TeamPinCard pin={pin} view={view} here={here} onClose={() => select(null)} />
+        </View>
+      )}
+      {draft === null && cardSlotFree && (member || wpt) && (
         <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
           <View
             style={[

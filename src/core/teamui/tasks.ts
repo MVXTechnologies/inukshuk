@@ -3,12 +3,18 @@
  * the task list's filters and groups. Pure. The task entity and its rules
  * are `@core/team/tasks`.
  */
-import { MAX_TASK_TITLE, type TeamTask } from '@core/team/tasks';
+import { MAX_TASK_TITLE, type TaskAnchor, type TeamTask } from '@core/team/tasks';
 
 import type { MemberRow } from './view';
 
 export type TaskCommand =
-  | { ok: true; assignee: string; title: string }
+  | {
+      ok: true;
+      assignee: string;
+      title: string;
+      /** Where `+task @Name` sits in the text (to highlight it). */
+      span: [number, number];
+    }
   | { ok: false; reason: 'no-assignee' | 'guest' | 'empty' | 'too-long' };
 
 const COMMAND = /(^|\s)\+task\b/iu;
@@ -51,7 +57,10 @@ export function parseTaskCommand(text: string, members: readonly MemberRow[]): T
     .trim();
   if (title.length === 0) return { ok: false, reason: 'empty' };
   if (title.length > MAX_TASK_TITLE) return { ok: false, reason: 'too-long' };
-  return { ok: true, assignee: who.id, title };
+  const base = m.index + m[0].length;
+  const at = base + (text.length - base - after.length);
+  const start = m.index + m[1]!.length;
+  return { ok: true, assignee: who.id, title, span: [start, at + 1 + used] };
 }
 
 export type TaskFilter = 'mine' | 'all' | 'open' | 'done';
@@ -121,4 +130,46 @@ export function groupTasks(
 /** Tasks made from one comment or message (its chips). */
 export function tasksFromSource(tasks: readonly TeamTask[], owner: string, id: string): TeamTask[] {
   return tasks.filter((t) => t.source?.owner === owner && t.source.id === id);
+}
+
+/** What a task's anchor points at, looked up in the team's data. */
+export interface AnchorLookup {
+  photo(
+    owner: string,
+    id: string,
+  ): { lng: number; lat: number; caption: string | null } | undefined;
+  pin(owner: string, id: string): { lng: number; lat: number; text: string } | undefined;
+  trail(owner: string, id: string): { name: string; start: [number, number] | null } | undefined;
+}
+
+const short = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
+/** A task anchor's label ("Photo · Summit") and where it is on the map, if anywhere. */
+export function anchorInfo(
+  anchor: TaskAnchor | null,
+  look: AnchorLookup,
+): { label: string; at: [number, number] | null } {
+  if (anchor === null) return { label: 'No place', at: null };
+  switch (anchor.kind) {
+    case 'point':
+      return { label: 'A place on the map', at: [anchor.lng, anchor.lat] };
+    case 'photo': {
+      const p = look.photo(anchor.owner, anchor.id);
+      if (!p) return { label: 'A photo no longer shared', at: null };
+      return {
+        label: p.caption ? `Photo · ${short(p.caption, 40)}` : 'A shared photo',
+        at: [p.lng, p.lat],
+      };
+    }
+    case 'pin': {
+      const p = look.pin(anchor.owner, anchor.id);
+      if (!p) return { label: 'A removed pin', at: null };
+      return { label: `Pin · ${short(p.text, 40)}`, at: [p.lng, p.lat] };
+    }
+    case 'trail': {
+      const tr = look.trail(anchor.owner, anchor.id);
+      if (!tr) return { label: 'A trail no longer shared', at: null };
+      return { label: `Trail · ${short(tr.name, 40)}`, at: tr.start };
+    }
+  }
 }

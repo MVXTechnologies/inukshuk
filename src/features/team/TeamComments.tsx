@@ -4,8 +4,10 @@
  * screen and the photo viewer. Comments are signed team ops; the core
  * decides who can see and write them.
  */
+import { canCompleteTask, type TeamTask } from '@core/team/tasks';
 import type { TeamComment } from '@core/teamui/comments';
 import { findMentions } from '@core/teamui/compose';
+import { parseTaskCommand, tasksFromSource } from '@core/teamui/tasks';
 import type { MemberRow } from '@core/teamui/view';
 import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -14,6 +16,28 @@ import { StyleSheet, View } from 'react-native';
 import { IconButton, Text, TextInput } from 'react-native-paper';
 
 import { MemberAvatar, ROLE_LABEL } from './components';
+import { TaskChip } from './TaskChip';
+
+/** A comment's text with its `+task @Name` highlighted. */
+function CommentText({ text, members }: { text: string; members: readonly MemberRow[] }) {
+  const t = useSchemeTokens();
+  const cmd = parseTaskCommand(text, members);
+  if (cmd === null || !cmd.ok) {
+    return (
+      <Text variant="bodyLarge" style={{ color: t.ink }} selectable>
+        {text}
+      </Text>
+    );
+  }
+  const [a, b] = cmd.span;
+  return (
+    <Text variant="bodyLarge" style={{ color: t.ink }} selectable>
+      {text.slice(0, a)}
+      <Text style={[styles.command, { color: t.team.taskCommand }]}>{text.slice(a, b)}</Text>
+      {text.slice(b)}
+    </Text>
+  );
+}
 
 export function commentTime(at: number): string {
   const d = new Date(at);
@@ -32,6 +56,8 @@ export function TeamComments({
   photoLabel,
   canWrite,
   testID,
+  tasks = [],
+  onToggleTask,
 }: {
   comments: readonly TeamComment[];
   members: readonly MemberRow[];
@@ -43,11 +69,16 @@ export function TeamComments({
   photoLabel?: (photoId: string) => string | null;
   canWrite: boolean;
   testID?: string;
+  /** The team's tasks: those made from a comment show as chips under it. */
+  tasks?: readonly TeamTask[];
+  onToggleTask?: (task: TeamTask) => void;
 }) {
   const t = useSchemeTokens();
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const byId = new Map(members.map((m) => [m.id, m]));
+  const myRole = byId.get(me)?.role;
+  const draft = parseTaskCommand(text, members);
   const send = () => {
     if (!onSend) return;
     const err = onSend(text, findMentions(text, members));
@@ -80,9 +111,18 @@ export function TeamComments({
                   {about ? `  · ${about}` : ''}
                 </Text>
               </Text>
-              <Text variant="bodyLarge" style={{ color: t.ink }} selectable>
-                {c.text}
-              </Text>
+              <CommentText text={c.text} members={members} />
+              {tasksFromSource(tasks, c.author, c.id).map((task) => (
+                <TaskChip
+                  key={`${task.owner}:${task.id}`}
+                  task={task}
+                  assigneeName={
+                    task.assignee === me ? 'you' : (byId.get(task.assignee)?.name ?? 'a teammate')
+                  }
+                  canToggle={onToggleTask !== undefined && canCompleteTask(task, me, myRole)}
+                  onToggle={() => onToggleTask?.(task)}
+                />
+              ))}
             </View>
           </View>
         );
@@ -112,6 +152,11 @@ export function TeamComments({
           />
         </View>
       )}
+      {draft !== null && draft.ok && error === null && (
+        <Text variant="bodySmall" style={{ color: t.inkVariant }} testID="team-task-preview">
+          {`Creates a task for ${draft.assignee === me ? 'you' : (byId.get(draft.assignee)?.name ?? 'a teammate')}: ${draft.title}`}
+        </Text>
+      )}
       {error !== null && (
         <Text variant="bodySmall" style={{ color: t.status.gpsLostInk }}>
           {error}
@@ -126,4 +171,5 @@ const styles = StyleSheet.create({
   wrap: { gap: space.sm },
   row: { flexDirection: 'row', gap: space.sm, paddingVertical: 4 },
   composer: { flexDirection: 'row', alignItems: 'center' },
+  command: { fontWeight: '700' },
 });

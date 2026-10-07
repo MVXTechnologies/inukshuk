@@ -256,6 +256,11 @@ export interface SchemeTokens {
     /** The QR scanner's backdrop and viewfinder frame. */
     scannerBackdrop: string;
     scannerFrame: string;
+    /** A "new comments" bubble on the map, and its count. */
+    bubbleNew: string;
+    bubbleNewInk: string;
+    /** A highlighted `+task @name` in a comment. */
+    taskCommand: string;
   };
   /** Logbook statistics (Statistics, Personal records, Year in review). */
   stats: {
@@ -428,6 +433,9 @@ export const lightScheme: SchemeTokens = {
     qrLight: palette.white,
     scannerBackdrop: palette.black,
     scannerFrame: palette.white,
+    bubbleNew: '#E07B39',
+    bubbleNewInk: palette.white,
+    taskCommand: '#2F6F8F',
   },
   stats: {
     flame: '#C2410C',
@@ -600,6 +608,9 @@ export const darkScheme: SchemeTokens = {
     qrLight: palette.white,
     scannerBackdrop: palette.black,
     scannerFrame: palette.white,
+    bubbleNew: '#F08A4B',
+    bubbleNewInk: palette.black,
+    taskCommand: '#7FC4E3',
   },
   stats: {
     flame: '#F07A45',
@@ -765,6 +776,9 @@ export const sunlightScheme: SchemeTokens = {
     qrLight: palette.white,
     scannerBackdrop: palette.black,
     scannerFrame: palette.white,
+    bubbleNew: palette.black,
+    bubbleNewInk: palette.white,
+    taskCommand: palette.black,
   },
   stats: {
     flame: '#B02222',
@@ -935,6 +949,9 @@ export const nightScheme: SchemeTokens = {
     qrLight: palette.white,
     scannerBackdrop: palette.black,
     scannerFrame: NIGHT_INK,
+    bubbleNew: NIGHT_INK,
+    bubbleNewInk: palette.black,
+    taskCommand: NIGHT_INK,
   },
   stats: {
     flame: '#FF5C5C',

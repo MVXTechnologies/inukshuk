@@ -6,6 +6,7 @@ import type { WriterCursor } from '@core/team/actions';
 import { isTeamId } from '@core/team/ids';
 import { readSecret, secretKey, writeSecret } from '@data/secureStore';
 import { readJson, writeJson } from '@data/storage';
+import { deleteTeamPhotoFiles } from './teamPhotoFiles';
 import { Directory, File, Paths } from 'expo-file-system';
 
 import {
@@ -95,5 +96,7 @@ export const fsTeamDisk: TeamDisk = {
   deleteTeam(teamId) {
     const dir = teamDir(teamId);
     if (dir.exists) dir.delete();
+    // Teammates' photo thumbnails go with the team.
+    deleteTeamPhotoFiles(teamId);
   },
 };

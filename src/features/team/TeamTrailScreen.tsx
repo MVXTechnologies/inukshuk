@@ -14,8 +14,9 @@ import { Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } f
 import { Text } from 'react-native-paper';
 
 import { MemberAvatar, Note, SectionLabel, TeamScreenFrame } from './components';
-import { actionMessage } from './messages';
+import { sendTeamComment } from './taskSend';
 import { commentTime, TeamComments } from './TeamComments';
+import { useToggleTask } from './useToggleTask';
 import { TeamRouteMap } from './TeamRouteMap';
 
 export function TeamTrailScreen() {
@@ -30,6 +31,8 @@ export function TeamTrailScreen() {
   const shares = useTeamStore((s) => s.shares);
   const allPhotos = useTeamStore((s) => s.photos);
   const dataVersion = useTeamStore((s) => s.dataVersion);
+  const tasks = useTeamStore((s) => s.tasks);
+  const toggleTask = useToggleTask();
   const [selected, setSelected] = useState<string | null>(photo ?? null);
   const session = teamService()?.active ?? null;
   const trail = shares.tracks.find((tr) => tr.owner === owner && tr.id === id);
@@ -142,13 +145,22 @@ export function TeamTrailScreen() {
         canWrite={view.active && !view.readOnly}
         placeholder={sel ? 'Comment on this photo' : 'Comment on the trail'}
         photoLabel={(pid) => (ordinal.has(pid) ? `photo ${ordinal.get(pid)}` : null)}
-        onSend={(text, mentions) => {
-          const err = sel
-            ? session.commentOnPhoto(sel.id, text, mentions)
-            : session.commentOnTrail(id, text, mentions);
-          useTeamStore.getState().refresh();
-          return err ? actionMessage(err) : null;
-        }}
+        tasks={tasks}
+        onToggleTask={toggleTask}
+        onSend={(text, mentions) =>
+          sendTeamComment({
+            session,
+            text,
+            members: view.members,
+            anchor: sel
+              ? { kind: 'photo', owner: sel.owner, id: sel.id }
+              : { kind: 'trail', owner, id },
+            write: (cid) =>
+              sel
+                ? session.commentOnPhoto(sel.id, text, mentions, cid)
+                : session.commentOnTrail(id, text, mentions, cid),
+          })
+        }
         testID="team-trail-comments"
       />
     </TeamScreenFrame>

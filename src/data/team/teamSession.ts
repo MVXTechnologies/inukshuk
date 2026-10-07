@@ -18,6 +18,7 @@ import { TeamReplica } from '@core/team/replica';
 import type { Audience, GroupLink, Priority, Role } from '@core/team/roles';
 import { SyncSession, type SessionEvent } from '@core/team/sync';
 import { alertContext, alertFor, TaskAlertThrottle, type TeamAlert } from '@core/teamui/alerts';
+import { commentsByPhoto, type Said } from '@core/teamui/mapMarks';
 import { pinThread, teamPins, type TeamPin } from '@core/teamui/pins';
 import {
   statusFields,
@@ -258,6 +259,16 @@ export class TeamSession {
     if (this.pinsCache?.key !== this.dataVersion)
       this.pinsCache = { key: this.dataVersion, pins: teamPins(data) };
     return this.pinsCache.pins;
+  }
+
+  private threadsCache: { key: string; threads: Map<string, Said[]> } | null = null;
+
+  /** Who commented on each shared photo, and when (the map's bubbles). */
+  photoThreads(): Map<string, Said[]> {
+    const data = this.replica.data(this.deps.now());
+    if (this.threadsCache?.key !== this.dataVersion)
+      this.threadsCache = { key: this.dataVersion, threads: commentsByPhoto(data) };
+    return this.threadsCache.threads;
   }
 
   private tasksCache: { key: string; tasks: TeamTask[] } | null = null;
@@ -702,12 +713,17 @@ export class TeamSession {
   }
 
   /** Comment on a whole shared trail (a message on its `trail:` thread; guests too). */
-  commentOnTrail(trackId: string, text: string, mentions: string[] = []): ActionError | null {
+  commentOnTrail(
+    trackId: string,
+    text: string,
+    mentions: string[] = [],
+    id: string = this.deps.newId(),
+  ): ActionError | null {
     const blocked = this.guardWrite();
     if (blocked) return blocked;
     const tx = text.trim();
     if (tx.length === 0 || tx.length > 4000) return 'invalid';
-    const body: Record<string, Json> = { id: this.deps.newId(), th: trailThread(trackId), tx };
+    const body: Record<string, Json> = { id, th: trailThread(trackId), tx };
     if (mentions.length > 0) body['mn'] = mentions;
     return this.writeMsg(body);
   }
@@ -732,14 +748,14 @@ export class TeamSession {
     return op === undefined ? 'rotation-pending' : null;
   }
 
-  /** Pin a message to a place (guests too). Returns the pin's id. */
+  /** Pin a message to a place (guests too); `id` is the pin's id. */
   dropPin(
     lng: number,
     lat: number,
     text: string,
     mentions: string[] = [],
     id: string = this.deps.newId(),
-  ): ActionError | string {
+  ): ActionError | null {
     const blocked = this.guardWrite();
     if (blocked) return blocked;
     const tx = text.trim();
@@ -750,7 +766,7 @@ export class TeamSession {
     if (mentions.length > 0) body['mn'] = mentions;
     const err = this.writeMsg(body);
     if (err === null) this.markSeen(pinThread(this.me, id));
-    return err ?? id;
+    return err;
   }
 
   /** Reply under a pin (guests too). */

@@ -2,6 +2,7 @@ import type { TeamTask } from '@core/team/tasks';
 
 import { distanceToLine, unseenCount } from './pins';
 import {
+  anchorInfo,
   filterCounts,
   filterTasks,
   groupTasks,
@@ -61,13 +62,15 @@ describe('+task command', () => {
       ok: true,
       assignee: 'alex',
       title: 'flag the detour',
+      span: [0, 19],
     });
     expect(parseTaskCommand('Thanks! +TASK @al: count the markers', members)).toEqual({
       ok: true,
       assignee: 'al',
       title: 'count the markers',
+      span: [8, 17],
     });
-    expect(parseTaskCommand('+task @me photograph the erosion', members)).toEqual({
+    expect(parseTaskCommand('+task @me photograph the erosion', members)).toMatchObject({
       ok: true,
       assignee: 'me',
       title: 'photograph the erosion',
@@ -158,5 +161,37 @@ describe('pins helpers', () => {
     expect(unseenCount(msgs, 'me', 4)).toBe(2);
     expect(unseenCount(msgs, 'me', 5)).toBe(1);
     expect(unseenCount(msgs, 'me', 9)).toBe(0);
+  });
+});
+
+describe('anchorInfo', () => {
+  const look = {
+    photo: (o: string, id: string) =>
+      o === 'me' && id === 'p' ? { lng: 1, lat: 2, caption: 'Summit: the river' } : undefined,
+    pin: (o: string, id: string) =>
+      o === 'alex' && id === 'q' ? { lng: 3, lat: 4, text: 'x'.repeat(60) } : undefined,
+    trail: (_o: string, id: string) =>
+      id === 't' ? { name: 'Mont-Sainte-Anne', start: [5, 6] as [number, number] } : undefined,
+  };
+  it('labels and locates every kind of anchor', () => {
+    expect(anchorInfo(null, look)).toEqual({ label: 'No place', at: null });
+    expect(anchorInfo({ kind: 'point', lat: 47, lng: -70 }, look)).toEqual({
+      label: 'A place on the map',
+      at: [-70, 47],
+    });
+    expect(anchorInfo({ kind: 'photo', owner: 'me', id: 'p' }, look)).toEqual({
+      label: 'Photo · Summit: the river',
+      at: [1, 2],
+    });
+    expect(anchorInfo({ kind: 'photo', owner: 'x', id: 'p' }, look).at).toBeNull();
+    const pin = anchorInfo({ kind: 'pin', owner: 'alex', id: 'q' }, look);
+    expect(pin.label.length).toBeLessThanOrEqual('Pin · '.length + 40);
+    expect(pin.at).toEqual([3, 4]);
+    expect(anchorInfo({ kind: 'pin', owner: 'me', id: 'q' }, look).label).toBe('A removed pin');
+    expect(anchorInfo({ kind: 'trail', owner: 'me', id: 't' }, look)).toEqual({
+      label: 'Trail · Mont-Sainte-Anne',
+      at: [5, 6],
+    });
+    expect(anchorInfo({ kind: 'trail', owner: 'me', id: 'z' }, look).at).toBeNull();
   });
 });

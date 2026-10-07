@@ -667,7 +667,8 @@ chars), never from the op body. A task whose `assignee` becomes me alerts
 me; my own task marked done by someone else alerts me; a reply on my pin
 alerts me; a new pin follows the normal-message rule. Task alerts from one
 teammate collapse: the first in 60 s notifies, the rest only update the
-banner ("3 task updates for you").
+banner ("3 task updates for you"). The throttle is per author and per device, so colluding
+members can each still raise one full alert per 60 s (accepted).
 
 ### 11.3 Blobs (stage 3)
 
