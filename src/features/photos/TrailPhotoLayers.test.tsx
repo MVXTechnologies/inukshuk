@@ -110,6 +110,30 @@ it('registers sprites at 3 px per point plus the bundled badges, and loads missi
   expect(mockImages.current!.images).toHaveProperty('ph-count-40');
 });
 
+it("names a registered image for every drawn photo, and a bundled badge for a stack's count", async () => {
+  await render(<TrailPhotoLayers id="m" photos={PHOTOS} />);
+  const images = mockImages.current!.images as Record<string, unknown>;
+  const img = mockLayers.find((l) => l.id === 'm-photos-img')!;
+  const count = mockLayers.find((l) => l.id === 'm-photos-count')!;
+  // icon-image is ['concat', prefix, ['to-string', ['get', 'order']]]: resolve it per feature.
+  const iconImage = (img.layout as Record<string, unknown>)['icon-image'] as [
+    string,
+    string,
+    unknown,
+  ];
+  expect(iconImage[0]).toBe('concat');
+  const features = (lastSource('m-photos').data as GeoJSON.FeatureCollection).features;
+  expect(features.length).toBeGreaterThan(0);
+  for (const f of features) {
+    const name = `${iconImage[1]}${String(f.properties?.['order'])}`;
+    expect(images).toHaveProperty([name]);
+  }
+  // Stacks of 2-10 find their badge registered up front (larger ones load on demand, above).
+  const countImage = (count.layout as Record<string, unknown>)['icon-image'] as unknown[];
+  expect(countImage.slice(0, 2)).toEqual(['concat', 'ph-count-']);
+  for (let n = 2; n <= 10; n++) expect(images).toHaveProperty([`ph-count-${n}`]);
+});
+
 it('draws nothing without photos to draw', async () => {
   await render(<TrailPhotoLayers id="x" photos={[photo('note:n', 1)]} />);
   expect(mockSources).toEqual([]);
