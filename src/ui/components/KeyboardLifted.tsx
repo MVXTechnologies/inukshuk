@@ -5,18 +5,27 @@
  * for the keyboard nor told about it through React Native's own Keyboard
  * events, so docked inputs sat under the keys (2026-10-08).
  *
- * The view moves with the keyboard (KeyboardStickyView, its animated
- * height), less the gap it already keeps above the screen's bottom edge (a
- * card docked over the tab bar rises only by what the keys would cover).
- * The gap is measured while the keyboard is down.
+ * The view follows the keyboard's animated height (the library's Reanimated
+ * shared value, the same source its KeyboardAvoidingView uses, which the CI
+ * emulator proved), less the gap it already keeps above the window's bottom
+ * edge, so a card docked over the tab bar rises only by what the keys would
+ * hide. The gap is measured in window coordinates while the keyboard is down.
+ * (Tried and rejected: useKeyboardState's visibility and KeyboardStickyView
+ * did not move on Android; KeyboardAvoidingView "position" reads its frame
+ * relative to its parent, so a docked card was off by the dock's offset.)
  */
-import { useCallback, useRef, useState, type ReactNode } from 'react';
-import { Dimensions, View, type StyleProp, type ViewStyle } from 'react-native';
-import { KeyboardStickyView, useKeyboardState } from 'react-native-keyboard-controller';
+import { useCallback, useRef, type ReactNode } from 'react';
+import { View, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  useKeyboardState,
+  useReanimatedKeyboardAnimation,
+  useWindowDimensions,
+} from 'react-native-keyboard-controller';
+import Reanimated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 import { restGap } from '../keyboardLift';
 
-/** The keyboard's height while it is up, else 0 (both platforms). */
+/** The keyboard's height (0 when down): for sizing, not for moving views. */
 export function useKeyboardHeight(): number {
   return useKeyboardState((s) => s.height);
 }
@@ -30,15 +39,20 @@ export function KeyboardLifted({
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }) {
+  const { height } = useReanimatedKeyboardAnimation();
+  const { height: windowH } = useWindowDimensions();
   const rest = useRef<View>(null);
-  const [gap, setGap] = useState(0);
-  const keyboardUp = useKeyboardState((s) => s.height > 0);
+  const gap = useSharedValue(0);
   const measure = useCallback(() => {
-    if (keyboardUp) return;
-    rest.current?.measureInWindow((_x, y, _w, h) =>
-      setGap(restGap(y + h, Dimensions.get('screen').height)),
-    );
-  }, [keyboardUp]);
+    rest.current?.measureInWindow((_x, y, _w, h) => {
+      // Only at rest: while the keyboard is up the view has moved.
+      if (height.value === 0) gap.value = restGap(y + h, windowH);
+    });
+  }, [height, gap, windowH]);
+  const lifted = useAnimatedStyle(() => ({
+    // `height` is negative while the keyboard is up.
+    transform: [{ translateY: Math.min(0, height.value + gap.value) }],
+  }));
   return (
     <View
       ref={rest}
@@ -48,9 +62,9 @@ export function KeyboardLifted({
       testID={testID}
       onLayout={measure}
     >
-      <KeyboardStickyView offset={{ closed: 0, opened: gap }} pointerEvents="box-none">
+      <Reanimated.View style={lifted} pointerEvents="box-none">
         {children}
-      </KeyboardStickyView>
+      </Reanimated.View>
     </View>
   );
 }

@@ -1,7 +1,7 @@
 import { restGap } from './keyboardLift';
 
 describe('restGap', () => {
-  it('is the distance to the screen bottom less a margin', () => {
+  it('is the distance to the window bottom less a margin', () => {
     expect(restGap(800, 900)).toBe(92);
     expect(restGap(800, 900, 0)).toBe(100);
   });
