@@ -13,25 +13,39 @@ name: CI health monitor
 # Nightly Health files its own issue with the failing step's details; this one
 # is the single place that says whether main is green at all, so a red E2E or
 # native build can't sit unnoticed in the Actions tab.
+#
+# `weekly` (Mondays, or a manual run with `weekly: true`) posts one comment on
+# the pinned `ci-weekly` issue: main red time, failed runs by workflow/branch/
+# event, branch failure rates, flaky jobs (pass after retry, from the warning
+# annotations) and the top causes. The numbers come from
+# scripts/ci/ciWeekly.mjs, unit-tested in ciWeekly.test.mjs.
 on:
   schedule:
     # Off the hour: scheduled runs at :00 are the ones GitHub delays most.
     - cron: '23 */3 * * *'
+    - cron: '41 6 * * 1'
   workflow_dispatch:
+    inputs:
+      weekly:
+        description: Post the weekly report instead of updating the health issue
+        type: boolean
+        default: false
 
 concurrency:
-  group: ci-health
+  group: ci-health-${{ github.event.schedule || 'manual' }}
   cancel-in-progress: false
 
-# Least privilege: read the runs, write the one issue. Nothing else.
-permissions:
-  actions: read
-  issues: write
+# Least privilege: each job states what it needs.
+permissions: {}
 
 jobs:
   report:
+    if: github.event.schedule != '41 6 * * 1' && inputs.weekly != true
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      actions: read
+      issues: write
     steps:
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
@@ -106,3 +120,90 @@ jobs:
             } else {
               await github.rest.issues.create({ owner, repo, title: TITLE, body, labels: [LABEL] });
             }
+
+  weekly:
+    if: github.event.schedule == '41 6 * * 1' || inputs.weekly == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # the report module
+      actions: read # runs and jobs
+      checks: read # annotations (flakes)
+      issues: write # the one ci-weekly issue
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const m = await import(`${process.env.GITHUB_WORKSPACE}/scripts/ci/ciWeekly.mjs`);
+            const now = Date.now();
+            const since = now - 7 * 24 * 3600 * 1000;
+            const created = `>=${new Date(since).toISOString()}`;
+            const runs = (
+              await github.paginate(github.rest.actions.listWorkflowRunsForRepo, { owner, repo, created, per_page: 100 })
+            ).filter((r) => r.name !== context.workflow);
+            const completed = runs.filter((r) => r.status === 'completed');
+
+            // Red time needs main's state at the window start too (see
+            // withStateAtStart).
+            const earlier = await github.rest.actions.listWorkflowRunsForRepo({
+              owner, repo, branch: 'main', status: 'completed', per_page: 100,
+              created: `<${new Date(since).toISOString()}`,
+            });
+            const mainRuns = m.withStateAtStart(
+              completed.filter((r) => r.head_branch === 'main'),
+              earlier.data.workflow_runs.filter((r) => r.name !== context.workflow),
+            );
+
+            // Jobs of red runs (causes) and of runs that retried (flakes):
+            // annotations live on check runs, whose id is the job id.
+            const failedJobs = [];
+            const annotations = [];
+            for (const r of completed) {
+              const red = m.isRed(r);
+              const mayFlake = /E2E|Native Build|Release path/.test(r.name);
+              if (!red && !mayFlake) continue;
+              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+                owner, repo, run_id: r.id, per_page: 100,
+              });
+              for (const job of jobs) {
+                if (red && m.RED.has(job.conclusion)) failedJobs.push({ workflow: r.name, job });
+                if (mayFlake && job.conclusion === 'success') {
+                  const { data } = await github.rest.checks.listAnnotations({ owner, repo, check_run_id: job.id });
+                  annotations.push(...data);
+                }
+              }
+            }
+
+            const body = m.renderReport({
+              from: new Date(since).toISOString(),
+              to: new Date(now).toISOString(),
+              redHoursMain: m.redHours(mainRuns, since, now),
+              redByWorkflow: m.redHoursByWorkflow(mainRuns, since, now),
+              failures: m.failuresBy(completed),
+              rates: m.branchFailureRates(completed),
+              flaky: m.flakes(annotations),
+              causes: m.topCauses(failedJobs),
+              runCount: completed.length,
+            });
+
+            const LABEL = 'ci-weekly';
+            await github.rest.issues.createLabel({ owner, repo, name: LABEL, color: '5319e7' }).catch(() => {});
+            const { data: open } = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: LABEL });
+            let issue = open[0];
+            if (!issue) {
+              ({ data: issue } = await github.rest.issues.create({
+                owner, repo, title: '📈 CI weekly', labels: [LABEL],
+                body: 'One comment per week from `ci-health.yml` › weekly: red time on main, failures, flakes and causes.',
+              }));
+              // Pinning is best effort: a repo can hold at most three pins.
+              await github.graphql('mutation($id: ID!) { pinIssue(input: { issueId: $id }) { issue { number } } }', { id: issue.node_id })
+                .catch((e) => core.warning(`Could not pin #${issue.number}: ${e.message}`));
+            }
+            await github.rest.issues.createComment({ owner, repo, issue_number: issue.number, body });
+            core.summary.addRaw(body).write();
