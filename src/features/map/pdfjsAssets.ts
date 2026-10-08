@@ -15,6 +15,7 @@
 import { copyToServed } from '@data/localServer';
 import { Asset } from 'expo-asset';
 import { File } from 'expo-file-system';
+import { keepAlive } from '@data/keepAlive';
 
 // The `.pdfjs` extension is a Metro asset extension (metro.config.js), so
 // these resolve to asset ids and ship inside the app. Metro asset modules can
@@ -64,10 +65,13 @@ export async function loadPdfjsSources(): Promise<PdfjsSources> {
     Promise.all(wasmNames.map((name) => localUri(WASM[name] as number))),
     Promise.all(fallbackNames.map((name) => localUri(FALLBACKS[name] as number))),
   ]);
+  const mainFile = new File(mainUri);
+  const workerFile = new File(workerUri);
+  const wasmFiles = wasmUris.map((uri) => new File(uri));
   const [main, worker, wasm64] = await Promise.all([
-    new File(mainUri).text(),
-    new File(workerUri).text(),
-    Promise.all(wasmUris.map((uri) => new File(uri).base64())),
+    keepAlive(mainFile, mainFile.text()),
+    keepAlive(workerFile, workerFile.text()),
+    Promise.all(wasmFiles.map((f) => keepAlive(f, f.base64()))),
   ]);
   const wasm: Record<string, string> = {};
   wasmNames.forEach((name, i) => {

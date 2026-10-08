@@ -4,6 +4,7 @@
  * missing file reads as an empty history.
  */
 import { File, Paths } from 'expo-file-system';
+import { keepAlive } from '@data/keepAlive';
 
 export interface HistoryEntry {
   at: number;
@@ -23,7 +24,7 @@ export async function loadHistory(): Promise<HistoryEntry[]> {
   try {
     const f = file();
     if (!f.exists) return [];
-    const raw = JSON.parse(await f.text()) as unknown;
+    const raw = JSON.parse(await keepAlive(f, f.text())) as unknown;
     if (!Array.isArray(raw)) return [];
     return raw
       .filter(

@@ -9,6 +9,7 @@ import {
 } from '@core/photos/model';
 import { sidecarPath, trailPhotoDir } from '@core/photos/paths';
 import { pruneTombstones } from '@core/photos/record';
+import { keepAlive } from '@data/keepAlive';
 import { resolveDocumentPath, writeJson } from '@data/storage';
 
 /**
@@ -52,7 +53,7 @@ type RawRead = { kind: 'json'; value: unknown } | { kind: 'missing' } | { kind: 
 async function readJsonFile(file: File): Promise<RawRead> {
   if (!file.exists) return { kind: 'missing' };
   try {
-    return { kind: 'json', value: JSON.parse(await file.text()) as unknown };
+    return { kind: 'json', value: JSON.parse(await keepAlive(file, file.text())) as unknown };
   } catch {
     return { kind: 'corrupt' };
   }

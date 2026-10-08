@@ -5,6 +5,7 @@ import type { ByteSource } from '@core/geo/geopdf';
 import { isOutOfSpaceMessage } from '@core/storage/diskBudget';
 import { joinDocumentPath, toDocumentRelativePath } from '@core/storage/documentPaths';
 import { singleFlight } from '@core/storage/singleFlight';
+import { keepAlive } from '@data/keepAlive';
 
 /**
  * Platform-coupled persistence for Inukshuk. Lives outside `src/core` (which stays
@@ -133,7 +134,8 @@ export async function importGpx(sourceUri: string, id: string): Promise<string> 
 }
 
 export async function readFileBase64(uri: string): Promise<string> {
-  return new File(resolveDocumentPath(uri)).base64();
+  const file = new File(resolveDocumentPath(uri));
+  return keepAlive(file, file.base64());
 }
 
 /**
@@ -306,7 +308,8 @@ export function writeChartPng(id: string, bytes: Uint8Array): string {
  * heap (#328) — parsers use {@link withFileByteSource} instead.
  */
 export async function readFileBytes(uri: string): Promise<Uint8Array> {
-  return readableFile(uri).bytes();
+  const file = readableFile(uri);
+  return keepAlive(file, file.bytes());
 }
 
 /**
@@ -500,7 +503,7 @@ async function downloadBytesUncontended(
   const dest = new File(dir, name);
   if (dest.exists) {
     try {
-      const cached = await dest.bytes();
+      const cached = await keepAlive(dest, dest.bytes());
       if (cached.length > 0 && (validate === undefined || validate(cached))) {
         return cached; // cache hit
       }
@@ -513,7 +516,7 @@ async function downloadBytesUncontended(
   // `idempotent`: overwrite a destination that (re)appeared since the check
   // above — without it iOS throws DestinationAlreadyExistsException (#126).
   await File.downloadFileAsync(url, dest, { idempotent: true, ...(headers ? { headers } : {}) });
-  const bytes = await dest.bytes();
+  const bytes = await keepAlive(dest, dest.bytes());
   if (validate !== undefined && !validate(bytes)) {
     try {
       dest.delete();
@@ -551,7 +554,8 @@ export async function downloadToCacheUri(
  *   return LegacyFS.readAsStringAsync(uri);
  */
 export async function readFileText(uri: string): Promise<string> {
-  return readableFile(uri).text();
+  const file = readableFile(uri);
+  return keepAlive(file, file.text());
 }
 
 // ---- simplified trail geometry cache (#465) --------------------------------
@@ -573,7 +577,7 @@ function trackGeometryFile(id: string): File {
 /** The cached simplified-geometry JSON for a trail, or null when absent. */
 export async function readTrackGeometryCache(id: string): Promise<string | null> {
   const file = trackGeometryFile(id);
-  return file.exists ? file.text() : null;
+  return file.exists ? keepAlive(file, file.text()) : null;
 }
 
 /** Cache a trail's simplified-geometry JSON (overwrites). */
@@ -599,7 +603,7 @@ const TRAIL_STATS_FILE = 'trail-stats.json';
 /** The cached trail-statistics JSON, or null when absent. */
 export async function readTrailStatsCache(): Promise<string | null> {
   const file = new File(Paths.cache, TRAIL_STATS_FILE);
-  return file.exists ? file.text() : null;
+  return file.exists ? keepAlive(file, file.text()) : null;
 }
 
 /** Replace the trail-statistics cache: staged, then moved into place. */
@@ -719,7 +723,7 @@ export async function readJson<T>(name: string): Promise<T | null> {
   const file = new File(Paths.document, name);
   if (file.exists) {
     try {
-      return JSON.parse(await file.text()) as T;
+      return JSON.parse(await keepAlive(file, file.text())) as T;
     } catch {
       try {
         const evidence = new File(Paths.document, `${name}.corrupt`);
@@ -733,7 +737,7 @@ export async function readJson<T>(name: string): Promise<T | null> {
   const staged = new File(Paths.document, `${name}.tmp`);
   if (staged.exists) {
     try {
-      return JSON.parse(await staged.text()) as T;
+      return JSON.parse(await keepAlive(staged, staged.text())) as T;
     } catch {
       return null;
     }
@@ -802,7 +806,7 @@ export function writeIndex(value: unknown): void {
  */
 export async function readIndexText(): Promise<string | null> {
   const file = new File(Paths.document, INDEX_FILE);
-  return file.exists ? file.text() : null;
+  return file.exists ? keepAlive(file, file.text()) : null;
 }
 
 /** Size in bytes of the file at `uri`, or 0 when it does not exist / cannot be read. */

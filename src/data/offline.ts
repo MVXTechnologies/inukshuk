@@ -17,6 +17,7 @@ import { NetworkManager, OfflineManager } from '@maplibre/maplibre-react-native'
 import { acquireLocalServer, type LocalServerLease } from './localServer';
 import { setNetworkAllowed } from './storage';
 import { clearWeatherFrames } from './weatherFrames';
+import { keepAlive } from '@data/keepAlive';
 
 // MapLibre's offline `createPack` expects `mapStyle` to be an **http(s) style URL**
 // it can fetch through its native HTTP source — inline style JSON AND `file://`
@@ -309,7 +310,7 @@ export async function createRegionPack(
   let previousStyle: string | null = null;
   if (replacing !== undefined) {
     const f = styleFile(args.id);
-    previousStyle = f.exists ? await f.text().catch(() => null) : null;
+    previousStyle = f.exists ? await keepAlive(f, f.text()).catch(() => null) : null;
   }
 
   try {
@@ -463,7 +464,7 @@ export async function readPackStyleTemplates(id: string): Promise<UrlTemplates |
   try {
     const f = styleFile(id);
     if (!f.exists) return null;
-    const urls = styleUrlTemplates(await f.text());
+    const urls = styleUrlTemplates(await keepAlive(f, f.text()));
     return Object.keys(urls).length > 0 ? urls : null;
   } catch {
     return null;

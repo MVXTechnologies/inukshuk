@@ -1,4 +1,5 @@
 import { Directory, File, Paths } from 'expo-file-system';
+import { keepAlive } from '@data/keepAlive';
 
 /**
  * Where the stored heatmap lives (#500): `<cache>/heat/`. A cache, by the
@@ -44,11 +45,11 @@ export function createHeatFileIO(): HeatStoreIO {
   return {
     async readText(name) {
       const f = fileOf(name);
-      return f.exists ? f.text() : null;
+      return f.exists ? keepAlive(f, f.text()) : null;
     },
     async readBytes(name) {
       const f = fileOf(name);
-      return f.exists ? f.bytes() : null;
+      return f.exists ? keepAlive(f, f.bytes()) : null;
     },
     writeText(name, text, atomic = false) {
       const target = fileOf(name);

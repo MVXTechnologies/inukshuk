@@ -3,6 +3,7 @@ import { isMarineSourceId } from '@core/geo/marineSources';
 import { isOutOfSpaceMessage } from '@core/storage/diskBudget';
 import { Directory, File, Paths } from 'expo-file-system';
 
+import { keepAlive } from './keepAlive';
 import * as storage from './storage';
 
 /**
@@ -106,7 +107,7 @@ export async function readPackCell(key: string): Promise<Uint8Array | null> {
   try {
     const file = readableCell(key);
     if (!file.exists) return null;
-    return await file.bytes();
+    return await keepAlive(file, file.bytes());
   } catch {
     return null;
   }
