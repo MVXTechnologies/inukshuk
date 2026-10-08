@@ -1,34 +1,55 @@
-name: Dependabot Auto-merge
+name: Dependabot triage
 
-# Self-maintaining dependencies: once CI passes, automatically merge Dependabot
-# minor/patch updates. Major bumps are left for human review, and so is any
-# update that touches native code (see NATIVE_DEPENDENCIES below).
+# Dependabot updates are NEVER merged by automation. The 2026-10 security audit
+# flagged the chain Dependabot → auto-merge → OTA publish: a compromised or
+# malicious package release could reach installed apps with no human in the
+# loop. (The repository also does not allow auto-merge, so the old
+# `gh pr merge --auto` step failed on every eligible PR, e.g. #572.)
 #
-# Security: `pull_request_target` runs with a write token on PRs from forks, so
-# this workflow must never check out or run the PR's code (it doesn't: it only
-# reads Dependabot's metadata and asks GitHub to merge once the required checks
-# pass). It runs only for PRs that Dependabot itself OPENED in THIS repository:
-# `github.actor` alone is not enough, since it is whoever triggered the event,
-# and Dependabot can be made the actor of an event on someone else's PR.
-on: pull_request_target
+# Instead, two steps, both read-only on the PR's code:
+#
+# 1. `classify` (pull_request_target, on open/push): reads Dependabot's
+#    metadata. A minor/patch update that touches no native-bearing dependency
+#    gets the `dependabot:eligible` label; anything else gets none. A new push
+#    removes `ready-for-review`, since the checks are running again.
+# 2. `flag` (workflow_run, when CI or Native Build Test completes on a
+#    Dependabot branch): once EVERY check on the PR's current head commit has
+#    finished green, an eligible PR gets the `ready-for-review` label and one
+#    summary comment for a human, who merges it (or not).
+#
+# Neither job can fail on a policy outcome: "not eligible" and "checks not done
+# yet" are normal exits. A red run here means the triage itself broke.
+#
+# Security: `pull_request_target` and `workflow_run` run with a write token, so
+# this workflow never checks out or runs the PR's code. It acts only on PRs
+# that Dependabot opened in THIS repository (`github.actor` alone is not
+# enough: Dependabot can be made the actor of an event on someone else's PR).
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  workflow_run:
+    workflows: ['CI', 'Native Build Test']
+    types: [completed]
 
 permissions: {}
 
 jobs:
-  automerge:
+  classify:
     if: >
+      github.event_name == 'pull_request_target' &&
       github.repository == 'MVXTechnologies/inukshuk' &&
       github.event.pull_request.user.login == 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
-      contents: write
       pull-requests: write
+      issues: write
     env:
       # Native-bearing dependencies — THE list (one glob per line). A bump to
       # any of these changes the binary: it has to ship in a store build that
-      # someone installs and checks, so it is never merged unattended. Before
+      # someone installs and checks, so it is never flagged as routine. Before
       # the fingerprint runtime such merges were even published OTA to older
       # binaries: @maplibre/maplibre-react-native 11.3.7 (28498e3) and 11.3.8
       # (7ffb3cc), @dr.pogodin/react-native-fs 2.40.1/2.40.2 (c6b7a49,
@@ -78,15 +99,115 @@ jobs:
             done <<< "$NATIVE_DEPENDENCIES"
           done
           echo "native=$native" >> "$GITHUB_OUTPUT"
-          if [ "$native" = true ]; then
-            echo '::notice::Native-bearing update: left for a human and a store build, not auto-merged.'
-          fi
 
-      - name: Enable auto-merge for minor & patch updates
-        if: >
-          steps.meta.outputs.update-type != 'version-update:semver-major' &&
-          steps.native.outputs.native != 'true'
-        run: gh pr merge --auto --squash "$PR_URL"
+      - name: Label the PR
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+          NATIVE: ${{ steps.native.outputs.native }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const eligible =
+              process.env.NATIVE !== 'true' &&
+              ['version-update:semver-minor', 'version-update:semver-patch'].includes(process.env.UPDATE_TYPE);
+            const labels = (context.payload.pull_request.labels ?? []).map((l) => l.name);
+            const ensure = (name, color, description) =>
+              github.rest.issues.createLabel({ owner, repo, name, color, description }).catch(() => {});
+            // The checks of the previous head no longer describe this one.
+            if (labels.includes('ready-for-review')) {
+              await github.rest.issues.removeLabel({ owner, repo, issue_number, name: 'ready-for-review' }).catch(() => {});
+            }
+            if (eligible) {
+              await ensure('dependabot:eligible', '0e8a16', 'Minor/patch, not native-bearing: flagged for a human once all checks pass');
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: ['dependabot:eligible'] });
+              core.notice(`${process.env.UPDATE_TYPE}, not native-bearing: eligible for review once the checks pass.`);
+            } else {
+              if (labels.includes('dependabot:eligible')) {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name: 'dependabot:eligible' }).catch(() => {});
+              }
+              core.notice(
+                process.env.NATIVE === 'true'
+                  ? 'Native-bearing update: needs a store build and a human, not flagged as routine.'
+                  : `${process.env.UPDATE_TYPE || 'unknown update type'}: left for a human.`,
+              );
+            }
+
+  flag:
+    if: >
+      github.event_name == 'workflow_run' &&
+      github.repository == 'MVXTechnologies/inukshuk' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'dependabot/') &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+      issues: write
+      checks: read
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const run = context.payload.workflow_run;
+            const { data: prs } = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: 'open',
+              head: `${owner}:${run.head_branch}`,
+            });
+            const pr = prs.find((p) => p.user.login === 'dependabot[bot]' && p.head.sha === run.head_sha);
+            if (!pr) {
+              core.info(`No open Dependabot PR at ${run.head_sha} (superseded or closed): nothing to do.`);
+              return;
+            }
+            const labels = pr.labels.map((l) => l.name);
+            if (!labels.includes('dependabot:eligible')) {
+              core.info(`#${pr.number} is not eligible (major or native-bearing): left for a human.`);
+              return;
+            }
+            if (labels.includes('ready-for-review')) {
+              core.info(`#${pr.number} is already flagged.`);
+              return;
+            }
+            // Every check on the head commit must have finished green; this
+            // run fires once per completed workflow, so the last one to finish
+            // is the one that flags the PR.
+            const checks = await github.paginate(github.rest.checks.listForRef, {
+              owner,
+              repo,
+              ref: pr.head.sha,
+              per_page: 100,
+            });
+            const mine = new Set(['classify', 'flag']);
+            const relevant = checks.filter((c) => !mine.has(c.name));
+            const pending = relevant.filter((c) => c.status !== 'completed');
+            const bad = relevant.filter(
+              (c) => c.status === 'completed' && !['success', 'skipped', 'neutral'].includes(c.conclusion),
+            );
+            if (relevant.length === 0 || pending.length > 0) {
+              core.info(`#${pr.number}: ${pending.length} check(s) still running; the last to finish decides.`);
+              return;
+            }
+            if (bad.length > 0) {
+              core.info(`#${pr.number}: not green (${bad.map((c) => `${c.name}=${c.conclusion}`).join(', ')}): left for a human.`);
+              return;
+            }
+            await github.rest.issues
+              .createLabel({ owner, repo, name: 'ready-for-review', color: '1d76db', description: 'All checks green; waiting for a human to review and merge' })
+              .catch(() => {});
+            await github.rest.issues.addLabels({ owner, repo, issue_number: pr.number, labels: ['ready-for-review'] });
+            const body =
+              `**Ready for review** — minor/patch, no native-bearing dependency, and all ` +
+              `${relevant.length} checks on \`${pr.head.sha.slice(0, 7)}\` are green.\n\n` +
+              `> ${pr.title}\n\n` +
+              `Automation never merges dependency updates (the Dependabot → merge → OTA chain ` +
+              `was flagged in the 2026-10 security audit). Before merging: skim the release ` +
+              `notes / changelog linked above for anything that runs on the device or in the ` +
+              `release pipeline. Merging to \`main\` publishes an OTA update for JS-only changes.`;
+            await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body });
+            core.notice(`#${pr.number} flagged ready-for-review.`);

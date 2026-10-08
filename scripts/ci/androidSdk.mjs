@@ -72,12 +72,17 @@ export function requiredComponents(catalog, pins) {
 
 /**
  * The directory, relative to the SDK root, that proves a component is
- * installed (sdkmanager writes source.properties last).
+ * installed (sdkmanager writes source.properties last). Package paths map
+ * one-to-one onto directories: `ndk;27.1.x` → ndk/27.1.x, `emulator` →
+ * emulator, `system-images;android-34;google_apis;x86_64` →
+ * system-images/android-34/google_apis/x86_64.
  */
 export function componentMarker(component) {
-  const [kind, version] = component.split(';');
-  if (!kind || !version) throw new Error(`not an sdkmanager package name: ${component}`);
-  return `${kind}/${version}/source.properties`;
+  const parts = component.split(';');
+  if (parts.some((p) => !/^[A-Za-z0-9._-]+$/.test(p))) {
+    throw new Error(`not an sdkmanager package name: ${component}`);
+  }
+  return `${parts.join('/')}/source.properties`;
 }
 
 /**
