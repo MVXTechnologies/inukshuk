@@ -259,6 +259,8 @@ export interface SchemeTokens {
     /** A "new comments" bubble on the map, and its count. */
     bubbleNew: string;
     bubbleNewInk: string;
+    /** Behind the open team menu: the map recedes, the actions read. */
+    menuScrim: string;
     /** A highlighted `+task @name` in a comment. */
     taskCommand: string;
     /** SOS: the banner, the hold button and the map marker; its ink. */
@@ -438,6 +440,7 @@ export const lightScheme: SchemeTokens = {
     scannerFrame: palette.white,
     bubbleNew: '#E07B39',
     bubbleNewInk: palette.white,
+    menuScrim: 'rgba(20, 24, 28, 0.28)',
     taskCommand: '#2F6F8F',
     sos: '#C62828',
     sosInk: palette.white,
@@ -615,6 +618,7 @@ export const darkScheme: SchemeTokens = {
     scannerFrame: palette.white,
     bubbleNew: '#F08A4B',
     bubbleNewInk: palette.black,
+    menuScrim: 'rgba(0, 0, 0, 0.5)',
     taskCommand: '#7FC4E3',
     sos: '#C62828',
     sosInk: palette.white,
@@ -785,6 +789,7 @@ export const sunlightScheme: SchemeTokens = {
     scannerFrame: palette.white,
     bubbleNew: palette.black,
     bubbleNewInk: palette.white,
+    menuScrim: 'rgba(20, 24, 28, 0.32)',
     taskCommand: palette.black,
     sos: '#C62828',
     sosInk: palette.white,
@@ -960,6 +965,7 @@ export const nightScheme: SchemeTokens = {
     scannerFrame: NIGHT_INK,
     bubbleNew: NIGHT_INK,
     bubbleNewInk: palette.black,
+    menuScrim: 'rgba(0, 0, 0, 0.55)',
     taskCommand: NIGHT_INK,
     sos: '#C62828',
     sosInk: palette.white,

@@ -703,6 +703,14 @@ export function TeamFab({ bottom }: { bottom: number }) {
   return (
     <>
       {menuOpen && (
+        <Pressable
+          style={[StyleSheet.absoluteFill, { backgroundColor: t.team.menuScrim }]}
+          onPress={close}
+          accessibilityLabel="Close the team menu"
+          testID="team-fab-scrim"
+        />
+      )}
+      {menuOpen && (
         <View style={[styles.menu, { bottom: bottom + 72 }]} pointerEvents="box-none">
           {items.map(([icon, label, run, id, tint]) => (
             <Pressable

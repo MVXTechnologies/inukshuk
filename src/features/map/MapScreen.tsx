@@ -1001,6 +1001,7 @@ export function MapScreen() {
   const teamMarks = useTeamMapMarks(style.glyphs);
   const teamField = useTeamFieldLayers(style.glyphs);
   const teamTrailLayers = useTeamTrailLayers(style.glyphs);
+  const teamMenuOpen = useTeamSheet((s) => s.sheet?.kind === 'menu');
 
   // Native 3D terrain (docs/plans/native-terrain.md): with "3D relief" on and
   // a binary that ships the module, tilting past ~25° grows real relief out of
@@ -3308,7 +3309,8 @@ export function MapScreen() {
           directly over the rail's footprint (top-right), so a covered rail
           would again leave hidden nodes in the a11y tree; it comes back the
           instant the carousel closes (heatSelection back to null). */}
-        {makeMapState === null && heatSelection === null && (
+        {/* Also hidden while the team menu runs down the same edge. */}
+        {makeMapState === null && heatSelection === null && !teamMenuOpen && (
           <MapControlsRail
             top={insets.top + 8}
             viewToggle={
