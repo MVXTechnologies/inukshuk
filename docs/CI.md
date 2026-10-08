@@ -114,6 +114,19 @@ GitHub delays scheduled runs under load (the 05:00/05:15 UTC nightlies started
 at ~11:40 UTC on 2026-10-07); nothing in the repo can fix that, the monitor
 below just reports on whatever ran.
 
+## Local gate before every push (`.githooks/pre-push`)
+
+`npm install` sets `core.hooksPath` to `.githooks`. The pre-push hook refuses a
+push unless top-level `node_modules` matches `package-lock.json` and
+`npm run check` passes. Branch deletions are exempt.
+
+**Why:** on 2026-10-06/07, 44 of 50 failed runs came from pushes that had never
+been checked locally, and each one emailed the owner. The shared install also
+lagged a merged dependency (pdf.js 3.x vs 6.x), so local checks tested the
+wrong code.
+
+**Emergency bypass:** `INUKSHUK_SKIP_PREPUSH=1`, explained in the PR.
+
 ## CI health monitor (`ci-health.yml`)
 
 Every 3 hours, for each workflow that ran on `main` in the last 24 h, the

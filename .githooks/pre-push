@@ -1,0 +1,39 @@
+#!/bin/sh
+# Every push must pass the full local gate first (owner rule, 2026-10-07):
+# 44 of 50 failed CI runs in two days came from pushes that had not been
+# checked locally, and each one emailed the owner. A red run on a branch is a
+# bug caught late; catch it here instead.
+#
+# Emergency only (e.g. pushing a revert while main is broken):
+#   INUKSHUK_SKIP_PREPUSH=1 git push ...
+# and say so in the PR. Never use it to push work you know is failing.
+set -e
+
+if [ "${INUKSHUK_SKIP_PREPUSH:-}" = "1" ]; then
+  echo "pre-push: SKIPPED by INUKSHUK_SKIP_PREPUSH=1 — say why in the PR." >&2
+  exit 0
+fi
+
+# Branch deletions (the local sha is all zeros) carry no code to check.
+zero=0000000000000000000000000000000000000000
+pushes_code=0
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  [ "$local_sha" != "$zero" ] && pushes_code=1
+done
+[ "$pushes_code" = 0 ] && exit 0
+
+if [ ! -d node_modules ]; then
+  echo "pre-push: node_modules is missing — run npm ci (or link the shared install) first." >&2
+  exit 1
+fi
+
+# A stale install tests the wrong code (2026-10-07: main was on pdf.js 6 while
+# the shared node_modules still had 3.x). Top-level deps must match the lockfile.
+if ! npm ls --depth=0 >/dev/null 2>&1; then
+  echo "pre-push: node_modules does not match package-lock.json — run npm install (root) first." >&2
+  npm ls --depth=0 2>&1 | grep -iE "missing|invalid|extraneous" | head -10 >&2
+  exit 1
+fi
+
+echo "pre-push: running npm run check (typecheck, lint, format, tests)…" >&2
+npm run check >&2
