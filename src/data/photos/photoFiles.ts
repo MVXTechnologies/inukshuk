@@ -14,6 +14,7 @@ import { isOutOfSpaceMessage } from '@core/storage/diskBudget';
 import { resolveDocumentPath, StorageFullError } from '@data/storage';
 
 import { deleteTrailPhotoFolder } from './trailFolder';
+import { keepAlive } from '@data/keepAlive';
 
 /**
  * Trail photo files (#587): the three copies per photo under
@@ -138,7 +139,8 @@ export async function writeFullSizeCopies(
   sourceUri: string,
   outputs: { thumb: string; sprite: string },
 ): Promise<WrittenCopies> {
-  const source = await new File(sourceUri).bytes();
+  const sourceFile = new File(sourceUri);
+  const source = await keepAlive(sourceFile, sourceFile.bytes());
   const stripped = stripJpegMetadata(source);
   if (!stripped.jpeg) throw new Error('Full size keeps JPEG photos only');
   const paths = photoFilePaths(trackId, photoId);

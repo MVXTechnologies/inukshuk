@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { keepAlive } from '@data/keepAlive';
 
 /**
  * The on-device regression gate (CONVERT §5.5 step 3), reached only by
@@ -36,7 +37,7 @@ export function ConvertSelfTestScreen() {
       }
       const grids = new Directory(dir, 'grids');
       const info = initNativeProj([fsPath(grids.uri)]);
-      const suite = JSON.parse(await ref.text()) as Suite;
+      const suite = JSON.parse(await keepAlive(ref, ref.text())) as Suite;
       const t0 = Date.now();
       const report: NativeSuiteReport = await runNativeSuite(engine, suite);
       const header = `Convert native suite — device (PROJ ${info?.projVersion ?? '?'}, EPSG ${info?.epsgVersion ?? '?'}) in ${Date.now() - t0} ms`;
