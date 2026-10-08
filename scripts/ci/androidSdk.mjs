@@ -20,6 +20,8 @@
  *   fails here, in seconds, with the remedy.
  */
 
+import { createHash } from 'node:crypto';
+
 /** Reads `key = "value"` pairs from the [versions] table of a Gradle version catalog. */
 export function parseVersionCatalog(toml) {
   const versions = {};
@@ -91,3 +93,162 @@ export function componentMarker(component) {
  * minutes should fail the job loudly, not stall it.
  */
 export const RETRY_DELAYS_S = [15, 45];
+
+/**
+ * Backoff between attempts to fetch ONE file (a repository XML or an SDK zip),
+ * which resumes where the last attempt stopped. Bounded: 4 attempts in all.
+ */
+export const DOWNLOAD_DELAYS_S = [10, 30, 60];
+
+const REPOSITORY = 'https://dl.google.com/android/repository/';
+
+/**
+ * Where Google publishes the metadata (and, relative to `base`, the zip) for a
+ * package: the main repository for the emulator, `sys-img/<tag>/` for system
+ * images (`system-images;android-34;google_apis;x86_64`).
+ */
+export function repositoryLocation(pkg) {
+  const parts = pkg.split(';');
+  if (parts[0] === 'system-images') {
+    const imageTag = parts[2];
+    if (!imageTag) throw new Error(`not a system-image package: ${pkg}`);
+    const base = `${REPOSITORY}sys-img/${imageTag}/`;
+    return { xml: `${base}sys-img2-3.xml`, base };
+  }
+  return { xml: `${REPOSITORY}repository2-3.xml`, base: REPOSITORY };
+}
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const tag = (xml, name) => new RegExp(`<${name}>\\s*([^<]*?)\\s*</${name}>`).exec(xml)?.[1];
+
+function revisionOf(block) {
+  const rev = /<revision>([\s\S]*?)<\/revision>/.exec(block)?.[1] ?? '';
+  const parts = ['major', 'minor', 'micro']
+    .map((n) => tag(rev, n))
+    .filter((v) => v !== undefined)
+    .map(Number);
+  return parts.length > 0 && parts.every(Number.isInteger) ? parts : null;
+}
+
+function compareRevisions(a, b) {
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const d = (a[i] ?? 0) - (b[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
+/**
+ * What the SDK repository XML says about the STABLE (channel-0, the channel
+ * sdkmanager uses by default) archive of `pkg` for `hostOs`: its revision,
+ * size, sha1 and zip URL — the facts a download is verified against — plus the
+ * pieces needed to write the package.xml sdkmanager expects beside an unzipped
+ * package. Where several revisions are published, the highest wins. Throws if
+ * the XML has no such package or archive.
+ */
+export function resolveRemotePackage(xml, pkg, hostOs = 'linux') {
+  const re = new RegExp(
+    `<remotePackage path="${escapeRe(pkg)}"[^>]*>([\\s\\S]*?)</remotePackage>`,
+    'g',
+  );
+  let best = null;
+  for (const m of xml.matchAll(re)) {
+    const block = m[1] ?? '';
+    if (!/<channelRef ref="channel-0"\s*\/>/.test(block)) continue;
+    const revision = revisionOf(block);
+    if (revision && (!best || compareRevisions(revision, best.revision) > 0)) {
+      best = { block, revision };
+    }
+  }
+  if (!best) throw new Error(`${pkg}: no stable (channel-0) package in the repository XML`);
+
+  const archive = [...best.block.matchAll(/<archive>([\s\S]*?)<\/archive>/g)]
+    .map((a) => a[1] ?? '')
+    .find((a) => (tag(a, 'host-os') ?? hostOs) === hostOs);
+  const complete = /<complete>([\s\S]*?)<\/complete>/.exec(archive ?? '')?.[1] ?? '';
+  const size = Number(tag(complete, 'size'));
+  const sha1 = /<checksum type="sha1">\s*([0-9a-f]{40})\s*<\/checksum>/i.exec(complete)?.[1];
+  const url = tag(complete, 'url');
+  if (!Number.isInteger(size) || size <= 0 || !sha1 || !url) {
+    throw new Error(`${pkg}: no complete ${hostOs} archive with size + sha1 + url in the XML`);
+  }
+
+  const licenseId = /<uses-license ref="([^"]+)"/.exec(best.block)?.[1];
+  const license = licenseId
+    ? new RegExp(`<license id="${escapeRe(licenseId)}"[^>]*>[\\s\\S]*?</license>`).exec(xml)?.[0]
+    : undefined;
+  if (!licenseId || !license) throw new Error(`${pkg}: license element not found in the XML`);
+
+  const details = /<type-details[\s\S]*?(?:\/>|<\/type-details>)/.exec(best.block)?.[0];
+  const prefix = /xsi:type="([^":]+):/.exec(details ?? '')?.[1];
+  const namespace = prefix
+    ? new RegExp(`xmlns:${escapeRe(prefix)}="([^"]+)"`).exec(xml)?.[1]
+    : undefined;
+  if (!details || (prefix && !namespace)) {
+    throw new Error(`${pkg}: type-details (or its namespace) not found in the XML`);
+  }
+
+  return {
+    path: pkg,
+    revision: best.revision,
+    revisionText: best.revision.join('.'),
+    displayName: tag(best.block, 'display-name') ?? pkg,
+    size,
+    sha1: sha1.toLowerCase(),
+    url,
+    licenseId,
+    license,
+    details,
+    prefix,
+    namespace,
+  };
+}
+
+/**
+ * The package.xml sdkmanager writes next to every package it installs. Without
+ * it a package unzipped by hand is "not installed" to sdkmanager, so the
+ * emulator-runner action would download it again; the direct-download path
+ * writes the same record: path, revision, display name, license, details.
+ */
+export function renderPackageXml(info) {
+  const [major, minor, micro] = info.revision;
+  const rev =
+    `<major>${major}</major>` +
+    (minor === undefined ? '' : `<minor>${minor}</minor>`) +
+    (micro === undefined ? '' : `<micro>${micro}</micro>`);
+  const ns = info.prefix ? ` xmlns:${info.prefix}="${info.namespace}"` : '';
+  const details = info.details.replace(
+    /^<type-details/,
+    `<type-details xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"${ns}`,
+  );
+  return [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<ns2:repository xmlns:ns2="http://schemas.android.com/repository/android/common/02">',
+    `    ${info.license}`,
+    `    <localPackage path="${info.path}" obsolete="false">`,
+    `        ${details}`,
+    `        <revision>${rev}</revision>`,
+    `        <display-name>${info.displayName}</display-name>`,
+    `        <uses-license ref="${info.licenseId}"/>`,
+    '    </localPackage>',
+    '</ns2:repository>',
+    '',
+  ].join('\n');
+}
+
+/**
+ * The actions/cache key for the cached emulator packages: the exact package
+ * list, the runner image OS, a hand-bumped salt and the repository's current
+ * revision + sha1 of each cached package. A new emulator release is therefore
+ * a new key (a miss that downloads the new one, verified) rather than a stale
+ * copy that the emulator-runner action would try to update through sdkmanager.
+ */
+export function emulatorCacheKey({ os, imageOs, salt, packages, cached, resolved }) {
+  const material = [
+    `salt=${salt}`,
+    `packages=${packages.join(',')}`,
+    ...cached.map((p) => `${p}=${resolved[p]?.revisionText}:${resolved[p]?.sha1}`),
+  ].join('\n');
+  const digest = createHash('sha256').update(material).digest('hex').slice(0, 16);
+  return `android-emulator-${os}-${imageOs}-${digest}`;
+}
