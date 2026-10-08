@@ -93,9 +93,37 @@ long job, with no retry:
 - **Emulator packages.** The E2E flows job installs platform-tools, the
   emulator, the system image and the build-tools/platform that
   `reactivecircus/android-emulator-runner` would otherwise fetch itself with
-  no retry (2026-10-07: a truncated emulator zip killed a shard before boot).
-  It uses `android-sdk.mjs install <pkg…>`, with the same retry and
-  verification.
+  no retry (2026-10-07: a truncated emulator zip killed a shard before boot;
+  2026-10-08, #650: sdkmanager's downloader produced a corrupt emulator zip
+  three bounded attempts in a row, so retrying it was not a cure). The list is
+  `e2eEmulator` in `scripts/ci/android-sdk.json`; `android-sdk.mjs install-e2e`
+  installs it.
+  - **Cache.** The emulator (~350 MB) and the system image (~1.6 GB; ~2 GB of
+    the 10 GB repository limit, so one entry, never per shard) are restored from
+    `actions/cache` in every shard and saved only from `main`. The key is
+    `android-emulator-<OS>-<ImageOS>-<digest>`, the digest covering the package
+    list, `cacheSalt` and the repository's current revision + sha1 of both
+    packages, so a new emulator release is a new key (a miss, then re-seeded by
+    `main`) rather than a stale copy that the action would "update" through
+    sdkmanager. The "Report emulator cache" step logs HIT/MISS and the sizes.
+    Bump `cacheSalt` to drop every cached copy.
+  - **Verified download on a miss.** `android-sdk.mjs` reads the stable
+    (channel-0) archive's size and sha1 from Google's repository XML, fetches
+    the zip with `curl` (resuming, stall-aborting, 4 bounded attempts, each
+    retry a `::warning::`), refuses to unzip anything whose size or sha1 differ
+    (it restarts the file once, then gives up), runs `unzip -t`, and writes the
+    `package.xml` sdkmanager needs to count the package as installed
+    (`sdkmanager --list_installed` is checked). If any of that fails, a
+    `::warning::` is logged and the old bounded sdkmanager path takes over, so
+    the direct path can only add certainty.
+  - **First `main` run seeds the cache.** Branch runs only restore. The first
+    `main` run after this lands (the next nightly, or a `main` dispatch) misses,
+    downloads verified, and every shard whose restore missed tries to save under
+    the same key; the first reservation wins and the others log an informational
+    "another job may be creating this cache". From then on every run, branch or
+    `main`, hits until Google publishes a new emulator/image or `ImageOS` changes.
+    Until seeded, branch runs take the verified download path (still green, just
+    slower).
 - **Maestro** is pinned (`MAESTRO_VERSION` in `e2e.yml`); the installer is
   downloaded to a file, then run, with a bounded retry of that download only.
 - **Gradle and NDK caches are saved from `main` only** (`actions/cache/restore`
