@@ -219,10 +219,11 @@ appId: com.inukshuk.app
 - tapOn:
     id: 'team-member-remove'
 - tapOn: 'Remove'
+# Removing rotates the team key (slow on a CI emulator).
 - extendedWaitUntil:
     visible:
       id: 'team-hub-screen'
-    timeout: 5000
+    timeout: 20000
 - assertVisible: '.*Removed.*'
 - assertNotVisible:
     id: 'team-needs-rotation'

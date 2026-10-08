@@ -133,7 +133,7 @@ export function TeamMapOverlay({
 
   return (
     <>
-      {editing && <TrailEditBar style={[cardStyle, styles.leaveFab]} />}
+      {editing && <TrailEditBar style={cardStyle} />}
       {/* An open SOS is pinned at the top for everyone, signal mode or not. */}
       <SosBanner top={sosTop} here={here} onNavigate={onNavigate} />
       {/* The rally point's pill: signal mode, no card up. */}
@@ -160,7 +160,7 @@ export function TeamMapOverlay({
         </View>
       )}
       {!editing && draft === null && card && sheet !== null && (
-        <View style={[cardStyle, styles.leaveFab]} pointerEvents="box-none" testID="team-card-dock">
+        <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
           <TeamSheetCard sheet={sheet} here={here} onPointActions={onPointActions} />
         </View>
       )}
@@ -170,7 +170,7 @@ export function TeamMapOverlay({
         </View>
       )}
       {draft === null && !card && cardSlotFree && member && row && (
-        <View style={[cardStyle, styles.leaveFab]} pointerEvents="box-none" testID="team-card-dock">
+        <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
           <View
             style={[
               styles.card,
@@ -319,7 +319,6 @@ export function TeamMapOverlay({
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   /** Cards stop short of the team button's column. */
-  leaveFab: { right: 84 },
   card: {
     borderRadius: 16,
     paddingHorizontal: 12,

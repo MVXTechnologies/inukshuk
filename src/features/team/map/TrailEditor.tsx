@@ -14,7 +14,7 @@ import { teamService, useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Icon, IconButton, Text, TextInput } from 'react-native-paper';
 import { create } from 'zustand';
 
@@ -144,7 +144,7 @@ function undoLast(): void {
 }
 
 /** The editing toolbar (compact, bottom). */
-export function TrailEditBar({ style }: { style: object }) {
+export function TrailEditBar({ style }: { style: StyleProp<ViewStyle> }) {
   const t = useSchemeTokens();
   const st = useTrailEdit();
   const trails = useTeamStore((s) => s.teamTrails);
