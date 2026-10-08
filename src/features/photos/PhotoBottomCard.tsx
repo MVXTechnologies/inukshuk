@@ -5,7 +5,7 @@
  * trail, the team's comments with the reply box (+task, resolve), and for my
  * own photos Caption / Share / Hide / Remove. The map stays visible above.
  * The comments scroll inside the card; swipe the card's head down to close
- * (a swipe up does nothing). Above the iOS keyboard while typing.
+ * (a swipe up does nothing). Above the keyboard while typing, on both platforms.
  * A plain themed View (paper-surface-ios-flex-collapse).
  */
 import type { TrackPhoto } from '@core/photos/model';
@@ -32,7 +32,7 @@ import {
 import { Icon, IconButton, Text, TextInput } from 'react-native-paper';
 import { create } from 'zustand';
 
-import { useIosKeyboardHeight } from '../common/useIosKeyboardHeight';
+import { keyboardLift, useKeyboardTop } from '../common/useKeyboardTop';
 import { formatPhotoWhen } from './photoText';
 import { photoFileUri } from './photoUri';
 import { shareablePhotoUri, UnshareablePhotoError, type ShareablePhoto } from './sharePhoto';
@@ -71,21 +71,20 @@ export function PhotoBottomCard() {
   );
   const threads = useTeamStore((s) => s.photoThreads);
 
-  // Lift the card over the iOS keyboard (Android resizes the window): by how
-  // much the keyboard reaches above the card's resting bottom edge.
-  const keyboard = useIosKeyboardHeight();
-  const cardRef = useRef<View>(null);
+  // Lift the card over the keyboard, both platforms (an edge-to-edge Android
+  // window is not resized for it): by how much the keyboard's top edge is
+  // above the card's resting bottom edge. The untransformed outer view is
+  // the one measured, so the lift never feeds back into the measure.
+  const keyboardTop = useKeyboardTop();
+  const restRef = useRef<View>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const [lift, setLift] = useState(0);
-  const shownLift = keyboard === 0 ? 0 : lift;
+  const shownLift = keyboardTop === null ? 0 : lift;
   useEffect(() => {
-    if (keyboard === 0) return;
-    cardRef.current?.measureInWindow((_x, y, _w, h) => {
-      const below = windowH - (y + h) - shownLift;
-      setLift(Math.max(0, keyboard - below));
-    });
-    // Only a keyboard change re-measures (lift itself moves the card).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keyboard, windowH]);
+    if (keyboardTop === null) return;
+    restRef.current?.measureInWindow((_x, y, _w, h) => setLift(keyboardLift(y + h, keyboardTop)));
+  }, [keyboardTop, windowH]);
+  const keyboard = keyboardTop === null ? 0 : Math.max(0, windowH - keyboardTop);
 
   // Swipe the head down to close. Up does nothing; the comments scroll.
   const pan = useMemo(
@@ -122,66 +121,71 @@ export function PhotoBottomCard() {
     .filter(Boolean)
     .join(' · ');
   return (
-    <View
-      ref={cardRef}
-      style={[
-        styles.card,
-        {
-          backgroundColor: t.elevation.level2,
-          shadowColor: palette.shadow,
-          maxHeight: Math.max(240, (windowH - keyboard) * 0.62),
-          transform: [{ translateY: -shownLift }],
-        },
-      ]}
-      testID="photo-card"
-    >
-      <View {...pan.panHandlers} style={styles.head}>
-        <View style={[styles.grabber, { backgroundColor: t.outlineVariant }]} />
-        <View style={styles.row}>
-          {photo.uri ? (
-            <Image
-              source={{ uri: photo.uri }}
-              style={styles.thumb}
-              accessibilityIgnoresInvertColors
-              testID="photo-card-image"
-            />
-          ) : (
-            <View style={[styles.thumb, { backgroundColor: t.surfaceVariant }]} />
-          )}
-          <View style={styles.flex}>
-            <Text variant="titleSmall" style={{ color: t.ink }} numberOfLines={2}>
-              {photo.caption ?? 'Photo'}
-            </Text>
-            {sub ? (
-              <Text variant="bodySmall" style={{ color: t.inkVariant }} numberOfLines={2}>
-                {sub}
-              </Text>
-            ) : null}
-          </View>
-          <IconButton
-            icon="close"
-            size={20}
-            onPress={close}
-            accessibilityLabel="Close"
-            testID="photo-card-close"
-          />
-        </View>
-      </View>
-      {target.kind === 'own' && own && (
-        <OwnPhotoActions
-          trackId={target.trackId}
-          photo={own}
-          editable={photosEditable(ownStatus) && !isNotePhoto(own)}
-        />
-      )}
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollBody}
-        keyboardShouldPersistTaps="handled"
-        testID="photo-card-scroll"
+    <View ref={restRef} collapsable={false}>
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: t.elevation.level2,
+            shadowColor: palette.shadow,
+            maxHeight: Math.max(240, (windowH - keyboard) * 0.62),
+            transform: [{ translateY: -shownLift }],
+          },
+        ]}
+        testID="photo-card"
       >
-        <PhotoTeamComments photoId={target.photoId} all />
-      </ScrollView>
+        <View {...pan.panHandlers} style={styles.head}>
+          <View style={[styles.grabber, { backgroundColor: t.outlineVariant }]} />
+          <View style={styles.row}>
+            {photo.uri ? (
+              <Image
+                source={{ uri: photo.uri }}
+                style={styles.thumb}
+                accessibilityIgnoresInvertColors
+                testID="photo-card-image"
+              />
+            ) : (
+              <View style={[styles.thumb, { backgroundColor: t.surfaceVariant }]} />
+            )}
+            <View style={styles.flex}>
+              <Text variant="titleSmall" style={{ color: t.ink }} numberOfLines={2}>
+                {photo.caption ?? 'Photo'}
+              </Text>
+              {sub ? (
+                <Text variant="bodySmall" style={{ color: t.inkVariant }} numberOfLines={2}>
+                  {sub}
+                </Text>
+              ) : null}
+            </View>
+            <IconButton
+              icon="close"
+              size={20}
+              onPress={close}
+              accessibilityLabel="Close"
+              testID="photo-card-close"
+            />
+          </View>
+        </View>
+        {target.kind === 'own' && own && (
+          <OwnPhotoActions
+            trackId={target.trackId}
+            photo={own}
+            editable={photosEditable(ownStatus) && !isNotePhoto(own)}
+          />
+        )}
+        <ScrollView
+          ref={scrollRef}
+          // Newest last, like a chat: the latest comment and the reply box
+          // stay in view as comments arrive (and above the keyboard).
+          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollBody}
+          keyboardShouldPersistTaps="handled"
+          testID="photo-card-scroll"
+        >
+          <PhotoTeamComments photoId={target.photoId} all />
+        </ScrollView>
+      </View>
     </View>
   );
 }
@@ -368,6 +372,8 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   captionRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  scroll: { flexGrow: 0 },
+  // Shrinks within the card's max height (a keyboard halves it), so the reply box
+  // stays in the card instead of overflowing past its clipped bottom (Android).
+  scroll: { flexGrow: 0, flexShrink: 1 },
   scrollBody: { paddingBottom: 4 },
 });

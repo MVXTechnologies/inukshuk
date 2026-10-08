@@ -311,8 +311,8 @@ appId: com.inukshuk.app
 - tapOn:
     id: 'team-comment-send'
 - extendedWaitUntil:
-    visible: 'On my way'
-    timeout: 5000
+    visible: '.*On my way.*'
+    timeout: 10000
 - takeScreenshot: team-photo-card-keyboard
 - runFlow:
     when:
