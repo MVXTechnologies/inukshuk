@@ -731,6 +731,9 @@ final class MeshEngine {
   private func receive(_ c: Conn) {
     guard !c.closed, !c.receiving, !c.inboxPaused, c.throttledUntil == 0 else { return }
     c.receiving = true
+    // One receive (at most 64 KB) per inbox check: consume() pauses the peer
+    // once the inbox is past its bound, so it can overshoot by one receive and
+    // the frame the decoder was finishing, never more (the bound the tests hold).
     c.connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, isComplete, error in
       guard let self else { return }
       c.receiving = false
