@@ -29,8 +29,15 @@ type SymbolLayout = NonNullable<SymbolLayerSpecification['layout']>;
  * - No `symbol-sort-key` (one draw per distinct key per frame).
  */
 
-/** Pixels per point of the round sprites (132 px = 44 pt). */
-export const SPRITE_PIXEL_RATIO = 3;
+/** Pixels per point of the round sprites (264 px = 44 pt). */
+export const SPRITE_PIXEL_RATIO = 6;
+/** The older 132 px sprites (`.map.png`, team `-s.png`), still on disk. */
+export const LEGACY_SPRITE_PIXEL_RATIO = 3;
+
+/** A sprite file's pixels per point: 2× files are named `…map2.png` / `…-s2.png`. */
+export function spritePixelRatio(path: string): number {
+  return /(?:\.map2|-s2)\.png$/.test(path) ? SPRITE_PIXEL_RATIO : LEGACY_SPRITE_PIXEL_RATIO;
+}
 /** The bundled badges and ring are drawn at 3× in 1× files: shown at a third. */
 const BUNDLED_3X = 1 / 3;
 
@@ -49,14 +56,14 @@ export const MAX_SPRITES = 150;
  * Circle size by zoom (owner 2026-10-07: "when I zoom in close to a photo it
  * should get larger"): smaller over a whole trail, clearly larger at street
  * zoom. Always a top-level `interpolate` on `["zoom"]` (nested in a match or
- * case it crashes MapLibre iOS). Past 1.5 the 132 px sprite would upscale
- * visibly on a 3× screen, so it stops there.
+ * case it crashes MapLibre iOS). The 264 px sprites stay sharp up to 2× on
+ * a 3× screen, so 2× is the ceiling.
  */
 export const PHOTO_SIZE_STOPS: readonly (readonly [number, number])[] = [
   [12, 0.8],
   [15, 0.95],
-  [17, 1.25],
-  [18.5, 1.5],
+  [17, 1.4],
+  [18.5, 2],
 ];
 const SIZE_STOPS = PHOTO_SIZE_STOPS;
 

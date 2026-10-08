@@ -8,7 +8,7 @@ landscape photos placed along it, in the app's own on-disk format:
   <out>/photos/<id>/photos.json      the photo sidecar (v1)
   <out>/photos/<id>/<pid>.jpg        display copy, long edge 2048 px
   <out>/photos/<id>/<pid>.sq.jpg     240 px square thumbnail
-  <out>/photos/<id>/<pid>.map.png    132 px round map sprite
+  <out>/photos/<id>/<pid>.map2.png   264 px round map sprite (2x)
 
 The photos are RENDERED from the real terrain round the trail (terrarium DEM
 tiles, autumn-forest albedo, sun, haze, sky; `terrain_photos.py`) from each
@@ -71,16 +71,18 @@ def densify(coords, step=8.0):
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from terrain_photos import Terrain, render  # noqa: E402
 
-def sprite(thumb):
-    s = 132
-    img = thumb.resize((s, s), Image.LANCZOS).convert('RGBA')
+def sprite(src):
+    s = 264
+    side = min(src.size)
+    src = src.crop(((src.width - side) // 2, (src.height - side) // 2, (src.width + side) // 2, (src.height + side) // 2))
+    img = src.resize((s, s), Image.LANCZOS).convert('RGBA')
     mask = Image.new('L', (s * 4, s * 4), 0)
     ImageDraw.Draw(mask).ellipse([0, 0, s * 4 - 1, s * 4 - 1], fill=255)
     mask = mask.resize((s, s), Image.LANCZOS)
     out = Image.new('RGBA', (s, s), (0, 0, 0, 0))
     out.paste(img, (0, 0), mask)
     ring = Image.new('L', (s * 4, s * 4), 0)
-    ImageDraw.Draw(ring).ellipse([0, 0, s * 4 - 1, s * 4 - 1], outline=255, width=28)
+    ImageDraw.Draw(ring).ellipse([0, 0, s * 4 - 1, s * 4 - 1], outline=255, width=56)
     out.paste((247, 244, 238, 255), (0, 0), ring.resize((s, s), Image.LANCZOS))
     return out
 
@@ -148,14 +150,14 @@ def main():
         sq = img.crop(((img.width - side) // 2, (img.height - side) // 2, (img.width + side) // 2, (img.height + side) // 2))
         th = sq.resize((240, 240), Image.LANCZOS)
         th.save(f'{pdir}/{pid}.sq.jpg', quality=80, optimize=True)
-        sprite(th).save(f'{pdir}/{pid}.map.png')
-        size = sum(os.path.getsize(f'{pdir}/{pid}{ext}') for ext in ('.jpg', '.sq.jpg', '.map.png'))
+        sprite(img).save(f'{pdir}/{pid}.map2.png', optimize=True)
+        size = sum(os.path.getsize(f'{pdir}/{pid}{ext}') for ext in ('.jpg', '.sq.jpg', '.map2.png'))
         taken = int((times[i] + timedelta(seconds=40)).timestamp() * 1000)
         photos.append({
             'id': pid, 'trackId': TRACK_ID, 'distanceM': round(cum[i], 1), 'lngLat': coords[i],
             'elevationM': eles[i], 'placement': 'time', 'takenAt': taken, 'takenAtSource': 'exif-offset',
             'file': f'photos/{TRACK_ID}/{pid}.jpg', 'thumb': f'photos/{TRACK_ID}/{pid}.sq.jpg',
-            'sprite': f'photos/{TRACK_ID}/{pid}.map.png', 'width': img.width, 'height': img.height,
+            'sprite': f'photos/{TRACK_ID}/{pid}.map2.png', 'width': img.width, 'height': img.height,
             'bytes': size, 'caption': caption, 'createdAt': taken, 'updatedAt': taken,
         })
         print(f'{pid} {heading:3d}° {cum[i] / 1000:4.1f} km {eles[i]:5.0f} m  thumb {os.path.getsize(pdir + "/" + pid + ".sq.jpg") // 1024} KB')

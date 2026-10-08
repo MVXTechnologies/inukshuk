@@ -23,6 +23,7 @@ import {
   touchSprites,
   PHOTO_SIZE_STOPS,
   photoScaleAt,
+  spritePixelRatio,
 } from './mapStyle';
 import type { TrackPhoto } from './model';
 import { PHOTO_CLUSTER_PROPERTIES } from './stack';
@@ -70,6 +71,13 @@ it('grows the photos with zoom: clearly larger close in, one top-level interpola
     const size = layout['icon-size'] as unknown[];
     expect(size.slice(0, 3)).toEqual(['interpolate', ['linear'], ['zoom']]);
   }
+});
+
+it('registers 2× sprites at 6 px per point, the older 132 px ones at 3', () => {
+  expect(spritePixelRatio('photos/t1/p.map2.png')).toBe(6);
+  expect(spritePixelRatio('team-photos/x/o-p-s2.png')).toBe(6);
+  expect(spritePixelRatio('photos/t1/p.map.png')).toBe(3);
+  expect(spritePixelRatio('team-photos/x/o-p-s.png')).toBe(3);
 });
 
 it('gives the same scale in JS for what cannot take a zoom expression', () => {

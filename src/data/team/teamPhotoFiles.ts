@@ -19,7 +19,8 @@ export interface TeamPhotoPaths {
 export function teamPhotoPaths(teamId: string, owner: string, id: string): TeamPhotoPaths | null {
   if (!SAFE.test(teamId) || !SAFE.test(owner) || !SAFE.test(id)) return null;
   const base = `${TEAM_PHOTOS_ROOT}/${teamId}/${owner}-${id}`;
-  return { thumb: `${base}.jpg`, sprite: `${base}-s.png` };
+  // `-s2`: the 264 px sprites (the 132 px `-s.png` ones are made again).
+  return { thumb: `${base}.jpg`, sprite: `${base}-s2.png` };
 }
 
 const fileAt = (path: string) => new File(resolveDocumentPath(path));
