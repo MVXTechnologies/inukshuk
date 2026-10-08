@@ -224,6 +224,33 @@ func backpressure() {
   waitFor("writable announced after the stall") { rb.writable.count > writableBefore }
 }
 
+/// A peer whose frames are already queued in the socket: one delivery must not
+/// land past the inbox bound (the Android engine read up to 4 x 64 KB per
+/// wakeup before checking it; here each receive is at most 64 KB, checked).
+func burstInboxBound() {
+  let ra = Recorder()
+  let frame = 64 * 1024
+  let readChunk = 64 * 1024
+  let a = engine(ra, cfg {
+    $0.maxFrameBytes = frame; $0.maxInboxBytesPerPeer = 2 * frame; $0.maxInboxBytes = 16 * frame
+    $0.bytesPerSec = 64 * 1024 * 1024; $0.framesPerSec = 10_000
+  })
+  defer { a.stop() }
+  let s = RawSocket(port: a.port)
+  var burst = MeshWire.preamble()
+  for _ in 0..<16 { burst.append(MeshWire.encode(Data(count: frame))) }
+  // The engine stops reading part-way, so this send may block until stop().
+  DispatchQueue.global().async { s.write(burst) }
+  waitFor("receiver paused") {
+    let peers = a.stats()["peers"] as! [[String: Any?]]
+    return !peers.isEmpty && peers[0]["throttled"] as? Bool == true
+  }
+  usleep(300_000)
+  let inbox = a.stats()["inboxBytes"] as! Double
+  // At most: the bound, a frame the decoder was finishing, one receive.
+  expect(inbox <= Double(2 * frame + frame + readChunk), "inbox bounded under a burst (\(inbox))")
+}
+
 func throttle() {
   let ra = Recorder()
   let a = engine(ra, cfg { $0.framesPerSec = 10 })
@@ -312,6 +339,7 @@ func runEngineTests() {
   perIpLimit()
   idleAndKeepalive()
   backpressure()
+  burstInboxBound()
   throttle()
   reconnect()
   banByCore()
