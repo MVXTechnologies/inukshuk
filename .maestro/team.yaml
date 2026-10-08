@@ -170,6 +170,9 @@ appId: com.inukshuk.app
     visible: '.*Depart 9 h au P2.*'
     timeout: 5000
 - takeScreenshot: team-chat
+# The composer keeps the keyboard up after a send; close it, then leave.
+- hideKeyboard:
+    optional: true
 - tapOn: 'Back'
 # Tasks: a new task for her, in the list, ticked, under Done.
 - scrollUntilVisible:

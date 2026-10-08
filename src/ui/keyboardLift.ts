@@ -1,4 +1,7 @@
-/** How far a view whose bottom edge is at `bottom` must rise to clear a keyboard whose top is at `top` (null: down). */
-export function keyboardLift(bottom: number, top: number | null, margin = 8): number {
-  return top === null ? 0 : Math.max(0, bottom + margin - top);
+/**
+ * The gap a bottom-docked view keeps above the screen's bottom edge, less a
+ * margin: how much less than the keyboard's height it must rise to clear it.
+ */
+export function restGap(bottom: number, screenH: number, margin = 8): number {
+  return Math.max(0, screenH - bottom - margin);
 }

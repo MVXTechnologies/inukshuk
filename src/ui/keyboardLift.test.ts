@@ -1,13 +1,12 @@
-import { keyboardLift } from './keyboardLift';
+import { restGap } from './keyboardLift';
 
-describe('keyboardLift', () => {
-  it('rises by how far the keyboard covers the bottom edge, plus a margin', () => {
-    expect(keyboardLift(800, 500)).toBe(308);
-    expect(keyboardLift(800, 500, 0)).toBe(300);
+describe('restGap', () => {
+  it('is the distance to the screen bottom less a margin', () => {
+    expect(restGap(800, 900)).toBe(92);
+    expect(restGap(800, 900, 0)).toBe(100);
   });
 
-  it('stays put when the keyboard is down or already below', () => {
-    expect(keyboardLift(800, null)).toBe(0);
-    expect(keyboardLift(480, 500)).toBe(0);
+  it('is never negative (a view already at the bottom edge rises by the whole keyboard)', () => {
+    expect(restGap(900, 900)).toBe(0);
   });
 });
