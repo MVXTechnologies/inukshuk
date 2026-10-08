@@ -16,6 +16,7 @@ import {
 } from '@core/storage/serverStartFailure';
 
 import { documentDirUri } from './storage';
+import { keepAlive } from '@data/keepAlive';
 
 /**
  * The app's ONE loopback HTTP server (#269).
@@ -129,7 +130,7 @@ async function readErrorLogTail(): Promise<string | null> {
   try {
     const file = errorLogFile();
     if (!file.exists) return null;
-    return logTail(await file.text());
+    return logTail(await keepAlive(file, file.text()));
   } catch {
     return null;
   }

@@ -22,6 +22,7 @@ import * as Linking from 'expo-linking';
 import { useEffect, useRef, type RefObject } from 'react';
 import { useWindowDimensions } from 'react-native';
 import { planSteps, type Bounds } from './pdfBenchPlan';
+import { keepAlive } from '@data/keepAlive';
 
 /**
  * PDF time-to-sharp benchmark — compiled in only with `EXPO_PUBLIC_PDF_BENCH=1`
@@ -508,7 +509,8 @@ export function usePdfBench(args: {
                 uploaded.add(o.imageUri);
                 let png64 = '';
                 try {
-                  png64 = await new File(o.imageUri).base64();
+                  const tile = new File(o.imageUri);
+                  png64 = await keepAlive(tile, tile.base64());
                 } catch (e) {
                   log(`tile unreadable ${o.imageUri}: ${String(e)}`);
                   continue;
