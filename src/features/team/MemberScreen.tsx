@@ -6,6 +6,7 @@
  */
 import { rangeAndBearing, shortAge } from '@core/teamui/positions';
 import type { Role } from '@core/team/roles';
+import type { MemberRow } from '@core/teamui/view';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { space } from '@ui/tokens';
@@ -43,7 +44,11 @@ export function MemberScreen() {
   const peers = useTeamStore((s) => s.peers);
   const positions = useTeamStore((s) => s.positions);
   const here = useSettingsStore((s) => s.lastKnownPosition);
-  const m = view?.members.find((x) => x.id === id);
+  // Removing: this screen is on its way out; it keeps showing the member as
+  // they were, so the closing screen doesn't re-render into "Removed" while
+  // it animates away (a structural change mid-pop broke Android's mounting).
+  const [frozen, setFrozen] = useState<MemberRow | null>(null);
+  const m = frozen ?? view?.members.find((x) => x.id === id);
   const [group, setGroup] = useState<string>(m?.groups[0]?.id ?? 'none');
   const [lead, setLead] = useState<boolean>(m?.groups[0]?.lead ?? false);
   if (view === null || m === undefined) {
@@ -81,8 +86,9 @@ export function MemberScreen() {
           text: 'Remove',
           style: 'destructive',
           onPress: () => {
-            run(session?.removeMember(m.id));
+            setFrozen(m);
             router.back();
+            setTimeout(() => run(session?.removeMember(m.id)), 0);
           },
         },
       ],
