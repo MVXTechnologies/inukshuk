@@ -1,4 +1,5 @@
 import { photoOrdinal } from '@core/photos/lane';
+import { PhotoTeamComments } from '@features/team/PhotoTeamComments';
 import { isNotePhoto, type TrackPhoto } from '@core/photos/model';
 import { profilePaths, sampleProfile } from '@core/photos/profileSamples';
 import { photoEditFailureMessage, photoListNotice } from '@core/photos/status';
@@ -348,6 +349,9 @@ export function PhotoViewerScreen({ trackId, photoId }: { trackId: string; photo
               {notice}
             </Text>
           )}
+
+          {/* Team mode (#589): the team's comments when this photo is shared. */}
+          <PhotoTeamComments photoId={photo.id} />
 
           <ScrollView
             ref={strip}

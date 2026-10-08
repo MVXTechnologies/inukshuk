@@ -35,7 +35,8 @@
       "tides.yaml",
       "gnss.yaml",
       "extensions-review.yaml"
-    ]
+    ],
+    "team": ["team.yaml", "team-join.yaml"]
   },
   "requires": {
     "heatmap.yaml": ["category-record.yaml"],

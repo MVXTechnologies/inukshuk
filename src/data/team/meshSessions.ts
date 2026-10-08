@@ -120,6 +120,19 @@ export class MeshSessionHost<E, S extends FrameSession<E>> {
     }
   }
 
+  /** Every live connection and its session (per-peer sync status). */
+  peers(): { peer: MeshPeer; session: S }[] {
+    return [...this.entries.values()]
+      .filter((e) => !e.closing)
+      .map((e) => ({ peer: e.peer, session: e.session }));
+  }
+
+  /** Close one connection politely (a duplicate link to the same teammate). */
+  close(peerId: string, why = 'duplicate'): void {
+    const entry = this.entries.get(peerId);
+    if (entry) this.apply(peerId, entry, entry.session.close(why));
+  }
+
   session(peerId: string): S | undefined {
     return this.entries.get(peerId)?.session;
   }

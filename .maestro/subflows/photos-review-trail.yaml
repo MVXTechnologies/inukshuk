@@ -47,6 +47,9 @@ appId: com.inukshuk.app
     direction: DOWN
     timeout: 15000
 - tapOn: 'Photo 1 of [0-9]+.*'
+# A photo tap opens its bottom card; the viewer is its full-screen state.
+- tapOn:
+    id: 'photo-card-full'
 - extendedWaitUntil:
     visible: 'Show on map'
     timeout: 15000

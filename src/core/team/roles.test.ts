@@ -39,7 +39,9 @@ describe('authority ladder', () => {
     expect(canManage('admin', 'member')).toBe(true);
     expect(canManage('guest', 'guest')).toBe(false);
     expect(canWriteData('guest', 'pos')).toBe(true);
-    expect(canWriteData('guest', 'e.set')).toBe(false);
+    // Entity writes pass the op-type gate; the data fold narrows guests to their own comments.
+    expect(canWriteData('guest', 'e.set')).toBe(true);
+    expect(canWriteData('guest', 'g.set')).toBe(false);
     expect(canWriteData('member', 'e.set')).toBe(true);
   });
 });

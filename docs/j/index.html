@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Join a team in Inukshuk</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="../favicon-32.png" />
+    <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
+    <!--
+      Team invite hand-off (#589). An SMS or shared invite links here:
+      https://inukshuk.mvxtechnologies.com/j#<invite>. The invite is the part
+      after "#": browsers never send it to this server, and this page sends it
+      nowhere either — it only builds the app link (inukshuk://team/join?t=…)
+      on this phone. No scripts from elsewhere, no analytics, no storage.
+    -->
+    <style>
+      :root {
+        color-scheme: light dark;
+        --ground: #f2ece0;
+        --ink: #1e252c;
+        --muted: #4a5561;
+        --button: #2d3740;
+        --on-button: #f2ece0;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ground: #13171b;
+          --ink: #e9e4d8;
+          --muted: #a7b0b8;
+          --button: #e9e4d8;
+          --on-button: #13171b;
+        }
+      }
+      body {
+        margin: 0;
+        background: var(--ground);
+        color: var(--ink);
+        font:
+          17px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
+      main {
+        max-width: 28rem;
+        margin: 0 auto;
+        padding: 3rem 1.5rem;
+        text-align: center;
+      }
+      img {
+        width: 72px;
+        height: 72px;
+        border-radius: 16px;
+      }
+      h1 {
+        font-size: 1.5rem;
+        margin: 1rem 0 0.5rem;
+      }
+      p {
+        color: var(--muted);
+      }
+      a.button {
+        display: inline-block;
+        margin: 1rem 0;
+        padding: 0.85rem 1.6rem;
+        border-radius: 999px;
+        background: var(--button);
+        color: var(--on-button);
+        font-weight: 700;
+        text-decoration: none;
+      }
+      .stores a {
+        color: var(--ink);
+      }
+      .bad {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="../apple-touch-icon.png" alt="" />
+      <h1>You’re invited to a team</h1>
+      <div id="ok">
+        <p>Open the invite in Inukshuk on this phone.</p>
+        <a class="button" id="open" href="#">Open in Inukshuk</a>
+        <p>
+          Don’t have Inukshuk yet? Get it, then come back and tap the link in your message again.
+        </p>
+        <p class="stores">
+          <a href="https://apps.apple.com/ca/app/inukshuk/id6797629589">App Store</a> ·
+          <a href="https://play.google.com/store/apps/details?id=com.inukshuk.app">Google Play</a>
+        </p>
+        <p>
+          Your team syncs phone to phone over the same Wi-Fi or a phone’s hotspot. Nothing goes
+          through a server.
+        </p>
+      </div>
+      <p class="bad" id="bad">This link has no invite in it. Ask for a new one.</p>
+    </main>
+    <script>
+      (function () {
+        var token = (location.hash || '').slice(1);
+        if (!/^[A-Za-z0-9_-]{40,400}$/.test(token)) {
+          document.getElementById('ok').style.display = 'none';
+          document.getElementById('bad').style.display = 'block';
+          return;
+        }
+        var link = 'inukshuk://team/join?t=' + token;
+        document.getElementById('open').setAttribute('href', link);
+      })();
+    </script>
+  </body>
+</html>
