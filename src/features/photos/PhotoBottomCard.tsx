@@ -29,6 +29,8 @@ import {
   StyleSheet,
   useWindowDimensions,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 import { Icon, IconButton, Text, TextInput } from 'react-native-paper';
 import { create } from 'zustand';
@@ -53,7 +55,13 @@ export const usePhotoCard = create<{
 
 const SWIPE = 40;
 
-export function PhotoBottomCard() {
+/**
+ * `dockStyle` places the card (absolute, bottom-docked). It is the view that
+ * rises above the keyboard, so it must not sit in a wrapper sized to the card:
+ * Android leaves a view moved outside its parents' bounds out of the
+ * accessibility tree (E2E run 37814960809).
+ */
+export function PhotoBottomCard({ dockStyle }: { dockStyle?: StyleProp<ViewStyle> }) {
   const t = useSchemeTokens();
   const { height: windowH } = useWindowDimensions();
   const target = usePhotoCard((s) => s.target);
@@ -111,7 +119,7 @@ export function PhotoBottomCard() {
     .filter(Boolean)
     .join(' · ');
   return (
-    <KeyboardLifted>
+    <KeyboardLifted style={dockStyle}>
       <View
         style={[
           styles.card,

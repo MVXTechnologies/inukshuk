@@ -1115,9 +1115,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
         </View>
       )}
 
-      <View style={styles.photoCardDock} pointerEvents="box-none">
-        <PhotoBottomCard />
-      </View>
+      <PhotoBottomCard dockStyle={styles.photoCardDock} />
       <Snackbar
         visible={snack !== null}
         onDismiss={dismissSnack}

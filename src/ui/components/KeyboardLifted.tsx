@@ -5,20 +5,22 @@
  * for the keyboard nor told about it through React Native's own Keyboard
  * events, so docked inputs sat under the keys (2026-10-08).
  *
- * When the keyboard's height changes, the (untransformed) outer view is
- * measured where it is now — its dock can itself shift as the keyboard opens
- * — and the content rises by how far the keyboard's top edge covers its
- * bottom, following the library's Reanimated open/close progress.
+ * The view's bottom edge is measured while the keyboard is down (no lift
+ * applied), in screen coordinates: `measure`'s pageY, the frame the keyboard
+ * height and the library's window height use (Android's measureInWindow sits
+ * a status bar higher, 48.76 dp on the CI emulator, run 37805821997). With the
+ * keyboard up, the view rises by how far the keyboard's top edge covers that
+ * bottom edge, following the library's Reanimated open/close progress.
  *
- * Found on the CI emulator with logged values (runs 37799431929, 37805821997):
- * a lift from a gap measured once at rest came up short, because the dock
- * moved after the keyboard opened, and measureInWindow is offset by the status
- * bar on Android. Tried and rejected before that: KeyboardStickyView
- * (plain-Animated values) and KeyboardAvoidingView "position" (frame read
- * relative to its parent, wrong for a docked card).
+ * This view itself moves, so give it the dock's style and put it in a parent
+ * that spans the screen: on Android a view moved outside its parents' bounds
+ * still draws but is "not visible to user", so it leaves the accessibility
+ * tree (TalkBack, and E2E taps: run 37814960809). Tried and rejected before:
+ * KeyboardStickyView (plain-Animated values) and KeyboardAvoidingView
+ * "position" (frame read relative to its parent, wrong for a docked card).
  */
-import { useEffect, useRef, type ReactNode } from 'react';
-import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { useCallback, useEffect, useRef, type ReactNode } from 'react';
+import type { StyleProp, View, ViewStyle } from 'react-native';
 import {
   useKeyboardState,
   useReanimatedKeyboardAnimation,
@@ -45,25 +47,41 @@ export function KeyboardLifted({
   const { progress } = useReanimatedKeyboardAnimation();
   const keyboardHeight = useKeyboardHeight();
   const { height: windowH } = useWindowDimensions();
-  const rest = useRef<View>(null);
+  const view = useRef<View>(null);
+  /** The bottom edge at rest, in screen coordinates (null until measured). */
+  const restBottom = useRef<number | null>(null);
+  const keyboardUp = useRef(false);
   const lift = useSharedValue(0);
-  useEffect(() => {
-    if (keyboardHeight <= 0) return;
-    // Screen coordinates (pageY), the frame the keyboard height and the
-    // library's window height use. Android's measureInWindow sits a status
-    // bar higher (48.76 dp on the CI emulator), so the lift came up short.
-    rest.current?.measure((_x, _y, _w, h, _pageX, pageY) => {
-      lift.value = keyboardLift(pageY + h, windowH - keyboardHeight);
+
+  const measureRest = useCallback(() => {
+    // Only at rest: with the keyboard up (or still closing) the view is lifted.
+    if (keyboardUp.current || progress.value > 0) return;
+    view.current?.measure((_x, _y, _w, h, _pageX, pageY) => {
+      if (Number.isFinite(pageY) && h > 0) restBottom.current = pageY + h;
     });
+  }, [progress]);
+
+  useEffect(() => {
+    keyboardUp.current = keyboardHeight > 0;
+    if (keyboardHeight <= 0) return;
+    const bottom = restBottom.current;
+    if (bottom === null) return;
+    lift.value = keyboardLift(bottom, windowH - keyboardHeight);
   }, [keyboardHeight, windowH, lift]);
+
   const lifted = useAnimatedStyle(() => ({
     transform: [{ translateY: -lift.value * progress.value }],
   }));
   return (
-    <View ref={rest} collapsable={false} style={style} pointerEvents="box-none" testID={testID}>
-      <Reanimated.View style={lifted} pointerEvents="box-none">
-        {children}
-      </Reanimated.View>
-    </View>
+    <Reanimated.View
+      ref={view}
+      collapsable={false}
+      style={[style, lifted]}
+      onLayout={measureRest}
+      pointerEvents="box-none"
+      testID={testID}
+    >
+      {children}
+    </Reanimated.View>
   );
 }

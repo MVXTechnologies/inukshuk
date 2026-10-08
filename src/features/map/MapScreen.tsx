@@ -3676,9 +3676,7 @@ export function MapScreen() {
           cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight)}
         />
         {/* A tapped photo's bottom card (app-wide, owner 2026-10-07). */}
-        <View style={waypointCardDockStyle(recordingPanelUp, panelHeight)} pointerEvents="box-none">
-          <PhotoBottomCard />
-        </View>
+        <PhotoBottomCard dockStyle={waypointCardDockStyle(recordingPanelUp, panelHeight)} />
 
         {/* Right-edge activity carousel: opened by tapping a "hot" heat spot
           (onMapPress above). Mutually exclusive with TrailInspectPanel — the
