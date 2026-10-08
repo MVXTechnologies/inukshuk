@@ -13,7 +13,7 @@ tests, and corrects itself without anyone watching.
 | `nightly.yml`              | nightly; manual                      | full gate + **blocking** expo-doctor + high+ audits (app, Worker); opens a tracking issue on failure |
 | `ota-update.yml`           | push to `main` (JS/assets)           | publishes an EAS Update so installed apps self-correct                                               |
 | `release.yml`              | version tag `v*`; manual             | EAS build + auto-submit to App Store & Play Store                                                    |
-| `dependabot-automerge.yml` | Dependabot PRs                       | auto-merges green minor/patch updates, except native-bearing ones (they need a store build)          |
+| `dependabot-automerge.yml` | Dependabot PRs; CI completion        | never merges: labels green minor/patch, non-native updates `ready-for-review` for a human            |
 | `ci-health.yml`            | every 3 h; manual                    | one `ci-health` issue listing every workflow whose latest run on `main` (24 h) is red; auto-closes   |
 
 Plus `.github/dependabot.yml` (weekly npm + actions updates, grouped).
@@ -90,6 +90,12 @@ long job, with no retry:
   it (and an AGP bump without a pin fails the script in seconds): add it to
   `android-sdk.json`. The NDKs and CMake are also cached (restored everywhere,
   saved from `main`).
+- **Emulator packages.** The E2E flows job installs platform-tools, the
+  emulator, the system image and the build-tools/platform that
+  `reactivecircus/android-emulator-runner` would otherwise fetch itself with
+  no retry (2026-10-07: a truncated emulator zip killed a shard before boot).
+  It uses `android-sdk.mjs install <pkg…>`, with the same retry and
+  verification.
 - **Maestro** is pinned (`MAESTRO_VERSION` in `e2e.yml`); the installer is
   downloaded to a file, then run, with a bounded retry of that download only.
 - **Gradle and NDK caches are saved from `main` only** (`actions/cache/restore`
@@ -109,6 +115,16 @@ On a PR, a new push cancels that PR's previous run. On `main`, `ci.yml` and
 other, leaving no verdict for any but the last), and `native-build.yml` /
 `e2e.yml` group by event, so a manual dispatch on `main` no longer cancels the
 nightly scheduled run.
+
+**Runner queue.** Every PR push starts CI, Native Build Test (a ~40-minute
+Android job and a ~40-minute macOS job), the runtime check and sometimes the
+release path. With several agents pushing at once, the account's concurrent
+job limit saturates. On 2026-10-07 jobs sat _queued_ for 25–60 minutes (an
+Android job of #603 waited an hour; a photos E2E build 28 minutes; iOS jobs 20+
+minutes for a macOS runner), which looks like "in progress" in the PR list.
+Owner decision (2026-10-07): native builds keep running on draft PRs, because
+agents need that evidence; superseded runs of the same PR are cancelled
+(concurrency above), which is the lever we use.
 
 GitHub delays scheduled runs under load (the 05:00/05:15 UTC nightlies started
 at ~11:40 UTC on 2026-10-07); nothing in the repo can fix that, the monitor
@@ -177,6 +193,42 @@ Flows that set the location themselves and then tap by screen position carry
 the Maestro tag `own-location`; the loop is paused while they run, because
 moving the user moves the follow-camera under the tap (the old `heatmap.yaml`
 flake). Each shard writes a per-flow pass/time table to its job summary.
+
+The geo-fix feed is **gated** (run 37628988758, 2026-10-07): the emulator's
+GNSS HAL can deadlock `system_server` when a fix's status report races
+`GnssNative.stop()`, which happens when Maestro force-stops or relaunches the
+app at a flow boundary. The Watchdog then kills `system_server` ("Blocked in
+handler on foreground thread (android.fg) for 68s") and every later adb or
+Maestro call breaks ("Broken pipe", "Device server died"). A fix is now sent
+only while a flow is running (never across transitions or installs), only
+once the app process has lived a full tick unchanged (a launch, force-stop or
+relaunch pauses it), and every 5 s instead of 2 s. Gating alone still left
+one deadlock in nine runs (37686186144), so fixes no longer go through the
+emulated GNSS chip (`adb emu geo fix`). They now set the location of a
+shell-owned `gps` **test provider** (`cmd location providers
+set-test-provider-location`), which shadows the real GnssLocationProvider,
+so the deadlocking start/stop path is never entered. If `system_server` still
+restarts, the runner reports **`E2E infra: emulator system_server
+restarted`** as its own error annotation, uploads
+`logcat-system-server-restart-*.txt`, does not retry the flow, and marks the
+shard's remaining flows NOT RUN. Results from a rebooted emulator prove
+nothing either way.
+
+Before the first flow the runner waits for Google Play services' post-boot
+restart: until `gms.persistent` has kept one pid for 60 s, bounded at 4 min.
+That restart kills every process holding a GMS content provider, and the app
+holds GMS's FontsProvider, so the shard's first flow used to lose its app
+mid-flow.
+
+**Known open issue (catalog shard, `store.yaml`).** In about 1 run in 5, the
+app's main window never finishes its post-splash `starting_reveal`
+transition. WindowManager logs "Timed out waiting for animations to complete"
+every 5 s, UiAutomator never sees an idle UI, and every Maestro step waits out
+its timeout, so `inputText` takes ~70 s and both attempts fail (runs
+37616199722, 37671698583, 37695369794). It happens on a clean launch with no
+leftover window, so it is not a CI sequencing artefact. Look into the app's
+first draw on that path (Map tab with the map `make-map.yaml` just created,
+pdf.js WebView starting).
 
 ## Release path (`release-path.yml`)
 
@@ -266,9 +318,15 @@ it, and runs its Jest suites. Deploying it is still the owner's manual step
 - **No untrusted text in `run:`.** `${{ … }}` inside a script is pasted in
   before the shell parses it. Event data and inputs go through `env:` and are
   read as `"$VAR"`.
-- **`pull_request_target`** is used only by `dependabot-automerge.yml`, which
-  never checks out the PR, and runs only for PRs Dependabot opened in this
-  repository (`pull_request.user.login`, not just `github.actor`).
+- **`pull_request_target`** (and `workflow_run`) are used only by
+  `dependabot-automerge.yml` ("Dependabot triage"), which never checks out
+  the PR, and acts only on PRs Dependabot opened in this repository
+  (`pull_request.user.login`, not just `github.actor`).
+- **No automated merges of dependency updates.** The audit flagged the chain
+  Dependabot → auto-merge → OTA publish. The triage workflow labels a
+  minor/patch, non-native update `dependabot:eligible`; once every check on its
+  head commit is green it adds `ready-for-review` and one summary comment, and
+  a human merges it.
 - Fork PRs get no secrets (`pull_request`), so CI, native builds and E2E never
   see a credential.
 

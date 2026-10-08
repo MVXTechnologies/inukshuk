@@ -197,6 +197,19 @@ jobs:
 
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
+      # Everything the emulator-runner action would otherwise download itself,
+      # with no retry (2026-10-07, run 37666396667: "An error occurred while
+      # preparing SDK package Android Emulator: Error on ZipFile unknown
+      # archive" killed the extensions shard before boot). Installed here with
+      # the same bounded, logged retry as the build's NDKs; the action then
+      # finds each package in place. Keep in step with the action's version
+      # (its build-tools/platform list) and with api-level/target/arch below.
+      - name: Install emulator SDK packages (bounded retry)
+        run: >-
+          node scripts/ci/android-sdk.mjs install
+          platform-tools emulator 'build-tools;37.0.0' 'platforms;android-34'
+          'system-images;android-34;google_apis;x86_64'
+
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: e2e-apk
@@ -318,4 +331,5 @@ jobs:
           path: |
             ~/.maestro/tests
             logcat-failure-*.txt
+            logcat-system-server-restart-*.txt
           retention-days: 7
