@@ -189,6 +189,41 @@ object MeshEngineTest {
     } finally { a.stop(); b.stop() }
   }
 
+  // A peer whose frames are already queued in the socket (a burst, a slow
+  // receiver catching up): one wakeup must not deliver past the inbox bound.
+  // It used to read up to 4 × 64 KB per wakeup before checking it, so the
+  // inbox could reach the bound plus ~4 frames ("receiver inbox bounded",
+  // flaky on CI where wakeups find more data queued).
+  fun burstInboxBound() {
+    val ra = Recorder()
+    val frame = 64 * 1024
+    val readChunk = 64 * 1024
+    val cfg = MeshConfig(
+      preferredPort = 0, maxFrameBytes = frame, maxInboxBytesPerPeer = 2 * frame,
+      maxInboxBytes = 16 * frame, bytesPerSec = 64 * 1024 * 1024, framesPerSec = 10_000,
+    )
+    val a = engine(ra, cfg)
+    try {
+      raw(a.port).use { s ->
+        var burst = MeshWire.preamble()
+        repeat(16) { burst += MeshWire.encode(ByteArray(frame)) }
+        // The engine stops reading part-way, so this write may never finish:
+        // it runs on its own thread, and closing the socket ends it.
+        Thread { try { s.getOutputStream().write(burst) } catch (_: Exception) {} }
+          .apply { isDaemon = true }.start()
+        waitFor("receiver paused") {
+          @Suppress("UNCHECKED_CAST")
+          val peers = a.stats()["peers"] as List<Map<String, Any?>>
+          peers.isNotEmpty() && peers[0]["throttled"] == true
+        }
+        Thread.sleep(300)
+        val inbox = a.stats()["inboxBytes"] as Double
+        // At most: the bound, a frame the decoder was finishing, one read.
+        expect(inbox <= (2 * frame + frame + readChunk).toDouble(), "inbox bounded under a burst ($inbox)")
+      }
+    } finally { a.stop() }
+  }
+
   fun throttle() {
     val ra = Recorder()
     val a = engine(ra, MeshConfig(preferredPort = 0, framesPerSec = 10))
@@ -262,6 +297,7 @@ object MeshEngineTest {
     perIpLimit()
     idleAndKeepalive()
     backpressure()
+    burstInboxBound()
     throttle()
     reconnect()
     banByCore()

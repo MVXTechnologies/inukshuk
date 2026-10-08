@@ -483,6 +483,7 @@ class MeshEngine(
     val now = clock()
     val frames = ArrayList<ByteArray>()
     var total = 0
+    var pending = 0L
     // A few reads per wakeup, so one fast peer cannot starve the others.
     for (round in 0 until 4) {
       readBuffer.clear()
@@ -508,6 +509,12 @@ class MeshEngine(
       // Stop this round as soon as the peer is over its rate, or the socket is drained.
       if (c.bytesBucket.waitMs(now) > 0 || c.framesBucket.waitMs(now) > 0) break
       if (n < readArray.size) break
+      // Or once what this wakeup decoded fills the inbox: deliver() pauses the
+      // peer, and no further read may land past the bound (it used to read up
+      // to 4 × 64 KB more first: "receiver inbox bounded" flaked on CI).
+      pending += frames.subList(framesBefore, frames.size).sumOf { it.size.toLong() }
+      if (c.inboxBytes.get() + pending > config.maxInboxBytesPerPeer ||
+        inboxBytes.get() + pending > config.maxInboxBytes) break
     }
     if (total > 0) {
       c.lastRecv = now

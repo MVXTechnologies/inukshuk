@@ -76,6 +76,17 @@ appId: com.inukshuk.app
           direction: DOWN
       - tapOn: 'Remove External GNSS receiver extension'
       - tapOn: 'Remove'
+      # Removing keeps the row open: close it, so the row tap below opens it.
+      - scrollUntilVisible:
+          element:
+            id: 'extension-row-gnss'
+          direction: UP
+      - tapOn:
+          id: 'extension-row-gnss'
+      - extendedWaitUntil:
+          notVisible:
+            id: 'extension-details-gnss'
+          timeout: 5000
 - scrollUntilVisible:
     element: 'Get External GNSS receiver'
     direction: DOWN
