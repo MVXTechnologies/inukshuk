@@ -39,6 +39,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
+import { useIosKeyboardHeight } from '../common/useIosKeyboardHeight';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
 import { formatPhotoWhen } from './photoText';
 import { photoFileUri } from './photoUri';
@@ -77,6 +78,8 @@ export function PhotoViewerScreen({ trackId, photoId }: { trackId: string; photo
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [busy, setBusy] = useState(false);
   const [stageH, setStageH] = useState(0);
+  // The team comment field is in the sheet: lift the sheet over the keyboard.
+  const keyboard = useIosKeyboardHeight();
   const { message, show, dismiss } = useTimedSnackbar(2500);
   const pager = useRef<FlatList<TrackPhoto>>(null);
 
@@ -282,7 +285,13 @@ export function PhotoViewerScreen({ trackId, photoId }: { trackId: string; photo
 
       {info && photo && (
         <View
-          style={[styles.sheet, { backgroundColor: t.surface, paddingBottom: insets.bottom + 12 }]}
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: t.surface,
+              paddingBottom: keyboard > 0 ? keyboard + 8 : insets.bottom + 12,
+            },
+          ]}
           testID="photo-info"
         >
           <Text style={[styles.title, { color: t.ink }]} numberOfLines={2}>
