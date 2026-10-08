@@ -28,13 +28,11 @@ export function TeamSettings() {
   return (
     <ExtensionSettingsShell
       extKey="team"
-      // The collapsed row's status: the open team and who is nearby.
+      // The collapsed row's status, short so the title keeps its room (the team
+      // is named in the details): unread, else who is nearby.
       {...(view !== null
         ? {
-            status:
-              unread > 0
-                ? `${view.name} · ${unread} unread`
-                : `${view.name} · ${openPeers(peers).length} nearby`,
+            status: unread > 0 ? `${unread} unread` : `${openPeers(peers).length} nearby`,
           }
         : {})}
       badge={undefined}
