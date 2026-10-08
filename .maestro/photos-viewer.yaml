@@ -57,6 +57,7 @@ appId: com.inukshuk.app
     id: 'photo-card-caption-input'
 - eraseText: 60
 - inputText: 'Lichen glade'
+- takeScreenshot: review-photo-card-caption-keyboard
 - tapOn:
     id: 'photo-card-caption-save'
 - extendedWaitUntil:

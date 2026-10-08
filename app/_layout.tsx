@@ -31,6 +31,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { AppState, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { installTileHostAlias } from '@data/tileHostAlias';
@@ -125,77 +126,79 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <DisplayConditionContext.Provider value={condition}>
-          <PaperProvider theme={theme}>
-            <ErrorBoundary>
-              <PdfRasterizerProvider>
-                <StatusBar style={theme.dark ? 'light' : 'dark'} />
-                <Stack
-                  screenOptions={{
-                    headerShown: false,
-                    contentStyle: { backgroundColor: theme.colors.background },
-                  }}
-                >
-                  <Stack.Screen name="(tabs)" />
-                  <Stack.Screen name="trail3d/[id]" />
-                  <Stack.Screen name="settings" />
-                  {/* Logbook statistics: Statistics, Personal records, Year in review. */}
-                  <Stack.Screen name="logbook/stats" />
-                  <Stack.Screen name="logbook/records" />
-                  <Stack.Screen name="logbook/year" />
-                  {/* Support Inukshuk: the tip jar and its thank-you (#476). */}
-                  <Stack.Screen name="support/index" />
-                  <Stack.Screen name="support/thanks" />
-                  <Stack.Screen name="support/donor" />
-                  <Stack.Screen name="support/verify" />
-                  {/* The Explore tab's secondary screens (#447). */}
-                  <Stack.Screen name="explore/list" />
-                  <Stack.Screen name="explore/map" />
-                  <Stack.Screen name="explore/item/[id]" />
-                  <Stack.Screen name="explore/collection/[id]" />
-                  {/* Long-distance trails (#467). */}
-                  <Stack.Screen name="explore/trails" />
-                  <Stack.Screen name="explore/trail/[id]" />
-                  {/* Convert: coordinates, heights, epochs, chart datum (pinned PROJ pipelines). */}
-                  <Stack.Screen name="convert" />
-                  <Stack.Screen name="convert-selftest" />
-                  {/* External GNSS receiver (#588): Settings › Extensions sub-screens. */}
-                  <Stack.Screen name="gnss/pair" />
-                  <Stack.Screen name="gnss/corrections" />
-                  <Stack.Screen name="gnss/datum" />
-                  {/* Team mode (#589): Settings › Extensions › Team mode and its screens. */}
-                  <Stack.Screen name="team/index" />
-                  <Stack.Screen name="team/create" />
-                  <Stack.Screen name="team/join" />
-                  <Stack.Screen name="team/invite" />
-                  <Stack.Screen name="team/chat" />
-                  <Stack.Screen name="team/groups" />
-                  <Stack.Screen name="team/share" />
-                  <Stack.Screen name="team/teams" />
-                  <Stack.Screen name="team/tasks" />
-                  <Stack.Screen name="team/task-new" />
-                  <Stack.Screen name="team/pin/[owner]/[id]" />
-                  <Stack.Screen name="team/member/[id]" />
-                  <Stack.Screen name="team/trail/[owner]/[id]" />
-                </Stack>
-                <ImportFeedbackSnackbar />
-                <PdfRecoverySnackbar />
-                <PdfPrerenderWorker />
-                <PhotoResizeHost />
-                <MapReparseWorker />
-                {/* Before StravaPushPrompt, on purpose: both subscribe to the
+        <KeyboardProvider>
+          <DisplayConditionContext.Provider value={condition}>
+            <PaperProvider theme={theme}>
+              <ErrorBoundary>
+                <PdfRasterizerProvider>
+                  <StatusBar style={theme.dark ? 'light' : 'dark'} />
+                  <Stack
+                    screenOptions={{
+                      headerShown: false,
+                      contentStyle: { backgroundColor: theme.colors.background },
+                    }}
+                  >
+                    <Stack.Screen name="(tabs)" />
+                    <Stack.Screen name="trail3d/[id]" />
+                    <Stack.Screen name="settings" />
+                    {/* Logbook statistics: Statistics, Personal records, Year in review. */}
+                    <Stack.Screen name="logbook/stats" />
+                    <Stack.Screen name="logbook/records" />
+                    <Stack.Screen name="logbook/year" />
+                    {/* Support Inukshuk: the tip jar and its thank-you (#476). */}
+                    <Stack.Screen name="support/index" />
+                    <Stack.Screen name="support/thanks" />
+                    <Stack.Screen name="support/donor" />
+                    <Stack.Screen name="support/verify" />
+                    {/* The Explore tab's secondary screens (#447). */}
+                    <Stack.Screen name="explore/list" />
+                    <Stack.Screen name="explore/map" />
+                    <Stack.Screen name="explore/item/[id]" />
+                    <Stack.Screen name="explore/collection/[id]" />
+                    {/* Long-distance trails (#467). */}
+                    <Stack.Screen name="explore/trails" />
+                    <Stack.Screen name="explore/trail/[id]" />
+                    {/* Convert: coordinates, heights, epochs, chart datum (pinned PROJ pipelines). */}
+                    <Stack.Screen name="convert" />
+                    <Stack.Screen name="convert-selftest" />
+                    {/* External GNSS receiver (#588): Settings › Extensions sub-screens. */}
+                    <Stack.Screen name="gnss/pair" />
+                    <Stack.Screen name="gnss/corrections" />
+                    <Stack.Screen name="gnss/datum" />
+                    {/* Team mode (#589): Settings › Extensions › Team mode and its screens. */}
+                    <Stack.Screen name="team/index" />
+                    <Stack.Screen name="team/create" />
+                    <Stack.Screen name="team/join" />
+                    <Stack.Screen name="team/invite" />
+                    <Stack.Screen name="team/chat" />
+                    <Stack.Screen name="team/groups" />
+                    <Stack.Screen name="team/share" />
+                    <Stack.Screen name="team/teams" />
+                    <Stack.Screen name="team/tasks" />
+                    <Stack.Screen name="team/task-new" />
+                    <Stack.Screen name="team/pin/[owner]/[id]" />
+                    <Stack.Screen name="team/member/[id]" />
+                    <Stack.Screen name="team/trail/[owner]/[id]" />
+                  </Stack>
+                  <ImportFeedbackSnackbar />
+                  <PdfRecoverySnackbar />
+                  <PdfPrerenderWorker />
+                  <PhotoResizeHost />
+                  <MapReparseWorker />
+                  {/* Before StravaPushPrompt, on purpose: both subscribe to the
                     recorder's lastSavedTrackId, and the Strava prompt consumes
                     it synchronously inside its listener — a listener registered
                     after it then only ever sees null (device QA, #587). */}
-                <AddPhotosAfterSavePrompt />
-                <StravaPushPrompt />
-                <GnssHost />
-                <TeamHost />
-                <TeamAlertBanner />
-              </PdfRasterizerProvider>
-            </ErrorBoundary>
-          </PaperProvider>
-        </DisplayConditionContext.Provider>
+                  <AddPhotosAfterSavePrompt />
+                  <StravaPushPrompt />
+                  <GnssHost />
+                  <TeamHost />
+                  <TeamAlertBanner />
+                </PdfRasterizerProvider>
+              </ErrorBoundary>
+            </PaperProvider>
+          </DisplayConditionContext.Provider>
+        </KeyboardProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

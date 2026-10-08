@@ -97,7 +97,7 @@ const SIGN_THUMB =
   '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCABgAGADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwCXy6PLrATVLtD8sxYD+8AasJrF0R0iPuVNdf1mJy+yZr+XR5dZZ1S8TkrAw9s/41NDrSsP3tuw9ShzTWIg+oOk0XvLo8uo49UsZOPO2H0YEVajkhk/1c0bfRga0VRPZk8pD5dHl1a8ujZT5hWKvl0eXVrZRso5gsVfLo8urWyjZRzBY4YuD0BFAfHFN8mUdUP40FHB+7+teXzLudXK+xMszLxnI96eJlBypx9KqncP4aQN6iiyY7tFtp0x0JppkjPITB9jiq28U4Pjo1Fg5n1LAmmH3GcD2Y1LFqF5GcpcSD6tkfrVRJCGyTxVtWiccMFJ7ChzcRqCZpW/iCZRi4iSQeqnBrSh1mxlA3M0Z9GX/CubIQ8LGPrikEanO3qPQ1SxEkN0Ds4ZIZxmGVH/AN05qXZXDBJUOQxXH0qeHV7+3OFuGYejfMP1raOIT3MnSaG79gwofp3x+lNd2GTkHPJ4zmstZnXo2Afeni5dW+VVP1FcPsmdHtS7JcZA+Vf++cVA0wJOUB/DFQNOH++gB9qaCB0PPWqULE+0ZM7Qt/CVPqKjIHUH86azD/8AUaQsOlWtCXqO3H1pQ3cE1GWzzT8jGOTVXJsyUXEgH3zS/aZe5z9ahIPqKQHnB5qbJle8i39rBGJI9w9jilW5QD5Y8Z96p856UobnPelyRGpyIwT1IBFJu9gtDeg/lTQoLYqzMcMGgnB/rQqhTnd0odz0WgBAFz1/KpFBY9DiocHbmgE/3TihoZbQKW9R3yKVgCOFUVXWRgetL5rDrUcrKUh5Bz/hTDuzyeKFlIzsIwafuVh6GmkDZEWI4/pSh8Dr+VIxwOlJx1OaqxN2BJcfKpA+tAXA6UbSDwfyp43/AN3ii4NEZXJ4WlJ29QCaHyG6UcnkDpQIGc44GKYGY8YpxYk8igEg55oGKEfqfypM465zTi+BwCaRcNy3egBe2QuRT1K4xhh7daZvI4ABFBJ4IApDHFQR8pB9jTNmOhP0pSd3VfxFLwRjnNAiUiNOp5pGcnoeKqsxLc09M9BRYbByTQqMO5oIINBdzximIUp6Hml3diRSIp7mgxDOaBDu3BqJ3xwBT9hFRlcGgY9VLClwehNNBIFAZjQAFcd6buYHrmpMkdRQyK3PQ0Af/9k=';
 
 /**
- * Each simulated teammate shares one photo near me and comments on it, so a
+ * Each simulated teammate shares a photo near me and comments on it, so a
  * photo thread exists for the flows (Team chat → Threads → the photo's card,
  * whose comment box must stay above the keyboard).
  */
@@ -123,6 +123,22 @@ function sharePhotoWithComment(
   });
   session.writeEntity('photo', id, { tb: SIGN_THUMB });
   session.commentOnPhoto(id, 'The trail sign is down here');
+  // Two more photos with 12 and 120 comments: the map's comment badges at two
+  // and three characters ("12", "99+"), screenshotted by the flows.
+  [12, 120].forEach((count, k) => {
+    const pid = `${id}b${k}`;
+    session.writeEntity('photo', pid, {
+      trackId: `simtrail${n}`,
+      lngLat: [center.longitude + 0.0015 * n + 0.0006 * (k + 1), center.latitude + 0.0006],
+      placement: 'gps',
+      takenAt: at + k + 1,
+      width: 96,
+      height: 96,
+      caption: `Badge ${count}`,
+    });
+    session.writeEntity('photo', pid, { tb: SIGN_THUMB });
+    for (let c = 0; c < count; c++) session.commentOnPhoto(pid, `Note ${c + 1}`);
+  });
 }
 
 /**

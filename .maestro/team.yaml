@@ -162,12 +162,8 @@ appId: com.inukshuk.app
 - tapOn:
     id: 'team-chat-input'
 - inputText: 'Depart 9 h au P2'
-# Android: the keyboard covers the send button.
-- runFlow:
-    when:
-      platform: Android
-    commands:
-      - hideKeyboard
+# Send with the keyboard up: the composer stays above it on both platforms.
+- takeScreenshot: review-team-chat-keyboard
 - tapOn:
     id: 'team-chat-send'
 - extendedWaitUntil:
@@ -268,8 +264,9 @@ appId: com.inukshuk.app
 - tapOn:
     id: 'team-pin-input'
 - inputText: 'Fallen tree here'
-# Return sends (the keyboard would cover the button).
-- pressKey: Enter
+# The composer card stays above the keyboard: tap Send itself.
+- tapOn:
+    id: 'team-pin-send'
 - extendedWaitUntil:
     visible:
       id: 'team-pin-card'
@@ -292,6 +289,23 @@ appId: com.inukshuk.app
     visible: '.*Fallen tree here.*'
     timeout: 5000
 - takeScreenshot: team-threads
+# The map's comment badges at two and three characters, centred.
+- tapOn:
+    id: 'team-thread-locate'
+    childOf:
+      id: 'team-thread-row'
+      text: '.*Badge 120.*'
+- extendedWaitUntil:
+    visible: 'never-shown-sentinel'
+    timeout: 4000
+    optional: true
+- takeScreenshot: review-team-badges
+- tapOn:
+    id: 'team-fab'
+- tapOn:
+    id: 'team-fab-chat'
+- tapOn:
+    id: 'team-chat-tab-threads'
 # A teammate's photo thread opens the photo's card on the map. Its comment
 # box must stay above the keyboard: typing, then tapping Send (not Return)
 # only posts when the button is not under the keys.
@@ -306,7 +320,7 @@ appId: com.inukshuk.app
     id: 'team-comment-input'
 - waitForAnimationToEnd:
     timeout: 2000
-- takeScreenshot: team-photo-card-keyboard-up
+- takeScreenshot: review-team-photo-card-keyboard
 - inputText: 'On my way'
 - tapOn:
     id: 'team-comment-send'

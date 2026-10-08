@@ -27,6 +27,7 @@ import { useTeamSheet, useTeamSignalMode } from './teamMode';
 import { usePhotoCard } from '@features/photos/PhotoBottomCard';
 import { RallyPill, SosBanner } from './TeamField';
 import { TrailEditBar, useTrailEdit } from './TrailEditor';
+import { KeyboardLifted } from '@ui/components/KeyboardLifted';
 import { TeamPinCard } from './TeamPinCard';
 import { useTeamPick } from './TeamPick';
 import { TeamPinComposer, usePinDraft } from './TeamPinComposer';
@@ -133,7 +134,11 @@ export function TeamMapOverlay({
 
   return (
     <>
-      {editing && <TrailEditBar style={cardStyle} />}
+      {editing && (
+        <KeyboardLifted style={cardStyle}>
+          <TrailEditBar style={{}} />
+        </KeyboardLifted>
+      )}
       {/* An open SOS is pinned at the top for everyone, signal mode or not. */}
       <SosBanner top={sosTop} here={here} onNavigate={onNavigate} />
       {/* The rally point's pill: signal mode, no card up. */}
@@ -155,9 +160,9 @@ export function TeamMapOverlay({
         photoCard === null &&
         (sheet === null || sheet.kind === 'menu') && <TeamFab bottom={fabBottom} />}
       {draft !== null && (
-        <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
+        <KeyboardLifted style={cardStyle} testID="team-card-dock">
           <TeamPinComposer onPinned={(owner, id) => select({ kind: 'pin', owner, id })} />
-        </View>
+        </KeyboardLifted>
       )}
       {!editing && draft === null && card && sheet !== null && (
         <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">

@@ -15,10 +15,11 @@ import { PhotoTeamComments } from '@features/team/PhotoTeamComments';
 import { useLibraryStore } from '@state/libraryStore';
 import { useTeamStore } from '@state/teamStore';
 import { photosEditable, useTrailPhotosStore } from '@state/trailPhotosStore';
+import { KeyboardLifted, useKeyboardHeight } from '@ui/components/KeyboardLifted';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import * as Sharing from 'expo-sharing';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -32,7 +33,6 @@ import {
 import { Icon, IconButton, Text, TextInput } from 'react-native-paper';
 import { create } from 'zustand';
 
-import { keyboardLift, useKeyboardTop } from '../common/useKeyboardTop';
 import { formatPhotoWhen } from './photoText';
 import { photoFileUri } from './photoUri';
 import { shareablePhotoUri, UnshareablePhotoError, type ShareablePhoto } from './sharePhoto';
@@ -71,20 +71,10 @@ export function PhotoBottomCard() {
   );
   const threads = useTeamStore((s) => s.photoThreads);
 
-  // Lift the card over the keyboard, both platforms (an edge-to-edge Android
-  // window is not resized for it): by how much the keyboard's top edge is
-  // above the card's resting bottom edge. The untransformed outer view is
-  // the one measured, so the lift never feeds back into the measure.
-  const keyboardTop = useKeyboardTop();
-  const restRef = useRef<View>(null);
+  // Above the keyboard on both platforms (KeyboardLifted); shorter while it
+  // is up, the comments scrolling inside.
+  const keyboard = useKeyboardHeight();
   const scrollRef = useRef<ScrollView>(null);
-  const [lift, setLift] = useState(0);
-  const shownLift = keyboardTop === null ? 0 : lift;
-  useEffect(() => {
-    if (keyboardTop === null) return;
-    restRef.current?.measureInWindow((_x, y, _w, h) => setLift(keyboardLift(y + h, keyboardTop)));
-  }, [keyboardTop, windowH]);
-  const keyboard = keyboardTop === null ? 0 : Math.max(0, windowH - keyboardTop);
 
   // Swipe the head down to close. Up does nothing; the comments scroll.
   const pan = useMemo(
@@ -121,7 +111,7 @@ export function PhotoBottomCard() {
     .filter(Boolean)
     .join(' · ');
   return (
-    <View ref={restRef} collapsable={false}>
+    <KeyboardLifted>
       <View
         style={[
           styles.card,
@@ -129,7 +119,6 @@ export function PhotoBottomCard() {
             backgroundColor: t.elevation.level2,
             shadowColor: palette.shadow,
             maxHeight: Math.max(240, (windowH - keyboard) * 0.62),
-            transform: [{ translateY: -shownLift }],
           },
         ]}
         testID="photo-card"
@@ -186,7 +175,7 @@ export function PhotoBottomCard() {
           <PhotoTeamComments photoId={target.photoId} all />
         </ScrollView>
       </View>
-    </View>
+    </KeyboardLifted>
   );
 }
 

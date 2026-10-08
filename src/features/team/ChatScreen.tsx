@@ -8,6 +8,7 @@
  * Two tabs (owner 2026-10-07): "Team", the general channel, and "Threads",
  * the conversations that hang off a photo, a pin or a trail (ChatThreads).
  */
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { audienceChoices, findMentions } from '@core/teamui/compose';
 import type { ChatMessage } from '@core/teamui/view';
 import { teamService, useTeamStore } from '@state/teamStore';
@@ -16,16 +17,7 @@ import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import {
-  Alert,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Alert, FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { IconButton, Text, TextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -154,7 +146,7 @@ export function ChatScreen() {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
       style={[styles.flex, { backgroundColor: t.background, paddingTop: insets.top }]}
       testID="team-chat-screen"
     >
