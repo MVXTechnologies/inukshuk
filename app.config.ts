@@ -272,6 +272,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // Allow cleartext to loopback only, for the in-app HTTP server that serves the
     // MapLibre style during an offline-region download (see src/data/offline.ts).
     './plugins/withLocalhostCleartext',
+    // Android 12+: no splash hand-off to the app's main thread at launch; a late
+    // answer left the window stuck in its reveal animation (#643).
+    './plugins/withSplashNoExitTransfer',
+    // No emoji2 start-up initializer: it bound the app to Play services' fonts
+    // provider, so a Play services restart killed the app (#643).
+    './plugins/withoutEmojiCompatInitializer',
     // External GNSS receivers over Bluetooth (#588, modules/inukshuk-gnss):
     // Android 12+ Bluetooth permissions (scan never used for location),
     // optional Bluetooth hardware, the iOS purpose string and the

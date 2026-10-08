@@ -184,9 +184,31 @@ done
 adb shell content call --uri content://media --method scan_volume --arg external_primary \
   >/dev/null 2>&1 || true
 
+# Launch-health counters for the logcat of the attempt that just ran (#643):
+# - reveal stalls: WindowManager waiting out a window animation that never
+#   ends ("Timed out waiting for animations to complete … starting_reveal").
+#   Each synced Maestro input then costs 5 s; that was the store.yaml flake.
+# - native crashes of the app ("Fatal signal" in com.inukshuk.app).
+# - provider kills: Android killing the app because a content provider it
+#   holds died ("depends on provider … in dying proc"), e.g. Play services'
+#   FontsProvider when com.google.android.gms.persistent restarts.
+# A non-zero count is a defect even on a green flow, so it is annotated.
+launch_health() {
+  local log stalls crashes kills
+  HEALTH=
+  log=$(adb logcat -d 2>/dev/null || true)
+  stalls=$(grep -c 'Timed out waiting for animations to complete' <<< "$log" || true)
+  crashes=$(grep -E 'Fatal signal' <<< "$log" | grep -c 'om\.inukshuk\.app' || true)
+  kills=$(grep -E 'Killing [0-9]+:com\.inukshuk\.app/' <<< "$log" | grep -c 'depends on provider' || true)
+  if [ "${stalls:-0}" -gt 0 ] || [ "${crashes:-0}" -gt 0 ] || [ "${kills:-0}" -gt 0 ]; then
+    echo "::warning title=E2E launch health ($SHARD)::$1: $stalls window-animation stall(s), $crashes native crash(es), $kills provider kill(s) in logcat"
+  fi
+  HEALTH="${stalls:-0}/${crashes:-0}/${kills:-0}"
+}
+
 RC=0
 SYSTEM_BROKE=0
-SUMMARY="| Flow | Result | Time |"$'\n'"| --- | --- | --- |"
+SUMMARY="| Flow | Result | Time | Stalls/crashes/provider kills |"$'\n'"| --- | --- | --- | --- |"
 # Screenshots taken from here on are this run's; anything older is stale.
 SHOT_MARK=$(mktemp)
 RAN_PDF_OVERLAYS=0
@@ -197,13 +219,16 @@ for entry in "${FLOWS[@]}"; do
   [ "$name" = pdf-overlays ] && RAN_PDF_OVERLAYS=1
   if [ "$SYSTEM_BROKE" = 1 ]; then
     # Nothing that runs on a rebooted emulator counts.
-    SUMMARY+=$'\n'"| $name | NOT RUN (emulator system_server restarted) | |"
+    SUMMARY+=$'\n'"| $name | NOT RUN (emulator system_server restarted) | | |"
     continue
   fi
   started=$SECONDS
   adb logcat -c || true
+  health=
   if run_flow "$flow" "$own_location"; then
     result=PASS
+    launch_health "$name"
+    health=$HEALTH
   elif system_server_restarted "$name" "$flow"; then
     result="FAIL (infra: system_server restarted)"
     RC=1
@@ -213,9 +238,13 @@ for entry in "${FLOWS[@]}"; do
     # clean second run. Keep the FIRST failure's logcat either way, so a
     # retried-but-green flow still leaves evidence it flaked — and say so in
     # an annotation, so a flake is visible on a green run too.
+    launch_health "$name"
+    health=$HEALTH
     adb logcat -d > "logcat-failure-$name.txt" || true
     adb logcat -c || true
     if run_flow "$flow" "$own_location"; then
+      launch_health "$name (retry)"
+      health="$health, retry $HEALTH"
       result="PASS (on retry)"
       echo "::warning title=E2E flake ($SHARD)::$flow failed once and passed on retry; see logcat-failure-$name.txt in the shard's artifact"
     elif system_server_restarted "$name-retry" "$flow (retry)"; then
@@ -223,6 +252,8 @@ for entry in "${FLOWS[@]}"; do
       RC=1
       SYSTEM_BROKE=1
     else
+      launch_health "$name (retry)"
+      health="$health, retry $HEALTH"
       result=FAIL
       RC=1
       adb logcat -d > "logcat-failure-$name-retry.txt" || true
@@ -230,7 +261,7 @@ for entry in "${FLOWS[@]}"; do
   fi
   took=$((SECONDS - started))
   echo "=== $flow $result ($((took / 60))m$((took % 60))s) ==="
-  SUMMARY+=$'\n'"| $name | $result | $((took / 60))m$((took % 60))s |"
+  SUMMARY+=$'\n'"| $name | $result | $((took / 60))m$((took % 60))s | $health |"
 done
 rm -f "$GEO_RUN"
 
