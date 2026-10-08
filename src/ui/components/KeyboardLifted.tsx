@@ -5,16 +5,19 @@
  * for the keyboard nor told about it through React Native's own Keyboard
  * events, so docked inputs sat under the keys (2026-10-08).
  *
- * The view follows the keyboard's animated height (the library's Reanimated
- * shared value, the same source its KeyboardAvoidingView uses, which the CI
- * emulator proved), less the gap it already keeps above the window's bottom
- * edge, so a card docked over the tab bar rises only by what the keys would
- * hide. The gap is measured in window coordinates while the keyboard is down.
- * (Tried and rejected: useKeyboardState's visibility and KeyboardStickyView
- * did not move on Android; KeyboardAvoidingView "position" reads its frame
- * relative to its parent, so a docked card was off by the dock's offset.)
+ * When the keyboard's height changes, the (untransformed) outer view is
+ * measured where it is now — its dock can itself shift as the keyboard opens
+ * — and the content rises by how far the keyboard's top edge covers its
+ * bottom, following the library's Reanimated open/close progress.
+ *
+ * Found on the CI emulator with logged values (runs 37799431929, 37805821997):
+ * a lift from a gap measured once at rest came up short, because the dock
+ * moved after the keyboard opened, and measureInWindow is offset by the status
+ * bar on Android. Tried and rejected before that: KeyboardStickyView
+ * (plain-Animated values) and KeyboardAvoidingView "position" (frame read
+ * relative to its parent, wrong for a docked card).
  */
-import { useCallback, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 import {
   useKeyboardState,
@@ -23,7 +26,7 @@ import {
 } from 'react-native-keyboard-controller';
 import Reanimated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
-import { restGap } from '../keyboardLift';
+import { keyboardLift } from '../keyboardLift';
 
 /** The keyboard's height (0 when down): for sizing, not for moving views. */
 export function useKeyboardHeight(): number {
@@ -39,29 +42,25 @@ export function KeyboardLifted({
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }) {
-  const { height } = useReanimatedKeyboardAnimation();
+  const { progress } = useReanimatedKeyboardAnimation();
+  const keyboardHeight = useKeyboardHeight();
   const { height: windowH } = useWindowDimensions();
   const rest = useRef<View>(null);
-  const gap = useSharedValue(0);
-  const measure = useCallback(() => {
-    rest.current?.measureInWindow((_x, y, _w, h) => {
-      // Only at rest: while the keyboard is up the view has moved.
-      if (height.value === 0) gap.value = restGap(y + h, windowH);
+  const lift = useSharedValue(0);
+  useEffect(() => {
+    if (keyboardHeight <= 0) return;
+    // Screen coordinates (pageY), the frame the keyboard height and the
+    // library's window height use. Android's measureInWindow sits a status
+    // bar higher (48.76 dp on the CI emulator), so the lift came up short.
+    rest.current?.measure((_x, _y, _w, h, _pageX, pageY) => {
+      lift.value = keyboardLift(pageY + h, windowH - keyboardHeight);
     });
-  }, [height, gap, windowH]);
+  }, [keyboardHeight, windowH, lift]);
   const lifted = useAnimatedStyle(() => ({
-    // `height` is negative while the keyboard is up.
-    transform: [{ translateY: Math.min(0, height.value + gap.value) }],
+    transform: [{ translateY: -lift.value * progress.value }],
   }));
   return (
-    <View
-      ref={rest}
-      collapsable={false}
-      style={style}
-      pointerEvents="box-none"
-      testID={testID}
-      onLayout={measure}
-    >
+    <View ref={rest} collapsable={false} style={style} pointerEvents="box-none" testID={testID}>
       <Reanimated.View style={lifted} pointerEvents="box-none">
         {children}
       </Reanimated.View>

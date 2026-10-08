@@ -1,12 +1,14 @@
-import { restGap } from './keyboardLift';
+import { keyboardLift } from './keyboardLift';
 
-describe('restGap', () => {
-  it('is the distance to the window bottom less a margin', () => {
-    expect(restGap(800, 900)).toBe(92);
-    expect(restGap(800, 900, 0)).toBe(100);
+describe('keyboardLift', () => {
+  it('rises by how far the keyboard covers the bottom edge, plus a margin', () => {
+    // The CI emulator's pin composer (run 37805821997), in screen dp: bottom at
+    // 697.14 + 156.19, keyboard top at 914.29 - 336.38.
+    expect(keyboardLift(697.14 + 156.19, 914.29 - 336.38)).toBeCloseTo(283.42, 2);
+    expect(keyboardLift(853, 578, 0)).toBe(275);
   });
 
-  it('is never negative (a view already at the bottom edge rises by the whole keyboard)', () => {
-    expect(restGap(900, 900)).toBe(0);
+  it('stays put when the keyboard is already below the view', () => {
+    expect(keyboardLift(480, 578)).toBe(0);
   });
 });
