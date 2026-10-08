@@ -293,7 +293,7 @@ describe('alerts', () => {
       level: 'alert',
       kind: 'comment',
       text: 'Superbe vue au sommet !',
-      url: '/photo/tr1/ph1',
+      url: '/trail3d/tr1?photo=ph1',
     });
     expect(alertFor(owner.state, t, tBody, owner.id, ctx)).toMatchObject({
       level: 'alert',

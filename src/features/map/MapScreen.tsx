@@ -463,7 +463,7 @@ export function MapScreen() {
   }, []);
 
   // A photo tap opens the bottom card (owner 2026-10-07: not another page);
-  // the full-screen viewer is its expanded state.
+  // its comments and actions are in the card (no full-screen viewer).
   const openPhoto = useCallback((trackId: string, photoId: string) => {
     if (useTeamPick.getState().purpose !== null) {
       // Picking: my photo, by its team copy when shared, else its place.
@@ -998,7 +998,7 @@ export function MapScreen() {
     satelliteImagery,
     extensionStyle,
   ]);
-  const teamMarks = useTeamMapMarks(style.glyphs);
+  const teamMarks = useTeamMapMarks(style.glyphs, scaleAt?.zoom ?? null);
   const teamField = useTeamFieldLayers(style.glyphs);
   const teamTrailLayers = useTeamTrailLayers(style.glyphs);
   const teamMenuOpen = useTeamSheet((s) => s.sheet?.kind === 'menu');

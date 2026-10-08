@@ -38,19 +38,45 @@ export const PHOTO_CLUSTER_RADIUS = 34;
 export const PHOTO_CLUSTER_MAX_ZOOM = 18;
 /**
  * A stack that only splits past this zoom is photos a few metres apart (the
- * summit's 16): a tap opens them in the viewer instead of zooming in.
+ * summit's 16): a tap opens the first in the photo card instead of zooming in.
  */
 export const PHOTO_LEAVES_ZOOM = 18;
 
 /** Most sprites registered with the map at once (~70 KB of texture each). */
 export const MAX_SPRITES = 150;
 
-/** Circle size by zoom: a little smaller zoomed out, a little larger close in. */
-const SIZE_STOPS: readonly (readonly [number, number])[] = [
-  [12, 0.82],
+/**
+ * Circle size by zoom (owner 2026-10-07: "when I zoom in close to a photo it
+ * should get larger"): smaller over a whole trail, clearly larger at street
+ * zoom. Always a top-level `interpolate` on `["zoom"]` (nested in a match or
+ * case it crashes MapLibre iOS). Past 1.5 the 132 px sprite would upscale
+ * visibly on a 3× screen, so it stops there.
+ */
+export const PHOTO_SIZE_STOPS: readonly (readonly [number, number])[] = [
+  [12, 0.8],
   [15, 0.95],
-  [17, 1.05],
+  [17, 1.25],
+  [18.5, 1.5],
 ];
+const SIZE_STOPS = PHOTO_SIZE_STOPS;
+
+/**
+ * The photo circles' scale at `zoom` (the same stops, linear between them):
+ * for what must follow them but can't take a zoom expression, like a badge's
+ * `circle-translate` (MapLibre iOS's RN bridge crashes on an expression there).
+ */
+export function photoScaleAt(zoom: number): number {
+  const first = PHOTO_SIZE_STOPS[0]!;
+  const last = PHOTO_SIZE_STOPS[PHOTO_SIZE_STOPS.length - 1]!;
+  if (zoom <= first[0]) return first[1];
+  if (zoom >= last[0]) return last[1];
+  for (let i = 1; i < PHOTO_SIZE_STOPS.length; i++) {
+    const [z1, s1] = PHOTO_SIZE_STOPS[i]!;
+    const [z0, s0] = PHOTO_SIZE_STOPS[i - 1]!;
+    if (zoom <= z1) return s0 + ((s1 - s0) * (zoom - z0)) / (z1 - z0);
+  }
+  return last[1];
+}
 
 function sizeBy(scale: number): ExpressionSpecification {
   return ['interpolate', ['linear'], ['zoom'], ...SIZE_STOPS.flatMap(([z, s]) => [z, s * scale])];
@@ -135,7 +161,7 @@ export function countLayout(): SymbolLayout {
 export function selectedRingLayout(): SymbolLayout {
   return {
     'icon-image': SELECTED_RING_IMAGE,
-    'icon-size': BUNDLED_3X,
+    'icon-size': sizeBy(BUNDLED_3X),
     'icon-allow-overlap': true,
     'icon-ignore-placement': true,
   };
@@ -145,7 +171,7 @@ export function selectedRingLayout(): SymbolLayout {
 export function selectedSpriteLayout(prefix: string): SymbolLayout {
   return {
     'icon-image': ['concat', prefix, ['to-string', ['get', 'order']]],
-    'icon-size': SELECTED_SCALE,
+    'icon-size': sizeBy(SELECTED_SCALE),
     'icon-allow-overlap': true,
     'icon-ignore-placement': true,
   };

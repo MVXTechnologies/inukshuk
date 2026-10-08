@@ -1,5 +1,5 @@
 /**
- * The team's comments on a photo, in the photo viewer (#589 + #587): shown
+ * The team's comments on a photo, in the photo card (#589 + #587): shown
  * when the photo is shared with the open team. Author, team colour, role and
  * time, newest last, a box to reply, and the tasks made from them with
  * `+task @name …` (anchored to this photo) as chips.
@@ -14,7 +14,14 @@ import { sendTeamComment } from './taskSend';
 import { TeamComments } from './TeamComments';
 import { useToggleTask } from './useToggleTask';
 
-export function PhotoTeamComments({ photoId }: { photoId: string }) {
+export function PhotoTeamComments({
+  photoId,
+  all = false,
+}: {
+  photoId: string;
+  /** Every comment (the photo card scrolls them), not just the last four. */
+  all?: boolean;
+}) {
   const t = useSchemeTokens();
   const view = useTeamStore((s) => s.view);
   const photo = useTeamStore((s) => s.photos.find((p) => p.id === photoId));
@@ -44,7 +51,7 @@ export function PhotoTeamComments({ photoId }: { photoId: string }) {
         </Text>
       </View>
       <TeamComments
-        comments={comments.slice(-4)}
+        comments={all ? comments : comments.slice(-4)}
         members={view.members}
         me={view.me}
         canWrite={view.active && !view.readOnly}

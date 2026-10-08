@@ -40,23 +40,22 @@ appId: com.inukshuk.app
     timeout: 15000
 - takeScreenshot: review-photos-timeline-${THEME}
 
-# The viewer (the stage is always black; the info sheet follows the theme).
+# The photo card (the map stays above it; no full-screen viewer).
 - tapOn: 'Overview'
 - scrollUntilVisible:
     element: 'Photo 1 of [0-9]+.*'
     direction: DOWN
     timeout: 15000
 - tapOn: 'Photo 1 of [0-9]+.*'
-# A photo tap opens its bottom card; the viewer is its full-screen state.
-- tapOn:
-    id: 'photo-card-full'
 - extendedWaitUntil:
-    visible: 'Show on map'
+    visible:
+      id: 'photo-card'
     timeout: 15000
 - waitForAnimationToEnd:
     timeout: 3000
-- takeScreenshot: review-photos-viewer-${THEME}
-- tapOn: 'Close'
+- takeScreenshot: review-photos-card-${THEME}
+- tapOn:
+    id: 'photo-card-close'
 - extendedWaitUntil:
     visible: 'Trail layers'
     timeout: 15000

@@ -34,6 +34,7 @@ const mockNavigate = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ navigate: mockNavigate, push: jest.fn(), back: jest.fn() }),
   useLocalSearchParams: () => ({}),
+  useFocusEffect: (effect: () => void) => jest.requireActual('react').useEffect(effect, [effect]),
 }));
 const mockGpx: { current: string } = { current: '' };
 jest.mock('@data/storage', () => ({

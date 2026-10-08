@@ -21,6 +21,8 @@ import {
   spritePrefix,
   stackTapAction,
   touchSprites,
+  PHOTO_SIZE_STOPS,
+  photoScaleAt,
 } from './mapStyle';
 import type { TrackPhoto } from './model';
 import { PHOTO_CLUSTER_PROPERTIES } from './stack';
@@ -58,6 +60,24 @@ it('emits valid layers and a valid clustered source', () => {
     ]),
   );
   expect(errors).toEqual([]);
+});
+
+it('grows the photos with zoom: clearly larger close in, one top-level interpolate', () => {
+  const sizes = PHOTO_SIZE_STOPS.map(([, k]) => k);
+  for (let i = 1; i < sizes.length; i++) expect(sizes[i]!).toBeGreaterThan(sizes[i - 1]!);
+  expect(sizes.at(-1)! / sizes[0]!).toBeGreaterThanOrEqual(1.8);
+  for (const layout of [spriteLayout('p-'), selectedSpriteLayout('p-'), selectedRingLayout()]) {
+    const size = layout['icon-size'] as unknown[];
+    expect(size.slice(0, 3)).toEqual(['interpolate', ['linear'], ['zoom']]);
+  }
+});
+
+it('gives the same scale in JS for what cannot take a zoom expression', () => {
+  const [first, mid, , last] = PHOTO_SIZE_STOPS;
+  expect(photoScaleAt(first![0] - 3)).toBe(first![1]);
+  expect(photoScaleAt(mid![0])).toBe(mid![1]);
+  expect(photoScaleAt(last![0] + 2)).toBe(last![1]);
+  expect(photoScaleAt((first![0] + mid![0]) / 2)).toBeCloseTo((first![1] + mid![1]) / 2, 6);
 });
 
 it('never uses a symbol sort key', () => {

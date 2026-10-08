@@ -1,24 +1,41 @@
 /**
- * A tapped photo as a bottom card (owner 2026-10-07: "not another page"):
- * the photo, its caption, when and where on the trail, the team's latest
- * comment, and actions. The map stays visible above it. Swipe down to close;
- * swipe up (or tap the photo) for the full-screen viewer, its expanded state.
+ * A tapped photo as a bottom card (owner 2026-10-07: "not another page"; and
+ * later the same day, of the full-screen viewer: "I hate that view. forget
+ * it."). Everything is here: the photo, its caption, when and where on the
+ * trail, the team's comments with the reply box (+task, resolve), and for my
+ * own photos Caption / Share / Hide / Remove. The map stays visible above.
+ * The comments scroll inside the card; swipe the card's head down to close
+ * (a swipe up does nothing). Above the iOS keyboard while typing.
  * A plain themed View (paper-surface-ios-flex-collapse).
  */
 import type { TrackPhoto } from '@core/photos/model';
-import { trailUrl } from '@core/teamui/alerts';
-import { teamService, useTeamStore } from '@state/teamStore';
-import { useTrailPhotosStore } from '@state/trailPhotosStore';
+import { isNotePhoto } from '@core/photos/model';
+import { photoEditFailureMessage } from '@core/photos/status';
+import { PhotoTeamComments } from '@features/team/PhotoTeamComments';
+import { useLibraryStore } from '@state/libraryStore';
+import { useTeamStore } from '@state/teamStore';
+import { photosEditable, useTrailPhotosStore } from '@state/trailPhotosStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo } from 'react';
-import { Image, PanResponder, Pressable, StyleSheet, View } from 'react-native';
-import { Icon, IconButton, Text } from 'react-native-paper';
+import * as Sharing from 'expo-sharing';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Alert,
+  Image,
+  PanResponder,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { Icon, IconButton, Text, TextInput } from 'react-native-paper';
 import { create } from 'zustand';
 
+import { useIosKeyboardHeight } from '../common/useIosKeyboardHeight';
 import { formatPhotoWhen } from './photoText';
-import { photoFileUri, photoViewerHref } from './photoUri';
+import { photoFileUri } from './photoUri';
+import { shareablePhotoUri, UnshareablePhotoError, type ShareablePhoto } from './sharePhoto';
 
 export type PhotoCardTarget =
   | { kind: 'own'; trackId: string; photoId: string }
@@ -26,24 +43,19 @@ export type PhotoCardTarget =
 
 export const usePhotoCard = create<{
   target: PhotoCardTarget | null;
-  /** Bumped by a swipe up: the card opens the full-screen viewer. */
-  expandAt: number;
   show: (t: PhotoCardTarget) => void;
   close: () => void;
-  expand: () => void;
 }>((set) => ({
   target: null,
-  expandAt: 0,
   show: (target) => set({ target }),
   close: () => set({ target: null }),
-  expand: () => set({ expandAt: Date.now() }),
 }));
 
 const SWIPE = 40;
 
 export function PhotoBottomCard() {
   const t = useSchemeTokens();
-  const router = useRouter();
+  const { height: windowH } = useWindowDimensions();
   const target = usePhotoCard((s) => s.target);
   const close = usePhotoCard((s) => s.close);
   const own = useTrailPhotosStore((s) =>
@@ -51,34 +63,37 @@ export function PhotoBottomCard() {
       ? s.byTrack[target.trackId]?.photos.find((p) => p.id === target.photoId)
       : undefined,
   );
+  const ownStatus = useTrailPhotosStore((s) =>
+    target?.kind === 'own' ? s.byTrack[target.trackId]?.status : undefined,
+  );
   const teamPhoto = useTeamStore((s) =>
     target ? s.photos.find((p) => p.id === target.photoId) : undefined,
   );
   const threads = useTeamStore((s) => s.photoThreads);
-  const view = useTeamStore((s) => s.view);
 
-  const expandAt = usePhotoCard((s) => s.expandAt);
-  const full = useCallback(() => {
-    if (!target) return;
-    close();
-    if (target.kind === 'own')
-      router.push(photoViewerHref(target.trackId, target.photoId) as never);
-    else
-      router.push(trailUrl(target.owner, target.trackId, view?.me ?? '', target.photoId) as never);
-  }, [target, close, router, view?.me]);
+  // Lift the card over the iOS keyboard (Android resizes the window): by how
+  // much the keyboard reaches above the card's resting bottom edge.
+  const keyboard = useIosKeyboardHeight();
+  const cardRef = useRef<View>(null);
+  const [lift, setLift] = useState(0);
+  const shownLift = keyboard === 0 ? 0 : lift;
   useEffect(() => {
-    if (expandAt > 0) full();
-    // Only a new swipe up expands.
+    if (keyboard === 0) return;
+    cardRef.current?.measureInWindow((_x, y, _w, h) => {
+      const below = windowH - (y + h) - shownLift;
+      setLift(Math.max(0, keyboard - below));
+    });
+    // Only a keyboard change re-measures (lift itself moves the card).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expandAt]);
+  }, [keyboard, windowH]);
+
+  // Swipe the head down to close. Up does nothing; the comments scroll.
   const pan = useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_e, g) =>
-          Math.abs(g.dy) > 8 && Math.abs(g.dy) > Math.abs(g.dx),
+        onMoveShouldSetPanResponder: (_e, g) => g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx),
         onPanResponderRelease: (_e, g) => {
           if (g.dy > SWIPE) usePhotoCard.getState().close();
-          else if (g.dy < -SWIPE) usePhotoCard.getState().expand();
         },
       }),
     [],
@@ -99,17 +114,6 @@ export function PhotoBottomCard() {
           km: null,
         };
   const said = threads.get(target.photoId) ?? [];
-  const lastComment =
-    said.length > 0 ? teamService()?.active?.photoComments(target.photoId).at(-1) : undefined;
-  const last = lastComment
-    ? {
-        text: lastComment.text,
-        name:
-          lastComment.author === view?.me
-            ? 'You'
-            : (view?.members.find((m) => m.id === lastComment.author)?.name ?? 'A teammate'),
-      }
-    : undefined;
   const sub = [
     photo.takenAt ? formatPhotoWhen(photo.takenAt) : null,
     photo.km !== null ? `km ${photo.km.toFixed(1)}` : null,
@@ -119,56 +123,217 @@ export function PhotoBottomCard() {
     .join(' · ');
   return (
     <View
-      style={[styles.card, { backgroundColor: t.elevation.level2, shadowColor: palette.shadow }]}
-      {...pan.panHandlers}
+      ref={cardRef}
+      style={[
+        styles.card,
+        {
+          backgroundColor: t.elevation.level2,
+          shadowColor: palette.shadow,
+          maxHeight: Math.max(240, (windowH - keyboard) * 0.62),
+          transform: [{ translateY: -shownLift }],
+        },
+      ]}
       testID="photo-card"
     >
-      <View style={[styles.grabber, { backgroundColor: t.outlineVariant }]} />
-      <View style={styles.row}>
-        <Pressable
-          onPress={() => full()}
-          accessibilityRole="imagebutton"
-          accessibilityLabel="Open the photo full screen"
-          testID="photo-card-image"
-        >
+      <View {...pan.panHandlers} style={styles.head}>
+        <View style={[styles.grabber, { backgroundColor: t.outlineVariant }]} />
+        <View style={styles.row}>
           {photo.uri ? (
-            <Image source={{ uri: photo.uri }} style={styles.thumb} />
+            <Image
+              source={{ uri: photo.uri }}
+              style={styles.thumb}
+              accessibilityIgnoresInvertColors
+              testID="photo-card-image"
+            />
           ) : (
             <View style={[styles.thumb, { backgroundColor: t.surfaceVariant }]} />
           )}
-        </Pressable>
-        <View style={styles.flex}>
-          <Text variant="titleSmall" style={{ color: t.ink }} numberOfLines={2}>
-            {photo.caption ?? 'Photo'}
-          </Text>
-          {sub ? (
-            <Text variant="bodySmall" style={{ color: t.inkVariant }} numberOfLines={2}>
-              {sub}
+          <View style={styles.flex}>
+            <Text variant="titleSmall" style={{ color: t.ink }} numberOfLines={2}>
+              {photo.caption ?? 'Photo'}
             </Text>
-          ) : null}
-          {last && (
-            <Text variant="bodySmall" style={{ color: t.ink }} numberOfLines={1}>
-              {`${last.name}: ${last.text}`}
-            </Text>
-          )}
-        </View>
-        <View>
-          <IconButton icon="close" size={20} onPress={close} accessibilityLabel="Close" />
+            {sub ? (
+              <Text variant="bodySmall" style={{ color: t.inkVariant }} numberOfLines={2}>
+                {sub}
+              </Text>
+            ) : null}
+          </View>
           <IconButton
-            icon="arrow-expand"
+            icon="close"
             size={20}
-            onPress={() => full()}
-            accessibilityLabel="Full screen"
-            testID="photo-card-full"
+            onPress={close}
+            accessibilityLabel="Close"
+            testID="photo-card-close"
           />
         </View>
       </View>
-      <View style={styles.hint}>
-        <Icon source="gesture-swipe-vertical" size={14} color={t.inkMuted} />
-        <Text variant="labelSmall" style={{ color: t.inkMuted }}>
-          Swipe up for the photo and its comments · down to close
-        </Text>
+      {target.kind === 'own' && own && (
+        <OwnPhotoActions
+          trackId={target.trackId}
+          photo={own}
+          editable={photosEditable(ownStatus) && !isNotePhoto(own)}
+        />
+      )}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollBody}
+        keyboardShouldPersistTaps="handled"
+        testID="photo-card-scroll"
+      >
+        <PhotoTeamComments photoId={target.photoId} all />
+      </ScrollView>
+    </View>
+  );
+}
+
+/** My own photo: Caption (inline), Share, Hide from the map, Remove. */
+function OwnPhotoActions({
+  trackId,
+  photo,
+  editable,
+}: {
+  trackId: string;
+  photo: TrackPhoto;
+  editable: boolean;
+}) {
+  const t = useSchemeTokens();
+  const trackName = useLibraryStore((s) => s.tracks.find((x) => x.id === trackId)?.name);
+  const [captioning, setCaptioning] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = async (label: string, job: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await job();
+    } catch (err) {
+      setError(photoEditFailureMessage(err, `Could not ${label}`));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const saveCaption = () => {
+    const caption = captioning ?? '';
+    setCaptioning(null);
+    void run('save the caption', () =>
+      useTrailPhotosStore.getState().editPhoto(trackId, photo.id, { caption }),
+    );
+  };
+  const share = async () => {
+    if (!(await Sharing.isAvailableAsync())) {
+      setError('Sharing is not available on this device');
+      return;
+    }
+    // The kept copy carries no location; it is checked again before it leaves.
+    let shareable: ShareablePhoto | null = null;
+    try {
+      shareable = await shareablePhotoUri(photo);
+      await Sharing.shareAsync(shareable.uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg' });
+    } catch (err) {
+      setError(err instanceof UnshareablePhotoError ? err.message : 'Could not share the photo');
+    } finally {
+      shareable?.dispose();
+    }
+  };
+  const remove = () =>
+    Alert.alert(
+      'Remove photo',
+      `Remove this photo from "${trackName ?? 'the trail'}"? Inukshuk's copy is deleted. The photo in your phone's library is not touched.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            usePhotoCard.getState().close();
+            void run('remove the photo', () =>
+              useTrailPhotosStore.getState().removePhoto(trackId, photo.id),
+            );
+          },
+        },
+      ],
+    );
+
+  if (captioning !== null)
+    return (
+      <View style={styles.captionRow}>
+        <TextInput
+          mode="outlined"
+          dense
+          style={styles.flex}
+          value={captioning}
+          onChangeText={setCaptioning}
+          placeholder="What is in this photo?"
+          autoFocus
+          maxLength={200}
+          returnKeyType="done"
+          onSubmitEditing={saveCaption}
+          testID="photo-card-caption-input"
+        />
+        <IconButton
+          icon="check"
+          mode="contained"
+          onPress={saveCaption}
+          accessibilityLabel="Save"
+          testID="photo-card-caption-save"
+        />
+        <IconButton icon="close" onPress={() => setCaptioning(null)} accessibilityLabel="Cancel" />
       </View>
+    );
+  const action = (
+    icon: string,
+    label: string,
+    onPress: () => void,
+    testID: string,
+    enabled = true,
+  ) => (
+    <Pressable
+      key={testID}
+      onPress={enabled && !busy ? onPress : undefined}
+      disabled={!enabled || busy}
+      style={[styles.action, { borderColor: t.outlineVariant, opacity: enabled ? 1 : 0.4 }]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !enabled || busy }}
+      testID={testID}
+    >
+      <Icon source={icon} size={18} color={t.ink} />
+      <Text variant="labelMedium" style={{ color: t.ink }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+  return (
+    <View style={styles.actionsWrap}>
+      <View style={styles.actions}>
+        {action(
+          'pencil-outline',
+          'Caption',
+          () => setCaptioning(photo.caption ?? ''),
+          'photo-card-caption',
+          editable,
+        )}
+        {action('share-variant', 'Share', () => void share(), 'photo-card-share')}
+        {action(
+          photo.hidden ? 'eye-outline' : 'eye-off-outline',
+          photo.hidden ? 'Show' : 'Hide',
+          () =>
+            void run(photo.hidden ? 'show the photo' : 'hide the photo', () =>
+              useTrailPhotosStore
+                .getState()
+                .editPhoto(trackId, photo.id, { hidden: !photo.hidden }),
+            ),
+          'photo-card-hide',
+          editable,
+        )}
+        {action('trash-can-outline', 'Remove', remove, 'photo-card-remove', editable)}
+      </View>
+      {error !== null && (
+        <Text variant="bodySmall" style={{ color: t.status.gpsLostInk }}>
+          {error}
+        </Text>
+      )}
     </View>
   );
 }
@@ -187,8 +352,22 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -2 },
     elevation: 8,
   },
+  head: { gap: 8 },
   grabber: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   thumb: { width: 112, height: 84, borderRadius: 12 },
-  hint: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'center' },
+  actionsWrap: { gap: 4 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  action: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  captionRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  scroll: { flexGrow: 0 },
+  scrollBody: { paddingBottom: 4 },
 });

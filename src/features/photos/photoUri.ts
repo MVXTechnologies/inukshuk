@@ -9,8 +9,3 @@ import { resolveDocumentPath } from '@data/storage';
 export function photoFileUri(path: string): string {
   return resolveDocumentPath(path);
 }
-
-/** The viewer route for one of a trail's photos. */
-export function photoViewerHref(trackId: string, photoId: string): string {
-  return `/photo/${encodeURIComponent(trackId)}/${encodeURIComponent(photoId)}`;
-}

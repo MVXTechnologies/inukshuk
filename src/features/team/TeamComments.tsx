@@ -1,7 +1,7 @@
 /**
  * Team comments on a shared trail or photo (#589): who, in their team colour
  * and role, when, what — and a box to add one. Used by the team's trail
- * screen and the photo viewer. Comments are signed team ops; the core
+ * screen and the photo card. Comments are signed team ops; the core
  * decides who can see and write them.
  */
 import { canCompleteTask, type TeamTask } from '@core/team/tasks';

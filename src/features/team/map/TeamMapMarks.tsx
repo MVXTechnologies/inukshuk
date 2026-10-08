@@ -11,6 +11,7 @@
  * (`queryRenderedFeatures` on these layers): a mark's action, or a cluster
  * (zoom in to where it splits; at the cluster limit, a list of its marks).
  */
+import { photoScaleAt } from '@core/photos/mapStyle';
 import { teamMapMarks, type BubbleMark, type PinMark, type TaskMark } from '@core/teamui/mapMarks';
 import { useExtensionPrefs } from '@features/extensions/prefs';
 import { GeoJSONSource, type GeoJSONSourceRef, Layer } from '@maplibre/maplibre-react-native';
@@ -29,6 +30,9 @@ export const MARK_LAYERS = [
   'team-mark-bubble',
   'team-mark-task',
 ];
+/** A badge's number: 1–99, then "99+" (three characters at most). */
+const badgeLabel = (n: number): string => (n > 99 ? '99+' : String(n));
+
 /** Below this zoom tasks only count in clusters (their labels crowd a wide view). */
 export const TASK_LABEL_MIN_ZOOM = 12;
 export const CLUSTER_RADIUS = 45;
@@ -109,7 +113,9 @@ export async function clusterMarks(id: number): Promise<TeamMarkHit[]> {
 }
 
 /** The marks as MapView children (an array), for the map's glyph host. */
-export function useTeamMapMarks(glyphs: string | undefined): ReactElement[] {
+export function useTeamMapMarks(glyphs: string | undefined, zoom: number | null): ReactElement[] {
+  // The photos' scale, in quarter-zoom steps (the badges beside them follow).
+  const photoK = photoScaleAt(Math.round((zoom ?? 15) * 4) / 4);
   const t = useSchemeTokens();
   const { installedAt, show } = useExtensionPrefs('team');
   const view = useTeamStore((s) => s.view);
@@ -148,7 +154,7 @@ export function useTeamMapMarks(glyphs: string | undefined): ReactElement[] {
       features.push({
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [b.photo.lng, b.photo.lat] },
-        properties: { key, kind: 'bubble', fresh: b.fresh ? 1 : 0, label: String(b.count) },
+        properties: { key, kind: 'bubble', fresh: b.fresh ? 1 : 0, label: badgeLabel(b.count) },
       });
     }
     for (const p of marks.pins) {
@@ -164,7 +170,7 @@ export function useTeamMapMarks(glyphs: string | undefined): ReactElement[] {
           fresh: p.fresh ? 1 : 0,
           color: m?.color ?? t.inkMuted,
           initials: m?.initials ?? '?',
-          label: String(p.count),
+          label: badgeLabel(p.count),
         },
       });
     }
@@ -194,6 +200,19 @@ export function useTeamMapMarks(glyphs: string | undefined): ReactElement[] {
     const ofKind = (k: string) => ['all', notCluster, ['==', ['get', 'kind'], k]];
     const freshColor = ['case', ['==', ['get', 'fresh'], 1], t.team.bubbleNew, t.team.mapPaper];
     const freshInk = ['case', ['==', ['get', 'fresh'], 1], t.team.bubbleNewInk, t.team.mapInk];
+    // A badge's circle and its number share one pixel offset (a text-offset in
+    // ems drifted off the circle's px translate: the number sat off-centre).
+    // Beside its photo, which grows with zoom: a constant per zoom step (the
+    // iOS bridge crashes on an expression for circle-translate).
+    const bubbleAt = [18 * photoK, -18 * photoK];
+    const pinBadgeAt = [14, -14];
+    // Wide enough for "99+": the circle grows with the label, not the other way.
+    const badgeR = (r: number) => [
+      'case',
+      ['>', ['length', ['to-string', ['get', 'label']]], 2],
+      r + 3,
+      r,
+    ];
     const out: ReactElement[] = [
       <Layer
         key="cluster"
@@ -230,8 +249,8 @@ export function useTeamMapMarks(glyphs: string | undefined): ReactElement[] {
         type="circle"
         filter={ofKind('pin') as never}
         paint={{
-          'circle-radius': 8,
-          'circle-translate': [14, -14],
+          'circle-radius': badgeR(8) as never,
+          'circle-translate': pinBadgeAt as never,
           'circle-color': freshColor as never,
           'circle-stroke-width': 1.5,
           'circle-stroke-color': t.team.mapInk,
@@ -243,8 +262,8 @@ export function useTeamMapMarks(glyphs: string | undefined): ReactElement[] {
         type="circle"
         filter={ofKind('bubble') as never}
         paint={{
-          'circle-radius': 10,
-          'circle-translate': [18, -18],
+          'circle-radius': badgeR(10) as never,
+          'circle-translate': bubbleAt as never,
           'circle-color': freshColor as never,
           'circle-stroke-width': 1.5,
           'circle-stroke-color': t.team.mapInk,
@@ -297,11 +316,11 @@ export function useTeamMapMarks(glyphs: string | undefined): ReactElement[] {
             'text-field': ['get', 'label'] as never,
             'text-font': font,
             'text-size': 10,
-            'text-offset': [1.4, -1.4],
+            'text-anchor': 'center',
             'text-allow-overlap': true,
             'text-ignore-placement': true,
           }}
-          paint={{ 'text-color': freshInk as never }}
+          paint={{ 'text-color': freshInk as never, 'text-translate': pinBadgeAt as never }}
         />,
         <Layer
           key="bubble-count"
@@ -312,11 +331,11 @@ export function useTeamMapMarks(glyphs: string | undefined): ReactElement[] {
             'text-field': ['get', 'label'] as never,
             'text-font': font,
             'text-size': 11,
-            'text-offset': [1.8, -1.8],
+            'text-anchor': 'center',
             'text-allow-overlap': true,
             'text-ignore-placement': true,
           }}
-          paint={{ 'text-color': freshInk as never }}
+          paint={{ 'text-color': freshInk as never, 'text-translate': bubbleAt as never }}
         />,
         <Layer
           key="task"
@@ -341,7 +360,7 @@ export function useTeamMapMarks(glyphs: string | undefined): ReactElement[] {
       );
     }
     return out;
-  }, [font, t]);
+  }, [font, t, photoK]);
 
   const on = installedAt !== 0 && show && data !== null && data.features.length > 0;
   if (!on) return [];

@@ -109,9 +109,12 @@ const cap = (s: string) => (s.length > MAX_ALERT_TITLE ? `${s.slice(0, MAX_ALERT
 
 export const TASKS_URL = '/team/tasks';
 
-/** Where a shared trail opens: my own in the Library's trail view, a teammate's in the team's. */
+/**
+ * Where a shared trail opens: my own in the Library's trail view (a photo:
+ * its card there), a teammate's in the team's.
+ */
 export function trailUrl(owner: string, trackId: string, me: string, photoId?: string): string {
-  if (owner === me) return photoId ? `/photo/${trackId}/${photoId}` : `/trail3d/${trackId}`;
+  if (owner === me) return photoId ? `/trail3d/${trackId}?photo=${photoId}` : `/trail3d/${trackId}`;
   const q = photoId ? `?photo=${photoId}` : '';
   return `/team/trail/${owner}/${trackId}${q}`;
 }

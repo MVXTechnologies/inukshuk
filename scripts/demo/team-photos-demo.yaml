@@ -128,20 +128,22 @@ appId: com.inukshuk.app
 - runFlow:
     when:
       notVisible:
-        id: 'photo-viewer'
+        id: 'photo-card'
     commands:
       - tapOn:
           id: 'team-alert-banner'
+          optional: true
 - extendedWaitUntil:
     visible:
-      id: 'photo-viewer'
+      id: 'photo-card'
     timeout: 10000
 - extendedWaitUntil:
     visible:
       id: 'photo-team-comments'
     timeout: 10000
 - takeScreenshot: 04-photo-with-comment
-- tapOn: 'Close'
+- tapOn:
+    id: 'photo-card-close'
 - tapOn: '.*Mont-Sainte-Anne · sentier du sommet.*'
 - extendedWaitUntil:
     visible:

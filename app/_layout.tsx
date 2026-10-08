@@ -138,11 +138,6 @@ export default function RootLayout() {
                 >
                   <Stack.Screen name="(tabs)" />
                   <Stack.Screen name="trail3d/[id]" />
-                  {/* Trail photos (#587): the full-screen viewer, always on black. */}
-                  <Stack.Screen
-                    name="photo/[trackId]/[photoId]"
-                    options={{ contentStyle: { backgroundColor: 'black' }, animation: 'fade' }}
-                  />
                   <Stack.Screen name="settings" />
                   {/* Logbook statistics: Statistics, Personal records, Year in review. */}
                   <Stack.Screen name="logbook/stats" />
