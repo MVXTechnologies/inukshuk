@@ -251,9 +251,16 @@ appId: com.inukshuk.app
     notVisible:
       id: 'team-status-card'
     timeout: 5000
-# A pin: + → Pin a team message, its card with the thread.
-- tapOn: 'Map actions'
-- tapOn: 'Pin a team message'
+# A pin: a long-press on the map → Message pin, its card with the thread
+# (pins are made from a spot on the map, not from a menu).
+- longPressOn:
+    point: '50%,55%'
+- extendedWaitUntil:
+    visible:
+      id: 'team-press-card'
+    timeout: 5000
+- tapOn:
+    id: 'team-press-pin'
 - extendedWaitUntil:
     visible:
       id: 'team-pin-composer'
@@ -270,11 +277,27 @@ appId: com.inukshuk.app
 - assertVisible: '.*Fallen tree here.*'
 - takeScreenshot: team-pin
 - tapOn: 'Close'
-# Leave the team (deletes it from this phone): the menu's Members & team.
+# Team chat → Threads: the pin's conversation, apart from the channel.
 - tapOn:
     id: 'team-fab'
 - tapOn:
-    id: 'team-fab-members'
+    id: 'team-fab-chat'
+- extendedWaitUntil:
+    visible:
+      id: 'team-chat-screen'
+    timeout: 5000
+- tapOn:
+    id: 'team-chat-tab-threads'
+- extendedWaitUntil:
+    visible: '.*Fallen tree here.*'
+    timeout: 5000
+- takeScreenshot: team-threads
+- tapOn: 'Back'
+# Leave the team (deletes it from this phone): the menu's Manage team.
+- tapOn:
+    id: 'team-fab'
+- tapOn:
+    id: 'team-fab-manage'
 - extendedWaitUntil:
     visible:
       id: 'team-hub-screen'

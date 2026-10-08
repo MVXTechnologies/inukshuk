@@ -619,7 +619,17 @@ export function TeamFab({ bottom }: { bottom: number }) {
   const myStatus = useTeamStore((s) => (me ? s.statuses.get(me)?.id : undefined));
   const guest = useTeamStore((s) => s.view?.members.find((m) => m.isMe)?.role === 'guest');
   const menuOpen = sheet?.kind === 'menu';
-  const resolvedCount = useTeamStore((s) => s.resolved.size);
+  const threadsUnread = useTeamStore((s) => s.threadsUnread);
+  const myOpenTasks = useTeamStore(
+    (s) => s.tasks.filter((x) => !x.done && x.assignee === me).length,
+  );
+  const go = (href: string) => () => {
+    close();
+    router.push(href as never);
+  };
+  // Owner, 2026-10-07: exactly these six, in this order. A new task starts
+  // from the task list (or a tap on the map); pins from a spot on the map.
+  const chatUnread = unread + threadsUnread;
   const items: [string, string, () => void, string, string?][] = [
     ['hand-back-left', 'SOS · hold', () => open({ kind: 'sos' }), 'team-fab-sos', t.team.sos],
     [
@@ -628,21 +638,12 @@ export function TeamFab({ bottom }: { bottom: number }) {
       () => open({ kind: 'status' }),
       'team-fab-status',
     ],
-    [
-      'bell-ring-outline',
-      'Notify someone',
-      () => {
-        close();
-        useTeamPick.getState().start('notify');
-      },
-      'team-fab-notify',
-    ],
     ...(guest
       ? []
       : ([
           [
             'flag-variant',
-            'Rally point',
+            'Rally team',
             () => {
               close();
               useTeamPick.getState().start('rally');
@@ -651,54 +652,18 @@ export function TeamFab({ bottom }: { bottom: number }) {
           ],
         ] as [string, string, () => void, string][])),
     [
-      'map-marker-account-outline',
-      'Message pin',
-      () => {
-        close();
-        useTeamPick.getState().start('pin');
-      },
-      'team-fab-pin',
+      'format-list-checks',
+      myOpenTasks > 0 ? `Task list · ${myOpenTasks}` : 'Task list',
+      go('/team/tasks'),
+      'team-fab-tasks',
     ],
-    ...(guest
-      ? []
-      : ([
-          [
-            'checkbox-marked-circle-plus-outline',
-            'New task',
-            () => {
-              close();
-              router.push('/team/task-new' as never);
-            },
-            'team-fab-task',
-          ],
-        ] as [string, string, () => void, string][])),
     [
       'message-text-outline',
-      unread > 0 ? `Team chat · ${unread}` : 'Team chat',
-      () => {
-        close();
-        router.push('/team/chat');
-      },
+      chatUnread > 0 ? `Team chat · ${chatUnread}` : 'Team chat',
+      go('/team/chat'),
       'team-fab-chat',
     ],
-    [
-      'check-all',
-      resolvedCount > 0 ? `Resolved · ${resolvedCount}` : 'Resolved',
-      () => {
-        close();
-        router.push('/team/resolved' as never);
-      },
-      'team-fab-resolved',
-    ],
-    [
-      'account-multiple',
-      'Members & team',
-      () => {
-        close();
-        router.push('/team');
-      },
-      'team-fab-members',
-    ],
+    ['account-cog-outline', 'Manage team', go('/team'), 'team-fab-manage'],
   ];
   return (
     <>

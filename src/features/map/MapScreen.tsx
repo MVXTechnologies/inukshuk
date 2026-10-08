@@ -138,7 +138,6 @@ import {
   useTeamMapMarks,
 } from '@features/team/map/TeamMapMarks';
 import { useTeamMapFocus } from '@features/team/map/teamMapFocus';
-import { usePinDraft } from '@features/team/map/TeamPinComposer';
 import { TeamTrailPhotos } from '@features/team/map/TeamTrailPhotos';
 import { useTeamSheet, useTeamSignalMode } from '@features/team/map/teamMode';
 import { TeamPickOverlay, useTeamPick } from '@features/team/map/TeamPick';
@@ -1849,29 +1848,6 @@ export function MapScreen() {
     const t = useTeamMapFocus.getState().take();
     if (t) zoomMapTo([t.lng, t.lat], t.zoom);
   }, [teamFocus, mapLoaded, zoomMapTo, setFollowUser, followUser]);
-  const teamOn = useTeamStore((s) => s.view !== null && s.view.active && !s.view.readOnly);
-  // "+" → Pin a team message: at the point chip, else the middle of the map.
-  const onTeamPin = useCallback(() => {
-    void (async () => {
-      let at: [number, number] | null = pointAt ? [pointAt.longitude, pointAt.latitude] : null;
-      if (at === null && mapLoaded) {
-        try {
-          const vs = await mapRef.current?.getViewState();
-          if (vs !== undefined) at = [vs.center[0], vs.center[1]];
-        } catch {
-          // map mid-teardown — fall back to my position.
-        }
-      }
-      if (at === null && location) at = [location.longitude, location.latitude];
-      if (at === null) {
-        showSnack('Move the map to the place first');
-        return;
-      }
-      setPointAt(null);
-      useTeamMapSelection.getState().select(null);
-      usePinDraft.getState().open(at[0], at[1]);
-    })();
-  }, [pointAt, mapLoaded, location, showSnack]);
 
   const onAddWaypoint = useCallback(() => {
     if (!location) {
@@ -3369,9 +3345,6 @@ export function MapScreen() {
                     // Drawing (#502/#503) taps the flat 2D map; "Draw" asks
                     // route or area first.
                     onDraw: drawing.openChooser,
-                    onTeamPin: teamOn ? onTeamPin : undefined,
-                    // Convert (appended last): type a coordinate you have not tapped.
-                    onConvert: () => openConvert(router),
                   }
                 : undefined
             }

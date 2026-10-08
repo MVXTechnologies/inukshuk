@@ -251,6 +251,17 @@ describe('the map card', () => {
     expect(screen.queryByTestId('team-fab')).toBeNull();
     await act(() => useTeamMapSelection.getState().select(null));
     expect(screen.getByTestId('team-fab')).toBeTruthy();
+    // Its menu: exactly six entries, in the owner's order (2026-10-07).
+    await fireEvent.press(screen.getByTestId('team-fab'));
+    const ids = ['sos', 'status', 'rally', 'tasks', 'chat', 'manage'].map((x) => `team-fab-${x}`);
+    const shown = screen
+      .queryAllByTestId(/^team-fab-/)
+      .map((n) => n.props.testID as string)
+      .filter((id, k, all) => all.indexOf(id) === k && id !== 'team-fab-scrim');
+    expect(shown).toEqual(ids);
+    expect(screen.getByLabelText('Manage team')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('team-fab-tasks'));
+    expect(mockPush).toHaveBeenCalledWith('/team/tasks');
     await session.stopMesh();
   });
 });

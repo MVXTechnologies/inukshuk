@@ -1,7 +1,8 @@
 /**
- * Resolved (#589, owner 2026-10-07): pins and directed messages marked done
- * leave the map, the chat and the unread counts and sit here; nothing is
- * deleted, and each can be opened again.
+ * Resolved messages (#589, owner 2026-10-07): pins and directed messages
+ * marked done leave the map, the chat and the unread counts and sit in the
+ * task list's "Done" view, below the completed tasks; nothing is deleted, and
+ * each can be opened again.
  */
 import { canResolve } from '@core/teamui/pins';
 import { teamService, useTeamStore } from '@state/teamStore';
@@ -9,14 +10,14 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { StyleSheet, View } from 'react-native';
 import { Button, Text } from 'react-native-paper';
 
-import { MemberAvatar, TeamScreenFrame } from './components';
+import { MemberAvatar, SectionLabel } from './components';
 
-export function ResolvedScreen() {
+export function ResolvedItems() {
   const t = useSchemeTokens();
   const view = useTeamStore((s) => s.view);
   const pins = useTeamStore((s) => s.pins);
   const resolved = useTeamStore((s) => s.resolved);
-  if (view === null) return <TeamScreenFrame title="Resolved">{null}</TeamScreenFrame>;
+  if (view === null) return null;
   const byId = new Map(view.members.map((m) => [m.id, m]));
   const rows = [
     ...pins
@@ -46,10 +47,11 @@ export function ResolvedScreen() {
       }),
   ].sort((a, b) => b.at - a.at);
   return (
-    <TeamScreenFrame title="Resolved" testID="team-resolved-screen">
+    <View style={styles.group} testID="team-resolved-list">
+      <SectionLabel>{`Resolved messages · ${rows.length}`}</SectionLabel>
       {rows.length === 0 && (
-        <Text variant="bodyMedium" style={{ color: t.inkVariant }}>
-          Nothing resolved yet. Mark a pin or a message done with its check.
+        <Text variant="bodySmall" style={{ color: t.inkVariant }}>
+          None yet. Mark a pin or a message done with its check.
         </Text>
       )}
       {rows.map((r) => {
@@ -80,11 +82,12 @@ export function ResolvedScreen() {
           </View>
         );
       })}
-    </TeamScreenFrame>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1, gap: 2 },
+  group: { gap: 8 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 12 },
 });

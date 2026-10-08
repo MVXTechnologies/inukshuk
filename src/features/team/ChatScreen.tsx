@@ -4,6 +4,9 @@
  * its leads (the core's audiences), as normal, important or — admins —
  * urgent. `@Name` mentions buzz that person. Messages you're not in the
  * audience of are not shown (they still pass through your phone, encrypted).
+ *
+ * Two tabs (owner 2026-10-07): "Team", the general channel, and "Threads",
+ * the conversations that hang off a photo, a pin or a trail (ChatThreads).
  */
 import { audienceChoices, findMentions } from '@core/teamui/compose';
 import type { ChatMessage } from '@core/teamui/view';
@@ -11,7 +14,7 @@ import { teamService, useTeamStore } from '@state/teamStore';
 import { HeaderAction } from '@ui/components/ScreenHeader';
 import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -26,6 +29,7 @@ import {
 import { IconButton, Text, TextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ChatThreads } from './ChatThreads';
 import { MemberAvatar } from './components';
 import { sendTeamComment } from './taskSend';
 
@@ -98,6 +102,9 @@ export function ChatScreen() {
   const router = useRouter();
   const view = useTeamStore((s) => s.view);
   const resolved = useTeamStore((s) => s.resolved);
+  const threadsUnread = useTeamStore((s) => s.threadsUnread);
+  const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
+  const [tab, setTab] = useState<'team' | 'threads'>(tabParam === 'threads' ? 'threads' : 'team');
   const [text, setText] = useState('');
   const [audienceId, setAudienceId] = useState('all');
   const [priority, setPriority] = useState<0 | 1 | 2>(0);
@@ -166,118 +173,156 @@ export function ChatScreen() {
           </Text>
         </View>
       </View>
-      <FlatList
-        style={styles.flex}
-        contentContainerStyle={styles.list}
-        data={[...view.messages].filter((m) => !resolved.has(m.key)).reverse()}
-        inverted
-        keyExtractor={(m) => m.key}
-        renderItem={({ item }) => (
-          <Bubble
-            m={item}
-            initials={initialsOf.get(item.author) ?? '?'}
-            onResolve={
-              item.mentionsMe || (item.mine && item.audience !== null) || view.isAdmin
-                ? () => {
-                    const [owner, id] = item.key.split(':');
-                    if (owner && id) teamService()?.active?.resolveMessage(owner, id, true);
-                    useTeamStore.getState().refresh();
-                  }
-                : undefined
+      <View style={[styles.tabs, { borderBottomColor: t.outlineVariant }]}>
+        {(
+          [
+            ['team', 'Team', 0],
+            ['threads', 'Threads', threadsUnread],
+          ] as const
+        ).map(([id, label, n]) => (
+          <Pressable
+            key={id}
+            onPress={() => setTab(id)}
+            style={[styles.tab, tab === id && { borderBottomColor: t.ink }]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: tab === id }}
+            accessibilityLabel={n > 0 ? `${label}, ${n} new` : label}
+            testID={`team-chat-tab-${id}`}
+          >
+            <Text variant="titleSmall" style={{ color: tab === id ? t.ink : t.inkVariant }}>
+              {label}
+            </Text>
+            {n > 0 && (
+              <View style={[styles.tabBadge, { backgroundColor: t.team.bubbleNew }]}>
+                <Text style={[styles.tabBadgeText, { color: t.team.bubbleNewInk }]}>
+                  {n > 99 ? '99+' : n}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+        ))}
+      </View>
+      {tab === 'threads' ? (
+        <ChatThreads />
+      ) : (
+        <>
+          <FlatList
+            style={styles.flex}
+            contentContainerStyle={styles.list}
+            data={[...view.messages].filter((m) => !resolved.has(m.key)).reverse()}
+            inverted
+            keyExtractor={(m) => m.key}
+            renderItem={({ item }) => (
+              <Bubble
+                m={item}
+                initials={initialsOf.get(item.author) ?? '?'}
+                onResolve={
+                  item.mentionsMe || (item.mine && item.audience !== null) || view.isAdmin
+                    ? () => {
+                        const [owner, id] = item.key.split(':');
+                        if (owner && id) teamService()?.active?.resolveMessage(owner, id, true);
+                        useTeamStore.getState().refresh();
+                      }
+                    : undefined
+                }
+              />
+            )}
+            ListEmptyComponent={
+              <Text variant="bodyMedium" style={[styles.empty, { color: t.inkVariant }]}>
+                No messages yet. Everything here stays on the team’s phones.
+              </Text>
             }
           />
-        )}
-        ListEmptyComponent={
-          <Text variant="bodyMedium" style={[styles.empty, { color: t.inkVariant }]}>
-            No messages yet. Everything here stays on the team’s phones.
-          </Text>
-        }
-      />
-      <View style={styles.bottom}>
-        {big && (
-          <Text variant="bodySmall" style={{ color: t.inkMuted }}>
-            {view.activeCount} people: ordinary messages don’t buzz phones. Use Important or a group
-            to reach people.
-          </Text>
-        )}
-        {canWrite && (
-          <View style={[styles.composer, { borderTopColor: t.outlineVariant }]}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chips}
-              keyboardShouldPersistTaps="handled"
-            >
-              {choices.map((c) => (
-                <Pressable
-                  key={c.id}
-                  onPress={() => setAudienceId(c.id)}
-                  style={[
-                    styles.chip,
-                    {
-                      borderColor: c.id === audienceId ? t.ink : t.outlineVariant,
-                      backgroundColor: c.id === audienceId ? t.surfaceVariant : 'transparent',
-                    },
-                  ]}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: c.id === audienceId }}
-                  testID={`team-chat-to-${c.id}`}
+          <View style={styles.bottom}>
+            {big && (
+              <Text variant="bodySmall" style={{ color: t.inkMuted }}>
+                {view.activeCount} people: ordinary messages don’t buzz phones. Use Important or a
+                group to reach people.
+              </Text>
+            )}
+            {canWrite && (
+              <View style={[styles.composer, { borderTopColor: t.outlineVariant }]}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.chips}
+                  keyboardShouldPersistTaps="handled"
                 >
-                  <Text
-                    style={[styles.chipText, { color: c.id === audienceId ? t.ink : t.inkVariant }]}
-                  >
-                    {c.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-            <View style={styles.row}>
-              <IconButton
-                icon={
-                  priority === 2
-                    ? 'alert'
-                    : priority === 1
-                      ? 'alert-circle'
-                      : 'alert-circle-outline'
-                }
-                iconColor={
-                  priority === 2
-                    ? t.status.gpsLostInk
-                    : priority === 1
-                      ? t.status.pausedInk
-                      : t.inkVariant
-                }
-                onPress={cyclePriority}
-                accessibilityLabel={
-                  priority === 2 ? 'Urgent' : priority === 1 ? 'Important' : 'Normal priority'
-                }
-                testID="team-chat-priority"
-              />
-              <TextInput
-                mode="outlined"
-                dense
-                style={styles.flex}
-                value={text}
-                onChangeText={setText}
-                placeholder={audience.aud ? `To ${audience.label}` : 'Message the team'}
-                returnKeyType="send"
-                onSubmitEditing={send}
-                submitBehavior="submit"
-                maxLength={4000}
-                testID="team-chat-input"
-              />
-              <IconButton
-                icon="send"
-                mode="contained"
-                onPress={send}
-                disabled={text.trim().length === 0}
-                accessibilityLabel="Send"
-                testID="team-chat-send"
-              />
-            </View>
+                  {choices.map((c) => (
+                    <Pressable
+                      key={c.id}
+                      onPress={() => setAudienceId(c.id)}
+                      style={[
+                        styles.chip,
+                        {
+                          borderColor: c.id === audienceId ? t.ink : t.outlineVariant,
+                          backgroundColor: c.id === audienceId ? t.surfaceVariant : 'transparent',
+                        },
+                      ]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: c.id === audienceId }}
+                      testID={`team-chat-to-${c.id}`}
+                    >
+                      <Text
+                        style={[
+                          styles.chipText,
+                          { color: c.id === audienceId ? t.ink : t.inkVariant },
+                        ]}
+                      >
+                        {c.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+                <View style={styles.row}>
+                  <IconButton
+                    icon={
+                      priority === 2
+                        ? 'alert'
+                        : priority === 1
+                          ? 'alert-circle'
+                          : 'alert-circle-outline'
+                    }
+                    iconColor={
+                      priority === 2
+                        ? t.status.gpsLostInk
+                        : priority === 1
+                          ? t.status.pausedInk
+                          : t.inkVariant
+                    }
+                    onPress={cyclePriority}
+                    accessibilityLabel={
+                      priority === 2 ? 'Urgent' : priority === 1 ? 'Important' : 'Normal priority'
+                    }
+                    testID="team-chat-priority"
+                  />
+                  <TextInput
+                    mode="outlined"
+                    dense
+                    style={styles.flex}
+                    value={text}
+                    onChangeText={setText}
+                    placeholder={audience.aud ? `To ${audience.label}` : 'Message the team'}
+                    returnKeyType="send"
+                    onSubmitEditing={send}
+                    submitBehavior="submit"
+                    maxLength={4000}
+                    testID="team-chat-input"
+                  />
+                  <IconButton
+                    icon="send"
+                    mode="contained"
+                    onPress={send}
+                    disabled={text.trim().length === 0}
+                    accessibilityLabel="Send"
+                    testID="team-chat-send"
+                  />
+                </View>
+              </View>
+            )}
           </View>
-        )}
-      </View>
+        </>
+      )}
       <View style={{ height: insets.bottom }} />
     </KeyboardAvoidingView>
   );
@@ -304,4 +349,27 @@ const styles = StyleSheet.create({
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   chipText: { fontSize: 12, fontWeight: '600' },
   row: { flexDirection: 'row', alignItems: 'center' },
+  tabs: {
+    flexDirection: 'row',
+    paddingHorizontal: space.lg,
+    gap: space.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBadgeText: { fontSize: 11, fontWeight: '800', includeFontPadding: false },
 });

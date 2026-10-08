@@ -1,4 +1,4 @@
-# Convert e2e: the map-actions row opens Convert; a deep link opens it on
+# Convert e2e: a long-pressed spot's chip opens Convert; a deep link opens it on
 # survey mark 81KM003's published values (NAD83(CSRS) 1997.0, h -3.127);
 # without the Québec grid pack the CGVD2013 height is REFUSED with the pack
 # offered (never approximated); dropping the height gives the MTM 7 result
@@ -22,22 +22,29 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
-# Guarded opener (make-map.yaml's idiom): the dial animates open, so wait for
-# its row instead of tapping it at once (CI 2026-10-06: the immediate tap on
-# 'Convert coordinates' found nothing), and only re-tap 'Map actions' while
-# the row is absent, so a retry never toggles an open dial shut.
+# Convert opens from a long-pressed spot's chip (owner 2026-10-07: no longer
+# in the "+" menu). The chip is a map marker the map hit-tests itself (not in
+# the accessibility tree): its Convert button sits 75 pt right of and 31 pt
+# above the pressed point (MAP_POINT_ACTION_LAYOUT), i.e. 68%,46% for a press
+# at the centre of a ~400 x 880 pt screen.
 - retry:
     maxRetries: 3
     commands:
       - runFlow:
           when:
-            notVisible: 'Convert coordinates'
+            notVisible:
+              id: 'convert-screen'
           commands:
-            - tapOn: 'Map actions'
+            - longPressOn:
+                point: '50%,50%'
+            - waitForAnimationToEnd:
+                timeout: 2000
+            - tapOn:
+                point: '68%,46%'
       - extendedWaitUntil:
-          visible: 'Convert coordinates'
-          timeout: 15000
-- tapOn: 'Convert coordinates'
+          visible:
+            id: 'convert-screen'
+          timeout: 10000
 - extendedWaitUntil:
     visible:
       id: 'convert-screen'

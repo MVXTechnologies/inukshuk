@@ -8,6 +8,7 @@ import type { TeamAlert } from '@core/teamui/alerts';
 import type { TeamPhoto } from '@core/teamui/comments';
 import type { Said } from '@core/teamui/mapMarks';
 import type { TeamRally, TeamSos } from '@core/teamui/field';
+import { threadsUnread } from '@core/teamui/threads';
 import type { TeamTrailView } from '@core/teamui/trails';
 import type { TeamPin } from '@core/teamui/pins';
 import type { MemberStatus } from '@core/teamui/system';
@@ -57,6 +58,8 @@ export interface TeamSnapshot {
   rally: TeamRally | null;
   /** `owner:id` of resolved messages (pins, notifies). */
   resolved: ReadonlySet<string>;
+  /** Unread messages across Team chat's sub-threads (photos, pins, trails). */
+  threadsUnread: number;
   /** Each member's newest quick status. */
   statuses: ReadonlyMap<string, MemberStatus>;
   /** Who commented on each shared photo, and when. */
@@ -103,6 +106,7 @@ function snapshot(service: TeamService | null): Omit<TeamSnapshot, 'banner'> {
     tasks: s?.tasks() ?? [],
     statuses: s?.statuses() ?? NO_STATUSES,
     resolved: s?.resolved() ?? NO_RESOLVED,
+    threadsUnread: s ? threadsUnread(s.threads()) : 0,
     soses: s?.soses() ?? [],
     teamTrails: s?.teamTrails() ?? [],
     editors: s?.editors() ?? NO_EDITORS,

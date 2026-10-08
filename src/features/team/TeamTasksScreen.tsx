@@ -1,8 +1,10 @@
 /**
- * The team's tasks (#589, mockup `d-task-list`): filters (mine, all, open,
- * done), grouped by person (me first), each with where it is anchored, its
- * age and who gave it; the box ticks it (creator, assignee or admin), the
- * locate button flies the map to its anchor. "New task" at the bottom.
+ * The task list (#589, mockup `d-task-list`; owner 2026-10-07: it replaces
+ * "Resolved"): open tasks first; filters (open, mine, all, done), grouped by
+ * person (me first), each with where it is anchored, its age and who gave it;
+ * the box ticks it (creator, assignee or admin), the locate button flies the
+ * map to its anchor. "Done" also lists the resolved pins and messages. "New
+ * task" is here (and a tap on the map), nowhere else.
  */
 import { canCompleteTask, type TeamTask } from '@core/team/tasks';
 import { shortAge } from '@core/teamui/positions';
@@ -22,6 +24,7 @@ import { Button, Icon, IconButton, Text } from 'react-native-paper';
 
 import { ChoiceRow, MemberAvatar, SectionLabel, TeamScreenFrame, useNow } from './components';
 import { useTeamMapFocus } from './map/teamMapFocus';
+import { ResolvedItems } from './ResolvedItems';
 import { taskStateLabel } from './TaskChip';
 import { useAnchorLookup } from './useAnchorLookup';
 import { useToggleTask } from './useToggleTask';
@@ -36,11 +39,12 @@ export function TeamTasksScreen() {
   const router = useRouter();
   const view = useTeamStore((s) => s.view);
   const tasks = useTeamStore((s) => s.tasks);
+  const resolvedCount = useTeamStore((s) => s.resolved.size);
   const look = useAnchorLookup();
   const toggle = useToggleTask();
   const now = useNow(60_000);
   const [filter, setFilter] = useState<TaskFilter>('open');
-  if (view === null) return <TeamScreenFrame title="Tasks">{null}</TeamScreenFrame>;
+  if (view === null) return <TeamScreenFrame title="Task list">{null}</TeamScreenFrame>;
 
   const me = view.me;
   const myRole = view.members.find((m) => m.id === me)?.role;
@@ -129,7 +133,7 @@ export function TeamTasksScreen() {
 
   return (
     <TeamScreenFrame
-      title="Tasks"
+      title="Task list"
       testID="team-tasks-screen"
       footer={
         canCreate ? (
@@ -146,10 +150,10 @@ export function TeamTasksScreen() {
     >
       <ChoiceRow
         options={[
+          { id: 'open', label: `Open · ${counts.open}` },
           { id: 'mine', label: `Mine · ${counts.mine}` },
           { id: 'all', label: `All · ${counts.all}` },
-          { id: 'open', label: `Open · ${counts.open}` },
-          { id: 'done', label: `Done · ${counts.done}` },
+          { id: 'done', label: `Done · ${counts.done + resolvedCount}` },
         ]}
         value={filter}
         onChange={setFilter}
@@ -168,6 +172,7 @@ export function TeamTasksScreen() {
           {g.tasks.map(row)}
         </View>
       ))}
+      {(filter === 'done' || filter === 'all') && <ResolvedItems />}
     </TeamScreenFrame>
   );
 }

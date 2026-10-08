@@ -20,6 +20,7 @@ import { SyncSession, type SessionEvent } from '@core/team/sync';
 import { alertContext, alertFor, TaskAlertThrottle, type TeamAlert } from '@core/teamui/alerts';
 import { commentsByPhoto, type Said } from '@core/teamui/mapMarks';
 import { teamRally, teamSos, type TeamRally, type TeamSos } from '@core/teamui/field';
+import { teamThreads, type ThreadRow } from '@core/teamui/threads';
 import { editors, editText, SYS_EDIT, teamTrails, type TeamTrailView } from '@core/teamui/trails';
 import { pinThread, resolvedMessages, teamPins, type TeamPin } from '@core/teamui/pins';
 import {
@@ -281,6 +282,23 @@ export class TeamSession {
     if (this.threadsCache?.key !== this.dataVersion)
       this.threadsCache = { key: this.dataVersion, threads: commentsByPhoto(data) };
     return this.threadsCache.threads;
+  }
+
+  /**
+   * Team chat's sub-threads (photo comments, pins, trail threads), open ones
+   * first, newest activity first, with what I haven't seen yet.
+   */
+  threads(): ThreadRow[] {
+    const data = this.replica.data(this.deps.now());
+    return teamThreads({
+      data,
+      me: this.me,
+      photos: this.photos(),
+      pins: this.pins(),
+      tracks: this.shares().tracks,
+      resolved: this.resolved(),
+      seenAt: (k) => this.seenAt(k),
+    });
   }
 
   private statusCache: { key: string; at: number; map: Map<string, MemberStatus> } | null = null;
