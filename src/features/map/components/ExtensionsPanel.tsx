@@ -1,4 +1,6 @@
+import type { AnyExtensionKey } from '@core/extensions/keys';
 import { installedExtensions } from '@core/extensions/state';
+import { availableDeviceExtensions } from '@features/extensions/availability';
 import { EXTENSION_PANEL_ENTRIES } from '@features/extensions/panelEntries';
 import { useExtensionsState } from '@features/extensions/prefs';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -26,7 +28,11 @@ export function ExtensionsPanel({
   const { accent, onAccent } = useSheetAccent();
   const router = useRouter();
   const ext = useExtensionsState();
-  const installed = installedExtensions(ext);
+  // Map extensions, then device extensions (installed and offered on this build).
+  const installed: AnyExtensionKey[] = [
+    ...installedExtensions(ext),
+    ...availableDeviceExtensions().filter((k) => ext.prefs[k].installedAt > 0),
+  ];
   const toSettings = () => {
     onClose();
     router.push({ pathname: '/settings', params: { open: 'extensions' } });
@@ -58,7 +64,9 @@ export function ExtensionsPanel({
     <>
       {installed.map((key) => {
         const PanelEntry = EXTENSION_PANEL_ENTRIES[key];
-        return <PanelEntry key={key} onOpenGeodeticFilter={onOpenGeodeticFilter} />;
+        return (
+          <PanelEntry key={key} onOpenGeodeticFilter={onOpenGeodeticFilter} onClose={onClose} />
+        );
       })}
       <NavRow
         icon="puzzle-plus-outline"
