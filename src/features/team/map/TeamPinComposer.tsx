@@ -9,7 +9,7 @@ import { teamService, useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Keyboard, StyleSheet, View } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
 import { create } from 'zustand';
 
@@ -55,6 +55,10 @@ export function TeamPinComposer({ onPinned }: { onPinned: (owner: string, id: st
     }
     setText('');
     setError(null);
+    // The composer (and its focused input) goes away: put the keyboard away
+    // with it. Android leaves the IME up when a focused input unmounts, over
+    // the new pin's card (CI 2026-10-08, run 37820770937).
+    Keyboard.dismiss();
     close();
     if (pinned) onPinned(session.me, pinned);
   };
@@ -88,7 +92,14 @@ export function TeamPinComposer({ onPinned }: { onPinned: (owner: string, id: st
         </Text>
       )}
       <View style={styles.actions}>
-        <Button mode="text" onPress={close} testID="team-pin-cancel">
+        <Button
+          mode="text"
+          onPress={() => {
+            Keyboard.dismiss();
+            close();
+          }}
+          testID="team-pin-cancel"
+        >
           Cancel
         </Button>
         <Button

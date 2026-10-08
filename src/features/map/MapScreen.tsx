@@ -2663,6 +2663,9 @@ export function MapScreen() {
               // long-press moves the pin rather than stacking another.
               // Owner 2026-10-07: long-press is the coordinates chip (Navigate,
               // waypoint, Convert); it no longer drops a destination by itself.
+              // Following would recentre on every fix and slide the chip out
+              // from under the finger reaching for Convert (CI 2026-10-08).
+              if (useMapStore.getState().followUser) setFollowUser(false);
               setPointAt(at);
             }}
             // NOT onWillStartLoadingMap -> setMapLoaded(false): that fires on
