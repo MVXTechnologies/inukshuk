@@ -25,7 +25,19 @@ appId: com.inukshuk.app
     element: 'Photo 1 of [0-9]+.*'
     direction: DOWN
     timeout: 15000
-- tapOn: 'Photo 1 of [0-9]+.*'
+# The second photo when there is one (the CI fixtures land as one photo or
+# two; the old viewer captioned the second the same way).
+- runFlow:
+    when:
+      visible: 'Photo 2 of [0-9]+.*'
+    commands:
+      - tapOn: 'Photo 2 of [0-9]+.*'
+- runFlow:
+    when:
+      notVisible:
+        id: 'photo-card'
+    commands:
+      - tapOn: 'Photo 1 of [0-9]+.*'
 - extendedWaitUntil:
     visible:
       id: 'photo-card'

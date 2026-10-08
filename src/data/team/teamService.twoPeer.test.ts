@@ -140,18 +140,27 @@ describe('team mode over the loopback mesh', () => {
     const a = await founded(hub);
     const { b } = await joined(hub, a, 'Julie');
     const { b: c } = await joined(hub, a, 'Simon');
-    await until(() => names(active(c)).length === 3 && names(active(b)).length === 3, 'all synced');
+    // Synced means each phone knows all three by name (a member's name comes
+    // in its own profile message, after the membership itself: counting
+    // members alone let the removal race Julie's name on a slow runner).
+    const knowsAll = (x: ReturnType<typeof phone>) => {
+      const n = names(active(x));
+      return n.length === 3 && n.includes('Julie:member') && n.includes('Simon:member');
+    };
+    await until(() => knowsAll(a) && knowsAll(b) && knowsAll(c), 'all synced, names included');
+    const julie = active(b).me;
 
     expect(active(a).removeMember(active(b).me)).toBeNull();
     const viewA = active(a).view();
     expect(viewA.needsRotation).toBe(false);
-    expect(viewA.members.find((m) => m.id === active(b).me)!.active).toBe(false);
+    expect(viewA.members.find((m) => m.id === julie)?.active).toBe(false);
 
+    // A pure predicate (no `!` inside a poll), by identity rather than name.
     await until(
       () =>
-        !active(c)
+        active(c)
           .view()
-          .members.find((m) => m.name === 'Julie')!.active,
+          .members.find((m) => m.id === julie)?.active === false,
       'C sees removal',
     );
     const newKey = active(a).replica.state.sendKeyId!;

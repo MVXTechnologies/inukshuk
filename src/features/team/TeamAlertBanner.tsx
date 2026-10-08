@@ -9,6 +9,7 @@
  * `badge` messages show only when they are urgent enough to interrupt
  * (important or from an admin); plain chatter just counts as unread.
  */
+import { usePhotoCard } from '@features/photos/PhotoBottomCard';
 import { useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -17,6 +18,8 @@ import { useEffect } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { useTeamSheet } from './map/teamMode';
 
 const SHOW_MS = 6_000;
 
@@ -34,8 +37,15 @@ export function TeamAlertBanner() {
     return () => clearTimeout(id);
   }, [banner, dismiss]);
 
+  // Not over something the user is in the middle of: the team menu, a team
+  // card or sheet, a photo card (it sits where their next tap goes). The
+  // message still counts as unread.
+  const sheetOpen = useTeamSheet((x) => x.sheet !== null);
+  const photoOpen = usePhotoCard((x) => x.target !== null);
+  const busy = sheetOpen || photoOpen;
   const show =
     banner !== null &&
+    !busy &&
     (banner.level === 'alert' || banner.priority > 0) &&
     path !== '/team/chat' &&
     !path.startsWith('/team/trail');

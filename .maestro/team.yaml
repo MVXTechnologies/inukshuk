@@ -292,7 +292,37 @@ appId: com.inukshuk.app
     visible: '.*Fallen tree here.*'
     timeout: 5000
 - takeScreenshot: team-threads
-- tapOn: 'Back'
+# A teammate's photo thread opens the photo's card on the map. Its comment
+# box must stay above the keyboard: typing, then tapping Send (not Return)
+# only posts when the button is not under the keys.
+- tapOn:
+    id: 'team-thread-row'
+    text: '.*Trail sign down.*'
+- extendedWaitUntil:
+    visible:
+      id: 'photo-card'
+    timeout: 10000
+- tapOn:
+    id: 'team-comment-input'
+- waitForAnimationToEnd:
+    timeout: 2000
+- takeScreenshot: team-photo-card-keyboard-up
+- inputText: 'On my way'
+- tapOn:
+    id: 'team-comment-send'
+- extendedWaitUntil:
+    visible: 'On my way'
+    timeout: 5000
+- takeScreenshot: team-photo-card-keyboard
+- runFlow:
+    when:
+      visible:
+        id: 'photo-card-close'
+    commands:
+      - hideKeyboard:
+          optional: true
+      - tapOn:
+          id: 'photo-card-close'
 # Leave the team (deletes it from this phone): the menu's Manage team.
 - tapOn:
     id: 'team-fab'

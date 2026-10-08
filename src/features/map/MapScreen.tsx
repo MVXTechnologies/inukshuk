@@ -1838,7 +1838,9 @@ export function MapScreen() {
   // Team mode (#589): "show on the map" from a task or a pin notification.
   const teamFocus = useTeamMapFocus((s) => s.target);
   useEffect(() => {
-    if (teamFocus === null || !mapLoaded) return;
+    // Only once the map is on screen again: a focus asked from another screen
+    // (a task, a chat thread) used to fly a hidden camera, which did nothing.
+    if (teamFocus === null || !mapLoaded || !screenFocused) return;
     // Follow mode first goes off (a rendered change), else the camera's own
     // tracking snaps straight back to my position; then the fly.
     if (followUser) {
@@ -1847,7 +1849,7 @@ export function MapScreen() {
     }
     const t = useTeamMapFocus.getState().take();
     if (t) zoomMapTo([t.lng, t.lat], t.zoom);
-  }, [teamFocus, mapLoaded, zoomMapTo, setFollowUser, followUser]);
+  }, [teamFocus, mapLoaded, screenFocused, zoomMapTo, setFollowUser, followUser]);
 
   const onAddWaypoint = useCallback(() => {
     if (!location) {

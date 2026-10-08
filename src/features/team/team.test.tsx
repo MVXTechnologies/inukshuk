@@ -225,7 +225,7 @@ describe('the map card', () => {
     await app.active!.startMesh();
     session.updateRecord({ prefs: { ...session.record.prefs, sharePosition: true } });
     session.sharePosition({ latitude: 47.01, longitude: -71, accuracy: 5, at: Date.now() });
-    await until(() => app.active!.positions().length === 1);
+    await until(() => app.active?.positions().length === 1);
     await act(() => {
       useTeamStore.getState().refresh();
       useTeamMapSelection.getState().select({ kind: 'member', id: session.me });

@@ -53,10 +53,16 @@ export function ChatThreads() {
     useTeamStore.getState().refresh();
     const x = r.target;
     if (x.kind === 'photo') {
-      usePhotoCard
-        .getState()
-        .show({ kind: 'team', owner: x.owner, trackId: x.trackId, photoId: x.photoId });
       locate(r);
+      // Once the map is back: the tap that opened the thread must not also
+      // land on the map, which closes a card on a bare tap.
+      setTimeout(
+        () =>
+          usePhotoCard
+            .getState()
+            .show({ kind: 'team', owner: x.owner, trackId: x.trackId, photoId: x.photoId }),
+        400,
+      );
     } else if (x.kind === 'pin') {
       router.push(`/team/pin/${x.owner}/${x.id}` as never);
     } else {
