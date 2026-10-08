@@ -6,6 +6,10 @@
 # removed and the theme on System so later flows see the default state.
 #
 # Settings rows merge title + subtitle on iOS: matches are wildcard regexes.
+# Open or closed is read from each entry's details container
+# (extension-details-<key>), never from a row inside it: Extensions is the
+# last Settings section, so a details' lower rows (Coverage & sources) can sit
+# below the fold (main 2026-10-08, run 37709319900).
 appId: com.inukshuk.app
 ---
 - runFlow:
@@ -55,7 +59,10 @@ appId: com.inukshuk.app
 # what they install).
 - assertVisible: 'Get Geodetic points'
 - assertVisible: 'Get Tide stations'
-- assertNotVisible: 'Coverage & sources.*'
+- assertNotVisible:
+    id: 'extension-details-geodetic'
+- assertNotVisible:
+    id: 'extension-details-tides'
 - takeScreenshot: review-extensions-none-light
 # --- Both installed from the collapsed rows; they stay collapsed.
 - tapOn: 'Get Geodetic points'
@@ -66,14 +73,21 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Show tide stations'
     timeout: 10000
-- assertNotVisible: 'Coverage & sources.*'
+- assertNotVisible:
+    id: 'extension-details-geodetic'
+- assertNotVisible:
+    id: 'extension-details-tides'
 - takeScreenshot: review-extensions-installed-light
 # --- One open: geodetic's details; then tides' row closes it.
 - tapOn:
     id: 'extension-row-geodetic'
 - extendedWaitUntil:
-    visible: 'Coverage & sources.*'
+    visible:
+      id: 'extension-details-geodetic'
     timeout: 5000
+- scrollUntilVisible:
+    element: 'Coverage & sources.*'
+    direction: DOWN
 - takeScreenshot: review-extensions-open-light
 - scrollUntilVisible:
     element:
@@ -82,9 +96,14 @@ appId: com.inukshuk.app
 - tapOn:
     id: 'extension-row-tides'
 - extendedWaitUntil:
-    visible: 'Tide coverage & sources.*'
+    visible:
+      id: 'extension-details-tides'
     timeout: 5000
-- assertNotVisible: 'Coverage & sources.*'
+- assertNotVisible:
+    id: 'extension-details-geodetic'
+- scrollUntilVisible:
+    element: 'Tide coverage & sources.*'
+    direction: DOWN
 # --- The overlays sheet's Extensions tab: one line per extension.
 - tapOn: 'Back'
 - tapOn:
@@ -142,8 +161,12 @@ appId: com.inukshuk.app
 - tapOn:
     id: 'extension-row-geodetic'
 - extendedWaitUntil:
-    visible: 'Coverage & sources.*'
+    visible:
+      id: 'extension-details-geodetic'
     timeout: 5000
+- scrollUntilVisible:
+    element: 'Coverage & sources.*'
+    direction: DOWN
 - takeScreenshot: review-extensions-open-dark
 # --- Remove tides: one installed beside one not installed.
 - scrollUntilVisible:

@@ -6,6 +6,12 @@
 #
 # iOS merges a row's title + subtitle into one accessibility string, so row
 # matches are wildcard regexes (see settings.yaml).
+#
+# Expanded or not is read from the details container (id
+# extension-details-geodetic), never from a row inside it: Extensions is the
+# last Settings section, so on a Pixel 6 the details' lower rows (Coverage &
+# sources, Remove) sit below the fold. Scroll to them, don't assert in place
+# (main 2026-10-08, run 37709319900: the Photos section pushed them off).
 appId: com.inukshuk.app
 ---
 - runFlow:
@@ -50,7 +56,8 @@ appId: com.inukshuk.app
           visible: 'Geodetic points.*'
           timeout: 5000
 # Start from "not installed" whatever a previous run left (installed, the
-# collapsed row shows its switch instead of Get).
+# collapsed row shows its switch instead of Get). Removing keeps the row
+# open, so close it again: the checks below start from a collapsed row.
 - runFlow:
     when:
       visible: 'Show geodetic points'
@@ -62,6 +69,16 @@ appId: com.inukshuk.app
           direction: DOWN
       - tapOn: 'Remove Geodetic points extension'
       - tapOn: 'Remove'
+      - scrollUntilVisible:
+          element:
+            id: 'extension-row-geodetic'
+          direction: UP
+      - tapOn:
+          id: 'extension-row-geodetic'
+      - extendedWaitUntil:
+          notVisible:
+            id: 'extension-details-geodetic'
+          timeout: 5000
 - scrollUntilVisible:
     element: 'Get Geodetic points'
     direction: DOWN
@@ -70,14 +87,21 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Show geodetic points'
     timeout: 10000
-- assertNotVisible: 'Coverage & sources.*'
+- assertNotVisible:
+    id: 'extension-details-geodetic'
 # Tapping the row expands its details.
 - tapOn:
     id: 'extension-row-geodetic'
 - extendedWaitUntil:
-    visible: 'Coverage & sources.*'
+    visible:
+      id: 'extension-details-geodetic'
     timeout: 10000
-- assertVisible: 'Offline in your regions.*'
+- scrollUntilVisible:
+    element: 'Offline in your regions.*'
+    direction: DOWN
+- scrollUntilVisible:
+    element: 'Coverage & sources.*'
+    direction: DOWN
 - scrollUntilVisible:
     element: 'Remove Geodetic points extension'
     direction: DOWN
@@ -120,7 +144,8 @@ appId: com.inukshuk.app
 - tapOn:
     id: 'extension-row-geodetic'
 - extendedWaitUntil:
-    visible: 'Coverage & sources.*'
+    visible:
+      id: 'extension-details-geodetic'
     timeout: 5000
 - scrollUntilVisible:
     element: 'Remove Geodetic points extension'
