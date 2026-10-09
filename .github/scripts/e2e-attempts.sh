@@ -64,6 +64,7 @@ fi
 GEO_RUN=$(mktemp -u)
 GEO_TICK=5
 APP_ID=com.inukshuk.app
+APP_LABEL=Inukshuk
 adb shell appops set com.android.shell android:mock_location allow || true
 geo_send() {
   local where="$1,$2"
@@ -139,12 +140,85 @@ python3 -m http.server 8787 --bind 127.0.0.1 --directory .maestro/fixtures/catal
 CATALOG_PID=$!
 adb reverse tcp:8787 tcp:8787 || true
 
-trap 'kill $GEO_PID $CATALOG_PID 2>/dev/null; rm -f "$GEO_RUN"' EXIT
+# System ANR dialogs ("Pixel Launcher isn't responding", run 37914205449): the
+# google_apis image's post-boot churn ANRs the launcher on this software-GPU
+# runner, and the dialog sat over the app and failed every flow of the
+# extensions shard at "Map actions" -- on the retry too, and with
+# hide_error_dialogs already set. The dialog is detected by what that run's
+# hierarchy showed: the buttons android:id/aerr_close ("Close app") and
+# android:id/aerr_wait (scripts/ci/anrDialog.mjs, unit-tested on the captured
+# hierarchy), read from a `uiautomator dump`. It is dismissed the way a user
+# would, by tapping "Close app" (the system then kills the ANRing process; the
+# launcher restarts as home). A dialog naming the app under test is never
+# closed: that ANR is a real defect and fails loudly instead. This is a guard,
+# not a retry: every dialog is COUNTED, annotated and shown in the job
+# summary, so a launcher that keeps ANRing stays a visible defect.
+#
+# The dump runs only when Maestro is NOT running (before each attempt, which
+# covers the retry after a failure), because Maestro's driver also uses
+# UiAutomation and two clients collide. Its cost is measured and reported.
+ANR_STATE=$(mktemp)
+echo "0 0 0 0" > "$ANR_STATE"   # dialogs, checks, check-ms, unavailable
+anr_state_add() { # <dialogs> <checks> <ms> <unavailable>
+  local d c m u
+  read -r d c m u < "$ANR_STATE"
+  echo "$((d + $1)) $((c + $2)) $((m + $3)) $((u + $4))" > "$ANR_STATE"
+}
+anr_count() { local d _; read -r d _ < "$ANR_STATE"; echo "$d"; }
+anr_dump() {
+  adb shell uiautomator dump /dev/stdout 2>/dev/null | tr -d '\r'
+}
+# Dismiss a visible ANR dialog. Returns 0 when one was found.
+dismiss_anr_dialog() {
+  local t0 t1 xml found kind x y title pkg
+  t0=$(date +%s%N)
+  xml=$(anr_dump)
+  t1=$(date +%s%N)
+  if ! grep -q '<hierarchy' <<< "$xml"; then
+    anr_state_add 0 1 $(( (t1 - t0) / 1000000 )) 1
+    # Secondary signal only: the dialog's window title. Never the primary
+    # detector (its format was not observed in a capture).
+    pkg=$(adb shell dumpsys window windows 2>/dev/null \
+      | grep -o 'Application Not Responding: [A-Za-z0-9_.]*' | head -1 \
+      | sed 's/^Application Not Responding: //' || true)
+    if [ -n "$pkg" ] && [ "$pkg" != "$APP_ID" ]; then
+      anr_state_add 1 0 0 0
+      adb shell am force-stop "$pkg" >/dev/null 2>&1 || true
+      echo "::warning title=E2E ANR dialog ($SHARD)::'$pkg' not responding (found by window title; uiautomator dump unavailable); force-stopped it"
+      return 0
+    fi
+    return 1
+  fi
+  anr_state_add 0 1 $(( (t1 - t0) / 1000000 )) 0
+  found=$(node scripts/ci/anr-dialog.mjs "$APP_LABEL" <<< "$xml") || return 1
+  read -r kind x y title <<< "$found"
+  anr_state_add 1 0 0 0
+  if [ "$kind" = own ]; then
+    echo "::error title=E2E ANR in the app ($SHARD)::\"$title\"; the dialog is left up (never closed by the runner) and the flow will report it"
+    return 0
+  fi
+  if [ "$x" = - ]; then
+    echo "::error title=E2E ANR dialog without a Close button ($SHARD)::\"$title\" (system process?); not dismissed"
+    return 0
+  fi
+  adb shell input tap "$x" "$y" >/dev/null 2>&1 || true
+  sleep 2
+  if node scripts/ci/anr-dialog.mjs "$APP_LABEL" <<< "$(anr_dump)" >/dev/null; then
+    echo "::error title=E2E ANR dialog not dismissed ($SHARD)::\"$title\" is still up after tapping Close app at $x,$y"
+  else
+    echo "::warning title=E2E ANR dialog ($SHARD)::\"$title\" -- tapped Close app, the dialog is gone. The launcher/system is overloaded: see the ANR counter in the job summary."
+  fi
+  return 0
+}
+
+trap 'kill $GEO_PID $CATALOG_PID 2>/dev/null; rm -f "$GEO_RUN" "$ANR_STATE"' EXIT
 
 # One flow attempt, with the feed on only while Maestro runs it.
 run_flow() {
   local flow=$1 own_location=$2
   geo_pause
+  # A dialog already up would fail the flow's first assert: clear it first.
+  dismiss_anr_dialog || true
   [ "$own_location" = 1 ] || touch "$GEO_RUN"
   maestro test "$flow"
   local rc=$?
@@ -218,7 +292,7 @@ launch_health() {
 
 RC=0
 SYSTEM_BROKE=0
-SUMMARY="| Flow | Result | Time | Stalls/crashes/provider kills |"$'\n'"| --- | --- | --- | --- |"
+SUMMARY="| Flow | Result | Time | Stalls/crashes/provider kills | ANR dialogs |"$'\n'"| --- | --- | --- | --- | --- |"
 # Screenshots taken from here on are this run's; anything older is stale.
 SHOT_MARK=$(mktemp)
 RAN_PDF_OVERLAYS=0
@@ -230,10 +304,11 @@ for entry in "${FLOWS[@]}"; do
   [ "$name" = pdf-overlays ] && RAN_PDF_OVERLAYS=1
   if [ "$SYSTEM_BROKE" = 1 ]; then
     # Nothing that runs on a rebooted emulator counts.
-    SUMMARY+=$'\n'"| $name | NOT RUN (emulator system_server restarted) | | |"
+    SUMMARY+=$'\n'"| $name | NOT RUN (emulator system_server restarted) | | | |"
     continue
   fi
   started=$SECONDS
+  anr_before=$(anr_count)
   adb logcat -c || true
   health=
   if run_flow "$flow" "$own_location"; then
@@ -302,18 +377,22 @@ for entry in "${FLOWS[@]}"; do
       PIXELS="FAIL (flow failed)"
     fi
   fi
-  SUMMARY+=$'\n'"| $name | $result | $((took / 60))m$((took % 60))s | $health |"
+  SUMMARY+=$'\n'"| $name | $result | $((took / 60))m$((took % 60))s | $health | $(( $(anr_count) - anr_before )) |"
 done
 rm -f "$GEO_RUN"
 
 # pdf-overlays pixels: checked right after the flow (see the loop above).
 if [ "$RAN_PDF_OVERLAYS" = 1 ]; then
-  SUMMARY+=$'\n'"| pdf-overlays pixels | $PIXELS | |"
+  SUMMARY+=$'\n'"| pdf-overlays pixels | $PIXELS | | | |"
   [ "$PIXELS" = PASS ] || RC=1
 fi
 rm -f "$SHOT_MARK"
 
+read -r ANR_N ANR_CHECKS ANR_MS ANR_UNAVAIL < "$ANR_STATE"
+ANR_LINE="ANR dialogs: $ANR_N; guard checks: $ANR_CHECKS ($ANR_UNAVAIL without a usable dump), $ANR_MS ms total"
+echo "$ANR_LINE"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  SUMMARY+=$'\n\n'"$ANR_LINE"
   printf '### E2E shard `%s`\n\n%s\n' "$SHARD" "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
 fi
 exit $RC
