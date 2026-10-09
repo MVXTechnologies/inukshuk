@@ -358,6 +358,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      # The catalog shard's logcat of every passing flow (text, a few MB):
+      # PDF pre-render and frame timings are read from green runs too.
+      - name: Upload passing flows' logcat (catalog)
+        if: always() && matrix.shard == 'catalog'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: logcat-pass-${{ matrix.shard }}
+          path: |
+            logcat-pass-*.txt
+            pdf-overlays-map-*.png
+          if-no-files-found: ignore
+          retention-days: 14
+
       # Maestro writes screenshots + the UI hierarchy on failure; without this
       # upload every red run is a black box. Also uploaded for a green shard
       # that needed a retry (its first failure's logcat is the flake evidence).
@@ -370,4 +383,5 @@ jobs:
             ~/.maestro/tests
             logcat-failure-*.txt
             logcat-system-server-restart-*.txt
+            pdf-overlays-map-*.png
           retention-days: 7
