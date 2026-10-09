@@ -287,6 +287,16 @@ for entry in "${FLOWS[@]}"; do
     if [[ "$result" == PASS* ]]; then
       SHOT=$(bash scripts/e2e/find-screenshot.sh pdf-overlays-map.png .maestro "$SHOT_MARK") || SHOT=-
       echo "=== pdf-overlays screenshot: $SHOT ==="
+      # Maestro's mock locations end with its session, and the map follows
+      # the user: hold the flow's own location through the runner's gps test
+      # provider, or the poll photographs the runner's last fix instead (run
+      # 37890668976: Québec at every capture after the flow's own shot).
+      if LOC=$(bash scripts/e2e/flow-location.sh "$flow"); then
+        read -r lat lon <<< "$LOC"
+        geo_send "$lat" "$lon"
+        echo "=== pdf-overlays poll held at the flow's location $lat,$lon ==="
+        sleep 2
+      fi
       if bash scripts/e2e/poll-overlay.sh "$SHOT" 60 3; then PIXELS=PASS; else PIXELS=FAIL; fi
     else
       PIXELS="FAIL (flow failed)"
