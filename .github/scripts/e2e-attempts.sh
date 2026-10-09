@@ -16,6 +16,16 @@ fi
 # Read the plan up front: maestro must not inherit (and drain) a loop's stdin.
 mapfile -t FLOWS <<< "$PLAN"
 
+# The catalog shard keeps every passing flow's logcat too (logcat-pass-*.txt,
+# its own artifact): PDF pre-render and frame timings are measured from green
+# runs, which otherwise leave no logcat. A larger ring so a flow's start is
+# not dropped before the dump.
+KEEP_PASS_LOGCAT=0
+if [ "$SHARD" = catalog ]; then
+  KEEP_PASS_LOGCAT=1
+  adb logcat -G 16M || true
+fi
+
 # Continuous GPS fixes so the recording flows exercise real location
 # deliveries — including through the foreground service while backgrounded,
 # the exact path that killed vc44 (missing RECEIVE_BOOT_COMPLETED).
@@ -212,6 +222,7 @@ SUMMARY="| Flow | Result | Time | Stalls/crashes/provider kills |"$'\n'"| --- | 
 # Screenshots taken from here on are this run's; anything older is stale.
 SHOT_MARK=$(mktemp)
 RAN_PDF_OVERLAYS=0
+PIXELS="FAIL (not checked)"
 for entry in "${FLOWS[@]}"; do
   flow=${entry% *}
   own_location=${entry##* }
@@ -229,6 +240,9 @@ for entry in "${FLOWS[@]}"; do
     result=PASS
     launch_health "$name"
     health=$HEALTH
+    if [ "$KEEP_PASS_LOGCAT" = 1 ]; then
+      adb logcat -d > "logcat-pass-$name.txt" || true
+    fi
   elif system_server_restarted "$name" "$flow"; then
     result="FAIL (infra: system_server restarted)"
     RC=1
@@ -261,28 +275,31 @@ for entry in "${FLOWS[@]}"; do
   fi
   took=$((SECONDS - started))
   echo "=== $flow $result ($((took / 60))m$((took % 60))s) ==="
+  # pdf-overlays.yaml proves the overlay drew through its map screenshot
+  # (#331); the flow passing without the pixels is not a pass. Checked NOW,
+  # while the app still shows the map: on a busy emulator the raster can land
+  # after the flow's single screenshot, so poll-overlay.sh re-checks fresh
+  # screen captures until it passes or 60 s run out (no relaunch, no re-tap;
+  # every attempt's sample count is logged). Where Maestro writes the flow's
+  # own screenshot depends on its CLI version: find-screenshot.sh looks
+  # everywhere.
+  if [ "$name" = pdf-overlays ]; then
+    if [[ "$result" == PASS* ]]; then
+      SHOT=$(bash scripts/e2e/find-screenshot.sh pdf-overlays-map.png .maestro "$SHOT_MARK") || SHOT=-
+      echo "=== pdf-overlays screenshot: $SHOT ==="
+      if bash scripts/e2e/poll-overlay.sh "$SHOT" 60 3; then PIXELS=PASS; else PIXELS=FAIL; fi
+    else
+      PIXELS="FAIL (flow failed)"
+    fi
+  fi
   SUMMARY+=$'\n'"| $name | $result | $((took / 60))m$((took % 60))s | $health |"
 done
 rm -f "$GEO_RUN"
 
-# pdf-overlays.yaml proves the overlay drew through its map screenshot (#331);
-# the flow passing without the pixels is not a pass. Where Maestro writes it
-# depends on the CLI version (current ones: the flow's artifact bundle under
-# ~/.maestro/tests, not the cwd) — find-screenshot.sh looks everywhere.
+# pdf-overlays pixels: checked right after the flow (see the loop above).
 if [ "$RAN_PDF_OVERLAYS" = 1 ]; then
-  if SHOT=$(bash scripts/e2e/find-screenshot.sh pdf-overlays-map.png .maestro "$SHOT_MARK"); then
-    echo "=== pdf-overlays screenshot: $SHOT ==="
-    if node scripts/e2e/check-overlay-screenshot.mjs "$SHOT"; then
-      SUMMARY+=$'\n'"| pdf-overlays pixels | PASS | |"
-    else
-      SUMMARY+=$'\n'"| pdf-overlays pixels | FAIL | |"
-      RC=1
-    fi
-  else
-    echo "=== pdf-overlays screenshot missing ==="
-    SUMMARY+=$'\n'"| pdf-overlays pixels | FAIL (no screenshot) | |"
-    RC=1
-  fi
+  SUMMARY+=$'\n'"| pdf-overlays pixels | $PIXELS | |"
+  [ "$PIXELS" = PASS ] || RC=1
 fi
 rm -f "$SHOT_MARK"
 
