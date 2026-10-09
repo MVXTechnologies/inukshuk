@@ -279,7 +279,10 @@ provoke_anr() {
   pid=$(adb shell pidof com.google.android.apps.nexuslauncher | tr -d '\r')
   echo "=== PROVOKE: launcher pid ${pid:-none}; freezing"
   [ -n "$pid" ] || return 1
-  adb shell kill -STOP "$pid"
+  echo "=== PROVOKE: adb root: $(adb root 2>&1 | tr -d '\r')"
+  adb wait-for-device
+  echo "=== PROVOKE: whoami: $(adb shell id -un | tr -d '\r'); kill -STOP: $(adb shell "kill -STOP $pid" 2>&1 | tr -d '\r')"
+  echo "=== PROVOKE: launcher state right after STOP: $(adb shell cat /proc/$pid/stat 2>/dev/null | cut -d' ' -f3)"
   adb logcat -c || true
   for i in $(seq 1 12); do
     timeout 15 adb shell input keyevent KEYCODE_HOME >/dev/null 2>&1 &
