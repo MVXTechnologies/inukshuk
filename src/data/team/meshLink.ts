@@ -26,6 +26,11 @@ export interface MeshLinkStatus {
 
 export const LOCAL_NETWORK_DENIED = 'E_MESH_LOCAL_NETWORK_DENIED';
 
+/** One at a time: 2 s, 4 s, 8 s … then every 30 s, until the link stops. */
+export function defaultRetryDelayMs(retry: number): number {
+  return Math.min(30_000, 2_000 * 2 ** retry);
+}
+
 export class MeshLink {
   private readonly services = new Map<string, string>();
   private readonly manual = new Map<string, string>();
@@ -34,6 +39,11 @@ export class MeshLink {
   private current: { serviceId: string; dialId: string } | null = null;
   private unsubscribe: (() => void) | null = null;
   private running = false;
+  /** One at a time: the pending redial of the last phone left, and how many so far. */
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private retries = 0;
+  /** One at a time: phones already tried since the last backoff (each once per round). */
+  private readonly tried = new Set<string>();
   private error: MeshLinkStatus['error'] = null;
 
   constructor(
@@ -49,6 +59,8 @@ export class MeshLink {
       oneAtATime?: boolean;
       /** Diagnostics: event kinds and reasons, never addresses or ids. */
       onDiag?: (event: string) => void;
+      /** One at a time: wait before dialling the same phone again (nth retry, from 0). */
+      retryDelayMs?: (retry: number) => number;
     },
   ) {}
 
@@ -81,6 +93,9 @@ export class MeshLink {
     this.manual.clear();
     this.queue.length = 0;
     this.current = null;
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    this.tried.clear();
     try {
       this.transport.stopAdvertising();
       this.transport.stopBrowsing();
@@ -156,7 +171,8 @@ export class MeshLink {
 
   private dialService(serviceId: string): void {
     try {
-      // One at a time: no automatic retry; the queue moves on instead.
+      // One at a time: no transport-level retry; the queue moves on instead
+      // (and comes back to the last phone left after a backoff).
       const dialId = this.transport.connectService(serviceId, {
         reconnect: this.options.oneAtATime !== true,
       });
@@ -165,6 +181,21 @@ export class MeshLink {
     } catch {
       // The service vanished between discovery and dial: the next advert retries.
     }
+  }
+
+  private scheduleRetry(): void {
+    if (this.retryTimer !== null || this.queue.length === 0) return;
+    const delay = (this.options.retryDelayMs ?? defaultRetryDelayMs)(this.retries);
+    this.retries += 1;
+    this.options.onDiag?.(`retry in ${delay} ms`);
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      this.tried.clear();
+      if (!this.running || this.current !== null) return;
+      const next = this.queue.shift();
+      if (next !== undefined) this.dialService(next);
+      this.options.onChange();
+    }, delay);
   }
 
   private onEvent(e: MeshEvent): void {
@@ -212,9 +243,20 @@ export class MeshLink {
           this.services.delete(serviceId);
           this.current = null;
           if (serviceId.startsWith('manual:')) this.manual.delete(serviceId.slice(7));
-          const next = this.queue.shift();
+          this.tried.add(serviceId);
           if (!serviceId.startsWith('manual:')) this.queue.push(serviceId);
-          if (next !== undefined && next !== serviceId) this.dialService(next);
+          const next = this.queue.find((id) => !this.tried.has(id));
+          if (next !== undefined) {
+            this.queue.splice(this.queue.indexOf(next), 1);
+            this.dialService(next);
+          } else {
+            // Every phone in range said no this round: try them again after a
+            // backoff. Never would leave a joiner with one teammate in range on
+            // "Connecting…" for good (a session can end for a passing reason: a
+            // dropped frame, a network blip, and the transport reports a phone
+            // only once); at once would spin between phones that refuse.
+            this.scheduleRetry();
+          }
         }
         this.options.onChange();
         return;

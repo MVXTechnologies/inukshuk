@@ -15,7 +15,8 @@ export function teamDebug(...parts: unknown[]): void {
 /** A session event's name, for the trace (`{ type: 'closed', why }` → "closed(why)"). */
 export function describeEvent(event: unknown): string {
   if (typeof event !== 'object' || event === null) return String(event);
-  const e = event as { type?: unknown; why?: unknown };
+  const e = event as { type?: unknown; why?: unknown; reason?: unknown };
   const type = typeof e.type === 'string' ? e.type : '?';
-  return typeof e.why === 'string' ? `${type}(${e.why})` : type;
+  const detail = typeof e.why === 'string' ? e.why : typeof e.reason === 'string' ? e.reason : null;
+  return detail !== null ? `${type}(${detail})` : type;
 }
