@@ -4,7 +4,12 @@
  * (Maestro). Never rendered in a store build.
  */
 import { DEFAULT_INVITE } from '@core/teamui/invites';
-import { addSimulatedTeammate, simulatedTeamToJoin } from '@data/team/simulatedTeammates';
+import {
+  addBadgeThreads,
+  addSimulatedTeammate,
+  BADGE_THREADS,
+  simulatedTeamToJoin,
+} from '@data/team/simulatedTeammates';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -23,6 +28,13 @@ export function SimulatedTeammates() {
   const t = useSchemeTokens();
   const [busy, setBusy] = useState(false);
   const count = useTeamStore((s) => s.view?.activeCount ?? 0);
+  // The badge threads as THIS phone holds them (synced, not just written).
+  const badgesHere = useTeamStore((s) =>
+    BADGE_THREADS.every(({ caption, comments }) => {
+      const photo = s.photos.find((p) => p.caption === caption);
+      return photo !== undefined && (s.photoThreads.get(photo.id)?.length ?? 0) >= comments;
+    }),
+  );
   const add = async () => {
     const session = teamService()?.active;
     if (!session) return;
@@ -56,6 +68,22 @@ export function SimulatedTeammates() {
       <Button mode="outlined" onPress={() => void addAlex()} loading={busy} testID="team-sim-alex">
         Add Alex (Guide) · comments on shared photos
       </Button>
+      <Button
+        mode="outlined"
+        onPress={() => {
+          setBusy(true);
+          void addBadgeThreads(center()).finally(() => setBusy(false));
+        }}
+        loading={busy}
+        testID="team-sim-badges"
+      >
+        Comment-badge threads (12, 100)
+      </Button>
+      {badgesHere && (
+        <Text variant="bodySmall" testID="team-sim-badges-done">
+          Badge threads synced to this phone
+        </Text>
+      )}
     </View>
   );
 }

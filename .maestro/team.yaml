@@ -217,6 +217,25 @@ tags:
     visible: '.*Check the culvert at km 2.*'
     timeout: 5000
 - tapOn: 'Back'
+# The comment-badge threads (12 and 100 comments on two of her photos), for
+# the badge screenshot later: written now, while she is a member, and only
+# now (at join time they loaded the JS thread through the checks above).
+# Wait until this phone holds them all.
+- scrollUntilVisible:
+    element:
+      id: 'team-sim-badges'
+    direction: DOWN
+- tapOn:
+    id: 'team-sim-badges'
+- scrollUntilVisible:
+    element:
+      id: 'team-sim-badges-done'
+    direction: DOWN
+    timeout: 90000
+- scrollUntilVisible:
+    element:
+      id: 'team-member-Julie Tremblay'
+    direction: UP
 # Remove her: the key rotates at once (no "must be rotated" banner).
 - tapOn:
     id: 'team-member-Julie Tremblay'

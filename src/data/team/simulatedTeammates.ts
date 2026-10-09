@@ -87,7 +87,7 @@ export async function addSimulatedTeammate(
   await until(() => session.view().members.length > 1, 5_000);
   session.sendMessage(`Bonjour, ici ${name}`);
   walk(bot, center, bots.length);
-  void sharePhotoWithComment(session, center, bots.length);
+  sharePhotoWithComment(session, center, bots.length);
   if (script) commentOnFirstSharedTrail(bot, script.photoComment);
   return true;
 }
@@ -101,7 +101,7 @@ const SIGN_THUMB =
  * photo thread exists for the flows (Team chat → Threads → the photo's card,
  * whose comment box must stay above the keyboard).
  */
-async function sharePhotoWithComment(
+function sharePhotoWithComment(
   session: {
     me: string;
     writeEntity: TeamSession['writeEntity'];
@@ -109,7 +109,7 @@ async function sharePhotoWithComment(
   },
   center: { latitude: number; longitude: number },
   n: number,
-): Promise<void> {
+): void {
   const id = `simph${n}${Date.now().toString(36)}`;
   const at = Date.now();
   session.writeEntity('photo', id, {
@@ -123,21 +123,40 @@ async function sharePhotoWithComment(
   });
   session.writeEntity('photo', id, { tb: SIGN_THUMB });
   session.commentOnPhoto(id, 'The trail sign is down here');
-  // Two more photos with 12 and 100 comments: the map's comment badges at two
-  // and three characters ("12", "99+"), screenshotted by the flows. Written a
-  // few at a time, yielding in between: every comment is a signed op, and 132
-  // of them in one go held the JS thread for ~17 s on the CI emulator (E2E run
-  // 37909729348: a join's close sat unprocessed, the team flow timed out).
-  for (const [k, count] of [12, 100].entries()) {
+}
+
+/** Captions of the badge threads' photos (the flows find them by caption). */
+export const BADGE_THREADS = [
+  { caption: 'Badge 12', comments: 12 },
+  { caption: 'Badge 100', comments: 100 },
+] as const;
+
+/**
+ * The first simulated teammate shares two more photos with 12 and 100
+ * comments: the map's comment badges at two and three characters ("12",
+ * "99+"), screenshotted by the flows. Only when a flow asks (a button), and a
+ * few comments at a time: every comment is a signed op that this phone then
+ * verifies and draws, and doing it at join time loaded the JS thread through
+ * the join notice and the chat checks (E2E runs 37909729348, 37959846472).
+ */
+export async function addBadgeThreads(center: {
+  latitude: number;
+  longitude: number;
+}): Promise<boolean> {
+  const session = bots[0]?.service.active;
+  if (!session) return false;
+  const id = `simbadge${Date.now().toString(36)}`;
+  const at = Date.now();
+  for (const [k, { caption, comments: count }] of BADGE_THREADS.entries()) {
     const pid = `${id}b${k}`;
     session.writeEntity('photo', pid, {
-      trackId: `simtrail${n}`,
-      lngLat: [center.longitude + 0.0015 * n + 0.0006 * (k + 1), center.latitude + 0.0006],
+      trackId: 'simtrail1',
+      lngLat: [center.longitude + 0.0015 + 0.0006 * (k + 1), center.latitude + 0.0006],
       placement: 'gps',
       takenAt: at + k + 1,
       width: 96,
       height: 96,
-      caption: `Badge ${count}`,
+      caption,
     });
     session.writeEntity('photo', pid, { tb: SIGN_THUMB });
     for (let c = 0; c < count; c++) {
@@ -145,6 +164,7 @@ async function sharePhotoWithComment(
       session.commentOnPhoto(pid, `Note ${c + 1}`);
     }
   }
+  return true;
 }
 
 /**
