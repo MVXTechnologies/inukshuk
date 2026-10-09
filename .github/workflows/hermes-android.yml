@@ -47,6 +47,10 @@ jobs:
     name: Build patched hermes-android
     runs-on: ubuntu-latest
     timeout-minutes: 240
+    env:
+      # Hermes's build-logic (HermesUtilsPlugin) requires it: the Hermes
+      # checkout, as in facebook/hermes's build-android.yml.
+      HERMES_WS_DIR: ${{ github.workspace }}/hermes-src
     outputs:
       release-tag: ${{ steps.inputs.outputs.release-tag }}
     steps:
