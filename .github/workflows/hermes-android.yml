@@ -129,12 +129,18 @@ jobs:
           sudo apt-get -o Acquire::Retries=3 update
           sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends libicu-dev
 
-      # Meta's own release script: VERSION_NAME from npm/hermes-compiler.
+      # What Meta's release script (utils/scripts/hermes/set-artifacts-version.js
+      # --build-type release) does: VERSION_NAME = npm/hermes-compiler's
+      # version, already checked to equal build.json's. Done directly: the
+      # script needs the Hermes repo's whole yarn install (shelljs) for a
+      # one-line edit.
       - name: Set the artifact version
         working-directory: hermes-src
+        env:
+          VERSION: ${{ steps.inputs.outputs.version }}
         run: |
-          node utils/scripts/hermes/set-artifacts-version.js --build-type release
-          grep '^VERSION_NAME=' android/gradle.properties
+          sed -i "s/^VERSION_NAME=.*/VERSION_NAME=$VERSION/" android/gradle.properties
+          grep -x "VERSION_NAME=$VERSION" android/gradle.properties
 
       # The steps are split so their durations are the build-from-source cost
       # per app build: hermesc once, then one variant for all four ABIs (what a
