@@ -165,8 +165,20 @@ anr_state_add() { # <dialogs> <checks> <ms> <unavailable>
   echo "$((d + $1)) $((c + $2)) $((m + $3)) $((u + $4))" > "$ANR_STATE"
 }
 anr_count() { local d _; read -r d _ < "$ANR_STATE"; echo "$d"; }
+ANR_DUMP_DIAG=0
 anr_dump() {
-  adb shell uiautomator dump /dev/stdout 2>/dev/null | tr -d '\r'
+  local out xml
+  # To a file, then cat it: /dev/stdout is not reliably writable by the
+  # dumper. The tool's own output is kept as evidence when no dump results
+  # (first few failures only, to keep the log readable).
+  adb shell rm -f /sdcard/anr-check.xml >/dev/null 2>&1 || true
+  out=$(adb shell uiautomator dump /sdcard/anr-check.xml 2>&1 | tr -d '\r')
+  xml=$(adb shell cat /sdcard/anr-check.xml 2>/dev/null | tr -d '\r')
+  if ! grep -q '<hierarchy' <<< "$xml" && [ "$ANR_DUMP_DIAG" -lt 3 ]; then
+    ANR_DUMP_DIAG=$((ANR_DUMP_DIAG + 1))
+    echo "anr_dump: no hierarchy; uiautomator said: ${out:0:400}" >&2
+  fi
+  printf '%s\n' "$xml"
 }
 # Dismiss a visible ANR dialog. Returns 0 when one was found.
 dismiss_anr_dialog() {
