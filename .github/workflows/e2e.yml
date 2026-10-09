@@ -139,6 +139,16 @@ jobs:
           # E2E builds only (plugins/withGnss.js), never a store build.
           GNSS_FAKE_DEVICE: '1'
 
+      # The Gradle build already refused anything else (verifyPatchedHermes*,
+      # plugins/withPatchedHermes.js); this checks the APK itself, logs the
+      # packaged Hermes build-id, and records the APK size for comparisons.
+      - name: Check the APK ships the patched Hermes (#648)
+        run: |
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          unzip -q -o "$apk" 'lib/*/libhermesvm.so' -d "$RUNNER_TEMP/apk-libs"
+          node plugins/patched-hermes/verify-hermes.js packaged "$RUNNER_TEMP/apk-libs"
+          echo "APK size (x86_64 release): $(stat -c %s "$apk") bytes" | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Save Gradle dependencies (main only)
         if: steps.gradle-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

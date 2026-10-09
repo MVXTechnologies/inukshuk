@@ -1,0 +1,12 @@
+{
+  "$comment": [
+    "Not published yet: .github/workflows/hermes-android.yml writes this file (artifact-manifest.js)."
+  ],
+  "version": "250829098.0.10",
+  "releaseTag": "hermes-android-250829098.0.10-gwpasan.1",
+  "baseUrl": "",
+  "mavenPath": "com/facebook/hermes/hermes-android/250829098.0.10",
+  "builtBy": "",
+  "files": [],
+  "buildIds": {}
+}
