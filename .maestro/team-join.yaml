@@ -4,13 +4,14 @@
 # name, compare the six-digit safety code, keep the team, and see the
 # founder's message and position, then leave.
 appId: com.inukshuk.app
+tags:
+  - clean-state
 ---
 - runFlow:
     when:
       platform: Android
     commands:
       - launchApp:
-          clearState: true
           permissions:
             location: allow
             notifications: allow
@@ -19,13 +20,13 @@ appId: com.inukshuk.app
       platform: iOS
     commands:
       - launchApp:
-          clearState: true
           permissions:
             location: always
             notifications: allow
-# A clean start (2026-10-09): no team, join or invite left over from an earlier
-# flow or a failed attempt, so a retry never inherits a half-done join.
-# Android's one-time "Viewing full screen" hint can sit over the map.
+# A clean start: the runner clears the app's data before every attempt (the
+# `clean-state` tag), so no team, join or invite is left over from an earlier
+# flow or a failed attempt. Android's one-time "Viewing full screen" hint can
+# then sit over the map.
 - tapOn:
     text: 'Got it'
     optional: true

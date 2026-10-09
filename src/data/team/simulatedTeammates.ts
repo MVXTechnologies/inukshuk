@@ -87,7 +87,7 @@ export async function addSimulatedTeammate(
   await until(() => session.view().members.length > 1, 5_000);
   session.sendMessage(`Bonjour, ici ${name}`);
   walk(bot, center, bots.length);
-  sharePhotoWithComment(session, center, bots.length);
+  void sharePhotoWithComment(session, center, bots.length);
   if (script) commentOnFirstSharedTrail(bot, script.photoComment);
   return true;
 }
@@ -101,7 +101,7 @@ const SIGN_THUMB =
  * photo thread exists for the flows (Team chat → Threads → the photo's card,
  * whose comment box must stay above the keyboard).
  */
-function sharePhotoWithComment(
+async function sharePhotoWithComment(
   session: {
     me: string;
     writeEntity: TeamSession['writeEntity'];
@@ -109,7 +109,7 @@ function sharePhotoWithComment(
   },
   center: { latitude: number; longitude: number },
   n: number,
-): void {
+): Promise<void> {
   const id = `simph${n}${Date.now().toString(36)}`;
   const at = Date.now();
   session.writeEntity('photo', id, {
@@ -123,9 +123,12 @@ function sharePhotoWithComment(
   });
   session.writeEntity('photo', id, { tb: SIGN_THUMB });
   session.commentOnPhoto(id, 'The trail sign is down here');
-  // Two more photos with 12 and 120 comments: the map's comment badges at two
-  // and three characters ("12", "99+"), screenshotted by the flows.
-  [12, 120].forEach((count, k) => {
+  // Two more photos with 12 and 100 comments: the map's comment badges at two
+  // and three characters ("12", "99+"), screenshotted by the flows. Written a
+  // few at a time, yielding in between: every comment is a signed op, and 132
+  // of them in one go held the JS thread for ~17 s on the CI emulator (E2E run
+  // 37909729348: a join's close sat unprocessed, the team flow timed out).
+  for (const [k, count] of [12, 100].entries()) {
     const pid = `${id}b${k}`;
     session.writeEntity('photo', pid, {
       trackId: `simtrail${n}`,
@@ -137,8 +140,11 @@ function sharePhotoWithComment(
       caption: `Badge ${count}`,
     });
     session.writeEntity('photo', pid, { tb: SIGN_THUMB });
-    for (let c = 0; c < count; c++) session.commentOnPhoto(pid, `Note ${c + 1}`);
-  });
+    for (let c = 0; c < count; c++) {
+      if (c % 4 === 0) await new Promise((r) => setTimeout(r, 25));
+      session.commentOnPhoto(pid, `Note ${c + 1}`);
+    }
+  }
 }
 
 /**
