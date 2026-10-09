@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Poll the pdf-overlays pixel check until the overlay is on the map, or a
 # hard deadline passes. Run right after pdf-overlays.yaml, while the app still
-# shows the map (not a flow retry: nothing is relaunched or re-tapped).
+# shows the map (not a flow retry: nothing is relaunched or re-tapped), with
+# the device held at the flow's location (the caller re-applies it with
+# flow-location.sh: Maestro's own mock locations end with the flow).
 #
 #   poll-overlay.sh <first-screenshot.png|-> [deadline-seconds] [interval-seconds]
 #
