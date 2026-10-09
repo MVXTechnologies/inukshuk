@@ -14,15 +14,19 @@ name: Patched Hermes (Android)
 # - Checks: every 64-bit libhermesvm.so of every variant carries the patched
 #   make_fcontext, and Meta's prebuilt from Maven Central does not (so the
 #   check is known to be able to fail).
-# - Publish (push / manual only, never on a pull request): only when the
-#   release tag does not exist yet. A published release is never replaced;
-#   when it exists, its assets' digests are checked against artifact.json.
-#   Builds are not bit-reproducible, so a rebuild proves the recipe, while
-#   the published bytes stay the pinned ones.
+# - Publish: only when the release tag does not exist yet. A published
+#   release is never replaced.
+# - Plan: the build takes about an hour, so it is skipped when releaseTag is
+#   already published from the same inputs (artifact.json records the
+#   fingerprint of build.json + patches, plugins/patched-hermes/inputs.js);
+#   then only the published assets' digests are checked against artifact.json.
+#   Inputs that changed under a published tag fail: set a new releaseTag.
+#   "Run workflow" with `rebuild` builds anyway, to prove the recipe still
+#   builds (builds are not bit-reproducible; the published bytes stay pinned).
 #
-# Runs only when its inputs change (it takes over an hour), on push rather than
-# pull_request: a pull_request path filter matches the whole PR diff, so every
-# later push of the PR would rebuild.
+# Triggered on push (a force-push or a merge re-triggers it; the plan makes
+# that cheap) rather than pull_request, whose path filter matches the whole PR
+# diff.
 on:
   push:
     paths:
@@ -32,8 +36,14 @@ on:
       - 'plugins/patched-hermes/hermesCheck.js'
       - 'plugins/patched-hermes/verify-hermes.js'
       - 'plugins/patched-hermes/artifact-manifest.js'
+      - 'plugins/patched-hermes/inputs.js'
       - '.github/workflows/hermes-android.yml'
   workflow_dispatch:
+    inputs:
+      rebuild:
+        description: Build even if releaseTag is published (never re-publishes)
+        type: boolean
+        default: false
 
 concurrency:
   group: hermes-android-${{ github.ref }}
@@ -43,16 +53,38 @@ permissions:
   contents: read
 
 jobs:
+  plan:
+    name: Plan (build, or check the published release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      build: ${{ steps.plan.outputs.build }}
+      release-tag: ${{ steps.plan.outputs.release-tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Decide
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REBUILD: ${{ inputs.rebuild || false }}
+        run: |
+          set -euo pipefail
+          tag=$(node -p 'require("./plugins/patched-hermes/build.json").releaseTag')
+          echo "release-tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then exists=true; else exists=false; fi
+          node plugins/patched-hermes/inputs.js plan "$exists" "$REBUILD" | tee -a "$GITHUB_OUTPUT"
+
   build:
     name: Build patched hermes-android
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 240
     env:
       # Hermes's build-logic (HermesUtilsPlugin) requires it: the Hermes
       # checkout, as in facebook/hermes's build-android.yml.
       HERMES_WS_DIR: ${{ github.workspace }}/hermes-src
-    outputs:
-      release-tag: ${{ steps.inputs.outputs.release-tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -226,8 +258,9 @@ jobs:
 
   publish:
     name: Publish (once per release tag)
-    needs: build
-    if: github.event_name != 'pull_request'
+    needs: [plan, build]
+    # Also when the build was skipped by the plan: then it checks the release.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -236,6 +269,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: needs.build.result == 'success'
         with:
           name: hermes-android-patched
           path: out
@@ -243,7 +277,7 @@ jobs:
       - name: Publish, or check the published assets
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.build.outputs.release-tag }}
+          TAG: ${{ needs.plan.outputs.release-tag }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail

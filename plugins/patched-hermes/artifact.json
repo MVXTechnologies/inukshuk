@@ -8,6 +8,7 @@
   ],
   "version": "250829098.0.10",
   "releaseTag": "hermes-android-250829098.0.10-gwpasan.1",
+  "inputsSha256": "9362b6fc667511fd325a020eea2c127027e407044b7868e3f67b73cae41043b8",
   "baseUrl": "https://github.com/MVXTechnologies/inukshuk/releases/download/hermes-android-250829098.0.10-gwpasan.1",
   "mavenPath": "com/facebook/hermes/hermes-android/250829098.0.10",
   "builtBy": "https://github.com/MVXTechnologies/inukshuk/actions/runs/37887727710",

@@ -15,6 +15,7 @@ const { join } = require('node:path');
 
 const build = require('./build.json');
 const { describeLib } = require('./hermesCheck');
+const { buildInputsHash } = require('./inputs');
 const { findLibs } = require('./verify-hermes');
 
 /** Maven files Gradle reads; checksum side files and maven-metadata are not needed. */
@@ -44,6 +45,7 @@ function artifactManifest(files, libs, where) {
     ],
     version: build.version,
     releaseTag: build.releaseTag,
+    inputsSha256: buildInputsHash(),
     baseUrl: `https://github.com/${where.repo}/releases/download/${build.releaseTag}`,
     mavenPath: `com/facebook/hermes/hermes-android/${build.version}`,
     builtBy: where.runUrl,
