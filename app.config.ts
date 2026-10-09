@@ -264,6 +264,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // Raise Gradle heap/metaspace so :expo-updates:kspReleaseKotlin doesn't OOM
     // on production builds (the SDK template's 512m metaspace is too small).
     './plugins/withGradleMemory',
+    // Android: Hermes with the boost.context frame-pointer fix (facebook/hermes
+    // 73f9af39b1), so GWP-ASan's stack walk can't crash the app at launch
+    // (#648). Built once by .github/workflows/hermes-android.yml, pinned by
+    // SHA-256; the build fails unless the packaged libhermesvm.so is that one.
+    './plugins/withPatchedHermes',
     // Allow cleartext to loopback only, for the in-app HTTP server that serves the
     // MapLibre style during an offline-region download (see src/data/offline.ts).
     './plugins/withLocalhostCleartext',

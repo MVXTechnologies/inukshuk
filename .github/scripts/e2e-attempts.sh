@@ -303,8 +303,42 @@ for entry in "${FLOWS[@]}"; do
     fi
   fi
   SUMMARY+=$'\n'"| $name | $result | $((took / 60))m$((took % 60))s | $health |"
+  # JS-side timings the app logs (PDF pre-render), for comparing builds.
+  if [ "$SYSTEM_BROKE" = 0 ]; then
+    adb logcat -d -s ReactNativeJS:I 2>/dev/null | grep -E 'PdfPrerender: .* in [0-9]+ ms' |
+      sed "s/^/perf ($name): /" || true
+  fi
 done
 rm -f "$GEO_RUN"
+
+# Cold starts after the flows (#648: a native change must not slow launch,
+# and each launch is one more chance for a start-up crash to show): COLD_RUNS
+# launches from a force-stopped process, `am start -W` TotalTime (process
+# start to first frame), each left running 8 s (the GWP-ASan crash of #648
+# struck 3-4 s after start). Median and every sample go in the summary; the
+# launches count in the crash counters like a flow.
+COLD_RUNS=5
+if [ "$SYSTEM_BROKE" = 0 ]; then
+  component=$(adb shell cmd package resolve-activity --brief "$APP_ID" 2>/dev/null | tr -d '\r' | tail -n 1)
+  cold=()
+  adb logcat -c || true
+  if [[ "$component" == */* ]]; then
+    for _ in $(seq "$COLD_RUNS"); do
+      t=$(adb shell am start -W -S -n "$component" 2>/dev/null | tr -d '\r' | sed -n 's/^TotalTime: *//p')
+      [ -n "$t" ] && cold+=("$t")
+      sleep 8
+    done
+  fi
+  launch_health "cold starts"
+  if [ "${#cold[@]}" -gt 0 ]; then
+    median=$(printf '%s\n' "${cold[@]}" | sort -n | awk '{a[NR]=$1} END {print a[int((NR + 1) / 2)]}')
+    echo "=== cold start: median ${median} ms of ${#cold[@]} (${cold[*]}) ==="
+    SUMMARY+=$'\n'"| cold start x${#cold[@]} (am start -W) | median ${median} ms (${cold[*]}) | | $HEALTH |"
+  else
+    echo "::warning title=E2E ($SHARD): no cold-start timing::am start -W returned no TotalTime for '$component'"
+    SUMMARY+=$'\n'"| cold start (am start -W) | no timing | | $HEALTH |"
+  fi
+fi
 
 # pdf-overlays pixels: checked right after the flow (see the loop above).
 if [ "$RAN_PDF_OVERLAYS" = 1 ]; then
