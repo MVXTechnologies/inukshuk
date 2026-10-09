@@ -226,14 +226,16 @@ flake). Each shard writes a per-flow pass/time table to its job summary.
 responding" sat over the app and failed every flow of the extensions shard at
 "Map actions", on the retry too, although `hide_error_dialogs` was set. The
 workflow now also sets `anr_show_background 0` and `show_first_crash_dialog 0`
-and logs the effective values, and the runner watches for an ANR dialog (window
-title "Application Not Responding: <process>") before each flow and every 4 s
-during the shard. A dialog for any process but the app is removed by
-force-stopping that process (the launcher restarts as home); a dialog for the
-app itself is never hidden and is reported as an error. Each one is a
-`E2E ANR dialog` warning and a count in the shard's job summary (an "ANR
-dialogs" column per flow), so a launcher that keeps ANRing stays visible. It
-is a guard, not a retry: no flow is re-run because of it.
+and logs the effective values. Before every flow attempt (so also before a
+retry) the runner takes a `uiautomator dump` and looks for the dialog by the
+resource ids seen in that run's hierarchy, `android:id/aerr_close` and
+`android:id/aerr_wait` (`scripts/ci/anrDialog.mjs`, unit-tested on the captured
+hierarchy and on a normal screen). It taps "Close app" like a user would; a
+dialog naming the app under test is never closed and is an error annotation.
+The dump is not taken while Maestro runs (both use UiAutomation); its count and
+total cost are in the job summary next to the number of ANR dialogs, and every
+dialog is an `E2E ANR dialog` warning, so a launcher that keeps ANRing stays
+visible. It is a guard, not a retry: no flow is re-run because of it.
 
 The geo-fix feed is **gated** (run 37628988758, 2026-10-07): the emulator's
 GNSS HAL can deadlock `system_server` when a fix's status report races
