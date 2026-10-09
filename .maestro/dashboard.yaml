@@ -38,8 +38,12 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
+# retryTapIfNoChange, like library-filter/settings/trail-view: a tab tap fired
+# mid-cold-start can be dropped while the hierarchy is churning (CI
+# 2026-10-09, run 37893244108: the Map was still showing 15 s later).
 - tapOn:
     text: 'Logbook(, tab.*)?'
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible: 'Distance per week'
     timeout: 15000
