@@ -15,7 +15,7 @@ describe('photo paths', () => {
     expect(photoFilePaths('t1', 'p-1')).toEqual({
       file: 'photos/t1/p-1.jpg',
       thumb: 'photos/t1/p-1.sq.jpg',
-      sprite: 'photos/t1/p-1.map.png',
+      sprite: 'photos/t1/p-1.map2.png',
     });
   });
 
@@ -35,7 +35,8 @@ describe('photo paths', () => {
   it('maps files back to photo ids', () => {
     expect(photoIdOfFile('abc.jpg')).toBe('abc');
     expect(photoIdOfFile('abc.sq.jpg')).toBe('abc');
-    expect(photoIdOfFile('abc.map.png')).toBe('abc');
+    expect(photoIdOfFile('abc.map.png')).toBe('abc'); // a 132 px one, from before 2× sprites
+    expect(photoIdOfFile('abc.map2.png')).toBe('abc');
     expect(photoIdOfFile('photos.json')).toBeNull();
     expect(photoIdOfFile('abc.png')).toBeNull();
   });
@@ -47,11 +48,12 @@ describe('photo paths', () => {
       'a.map.png',
       'b.jpg',
       'b.map.png',
+      'b.map2.png',
       'photos.json',
       'photos.json.tmp',
       'notes.txt',
     ];
-    expect(orphanFiles(names, new Set(['a']))).toEqual(['b.jpg', 'b.map.png']);
+    expect(orphanFiles(names, new Set(['a']))).toEqual(['b.jpg', 'b.map.png', 'b.map2.png']);
     expect(orphanFiles(names, new Set(['a', 'b']))).toEqual([]);
   });
 });

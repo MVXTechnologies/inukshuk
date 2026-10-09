@@ -1,0 +1,369 @@
+# Team mode e2e (#589), founder side, on the loopback mesh: a build made with
+# EXPO_PUBLIC_MESH_LOOPBACK=1 (the E2E APK sets it in .github/workflows/e2e.yml)
+# runs simulated teammates' phones inside the app over an in-memory LAN, with
+# the real protocol (join, safety code, sync, removal and key rotation).
+#
+# Settings → Extensions → Get Team mode → Create a team → share my position →
+# Invite (QR) → a simulated teammate joins with it (safety code on the admin's
+# screen) → their message reaches the chat → I reply → remove them (the key
+# rotates at once) → the team chip on the map → leave the team.
+#
+# Settings rows merge title + subtitle on iOS: their matches are wildcard
+# regexes (maestro-ios-tap-traps). The accordion opener is guarded.
+appId: com.inukshuk.app
+tags:
+  - clean-state
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            notifications: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+            notifications: allow
+# A clean start: the runner clears the app's data before every attempt (the
+# `clean-state` tag), so no team, join or invite is left over from an earlier
+# flow or a failed attempt. Android's one-time "Viewing full screen" hint can
+# then sit over the map.
+- tapOn:
+    text: 'Got it'
+    optional: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- setLocation:
+    latitude: 47.0745
+    longitude: -70.9065
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Settings'
+    timeout: 15000
+- tapOn: 'Settings'
+- scrollUntilVisible:
+    element: 'Extensions.*'
+    direction: DOWN
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: '.*Team mode.*'
+          commands:
+            - tapOn: 'Extensions.*'
+      - scrollUntilVisible:
+          element: '.*Team mode.*'
+          direction: DOWN
+          timeout: 5000
+# Compact list (#633): a one-line row, Get before the install and its switch
+# after; the team rows are in its details, opened by tapping the row (only
+# when they are closed: a second tap would close them again).
+- scrollUntilVisible:
+    element:
+      id: 'extension-row-team'
+    direction: DOWN
+- runFlow:
+    when:
+      visible: 'Get Team mode'
+    commands:
+      - tapOn: 'Get Team mode'
+- runFlow:
+    when:
+      notVisible:
+        id: 'extension-details-team'
+    commands:
+      - tapOn:
+          id: 'extension-row-team'
+- scrollUntilVisible:
+    element:
+      id: 'team-create-row'
+    direction: DOWN
+- tapOn:
+    id: 'team-create-row'
+# Create.
+- extendedWaitUntil:
+    visible:
+      id: 'team-create-screen'
+    timeout: 10000
+- tapOn:
+    id: 'team-create-name'
+- inputText: 'Releve MSA'
+- tapOn:
+    id: 'team-create-myname'
+- eraseText: 40
+- inputText: 'Marc'
+- hideKeyboard
+- tapOn:
+    id: 'team-create-ends-14d'
+- tapOn:
+    id: 'team-create-submit'
+# The first team makes this phone's keys, then the OS may ask for notifications once.
+- extendedWaitUntil:
+    visible: '(Allow|Releve MSA)'
+    timeout: 40000
+- runFlow:
+    when:
+      visible: 'Allow'
+    commands:
+      - tapOn: 'Allow'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 15000
+- assertVisible: 'Releve MSA'
+- assertVisible: '.*Off · nobody in the team sees where you are.*'
+- takeScreenshot: team-hub-new
+# Share my position (opt-in).
+- tapOn:
+    id: 'team-share-switch'
+- assertVisible: '.*On while you record.*'
+# Invite: the QR code.
+- tapOn:
+    id: 'team-invite-button'
+- extendedWaitUntil:
+    visible:
+      id: 'team-invite-create'
+    timeout: 5000
+- tapOn:
+    id: 'team-invite-create'
+- extendedWaitUntil:
+    visible:
+      id: 'team-invite-qr'
+    timeout: 5000
+- assertVisible: '.*Single use · 48 hours · joins as member.*'
+- takeScreenshot: team-invite-qr
+- tapOn:
+    id: 'team-invite-done'
+# A simulated phone joins with a fresh invite; the admin sees its safety code.
+- scrollUntilVisible:
+    element:
+      id: 'team-sim-add'
+    direction: DOWN
+- tapOn:
+    id: 'team-sim-add'
+- scrollUntilVisible:
+    element: '.*Julie Tremblay.*'
+    direction: UP
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: 'team-join-notice'
+    direction: UP
+    timeout: 10000
+- takeScreenshot: team-hub-joined
+# Chat: her hello arrives; I reply.
+- tapOn:
+    id: 'team-chat-button'
+- extendedWaitUntil:
+    visible: '.*Bonjour, ici Julie Tremblay.*'
+    timeout: 15000
+- tapOn:
+    id: 'team-chat-input'
+- inputText: 'Depart 9 h au P2'
+# Send with the keyboard up: the composer stays above it on both platforms.
+- takeScreenshot: review-team-chat-keyboard
+- tapOn:
+    id: 'team-chat-send'
+- extendedWaitUntil:
+    visible: '.*Depart 9 h au P2.*'
+    timeout: 5000
+- takeScreenshot: team-chat
+# The composer keeps the keyboard up after a send; close it, then leave.
+- hideKeyboard:
+    optional: true
+- tapOn: 'Back'
+# Tasks: a new task for her, in the list, ticked, under Done.
+- scrollUntilVisible:
+    element:
+      id: 'team-tasks-row'
+    direction: DOWN
+- tapOn:
+    id: 'team-tasks-row'
+- extendedWaitUntil:
+    visible:
+      id: 'team-tasks-screen'
+    timeout: 5000
+- tapOn:
+    id: 'team-task-new'
+- tapOn:
+    id: 'team-task-title'
+- inputText: 'Check the culvert at km 2'
+- hideKeyboard
+- tapOn: 'Julie Tremblay'
+- tapOn:
+    id: 'team-task-place-none'
+- tapOn:
+    id: 'team-task-create'
+- extendedWaitUntil:
+    visible: '.*Check the culvert at km 2.*'
+    timeout: 5000
+- takeScreenshot: team-tasks
+- tapOn:
+    id: 'team-task-check'
+- tapOn:
+    id: 'team-task-filter-done'
+- extendedWaitUntil:
+    visible: '.*Check the culvert at km 2.*'
+    timeout: 5000
+- tapOn: 'Back'
+# Remove her: the key rotates at once (no "must be rotated" banner).
+- tapOn:
+    id: 'team-member-Julie Tremblay'
+- extendedWaitUntil:
+    visible:
+      id: 'team-member-screen'
+    timeout: 5000
+- tapOn:
+    id: 'team-member-remove'
+- tapOn: 'Remove'
+# Removing rotates the team key (slow on a CI emulator).
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 20000
+- assertVisible: '.*Removed.*'
+- assertNotVisible:
+    id: 'team-needs-rotation'
+# The team chip on the map.
+- tapOn: 'Back'
+- tapOn: 'Back'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+# Team signal mode: the team button is the map's only team chrome.
+- extendedWaitUntil:
+    visible:
+      id: 'team-fab'
+    timeout: 10000
+- assertNotVisible: 'Search places'
+- takeScreenshot: team-map
+# Its menu: my status (shown on the map to the others).
+- tapOn:
+    id: 'team-fab'
+- tapOn:
+    id: 'team-fab-status'
+- tapOn:
+    id: 'team-status-arrived'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-status-card'
+    timeout: 5000
+# A pin: a long-press on the map → Message pin, its card with the thread
+# (pins are made from a spot on the map, not from a menu).
+- longPressOn:
+    point: '50%,55%'
+- extendedWaitUntil:
+    visible:
+      id: 'team-press-card'
+    timeout: 5000
+- tapOn:
+    id: 'team-press-pin'
+- extendedWaitUntil:
+    visible:
+      id: 'team-pin-composer'
+    timeout: 5000
+- tapOn:
+    id: 'team-pin-input'
+- inputText: 'Fallen tree here'
+# The composer card stays above the keyboard: tap Send itself.
+- tapOn:
+    id: 'team-pin-send'
+- extendedWaitUntil:
+    visible:
+      id: 'team-pin-card'
+    timeout: 5000
+- assertVisible: '.*Fallen tree here.*'
+- takeScreenshot: team-pin
+- tapOn: 'Close'
+# Team chat → Threads: the pin's conversation, apart from the channel.
+- tapOn:
+    id: 'team-fab'
+- tapOn:
+    id: 'team-fab-chat'
+- extendedWaitUntil:
+    visible:
+      id: 'team-chat-screen'
+    timeout: 5000
+- tapOn:
+    id: 'team-chat-tab-threads'
+- extendedWaitUntil:
+    visible: '.*Fallen tree here.*'
+    timeout: 5000
+- takeScreenshot: team-threads
+# The map's comment badges at two and three characters, centred.
+- tapOn:
+    id: 'team-thread-locate'
+    childOf:
+      id: 'team-thread-row'
+      text: '.*Badge 100.*'
+- extendedWaitUntil:
+    visible: 'never-shown-sentinel'
+    timeout: 4000
+    optional: true
+- takeScreenshot: review-team-badges
+- tapOn:
+    id: 'team-fab'
+- tapOn:
+    id: 'team-fab-chat'
+- tapOn:
+    id: 'team-chat-tab-threads'
+# A teammate's photo thread opens the photo's card on the map. Its comment
+# box must stay above the keyboard: typing, then tapping Send (not Return)
+# only posts when the button is not under the keys.
+- tapOn:
+    id: 'team-thread-row'
+    text: '.*Trail sign down.*'
+- extendedWaitUntil:
+    visible:
+      id: 'photo-card'
+    timeout: 10000
+- tapOn:
+    id: 'team-comment-input'
+- waitForAnimationToEnd:
+    timeout: 2000
+- takeScreenshot: review-team-photo-card-keyboard
+- inputText: 'On my way'
+- tapOn:
+    id: 'team-comment-send'
+- extendedWaitUntil:
+    visible: '.*On my way.*'
+    timeout: 10000
+- takeScreenshot: team-photo-card-keyboard
+- runFlow:
+    when:
+      visible:
+        id: 'photo-card-close'
+    commands:
+      - hideKeyboard:
+          optional: true
+      - tapOn:
+          id: 'photo-card-close'
+# Leave the team (deletes it from this phone): the menu's Manage team.
+- tapOn:
+    id: 'team-fab'
+- tapOn:
+    id: 'team-fab-manage'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 5000
+- scrollUntilVisible:
+    element: 'Leave team'
+    direction: DOWN
+- tapOn: 'Leave team'
+- tapOn: 'Leave'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-hub-screen'
+    timeout: 10000

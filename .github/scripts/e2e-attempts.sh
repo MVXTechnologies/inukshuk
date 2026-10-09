@@ -143,8 +143,16 @@ trap 'kill $GEO_PID $CATALOG_PID 2>/dev/null; rm -f "$GEO_RUN"' EXIT
 
 # One flow attempt, with the feed on only while Maestro runs it.
 run_flow() {
-  local flow=$1 own_location=$2
+  local flow=$1 own_location=$2 clean=${3:-0}
   geo_pause
+  if [ "$clean" = 1 ]; then
+    # `clean-state` flows (e2eShards.mjs startsClean): every attempt starts
+    # from a cleared app, and Android gets time to finish removing the old
+    # task before Maestro launches (an immediate launch was killed by the
+    # pending removal and only came up 30 s later).
+    adb shell pm clear "$APP_ID" >/dev/null 2>&1 || true
+    sleep 5
+  fi
   [ "$own_location" = 1 ] || touch "$GEO_RUN"
   maestro test "$flow"
   local rc=$?
@@ -224,8 +232,8 @@ SHOT_MARK=$(mktemp)
 RAN_PDF_OVERLAYS=0
 PIXELS="FAIL (not checked)"
 for entry in "${FLOWS[@]}"; do
-  flow=${entry% *}
-  own_location=${entry##* }
+  read -r flow own_location clean <<< "$entry"
+  clean=${clean:-0}
   name=$(basename "$flow" .yaml)
   [ "$name" = pdf-overlays ] && RAN_PDF_OVERLAYS=1
   if [ "$SYSTEM_BROKE" = 1 ]; then
@@ -236,7 +244,7 @@ for entry in "${FLOWS[@]}"; do
   started=$SECONDS
   adb logcat -c || true
   health=
-  if run_flow "$flow" "$own_location"; then
+  if run_flow "$flow" "$own_location" "$clean"; then
     result=PASS
     launch_health "$name"
     health=$HEALTH
@@ -256,7 +264,7 @@ for entry in "${FLOWS[@]}"; do
     health=$HEALTH
     adb logcat -d > "logcat-failure-$name.txt" || true
     adb logcat -c || true
-    if run_flow "$flow" "$own_location"; then
+    if run_flow "$flow" "$own_location" "$clean"; then
       launch_health "$name (retry)"
       health="$health, retry $HEALTH"
       result="PASS (on retry)"

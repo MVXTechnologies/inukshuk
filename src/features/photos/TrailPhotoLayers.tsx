@@ -12,7 +12,7 @@ import {
   SELECTED_RING_IMAGE,
   selectedRingLayout,
   selectedSpriteLayout,
-  SPRITE_PIXEL_RATIO,
+  spritePixelRatio,
   spriteLayout,
   spritePrefix,
   stackTapAction,
@@ -109,9 +109,12 @@ export function TrailPhotoLayers({
     for (const name of sprites) {
       const order = orderOfSprite(prefix, name);
       const photo = order === null ? undefined : drawn[order];
-      // 132 px sprites at 3 px per point: a 44 pt circle at icon-size 1.
+      // 264 px sprites at 6 px per point (older 132 px ones at 3): a 44 pt circle
+      // at icon-size 1 either way.
       if (photo) {
-        out[name] = { source: { uri: photoFileUri(photo.sprite), scale: SPRITE_PIXEL_RATIO } };
+        out[name] = {
+          source: { uri: photoFileUri(photo.sprite), scale: spritePixelRatio(photo.sprite) },
+        };
       }
     }
     for (const name of badges) {

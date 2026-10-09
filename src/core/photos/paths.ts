@@ -5,7 +5,8 @@
  *   photos/<trackId>/photos.json      the sidecar (metadata)
  *   photos/<trackId>/<id>.jpg         display copy
  *   photos/<trackId>/<id>.sq.jpg      240 px square thumb
- *   photos/<trackId>/<id>.map.png     132 px round map sprite
+ *   photos/<trackId>/<id>.map2.png    264 px round map sprite (`.map.png`: the
+ *                                     132 px ones made before 2026-10-07)
  *   .photo-inbox/<job>.<ext>          staging for the resize worker (served, short-lived)
  *
  * The flat `photos/<id>.<ext>` files next to the trail folders are the older
@@ -46,12 +47,16 @@ export interface PhotoFilePaths {
 export function photoFilePaths(trackId: string, photoId: string): PhotoFilePaths {
   const dir = trailPhotoDir(trackId);
   const id = assertSafeId(photoId);
-  return { file: `${dir}/${id}.jpg`, thumb: `${dir}/${id}.sq.jpg`, sprite: `${dir}/${id}.map.png` };
+  return {
+    file: `${dir}/${id}.jpg`,
+    thumb: `${dir}/${id}.sq.jpg`,
+    sprite: `${dir}/${id}.map2.png`,
+  };
 }
 
 /** The photo id a file in a trail folder belongs to, or null (the sidecar, strays). */
 export function photoIdOfFile(name: string): string | null {
-  const m = /^([A-Za-z0-9_-]{1,64})(?:\.sq\.jpg|\.map\.png|\.jpg)$/.exec(name);
+  const m = /^([A-Za-z0-9_-]{1,64})(?:\.sq\.jpg|\.map2?\.png|\.jpg)$/.exec(name);
   return m ? m[1]! : null;
 }
 

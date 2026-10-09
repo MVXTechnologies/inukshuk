@@ -72,3 +72,8 @@ jest.mock('expo-secure-store', () => {
   };
 });
 beforeEach(() => (globalThis as { __secureStore?: Map<string, string> }).__secureStore?.clear());
+
+// react-native-keyboard-controller: its own mock (no native module in jest).
+jest.mock('react-native-keyboard-controller', () =>
+  jest.requireActual('react-native-keyboard-controller/jest'),
+);

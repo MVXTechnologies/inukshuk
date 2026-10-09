@@ -10,6 +10,7 @@ import {
   ownsLocation,
   shardFlows,
   shardNames,
+  startsClean,
   validateShards,
 } from './e2eShards.mjs';
 
@@ -83,6 +84,11 @@ describe('flowTags / ownsLocation / clearsState', () => {
     assert.equal(ownsLocation('# own-location\nappId: x\n---\n- tapOn: own-location\n'), false);
   });
 
+  it('reads the clean-state tag (the runner clears the app before every attempt)', () => {
+    assert.equal(startsClean('appId: x\ntags:\n  - clean-state\n---\n- launchApp\n'), true);
+    assert.equal(startsClean('appId: x\n---\n- tapOn: clean-state\n'), false);
+  });
+
   it('spots a launchApp that clears state', () => {
     assert.equal(clearsState('---\n- launchApp:\n    clearState: true\n'), true);
     assert.equal(clearsState('---\n- launchApp:\n    clearState: false\n'), false);
@@ -139,6 +145,13 @@ describe('validateShards', () => {
       'one.yaml must be the last flow of shard a',
     ]);
     assert.deepEqual(validateShards(plan({ last: { 'one.yaml': 'why' } }), FILES, SOURCES), [
+      'one.yaml must be the last flow of shard a',
+    ]);
+  });
+
+  it('keeps clean-state flows at the end of their shard too (they wipe what came before)', () => {
+    const sources = { ...SOURCES, 'one.yaml': 'tags:\n  - clean-state\n---\n- launchApp\n' };
+    assert.deepEqual(validateShards(plan(), FILES, sources), [
       'one.yaml must be the last flow of shard a',
     ]);
   });

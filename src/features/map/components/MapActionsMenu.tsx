@@ -54,7 +54,7 @@ export interface MapActions {
    */
   onDraw?: () => void;
   /** Open Convert empty, to type a coordinate you have not tapped (appended last). */
-  onConvert?: () => void;
+  /** Team mode (#589): leave a message at the point chip, or the middle of the map. */
 }
 
 export function MapActionsMenu({
@@ -108,8 +108,6 @@ export function MapActionsMenu({
           {actions.onOpenSettings !== undefined &&
             row('cog-outline', 'Settings', run(actions.onOpenSettings))}
           {actions.onDraw !== undefined && row('draw', 'Draw', run(actions.onDraw))}
-          {actions.onConvert !== undefined &&
-            row('swap-vertical', 'Convert coordinates', run(actions.onConvert))}
         </View>
       )}
     </>

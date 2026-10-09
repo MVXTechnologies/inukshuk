@@ -1,12 +1,11 @@
-# Trail photos e2e (#587): open a trail photo in the full-screen viewer, page
-# to the next one, caption it, and close.
+# Trail photos e2e (#587): a trail photo opens its bottom card (the photo,
+# when and where, the team's comments, and for my own photos Caption / Share
+# / Hide / Remove); caption it from the card and close it. There is no
+# full-screen viewer (owner 2026-10-07: "I hate that view. forget it.").
 #
 # Portability notes:
-# - Runs after photos-add.yaml (the newest trail has at least two photos).
-# - The strip's cards are "Photo N of M: <caption or time>"; the viewer's
-#   header is "N of M" and its controls carry a11y labels ("Close", "Show on
-#   map", "Caption", "Share photo", "More photo actions").
-# - The caption dialog is user-initiated (a Paper Dialog is fine there).
+# - Runs after photos-add.yaml (the newest trail has at least one photo).
+# - The strip's cards are "Photo N of M: <caption or time>".
 appId: com.inukshuk.app
 ---
 - launchApp
@@ -26,48 +25,48 @@ appId: com.inukshuk.app
     element: 'Photo 1 of [0-9]+.*'
     direction: DOWN
     timeout: 15000
-- tapOn: 'Photo 1 of [0-9]+.*'
-- extendedWaitUntil:
-    visible: '1 of [0-9]+'
-    timeout: 15000
-- assertVisible: 'Show on map'
-# How it was placed (by time, location, by hand…): the CI fixtures, ticked
-# from "Not from this outing", are placed by hand at the cursor.
-- assertVisible: '(Placed|Taken|From) .*'
-# Page to the second photo, when there is one (the CI fixtures can land as
-# one photo or two, depending on what the picker hands over).
+# The second photo when there is one (the CI fixtures land as one photo or
+# two; the old viewer captioned the second the same way).
 - runFlow:
     when:
-      visible: '1 of ([2-9]|[1-9][0-9]+)'
+      visible: 'Photo 2 of [0-9]+.*'
     commands:
-      # A swipe that lands while the pager is settling can be taken as a pan.
-      - retry:
-          maxRetries: 3
-          commands:
-            - runFlow:
-                when:
-                  notVisible: '2 of [0-9]+'
-                commands:
-                  - swipe:
-                      start: 85%,35%
-                      end: 5%,35%
-                      duration: 300
-            - extendedWaitUntil:
-                visible: '2 of [0-9]+'
-                timeout: 5000
-# Caption it.
-- tapOn: 'Caption'
+      - tapOn: 'Photo 2 of [0-9]+.*'
+- runFlow:
+    when:
+      notVisible:
+        id: 'photo-card'
+    commands:
+      - tapOn: 'Photo 1 of [0-9]+.*'
 - extendedWaitUntil:
-    visible: 'Save'
-    timeout: 10000
-- tapOn: 'What is in this photo\?'
+    visible:
+      id: 'photo-card'
+    timeout: 15000
+# A swipe up stays on the card (it no longer opens anything).
+- swipe:
+    from:
+      id: 'photo-card-image'
+    direction: UP
+- assertVisible:
+    id: 'photo-card'
+- assertNotVisible: 'Show on map'
+# Caption it, in the card.
+- tapOn:
+    id: 'photo-card-caption'
+- tapOn:
+    id: 'photo-card-caption-input'
+- eraseText: 60
 - inputText: 'Lichen glade'
-- hideKeyboard
-- tapOn: 'Save'
+- takeScreenshot: review-photo-card-caption-keyboard
+- tapOn:
+    id: 'photo-card-caption-save'
 - extendedWaitUntil:
     visible: 'Lichen glade'
     timeout: 10000
-- tapOn: 'Close'
+- tapOn:
+    id: 'photo-card-close'
+- assertNotVisible:
+    id: 'photo-card'
 - extendedWaitUntil:
     visible: 'Trail layers'
     timeout: 15000

@@ -1,0 +1,156 @@
+# Team photos demo (#589 + #587), iOS simulator, loopback build
+# (EXPO_PUBLIC_MESH_LOOPBACK=1) seeded with seed-team-demo.sh:
+# create a team → Alex (Guide) joins → share the Mont-Sainte-Anne trail with
+# its photos → Alex comments on the summit photo → the system notification
+# appears → tap it → the photo with Alex's comment. Screenshots on the way.
+appId: com.inukshuk.app
+---
+- launchApp:
+    permissions:
+      location: always
+      notifications: allow
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- setLocation:
+    latitude: 47.0745
+    longitude: -70.9065
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Settings'
+    timeout: 15000
+- tapOn: 'Settings'
+- scrollUntilVisible:
+    element: 'Extensions.*'
+    direction: DOWN
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: '.*Team mode.*'
+          commands:
+            - tapOn: 'Extensions.*'
+      - scrollUntilVisible:
+          element: '.*Team mode.*'
+          direction: DOWN
+          timeout: 5000
+# Compact list (#633): a one-line row, Get before the install and its switch
+# after; the team rows are in its details, opened by tapping the row (only
+# when they are closed: a second tap would close them again).
+- scrollUntilVisible:
+    element:
+      id: 'extension-row-team'
+    direction: DOWN
+- runFlow:
+    when:
+      visible: 'Get Team mode'
+    commands:
+      - tapOn: 'Get Team mode'
+- runFlow:
+    when:
+      notVisible:
+        id: 'extension-details-team'
+    commands:
+      - tapOn:
+          id: 'extension-row-team'
+- scrollUntilVisible:
+    element:
+      id: 'team-create-row'
+    direction: DOWN
+- tapOn:
+    id: 'team-create-row'
+- tapOn:
+    id: 'team-create-name'
+- inputText: 'Sortie Mont-Sainte-Anne'
+- tapOn:
+    id: 'team-create-myname'
+- eraseText: 40
+- inputText: 'Marc-André'
+- hideKeyboard
+- tapOn:
+    id: 'team-create-ends-3d'
+- tapOn:
+    id: 'team-create-submit'
+# The first team makes this phone's keys (noble on Hermes: a few seconds),
+# then iOS asks for notifications once.
+- extendedWaitUntil:
+    visible: '(Allow|Sortie Mont-Sainte-Anne)'
+    timeout: 40000
+- runFlow:
+    when:
+      visible: 'Allow'
+    commands:
+      - tapOn: 'Allow'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 15000
+# Alex (Guide) joins.
+- scrollUntilVisible:
+    element:
+      id: 'team-sim-alex'
+    direction: DOWN
+- tapOn:
+    id: 'team-sim-alex'
+- scrollUntilVisible:
+    element: '.*Alex \(Guide\).*'
+    direction: UP
+    timeout: 20000
+- takeScreenshot: 01-team-with-alex
+# Share the trail with its photos.
+- scrollUntilVisible:
+    element:
+      id: 'team-shares-row'
+    direction: DOWN
+- tapOn:
+    id: 'team-shares-row'
+- tapOn:
+    id: 'team-share-pick-trail'
+- tapOn: '.*Mont-Sainte-Anne · sentier du sommet.*'
+- extendedWaitUntil:
+    visible: '.*Trail and 7 photos shared with the team.*'
+    timeout: 20000
+- tapOn: 'OK'
+- takeScreenshot: 02-shared
+# Alex looks at the photos, then comments on the summit photo: the system
+# notification drops in (foreground banner).
+- extendedWaitUntil:
+    visible: '.*Superbe vue au sommet.*'
+    timeout: 40000
+- takeScreenshot: 03-notification
+# Tap the system notification (the banner at the top of the screen).
+- tapOn:
+    point: '50%,8%'
+- runFlow:
+    when:
+      notVisible:
+        id: 'photo-card'
+    commands:
+      - tapOn:
+          id: 'team-alert-banner'
+          optional: true
+- extendedWaitUntil:
+    visible:
+      id: 'photo-card'
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: 'photo-team-comments'
+    timeout: 10000
+- takeScreenshot: 04-photo-with-comment
+- tapOn:
+    id: 'photo-card-close'
+- tapOn: '.*Mont-Sainte-Anne · sentier du sommet.*'
+- extendedWaitUntil:
+    visible:
+      id: 'team-trail-screen'
+    timeout: 5000
+- scrollUntilVisible:
+    element:
+      id: 'team-trail-comments'
+    direction: DOWN
+- takeScreenshot: 05-team-trail-comments

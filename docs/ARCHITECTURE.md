@@ -400,6 +400,16 @@ ntripClient.ts` over `data/gnss/ntripSocket.ts` (the module's `openTcp` /
   Strava tokens: `data/secureStore.ts` (Keychain / Keystore). A project datum
   whose grid isn't installed offers Convert's pack download (`GridDownload`).
 
+## Team mode (#589)
+
+- Pure protocol: `core/team` (docs/design/team-protocol.md); pure view logic
+  for the screens: `core/teamui`.
+- Transport: `modules/inukshuk-mesh` + `data/team/mesh*` (docs/design/team-mesh.md).
+- App: `data/team/teamService.ts` (device identity, teams, join),
+  `teamSession.ts` (one open team), `persistingStore.ts` (write-ahead op log),
+  `state/teamStore.ts`, `features/team/*` (a device extension; `TeamHost` runs
+  the mesh lifecycle). Decisions and the test plan: docs/design/team-ui.md.
+
 ## Error reporting ("no silent fails")
 
 - Capture: a chained `ErrorUtils` global handler (fatal + non-fatal), Hermes'
