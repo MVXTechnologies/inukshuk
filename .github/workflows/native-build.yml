@@ -196,6 +196,13 @@ jobs:
         run: ./gradlew assembleDebug --no-daemon -Pandroid.builder.sdkDownload=false
         working-directory: android
 
+      # Gradle already refused anything else (verifyPatchedHermesDebug,
+      # plugins/withPatchedHermes.js); this checks the APK itself.
+      - name: Check the APK ships the patched Hermes (#648)
+        run: |
+          unzip -q -o android/app/build/outputs/apk/debug/app-debug.apk 'lib/*/libhermesvm.so' -d "$RUNNER_TEMP/apk-libs"
+          node plugins/patched-hermes/verify-hermes.js packaged "$RUNNER_TEMP/apk-libs"
+
       - name: Save Gradle dependencies (main only)
         if: steps.gradle-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
