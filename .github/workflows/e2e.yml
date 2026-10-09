@@ -313,6 +313,14 @@ jobs:
             # the app in the a11y tree and failed EVERY flow's first assert on
             # 6 of the 7 red nightlies between 07-25 and 08-02.
             adb shell settings put global hide_error_dialogs 1
+            # hide_error_dialogs alone did not hold (run 37914205449: the
+            # dialog showed on every flow of the extensions shard). Also turn
+            # off the other two switches that gate crash/ANR UI, and log the
+            # effective values. Whatever still slips through is caught, counted
+            # and dismissed by the ANR guard in e2e-attempts.sh.
+            adb shell settings put secure anr_show_background 0
+            adb shell settings put global show_first_crash_dialog 0
+            echo "error-dialog settings: hide_error_dialogs=$(adb shell settings get global hide_error_dialogs) anr_show_background=$(adb shell settings get secure anr_show_background) show_first_crash_dialog=$(adb shell settings get global show_first_crash_dialog)"
             # Pre-acknowledge Android's "Viewing full screen — swipe down from
             # the top to exit" cling. Since 2.0.0 the app hides the system
             # navigation bar (useAndroidImmersive / expo-navigation-bar), and

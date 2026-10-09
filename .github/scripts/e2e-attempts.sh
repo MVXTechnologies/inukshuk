@@ -139,12 +139,67 @@ python3 -m http.server 8787 --bind 127.0.0.1 --directory .maestro/fixtures/catal
 CATALOG_PID=$!
 adb reverse tcp:8787 tcp:8787 || true
 
-trap 'kill $GEO_PID $CATALOG_PID 2>/dev/null; rm -f "$GEO_RUN"' EXIT
+# System ANR dialogs ("Pixel Launcher isn't responding", run 37914205449): the
+# google_apis image's post-boot churn ANRs the launcher on this software-GPU
+# runner, and the dialog sat over the app and failed every flow of the
+# extensions shard at "Map actions" -- on the retry too, and with
+# hide_error_dialogs already set. The setting alone cannot be relied on (it is
+# folded into system_server's dialog policy when the configuration updates,
+# and anr_show_background overrides it for a visible process such as the
+# home launcher). So the dialog is neutralized at its cause: it belongs to a
+# process record, and force-stopping that process removes it (the launcher
+# restarts as home on its own; the app under test is never the target). This
+# is a guard, not a retry: every dialog is COUNTED, annotated, and shown in
+# the job summary, so a launcher that keeps ANRing stays a visible defect.
+ANR_COUNT_FILE=$(mktemp)
+echo 0 > "$ANR_COUNT_FILE"
+anr_dialog_package() {
+  # The dialog window is titled "Application Not Responding: <process>".
+  adb shell dumpsys window windows 2>/dev/null \
+    | grep -o 'Application Not Responding: [A-Za-z0-9_.:]*' | head -1 \
+    | sed 's/^Application Not Responding: //; s/:.*$//' || true
+}
+# Dismiss a visible ANR dialog if there is one. Returns 0 when one was found.
+dismiss_anr_dialog() {
+  local pkg n
+  pkg=$(anr_dialog_package)
+  [ -n "$pkg" ] || return 1
+  n=$(( $(cat "$ANR_COUNT_FILE") + 1 ))
+  echo "$n" > "$ANR_COUNT_FILE"
+  if [ "$pkg" = "$APP_ID" ]; then
+    # Our own app ANRing is a real defect: never hide it by killing it.
+    echo "::error title=E2E ANR in the app ($SHARD)::'$APP_ID' is not responding; the dialog is left up and the flow will report it"
+    return 0
+  fi
+  adb shell am force-stop "$pkg" >/dev/null 2>&1 || true
+  adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
+  sleep 1
+  if [ -n "$(anr_dialog_package)" ]; then
+    echo "::error title=E2E ANR dialog not dismissed ($SHARD)::'$pkg' is not responding and force-stop did not remove its dialog (ANR dialog #$n)"
+  else
+    echo "::warning title=E2E ANR dialog ($SHARD)::'$pkg' was not responding (ANR dialog #$n); force-stopped it and the dialog is gone. The launcher/system is overloaded: see the ANR counter in the job summary."
+  fi
+  return 0
+}
+# Watch for the whole shard, not only between flows: the ANR can fire while a
+# flow runs. Restarting the launcher mid-flow is harmless to the app.
+(
+  while true; do
+    sleep 4
+    dismiss_anr_dialog || true
+  done
+) &
+ANR_PID=$!
+anr_count() { cat "$ANR_COUNT_FILE"; }
+
+trap 'kill $GEO_PID $CATALOG_PID $ANR_PID 2>/dev/null; rm -f "$GEO_RUN" "$ANR_COUNT_FILE"' EXIT
 
 # One flow attempt, with the feed on only while Maestro runs it.
 run_flow() {
   local flow=$1 own_location=$2
   geo_pause
+  # A dialog already up would fail the flow's first assert: clear it first.
+  dismiss_anr_dialog || true
   [ "$own_location" = 1 ] || touch "$GEO_RUN"
   maestro test "$flow"
   local rc=$?
@@ -218,7 +273,7 @@ launch_health() {
 
 RC=0
 SYSTEM_BROKE=0
-SUMMARY="| Flow | Result | Time | Stalls/crashes/provider kills |"$'\n'"| --- | --- | --- | --- |"
+SUMMARY="| Flow | Result | Time | Stalls/crashes/provider kills | ANR dialogs |"$'\n'"| --- | --- | --- | --- | --- |"
 # Screenshots taken from here on are this run's; anything older is stale.
 SHOT_MARK=$(mktemp)
 RAN_PDF_OVERLAYS=0
@@ -230,10 +285,11 @@ for entry in "${FLOWS[@]}"; do
   [ "$name" = pdf-overlays ] && RAN_PDF_OVERLAYS=1
   if [ "$SYSTEM_BROKE" = 1 ]; then
     # Nothing that runs on a rebooted emulator counts.
-    SUMMARY+=$'\n'"| $name | NOT RUN (emulator system_server restarted) | | |"
+    SUMMARY+=$'\n'"| $name | NOT RUN (emulator system_server restarted) | | | |"
     continue
   fi
   started=$SECONDS
+  anr_before=$(anr_count)
   adb logcat -c || true
   health=
   if run_flow "$flow" "$own_location"; then
@@ -302,18 +358,20 @@ for entry in "${FLOWS[@]}"; do
       PIXELS="FAIL (flow failed)"
     fi
   fi
-  SUMMARY+=$'\n'"| $name | $result | $((took / 60))m$((took % 60))s | $health |"
+  SUMMARY+=$'\n'"| $name | $result | $((took / 60))m$((took % 60))s | $health | $(( $(anr_count) - anr_before )) |"
 done
 rm -f "$GEO_RUN"
 
 # pdf-overlays pixels: checked right after the flow (see the loop above).
 if [ "$RAN_PDF_OVERLAYS" = 1 ]; then
-  SUMMARY+=$'\n'"| pdf-overlays pixels | $PIXELS | |"
+  SUMMARY+=$'\n'"| pdf-overlays pixels | $PIXELS | | | |"
   [ "$PIXELS" = PASS ] || RC=1
 fi
 rm -f "$SHOT_MARK"
 
+echo "ANR dialogs dismissed this shard: $(anr_count)"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  SUMMARY+=$'\n\n'"ANR dialogs dismissed (whole shard): $(anr_count)"
   printf '### E2E shard `%s`\n\n%s\n' "$SHARD" "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
 fi
 exit $RC

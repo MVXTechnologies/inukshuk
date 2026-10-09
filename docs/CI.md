@@ -222,6 +222,19 @@ the Maestro tag `own-location`; the loop is paused while they run, because
 moving the user moves the follow-camera under the tap (the old `heatmap.yaml`
 flake). Each shard writes a per-flow pass/time table to its job summary.
 
+**ANR dialogs** (run 37914205449, 2026-10-09): "Pixel Launcher isn't
+responding" sat over the app and failed every flow of the extensions shard at
+"Map actions", on the retry too, although `hide_error_dialogs` was set. The
+workflow now also sets `anr_show_background 0` and `show_first_crash_dialog 0`
+and logs the effective values, and the runner watches for an ANR dialog (window
+title "Application Not Responding: <process>") before each flow and every 4 s
+during the shard. A dialog for any process but the app is removed by
+force-stopping that process (the launcher restarts as home); a dialog for the
+app itself is never hidden and is reported as an error. Each one is a
+`E2E ANR dialog` warning and a count in the shard's job summary (an "ANR
+dialogs" column per flow), so a launcher that keeps ANRing stays visible. It
+is a guard, not a retry: no flow is re-run because of it.
+
 The geo-fix feed is **gated** (run 37628988758, 2026-10-07): the emulator's
 GNSS HAL can deadlock `system_server` when a fix's status report races
 `GnssNative.stop()`, which happens when Maestro force-stops or relaunches the
