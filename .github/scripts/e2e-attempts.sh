@@ -269,6 +269,48 @@ gms_settled() {
 }
 gms_settled
 
+# ---- THROWAWAY (ci/launcher-anr-provoke, never in the PR): provoke a real
+# launcher ANR deterministically, then show the guard handling it.
+provoke_anr() {
+  local phase=$1 pid i found
+  echo "=== PROVOKE ($phase): hide_error_dialogs=$(adb shell settings get global hide_error_dialogs) anr_show_background=$(adb shell settings get secure anr_show_background) show_first_crash_dialog=$(adb shell settings get global show_first_crash_dialog)"
+  adb shell input keyevent KEYCODE_HOME >/dev/null 2>&1 || true
+  sleep 3
+  pid=$(adb shell pidof com.google.android.apps.nexuslauncher | tr -d '\r')
+  echo "=== PROVOKE: launcher pid ${pid:-none}; freezing"
+  [ -n "$pid" ] || return 1
+  adb shell kill -STOP "$pid"
+  adb logcat -c || true
+  for i in $(seq 1 12); do
+    timeout 15 adb shell input keyevent KEYCODE_HOME >/dev/null 2>&1 &
+    sleep 5
+    found=$(anr_dump | node scripts/ci/anr-dialog.mjs "$APP_LABEL" || true)
+    echo "=== PROVOKE: t=$((i * 5))s dialog by aerr_close: ${found:-none}"
+    [ -n "$found" ] && break
+  done
+  echo "=== PROVOKE: logcat ANR evidence:"
+  adb logcat -d | grep -E 'ANR in|am_anr|Input dispatching timed out|not responding' | cut -c1-240 | head -8
+  echo "=== PROVOKE: launcher state after: $(adb shell cat /proc/$pid/stat 2>/dev/null | cut -d' ' -f3)"
+  [ -n "$found" ]
+}
+if provoke_anr "real job settings"; then
+  echo "=== PROVOKE: dialog is up; running the guard"
+  dismiss_anr_dialog && echo "=== PROVOKE: guard returned 0 (handled); ANR counter now $(anr_count)"
+else
+  echo "=== PROVOKE: no dialog under the real settings; resetting settings to AOSP defaults and retrying"
+  adb shell kill -CONT "$(adb shell pidof com.google.android.apps.nexuslauncher | tr -d '\r')" || true
+  adb shell settings put global hide_error_dialogs 0
+  adb shell settings put secure anr_show_background 1
+  if provoke_anr "AOSP defaults"; then
+    dismiss_anr_dialog && echo "=== PROVOKE: guard returned 0 (handled); ANR counter now $(anr_count)"
+  fi
+  adb shell settings put global hide_error_dialogs 1
+  adb shell settings put secure anr_show_background 0
+fi
+sleep 3
+echo "=== PROVOKE: dialog after guard: $(anr_dump | node scripts/ci/anr-dialog.mjs "$APP_LABEL" || echo none)"
+# ---- end throwaway
+
 # Trail photos (#587): the system photo picker shows what MediaStore indexed.
 # Put the fixture JPEGs (camera EXIF + GPS next to the fixed location above,
 # no capture time) in the device's Pictures and index them now, so
