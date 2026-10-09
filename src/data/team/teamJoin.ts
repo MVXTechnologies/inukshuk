@@ -26,6 +26,7 @@ import { MeshLink, type MeshLinkStatus } from './meshLink';
 import { MeshSessionHost } from './meshSessions';
 import type { MeshTransport } from './meshTransport';
 import { PersistingStore } from './persistingStore';
+import { teamDebug } from './teamDebug';
 import type { TeamDisk } from './teamDisk';
 
 export type JoinPhase =
@@ -123,7 +124,7 @@ export class JoinAttempt {
         respond: () => SyncSession.respond(this.deps.c, this.store),
       },
       (_peerId, event, session) => this.onEvent(event, session),
-      { now: this.deps.now, tickMs: this.deps.tickMs ?? 5_000 },
+      { now: this.deps.now, tickMs: this.deps.tickMs ?? 5_000, label: 'join' },
     );
     this.host.start();
     this.link = new MeshLink(transport, {
@@ -133,6 +134,7 @@ export class JoinAttempt {
       onChange: () => this.onMesh(),
     });
     await this.link.start();
+    teamDebug('join', 'start', this.teamId, this.hint ? `hint ${this.hint.host}` : 'no hint');
     if (this.hint) this.link.dial(this.hint.host, this.hint.port);
     this.deps.onChange();
   }
@@ -155,6 +157,7 @@ export class JoinAttempt {
 
   private fail(why: JoinFailure): void {
     addBreadcrumb(`team join: failed (${why})`);
+    teamDebug('join', 'failed', why);
     this.phase = 'failed';
     this.failure = why;
     this.deps.onChange();
@@ -168,7 +171,9 @@ export class JoinAttempt {
     }
     if (this.phase === 'searching' && this.host !== null && this.host.size > 0) {
       this.phase = 'connecting';
+      teamDebug('join', 'phase connecting');
     }
+    teamDebug('join', 'mesh', JSON.stringify(status ?? null));
     this.deps.onChange();
   }
 
@@ -208,6 +213,7 @@ export class JoinAttempt {
     if (this.phase !== 'verify' && this.phase !== 'failed' && this.admitted) {
       this.phase = 'verify';
       addBreadcrumb('team join: admitted');
+      teamDebug('join', 'admitted');
     }
     this.deps.onChange();
   }

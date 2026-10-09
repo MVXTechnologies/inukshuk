@@ -1,3 +1,4 @@
+import { describeEvent, teamDebug } from './teamDebug';
 import type { MeshPeer, MeshTransport } from './meshTransport';
 
 /**
@@ -52,6 +53,8 @@ export interface SessionHostOptions {
   tickMs?: number;
   /** Bytes a peer may have waiting in JS behind backpressure. Default 8 MiB. */
   maxPendingBytes?: number;
+  /** Names this host in loopback traces (`teamDebug`): 'team', 'join'. */
+  label?: string;
 }
 
 interface Entry<S> {
@@ -79,8 +82,13 @@ export class MeshSessionHost<E, S extends FrameSession<E>> {
     this.maxPendingBytes = options.maxPendingBytes ?? 8 * 1024 * 1024;
   }
 
+  private get label(): string {
+    return this.options.label ?? 'host';
+  }
+
   start(): void {
     if (this.unsubscribe) return;
+    teamDebug(this.label, 'host start');
     this.unsubscribe = this.transport.subscribe((e) => {
       switch (e.type) {
         case 'connected':
@@ -102,6 +110,7 @@ export class MeshSessionHost<E, S extends FrameSession<E>> {
 
   /** Closes every session politely (their 'bye' frames go out) and detaches. */
   stop(why = 'bye'): void {
+    teamDebug(this.label, 'host stop', why, this.entries.size);
     for (const [peerId, entry] of [...this.entries]) {
       this.apply(peerId, entry, entry.session.close(why));
     }
@@ -143,6 +152,7 @@ export class MeshSessionHost<E, S extends FrameSession<E>> {
 
   private onConnected(peer: MeshPeer): void {
     if (this.entries.has(peer.peerId)) return;
+    teamDebug(this.label, 'connected', peer.peerId, peer.direction, `${peer.host}:${peer.port}`);
     if (peer.direction === 'out') {
       const { session, step } = this.factory.initiate(peer, this.now());
       const entry = this.add(peer, session);
@@ -169,6 +179,7 @@ export class MeshSessionHost<E, S extends FrameSession<E>> {
   private apply(peerId: string, entry: Entry<S>, step: FrameStep<E>): void {
     for (const frame of step.send) this.enqueue(peerId, entry, frame);
     for (const event of step.events) {
+      teamDebug(this.label, 'event', peerId, describeEvent(event));
       try {
         this.onEvent(peerId, event, entry.session);
       } catch {
@@ -179,6 +190,7 @@ export class MeshSessionHost<E, S extends FrameSession<E>> {
     const banned = entry.session.bannedUntil;
     const now = this.now();
     if (banned !== undefined && banned > now) {
+      teamDebug(this.label, 'ban', peerId, `${banned - now} ms`);
       entry.closing = true;
       this.entries.delete(peerId);
       this.transport.ban(peerId, banned - now);
@@ -234,6 +246,7 @@ export class MeshSessionHost<E, S extends FrameSession<E>> {
   private forget(peerId: string): void {
     const entry = this.entries.get(peerId);
     if (!entry) return;
+    teamDebug(this.label, 'disconnected', peerId, entry.session.phase);
     this.entries.delete(peerId);
     // Let the session record its end; its frames have nowhere to go.
     if (entry.session.phase !== 'closed') {

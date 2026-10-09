@@ -1,3 +1,4 @@
+import { teamDebug } from './teamDebug';
 import { MESH_DEFAULT_PORT, type MeshNetworkInfo } from '@core/mesh/hotspot';
 
 import {
@@ -124,12 +125,14 @@ export class LoopbackMeshTransport implements MeshTransport {
   }
 
   async start(_config?: MeshConfigInput): Promise<{ port: number }> {
+    teamDebug(this.address, 'start');
     this.running = true;
     this.emitState();
     return { port: this.port };
   }
 
   async stop(): Promise<void> {
+    teamDebug(this.address, 'stop', this.links.size, 'links');
     for (const link of [...this.links.values()]) this.close(link, 'stopped');
     this.running = false;
     this.serviceId = null;
@@ -144,6 +147,7 @@ export class LoopbackMeshTransport implements MeshTransport {
     this.requireRunning();
     this.advertTag = tag;
     this.serviceId = this.hub.id('ink-loopback-');
+    teamDebug(this.address, 'advertise', tag.slice(0, 8), this.serviceId);
     this.hub.refreshBrowsers();
     this.emitState();
   }
@@ -158,6 +162,7 @@ export class LoopbackMeshTransport implements MeshTransport {
   async startBrowsing(tag: string | null): Promise<void> {
     this.requireRunning();
     this.browseTag = tag;
+    teamDebug(this.address, 'browse', tag?.slice(0, 8) ?? 'any');
     this.seen.clear();
     this.refreshBrowse();
     this.emitState();
@@ -181,6 +186,7 @@ export class LoopbackMeshTransport implements MeshTransport {
     for (const [id, t] of now) {
       if (this.seen.has(id) || this.banned.has(t.address)) continue;
       this.seen.add(id);
+      teamDebug(this.address, 'found', id, t.address);
       this.emit({
         type: 'peer-found',
         service: { serviceId: id, tag: t.advertTag ?? '', host: t.address, port: t.port },
@@ -207,6 +213,13 @@ export class LoopbackMeshTransport implements MeshTransport {
 
   private dial(dialId: string, target: LoopbackMeshTransport | undefined): void {
     if (!this.running) return;
+    teamDebug(
+      this.address,
+      'dial',
+      dialId,
+      target?.address ?? 'none',
+      target ? target.accepts(this.address) : false,
+    );
     if (!target || !target.accepts(this.address)) {
       this.listeners.emit({
         type: 'disconnected',
@@ -268,6 +281,7 @@ export class LoopbackMeshTransport implements MeshTransport {
 
   private close(link: Link, reason: string): void {
     if (!link.open) return;
+    teamDebug(this.address, 'close', link.peerId, link.host, reason);
     link.open = false;
     this.links.delete(link.peerId);
     this.emit({
@@ -317,6 +331,7 @@ export class LoopbackMeshTransport implements MeshTransport {
   ban(peerId: string, durationMs: number): void {
     const link = this.links.get(peerId);
     if (!link) return;
+    teamDebug(this.address, 'ban', link.host, durationMs);
     this.banned.set(link.host, Date.now() + Math.min(Math.max(durationMs, 1_000), 24 * 3_600_000));
     this.close(link, 'banned');
   }

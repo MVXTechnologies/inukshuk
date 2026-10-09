@@ -10,6 +10,7 @@ appId: com.inukshuk.app
       platform: Android
     commands:
       - launchApp:
+          clearState: true
           permissions:
             location: allow
             notifications: allow
@@ -18,9 +19,16 @@ appId: com.inukshuk.app
       platform: iOS
     commands:
       - launchApp:
+          clearState: true
           permissions:
             location: always
             notifications: allow
+# A clean start (2026-10-09): no team, join or invite left over from an earlier
+# flow or a failed attempt, so a retry never inherits a half-done join.
+# Android's one-time "Viewing full screen" hint can sit over the map.
+- tapOn:
+    text: 'Got it'
+    optional: true
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000

@@ -664,7 +664,7 @@ export class TeamSession {
         },
       },
       (peerId, event, session) => this.onSessionEvent(peerId, event, session),
-      { now: this.deps.now, tickMs: this.deps.tickMs ?? 20_000 },
+      { now: this.deps.now, tickMs: this.deps.tickMs ?? 20_000, label: 'team' },
     );
     this.host.start();
     this.link = new MeshLink(transport, {

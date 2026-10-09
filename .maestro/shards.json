@@ -36,7 +36,8 @@
       "gnss.yaml",
       "extensions-review.yaml"
     ],
-    "team": ["team.yaml", "team-join.yaml"]
+    "team": ["team.yaml"],
+    "team-join": ["team-join.yaml"]
   },
   "requires": {
     "heatmap.yaml": ["category-record.yaml"],
