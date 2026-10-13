@@ -60,7 +60,8 @@ function waypointsGeoJson(shares: TeamShares): FeatureCollection {
       type: 'Feature',
       id: w.id,
       geometry: { type: 'Point', coordinates: [w.lon, w.lat] },
-      properties: { waypoint: w.id, label: w.name },
+      // #675: the sharer's pin colour rings the dot (null = the team ink).
+      properties: { waypoint: w.id, label: w.name, color: w.color },
     })),
   };
 }
@@ -208,7 +209,7 @@ export function TeamMapLayers({
           'circle-radius': 6,
           'circle-color': paper,
           'circle-stroke-width': 3,
-          'circle-stroke-color': ink,
+          'circle-stroke-color': ['coalesce', ['get', 'color'], ink],
           'circle-pitch-alignment': 'map',
         }}
       />,

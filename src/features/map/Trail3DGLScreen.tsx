@@ -974,7 +974,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
 
         {/* #235 — every exit from this dialog puts the keyboard away first;
             unmounting the note field's accessory bar under a live keyboard
-            leaves a dangling accessory (see WaypointEditorDialog's `close`). */}
+            leaves a dangling accessory (see WaypointEditorSheet's `close`). */}
         <Dialog
           visible={editing !== null}
           onDismiss={closeNoteEditor}
@@ -1013,7 +1013,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
               )}
             </KeyboardDismissArea>
             {/* Mounted with the dialog, not at the app root — see the note in
-                WaypointEditorDialog: the native accessory binds to its field
+                WaypointEditorSheet: the native accessory binds to its field
                 once, when it moves to the window. */}
             <KeyboardDoneBar />
           </Dialog.Content>

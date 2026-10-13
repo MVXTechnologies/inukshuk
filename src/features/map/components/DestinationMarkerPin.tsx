@@ -12,8 +12,8 @@ import { weatherChrome as wc } from '../weather/weatherChrome';
  * the sage accent disc instead of the inukshuk on the location blue.
  *
  * Visual only (`pointerEvents="none"`) — it carries an accessibility label so
- * screen readers can find it, but taps fall through to the map, exactly like
- * WaypointMarkerPin.
+ * screen readers can find it, but taps fall through to the map, which
+ * hit-tests them itself (as it does the waypoint pins' symbol layer, #675).
  */
 export function DestinationMarkerPin() {
   return (

@@ -28,6 +28,19 @@ export interface GpxWaypoint {
   type?: string;
   /** First GPX `<link>`: a related file or URL (a trail photo's image, #587). */
   link?: GpxLink;
+  /**
+   * Inukshuk's pin style (#675), from `<extensions><pin:style>`: raw strings;
+   * the waypoint layer validates them (`@core/library/waypointGpx`). Other
+   * readers ignore the extension and still get the `<sym>`.
+   */
+  pinStyle?: GpxPinStyle;
+}
+
+/** The `pin:style` extension's fields, unvalidated. */
+export interface GpxPinStyle {
+  icon?: string;
+  color?: string;
+  size?: string;
 }
 
 /** A GPX 1.1 `<link href>` with its optional `<text>` and MIME `<type>`. */
@@ -167,6 +180,25 @@ const extractHeartRate = (raw: AnyRecord): number | undefined => {
   return ext && typeof ext === 'object' ? findHrDeep(ext as AnyRecord) : undefined;
 };
 
+/** Our own waypoint-style extension (#675): icon id, colour and size of a pin. */
+const INUKSHUK_PIN_NS = 'urn:inukshuk:pin:1';
+
+/** A `<wpt>`'s `<extensions><pin:style>`, if it has one with any field. */
+const extractPinStyle = (raw: AnyRecord): GpxPinStyle | undefined => {
+  const ext = raw['extensions'];
+  const node = ext && typeof ext === 'object' ? (ext as AnyRecord)['pin:style'] : undefined;
+  if (!node || typeof node !== 'object') return undefined;
+  const rec = node as AnyRecord;
+  const style: GpxPinStyle = {};
+  const icon = textOf(rec['pin:icon']);
+  if (icon) style.icon = icon;
+  const color = textOf(rec['pin:color']);
+  if (color) style.color = color;
+  const size = textOf(rec['pin:size']);
+  if (size) style.size = size;
+  return Object.keys(style).length > 0 ? style : undefined;
+};
+
 /** Our own receiver extension (#588): marks a fix that came from an external GNSS receiver. */
 const INUKSHUK_GNSS_NS = 'urn:inukshuk:gnss:1';
 
@@ -258,6 +290,8 @@ const parseWaypoint = (raw: AnyRecord): GpxWaypoint | undefined => {
   if (type !== undefined) wpt.type = type;
   const link = parseLink(raw['link']);
   if (link !== undefined) wpt.link = link;
+  const pinStyle = extractPinStyle(raw);
+  if (pinStyle !== undefined) wpt.pinStyle = pinStyle;
   return wpt;
 };
 
@@ -440,6 +474,9 @@ export function buildGpx(args: {
     gpx[`${ATTR_PREFIX}xmlns:gpxtpx`] = 'http://www.garmin.com/xmlschemas/TrackPointExtension/v1';
   }
   if (mixed) gpx[`${ATTR_PREFIX}xmlns:inukshuk`] = INUKSHUK_GNSS_NS;
+  if (waypoints?.some((w) => w.pinStyle !== undefined)) {
+    gpx[`${ATTR_PREFIX}xmlns:pin`] = INUKSHUK_PIN_NS;
+  }
   if (Object.keys(metaNode).length > 0) gpx['metadata'] = metaNode;
   // <wpt> must precede <trk> in the GPX 1.1 sequence.
   if (waypoints && waypoints.length > 0) {
@@ -462,6 +499,14 @@ export function buildGpx(args: {
       }
       if (w.symbol !== undefined) node['sym'] = w.symbol;
       if (w.type !== undefined) node['type'] = w.type;
+      // <extensions> closes the wptType sequence.
+      if (w.pinStyle !== undefined) {
+        const style: AnyRecord = {};
+        if (w.pinStyle.icon !== undefined) style['pin:icon'] = w.pinStyle.icon;
+        if (w.pinStyle.color !== undefined) style['pin:color'] = w.pinStyle.color;
+        if (w.pinStyle.size !== undefined) style['pin:size'] = w.pinStyle.size;
+        if (Object.keys(style).length > 0) node['extensions'] = { 'pin:style': style };
+      }
       return node;
     });
   }

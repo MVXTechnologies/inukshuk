@@ -3,6 +3,8 @@ import type { WaypointIcon } from '@core/models';
 import {
   DEFAULT_WAYPOINT_ICON_LABEL,
   WAYPOINT_ICONS,
+  WAYPOINT_ICON_GROUP_LIST,
+  searchWaypointIcons,
   gpxSymForWaypointIcon,
   isWaypointIcon,
   waypointIconForGpxSym,
@@ -12,26 +14,38 @@ import {
 } from './waypointIcons';
 
 describe('the waypoint icon catalogue', () => {
-  it('offers the outdoor set the picker promises, each with a glyph and a <sym>', () => {
-    expect(WAYPOINT_ICONS.map((s) => s.id)).toEqual([
-      'camp',
-      'shelter',
-      'water',
-      'food',
-      'trailhead',
-      'parking',
-      'summit',
-      'viewpoint',
-      'ford',
-      'gate',
-      'cache',
-      'hazard',
-    ]);
+  it('keeps the twelve #350 icons, with their ids and <sym> spellings', () => {
+    const ids = WAYPOINT_ICONS.map((s) => s.id);
+    for (const [id, sym] of [
+      ['camp', 'Campground'],
+      ['shelter', 'Lodging'],
+      ['water', 'Drinking Water'],
+      ['food', 'Restaurant'],
+      ['trailhead', 'Trail Head'],
+      ['parking', 'Parking Area'],
+      ['summit', 'Summit'],
+      ['viewpoint', 'Scenic Area'],
+      ['ford', 'Ford'],
+      ['gate', 'Gate'],
+      ['cache', 'Geocache'],
+      ['hazard', 'Danger Area'],
+    ] as const) {
+      expect(ids).toContain(id);
+      expect(gpxSymForWaypointIcon(id)).toBe(sym);
+    }
+  });
+
+  it('offers a curated set of about 300 icons, each with a label, glyph, <sym> and group', () => {
+    expect(WAYPOINT_ICONS.length).toBeGreaterThanOrEqual(280);
+    expect(WAYPOINT_ICONS.length).toBeLessThanOrEqual(400);
     for (const spec of WAYPOINT_ICONS) {
       expect(spec.label).not.toBe('');
       expect(spec.glyph).not.toBe('');
       expect(spec.sym).not.toBe('');
+      expect(spec.keywords.length).toBeGreaterThan(0);
     }
+    const inGroups = WAYPOINT_ICON_GROUP_LIST.flatMap((g) => g.icons.map((i) => i.id));
+    expect(inGroups).toEqual(WAYPOINT_ICONS.map((s) => s.id));
   });
 
   it('lists every icon exactly once', () => {
@@ -185,5 +199,41 @@ describe('an icon through a real GPX file', () => {
     const [read] = parseGpx(xml).waypoints;
     expect(read?.symbol).toBe('Navaid, Green');
     expect(waypointIconForGpxSym(read?.symbol)).toBeUndefined();
+  });
+});
+
+describe('searchWaypointIcons', () => {
+  const ids = (q: string) => searchWaypointIcons(q).map((s) => s.id);
+
+  it('finds by label, best match first', () => {
+    expect(ids('water')[0]).toBe('water');
+    expect(ids('Camp')[0]).toBe('camp');
+  });
+
+  it('finds by synonym, in English and in French, ignoring case and accents', () => {
+    expect(ids('eau')).toContain('water');
+    expect(ids('sentier')).toContain('trailhead');
+    expect(ids('belvedere')).toContain('viewpoint');
+    expect(ids('BELVÉDÈRE')).toContain('viewpoint');
+    expect(ids('orignal')).toContain('tracks');
+    expect(ids('spring')).toEqual(expect.arrayContaining(['water', 'spring']));
+  });
+
+  it('needs every word of a multi-word query', () => {
+    expect(ids('eau potable')).toContain('potable');
+    expect(ids('eau potable')).not.toContain('lake');
+  });
+
+  it('returns nothing for a blank query or a word no icon has', () => {
+    expect(ids('')).toEqual([]);
+    expect(ids('   ')).toEqual([]);
+    expect(ids('zzzzqx')).toEqual([]);
+  });
+
+  it('matches "water" across the families the mockup shows', () => {
+    const found = ids('water');
+    for (const id of ['water', 'potable', 'water-pump', 'well', 'ford', 'hot-tub']) {
+      expect(found).toContain(id);
+    }
   });
 });

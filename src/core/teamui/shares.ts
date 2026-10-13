@@ -16,22 +16,9 @@ import { simplifyTrack, type TrackGeometry } from '@core/geo/track/simplify';
 import type { Json } from '@core/team/canonical';
 import { isLive, visibleFields } from '@core/team/crdt';
 import type { TeamData } from '@core/team/data';
-import type { WaypointIcon } from '@core/models/waypoint';
-
-const WAYPOINT_ICONS: readonly WaypointIcon[] = [
-  'camp',
-  'shelter',
-  'water',
-  'food',
-  'trailhead',
-  'parking',
-  'summit',
-  'viewpoint',
-  'ford',
-  'gate',
-  'cache',
-  'hazard',
-];
+import { isWaypointIcon } from '@core/library/waypointIcons';
+import { normalizeWaypointStyle } from '@core/library/waypointStyle';
+import type { WaypointIcon, WaypointSize } from '@core/models/waypoint';
 
 export const MAX_SHARED_NAME = 80;
 export const MAX_SHARED_NOTE = 1000;
@@ -49,6 +36,9 @@ export interface ShareableWaypoint {
   label: string;
   note?: string;
   icon?: WaypointIcon;
+  /** #675 pin colour (`#RRGGBB`) and size. */
+  color?: string;
+  size?: WaypointSize;
 }
 
 export interface TeamWaypoint {
@@ -58,6 +48,9 @@ export interface TeamWaypoint {
   lon: number;
   note: string | null;
   icon: WaypointIcon | null;
+  /** #675 — null from a 2.5.0 peer (or junk): the default colour / size. */
+  color: string | null;
+  size: WaypointSize | null;
   /** Who shared it first (informational: a shared record has no owner). */
   by: string | null;
   at: number;
@@ -76,7 +69,13 @@ export function waypointFields(
     at: Math.floor(now),
   };
   if (w.note) f['no'] = w.note.slice(0, MAX_SHARED_NOTE);
+  // #675 — new short fields beside `ic`. A 2.5.0 peer ignores fields it does
+  // not know and reads an icon id outside its twelve as the default pin, so a
+  // styled share still shows there, just plainer.
   if (w.icon) f['ic'] = w.icon;
+  const style = normalizeWaypointStyle({ color: w.color, size: w.size });
+  if (style.color) f['co'] = style.color;
+  if (style.size) f['sz'] = style.size;
   return f;
 }
 
@@ -85,16 +84,16 @@ export function parseWaypoint(id: string, f: Record<string, Json>): TeamWaypoint
   const lo = f['lo'];
   if (!finite(la) || !finite(lo) || Math.abs(la) > 90 || Math.abs(lo) > 180) return null;
   const icon = f['ic'];
+  const style = normalizeWaypointStyle({ color: f['co'], size: f['sz'] });
   return {
     id,
     name: str(f['n'], MAX_SHARED_NAME) || 'Waypoint',
     lat: la,
     lon: lo,
     note: str(f['no'], MAX_SHARED_NOTE) ?? null,
-    icon:
-      typeof icon === 'string' && (WAYPOINT_ICONS as readonly string[]).includes(icon)
-        ? (icon as WaypointIcon)
-        : null,
+    icon: isWaypointIcon(icon) ? icon : null,
+    color: style.color ?? null,
+    size: style.size ?? null,
     by: typeof f['by'] === 'string' ? f['by'] : null,
     at: finite(f['at']) ? f['at'] : 0,
   };

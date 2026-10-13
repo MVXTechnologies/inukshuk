@@ -7,6 +7,7 @@ import type {
   TrackSummary,
   Waypoint,
   WaypointIcon,
+  WaypointSize,
 } from '@core/models';
 import type { ImportedNote } from '@core/geo/track';
 import { toggleId } from '@core/library/toggleId';
@@ -21,6 +22,8 @@ import { isAbsolutePath } from '@core/storage/documentPaths';
 import { removeNoteById } from '@core/library/notes';
 import { nextFolderVisibility } from '@core/library/visibility';
 import { nextWaypointLabel } from '@core/library/waypoints';
+import { isWaypointSize, normalizeWaypointColor } from '@core/library/waypointStyle';
+import { isValidLngLat } from '@core/geo/geomath';
 import * as storage from '@data/storage';
 import {
   type InterruptedPdfRender,
@@ -218,7 +221,13 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
    */
   updateWaypoint: (
     id: string,
-    patch: { note?: string; photoUri?: string; icon?: WaypointIcon | null },
+    patch: {
+      note?: string;
+      photoUri?: string;
+      icon?: WaypointIcon | null;
+      color?: string | null;
+      size?: WaypointSize | null;
+    },
   ) => void;
   /**
    * Rename a waypoint (its `label` — the title shown on the pin, the Library
@@ -229,6 +238,11 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
    * number, so a renamed one simply stops taking part in that numbering.
    */
   renameWaypoint: (id: string, label: string) => void;
+  /**
+   * Put a waypoint somewhere else (#676 Move): only its coordinate changes.
+   * An invalid coordinate is refused (no-op) rather than stored.
+   */
+  moveWaypoint: (id: string, latitude: number, longitude: number) => void;
   /** Remove a waypoint and any photo it owns. */
   removeWaypoint: (id: string) => void;
   // Drawn areas (#503) — polygons with a note, photos, a colour and tags,
@@ -911,6 +925,16 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
             if (patch.icon) updated.icon = patch.icon;
             else delete updated.icon;
           }
+          // #675 — null (or a value that is not a colour/size) restores the default.
+          if (patch.color !== undefined) {
+            const color = normalizeWaypointColor(patch.color);
+            if (color) updated.color = color;
+            else delete updated.color;
+          }
+          if (patch.size !== undefined) {
+            if (patch.size && isWaypointSize(patch.size)) updated.size = patch.size;
+            else delete updated.size;
+          }
           if (patch.photoUri !== undefined) {
             if (patch.photoUri) updated.photoUri = patch.photoUri;
             else delete updated.photoUri;
@@ -933,6 +957,17 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         waypoints: s.waypoints.map((w) =>
           w.id === id ? { ...w, label: label.trim() || w.label } : w,
         ),
+      };
+      persist(next);
+      return next;
+    }),
+
+  moveWaypoint: (id, latitude, longitude) =>
+    set((s) => {
+      if (!isValidLngLat([longitude, latitude])) return s;
+      const next = {
+        ...s,
+        waypoints: s.waypoints.map((w) => (w.id === id ? { ...w, latitude, longitude } : w)),
       };
       persist(next);
       return next;

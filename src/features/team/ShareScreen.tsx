@@ -136,6 +136,8 @@ export function ShareScreen() {
                     label: w.label,
                     ...(w.note ? { note: w.note } : {}),
                     ...(w.icon ? { icon: w.icon } : {}),
+                    ...(w.color ? { color: w.color } : {}),
+                    ...(w.size ? { size: w.size } : {}),
                   }),
                   'Waypoint',
                 )
