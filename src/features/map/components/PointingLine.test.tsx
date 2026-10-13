@@ -102,7 +102,7 @@ beforeEach(() => {
   mockLayers.length = 0;
   mockSources.length = 0;
   mockListeners.clear();
-  useSettingsStore.setState({ pointingLine: DEFAULT_POINTING_LINE });
+  useSettingsStore.setState({ pointingLine: DEFAULT_POINTING_LINE, units: 'metric' });
 });
 
 describe('PointingLine: when it shows', () => {
@@ -155,6 +155,19 @@ describe('PointingLine: when it shows', () => {
     await view.rerender(wrap({ glyphs: undefined }));
     expect(labels(drawn()!)).toEqual([]);
     expect(mockLayers.map((l) => l.id)).not.toContain(POINTING_LINE_LAYERS.labels);
+  });
+
+  it('follows the unit setting: round feet in imperial, redrawn when it changes', async () => {
+    configure({ enabled: true, direction: 'fixed', fixedBearingDeg: 0, labelEvery5th: true });
+    useSettingsStore.setState({ units: 'imperial' });
+    await render(wrap({}));
+    // 50 m stands for 200 ft: 8 ticks over 500 m (7 minor), the 5th at 1000 ft.
+    let fc = drawn()!;
+    expect(fc.features.filter((f) => f.properties.kind === 'tick')).toHaveLength(7);
+    expect(labels(fc)).toEqual(['1000 ft']);
+    await act(async () => useSettingsStore.setState({ units: 'metric' }));
+    fc = drawn()!;
+    expect(labels(fc)).toEqual(['250 m', '500 m']);
   });
 
   it('a fixed bearing works with no compass and standing still', async () => {

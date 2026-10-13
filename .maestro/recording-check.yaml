@@ -77,7 +77,7 @@ appId: com.inukshuk.app
 # to System so later flows see the default look.
 - scrollUntilVisible:
     element:
-      text: 'Theme.*'
+      text: 'Dark'
     direction: DOWN
 - tapOn: 'Dark'
 - scrollUntilVisible:
@@ -92,7 +92,7 @@ appId: com.inukshuk.app
 - tapOn: 'Close recording check'
 - scrollUntilVisible:
     element:
-      text: 'Theme.*'
+      text: 'System'
     direction: DOWN
 - tapOn: 'System'
 - assertVisible: 'Theme.*'

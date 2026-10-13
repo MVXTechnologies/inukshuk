@@ -2,8 +2,8 @@ import { act, render } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { PaperProvider } from 'react-native-paper';
 
-import { HeadingCone, PUCK_RING_LAYER_ID } from './HeadingCone';
-import { PuckLayers } from './PuckLayers';
+import { HeadingCone } from './HeadingCone';
+import { PUCK_RING_LAYER_ID, PuckLayers } from './PuckLayers';
 
 type Props = Record<string, unknown> & { children?: ReactNode };
 const mockLayers: Props[] = [];

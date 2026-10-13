@@ -1,4 +1,4 @@
-import { tickLabel } from '@core/geo/pointingLine';
+import { previewTickStep, tickLabel } from '@core/geo/pointingLine';
 import { waypointInk } from '@core/library/waypointStyle';
 import {
   POINTING_LINE_COLORS,
@@ -48,7 +48,6 @@ const SWATCH = 30;
 
 const STARTS_AT = [{ value: 'you' as const, label: 'You' }];
 const WIDTHS = POINTING_LINE_WIDTHS.map((w) => ({ value: w, label: POINTING_LINE_WIDTH_LABEL[w] }));
-const TICKS = POINTING_LINE_TICKS.map((t) => ({ value: t, label: pointingLineTicksLabel(t) }));
 
 /** The pointing line's settings and a setter that merges a change into them. */
 function usePointingLine(): [PointingLineSettings, (patch: Partial<PointingLineSettings>) => void] {
@@ -93,6 +92,7 @@ export function PointingLineRow({ onOpen }: { onOpen: () => void }) {
  */
 function Preview({ cfg }: { cfg: PointingLineSettings }) {
   const tokens = useSchemeTokens();
+  const units = useSettingsStore((s) => s.units);
   const w = useSheetWidth() - 32;
   const x0 = 22;
   const x1 = w - 18;
@@ -102,18 +102,18 @@ function Preview({ cfg }: { cfg: PointingLineSettings }) {
   // The preview's ground length: the setting, or a nominal 1 km for Edge;
   // ticks as set (Auto: five), dropped when they would fuse.
   const lengthM = cfg.length === 'edge' ? 1000 : cfg.length;
-  const stepM = cfg.ticks === 'off' ? null : cfg.ticks === 'auto' ? lengthM / 5 : cfg.ticks;
-  const px = stepM === null ? 0 : ((x1 - x0) * stepM) / lengthM;
+  const step = previewTickStep(cfg.ticks, lengthM, units);
+  const px = step === null ? 0 : ((x1 - x0) * step.stepM) / lengthM;
   const ticks =
-    stepM === null || px < 4
+    step === null || px < 4
       ? []
-      : Array.from({ length: Math.floor(lengthM / stepM + 1e-9) }, (_, i) => i + 1);
+      : Array.from({ length: Math.floor(lengthM / step.stepM + 1e-9) }, (_, i) => i + 1);
   return (
     <View style={styles.previewWrap}>
       <View
         testID="pointing-line-preview"
         accessible
-        accessibilityLabel={`Preview: ${pointingLineCaption(cfg)}`}
+        accessibilityLabel={`Preview: ${pointingLineCaption(cfg, units)}`}
         style={[styles.preview, { backgroundColor: tokens.surfaceVariant }]}
       >
         <Svg width={w} height={PREVIEW_H}>
@@ -151,7 +151,7 @@ function Preview({ cfg }: { cfg: PointingLineSettings }) {
                 strokeWidth={major ? 2 : 1.5}
                 strokeLinecap="round"
               />,
-              major && cfg.labelEvery5th && stepM !== null ? (
+              major && cfg.labelEvery5th && step !== null ? (
                 <SvgText
                   key={`l${i}`}
                   x={x}
@@ -161,7 +161,7 @@ function Preview({ cfg }: { cfg: PointingLineSettings }) {
                   textAnchor="middle"
                   fill={tokens.ink}
                 >
-                  {tickLabel(i * stepM)}
+                  {tickLabel(i * step.stepM, step.unit)}
                 </SvgText>
               ) : null,
             ];
@@ -188,7 +188,7 @@ function Preview({ cfg }: { cfg: PointingLineSettings }) {
         </Svg>
       </View>
       <Text style={[styles.caption, { color: tokens.inkMuted }]} numberOfLines={1}>
-        {pointingLineCaption(cfg)}
+        {pointingLineCaption(cfg, units)}
       </Text>
     </View>
   );
@@ -239,6 +239,11 @@ export function PointingLinePanel({ onBack }: { onBack: () => void }) {
   const { accent } = useSheetAccent();
   const sheetW = useSheetWidth();
   const [cfg, update] = usePointingLine();
+  const units = useSettingsStore((s) => s.units);
+  const tickLevels = POINTING_LINE_TICKS.map((t) => ({
+    value: t,
+    label: pointingLineTicksLabel(t, units),
+  }));
   const directions = POINTING_LINE_DIRECTIONS.map((d: PointingLineDirection) => ({
     value: d,
     label:
@@ -328,7 +333,11 @@ export function PointingLinePanel({ onBack }: { onBack: () => void }) {
       </View>
       <SectionTitle>Tick marks</SectionTitle>
       <View style={styles.pad}>
-        <Segmented levels={TICKS} selected={cfg.ticks} onSelect={(ticks) => update({ ticks })} />
+        <Segmented
+          levels={tickLevels}
+          selected={cfg.ticks}
+          onSelect={(ticks) => update({ ticks })}
+        />
       </View>
       <SwitchRow
         icon="tag-text-outline"

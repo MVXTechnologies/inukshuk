@@ -28,7 +28,7 @@ async function mount(dark = false) {
 
 beforeEach(() => {
   onBack.mockClear();
-  useSettingsStore.setState({ pointingLine: DEFAULT_POINTING_LINE });
+  useSettingsStore.setState({ pointingLine: DEFAULT_POINTING_LINE, units: 'metric' });
 });
 
 describe('PointingLinePanel', () => {
@@ -51,6 +51,19 @@ describe('PointingLinePanel', () => {
     expect(cfg().enabled).toBe(true);
     await fireEvent.press(screen.getByLabelText('Back to overlays'));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('in imperial, the tick choices and the caption read in round feet', async () => {
+    useSettingsStore.setState({ units: 'imperial' });
+    await mount();
+    expect(state('200 ft').selected).toBe(true);
+    expect(screen.getByLabelText('50 ft')).toBeTruthy();
+    expect(screen.getByLabelText('500 ft')).toBeTruthy();
+    expect(screen.queryByLabelText('50 m')).toBeNull();
+    expect(screen.getByText('From you · heading · 500 m · ticks every 200 ft')).toBeTruthy();
+    // The choice is one setting: 500 ft is the 100 m choice.
+    await fireEvent.press(screen.getByLabelText('500 ft'));
+    expect(cfg().ticks).toBe(100);
   });
 
   it('a fixed bearing: picked, typed in whole degrees, normalised', async () => {

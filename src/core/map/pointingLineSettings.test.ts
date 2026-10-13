@@ -84,9 +84,15 @@ describe('pointing line labels', () => {
     expect(pointingLineLengthText(250)).toBe('250 m');
     expect(pointingLineLengthText(2000)).toBe('2 km');
     expect(pointingLineLengthText('edge')).toBe('To the edge');
-    expect(pointingLineTicksLabel('off')).toBe('Off');
-    expect(pointingLineTicksLabel(10)).toBe('10 m');
-    expect(pointingLineTicksLabel('auto')).toBe('Auto');
+    expect(pointingLineTicksLabel('off', 'metric')).toBe('Off');
+    expect(pointingLineTicksLabel(10, 'metric')).toBe('10 m');
+    expect(pointingLineTicksLabel('auto', 'metric')).toBe('Auto');
+    // Imperial: the round-feet step each choice stands for.
+    expect(pointingLineTicksLabel('off', 'imperial')).toBe('Off');
+    expect(pointingLineTicksLabel(10, 'imperial')).toBe('50 ft');
+    expect(pointingLineTicksLabel(50, 'imperial')).toBe('200 ft');
+    expect(pointingLineTicksLabel(100, 'imperial')).toBe('500 ft');
+    expect(pointingLineTicksLabel('auto', 'imperial')).toBe('Auto');
     expect(pointingLineSummary(DEFAULT_POINTING_LINE)).toBe('500 m along your heading');
     expect(
       pointingLineSummary({ ...DEFAULT_POINTING_LINE, direction: 'course', length: 1000 }),
@@ -102,21 +108,30 @@ describe('pointing line labels', () => {
   });
 
   it('captions the preview', () => {
-    expect(pointingLineCaption(DEFAULT_POINTING_LINE)).toBe(
+    expect(pointingLineCaption(DEFAULT_POINTING_LINE, 'metric')).toBe(
       'From you · heading · 500 m · ticks every 50 m',
     );
     expect(
-      pointingLineCaption({
-        ...DEFAULT_POINTING_LINE,
-        direction: 'fixed',
-        fixedBearingDeg: 62,
-        length: 'edge',
-        ticks: 'off',
-      }),
+      pointingLineCaption(
+        {
+          ...DEFAULT_POINTING_LINE,
+          direction: 'fixed',
+          fixedBearingDeg: 62,
+          length: 'edge',
+          ticks: 'off',
+        },
+        'metric',
+      ),
     ).toBe('From you · 062° · to the edge · no ticks');
     expect(
-      pointingLineCaption({ ...DEFAULT_POINTING_LINE, direction: 'course', ticks: 'auto' }),
+      pointingLineCaption(
+        { ...DEFAULT_POINTING_LINE, direction: 'course', ticks: 'auto' },
+        'metric',
+      ),
     ).toBe('From you · course · 500 m · auto ticks');
+    expect(pointingLineCaption(DEFAULT_POINTING_LINE, 'imperial')).toBe(
+      'From you · heading · 500 m · ticks every 200 ft',
+    );
   });
 
   it('has nine colours, and a casing that never hides the line', () => {

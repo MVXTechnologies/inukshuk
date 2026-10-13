@@ -1,7 +1,7 @@
 import {
   pointingLineFeatures,
   resolveLengthM,
-  resolveTickStepM,
+  resolveTickStep,
   type ViewBounds,
 } from '@core/geo/pointingLine';
 import {
@@ -86,6 +86,7 @@ function LivePointingLine({
   location: LatLng;
 }) {
   const tokens = useSchemeTokens();
+  const units = useSettingsStore((s) => s.units);
   const { mapInk, mapHalo } = tokens.team;
   const font = teamLabelFont(glyphs);
 
@@ -146,12 +147,23 @@ function LivePointingLine({
       origin: location,
       bearingDeg,
       lengthM,
-      tickStepM: resolveTickStepM(cfg.ticks, zoom, location.latitude),
+      tickStep: resolveTickStep(cfg.ticks, zoom, location.latitude, units),
       zoom,
       labelMajors: cfg.labelEvery5th && hasFont,
       endLabel: cog && hasFont ? 'COG' : null,
     });
-  }, [bearingDeg, cog, cfg.length, cfg.ticks, cfg.labelEvery5th, location, bounds, zoom, hasFont]);
+  }, [
+    bearingDeg,
+    cog,
+    cfg.length,
+    cfg.ticks,
+    cfg.labelEvery5th,
+    location,
+    bounds,
+    zoom,
+    hasFont,
+    units,
+  ]);
 
   // Memoised children: <GeoJSONSource> re-serialises its data whenever a
   // child's identity changes; a heading tick must only change the data.

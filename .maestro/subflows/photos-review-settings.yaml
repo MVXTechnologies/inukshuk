@@ -37,12 +37,12 @@ appId: com.inukshuk.app
     commands:
       - runFlow:
           when:
-            notVisible: 'Theme.*'
+            notVisible: 'Keep screen awake.*'
           commands:
             - tapOn: 'App settings.*'
       - scrollUntilVisible:
           element:
-            text: 'Theme.*'
+            text: ${NEXT}
           direction: DOWN
           timeout: 5000
 - tapOn: ${NEXT}

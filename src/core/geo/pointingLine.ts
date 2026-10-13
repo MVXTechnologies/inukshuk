@@ -1,4 +1,10 @@
-import type { PointingLineLength, PointingLineTicks } from '@core/map/pointingLineSettings';
+import type { Units } from '@core/format';
+import {
+  IMPERIAL_TICK_FT,
+  type PointingLineFixedTicks,
+  type PointingLineLength,
+  type PointingLineTicks,
+} from '@core/map/pointingLineSettings';
 import type { LatLng } from '@core/models';
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 import { metersPerPixel, niceBelow } from './scaleBar';
@@ -140,31 +146,90 @@ export function niceAtLeast(value: number): number {
   return (f === 1 ? 2 : f === 2 ? 5 : 10) * pow;
 }
 
+const M_PER_FT = 0.3048;
+const M_PER_MI = 1609.344;
+const FT_PER_MI = 5280;
+/** Imperial Auto steps above this many feet are in miles (0.1 mi = 528 ft is next). */
+const AUTO_FT_MAX = 500;
+
 /**
- * Auto ticks: the round step (1/2/5 × 10ⁿ m, at least 1 m) that puts ticks at
- * least {@link AUTO_TICK_MIN_DP} apart at this zoom and latitude.
+ * The unit a tick step is round in, which is also the unit its labels are
+ * written in: metric ticks read "250 m" / "1.5 km"; imperial ticks on a
+ * round-feet step read in feet ("2500 ft"), on a round-mile step in miles
+ * ("0.5 mi"), so every label on the line is a round number.
  */
-export function autoTickStepM(zoom: number, latitude: number): number | null {
-  const mpp = metersPerPixel(zoom, latitude);
-  if (mpp === null) return null;
-  return Math.max(1, niceAtLeast(AUTO_TICK_MIN_DP * mpp));
+export type TickUnit = 'm' | 'ft' | 'mi';
+
+/** A tick spacing: its ground length, and the unit it is round in. */
+export interface TickStep {
+  stepM: number;
+  unit: TickUnit;
+}
+
+/** A fixed tick choice in the unit system: its metric step, or its imperial feet. */
+export function fixedTickStep(ticks: PointingLineFixedTicks, units: Units): TickStep {
+  return units === 'imperial'
+    ? { stepM: IMPERIAL_TICK_FT[ticks] * M_PER_FT, unit: 'ft' }
+    : { stepM: ticks, unit: 'm' };
 }
 
 /**
- * The tick spacing to draw, metres, or null for none: Off, no settled zoom
- * yet (ticks are sized in dp), or a fixed step that would sit closer than
+ * The smallest round step at least `minM` metres long: 1/2/5 × 10ⁿ m (at
+ * least 1 m) in metric; in imperial, 1/2/5 × 10ⁿ ft up to 500 ft (at least
+ * 1 ft), then 0.1/0.2/0.5/1/2… mi.
+ */
+export function roundTickStep(minM: number, units: Units): TickStep {
+  if (units !== 'imperial') return { stepM: Math.max(1, niceAtLeast(minM)), unit: 'm' };
+  const ft = minM / M_PER_FT;
+  if (ft <= AUTO_FT_MAX) return { stepM: Math.max(1, niceAtLeast(ft)) * M_PER_FT, unit: 'ft' };
+  return { stepM: niceAtLeast(ft / FT_PER_MI) * M_PER_MI, unit: 'mi' };
+}
+
+/**
+ * Auto ticks: the round step (see {@link roundTickStep}) that puts ticks at
+ * least {@link AUTO_TICK_MIN_DP} apart at this zoom and latitude.
+ */
+export function autoTickStep(zoom: number, latitude: number, units: Units): TickStep | null {
+  const mpp = metersPerPixel(zoom, latitude);
+  if (mpp === null) return null;
+  return roundTickStep(AUTO_TICK_MIN_DP * mpp, units);
+}
+
+/**
+ * The tick spacing to draw, or null for none: Off, no settled zoom yet
+ * (ticks are sized in dp), or a fixed step that would sit closer than
  * {@link MIN_TICK_DP} on screen.
  */
-export function resolveTickStepM(
+export function resolveTickStep(
   ticks: PointingLineTicks,
   zoom: number | null,
   latitude: number,
-): number | null {
+  units: Units,
+): TickStep | null {
   if (ticks === 'off' || zoom === null) return null;
-  if (ticks === 'auto') return autoTickStepM(zoom, latitude);
+  if (ticks === 'auto') return autoTickStep(zoom, latitude, units);
   const mpp = metersPerPixel(zoom, latitude);
-  if (mpp === null || ticks / mpp < MIN_TICK_DP) return null;
-  return ticks;
+  const step = fixedTickStep(ticks, units);
+  if (mpp === null || step.stepM / mpp < MIN_TICK_DP) return null;
+  return step;
+}
+
+/**
+ * The settings preview's ticks over a `lengthM` drawing (no zoom there):
+ * the fixed step as set; Auto as five ticks — exactly length / 5 in metric
+ * (every metric length divides into a round step), the next round imperial
+ * step at or above it in imperial.
+ */
+export function previewTickStep(
+  ticks: PointingLineTicks,
+  lengthM: number,
+  units: Units,
+): TickStep | null {
+  if (ticks === 'off') return null;
+  if (ticks !== 'auto') return fixedTickStep(ticks, units);
+  return units === 'imperial'
+    ? roundTickStep(lengthM / 5, units)
+    : { stepM: lengthM / 5, unit: 'm' };
 }
 
 /** The length to draw, metres: the setting, or the edge distance (null: not on screen / no bounds yet). */
@@ -185,8 +250,13 @@ export function tickDistances(lengthM: number, stepM: number): number[] {
   return Array.from({ length: n }, (_, i) => (i + 1) * stepM);
 }
 
-/** A tick's label: "100 m", "1 km", "1.5 km". */
-export function tickLabel(m: number): string {
+/**
+ * A tick's label, `m` metres from you, in its step's unit: "100 m", "1 km",
+ * "1.5 km"; "250 ft", "2500 ft"; "0.5 mi", "1.5 mi".
+ */
+export function tickLabel(m: number, unit: TickUnit): string {
+  if (unit === 'ft') return `${Math.round(m / M_PER_FT)} ft`;
+  if (unit === 'mi') return `${Number((m / M_PER_MI).toFixed(2))} mi`;
   if (m < 1000) return `${Math.round(m)} m`;
   return `${Number((m / 1000).toFixed(2))} km`;
 }
@@ -198,8 +268,8 @@ export interface PointingLineInput {
   origin: LatLng;
   bearingDeg: number;
   lengthM: number;
-  /** Tick spacing in metres, or null for no ticks. */
-  tickStepM: number | null;
+  /** Tick spacing (its unit writes the labels), or null for no ticks. */
+  tickStep: TickStep | null;
   /** The settled zoom: sizes the ticks and offsets the labels (no zoom: no ticks, no labels). */
   zoom: number | null;
   /** Label every {@link MAJOR_EVERY}th tick with its distance. */
@@ -220,7 +290,7 @@ const lngLat = (p: LatLng): [number, number] => [p.longitude, p.latitude];
 export function pointingLineFeatures(
   input: PointingLineInput,
 ): FeatureCollection<LineString | Point, Props> {
-  const { origin, bearingDeg, lengthM, tickStepM, zoom, labelMajors, endLabel } = input;
+  const { origin, bearingDeg, lengthM, tickStep, zoom, labelMajors, endLabel } = input;
   const end = destinationPoint(origin, bearingDeg, lengthM);
   const features: Feature<LineString | Point, Props>[] = [
     {
@@ -249,8 +319,8 @@ export function pointingLineFeatures(
     p.latitude + (py * dp * mpp) / mPerDegLat,
   ];
 
-  if (tickStepM !== null) {
-    const distances = tickDistances(lengthM, tickStepM);
+  if (tickStep !== null) {
+    const distances = tickDistances(lengthM, tickStep.stepM);
     distances.forEach((d, i) => {
       const at = destinationPoint(origin, bearingDeg, d);
       const major = (i + 1) % MAJOR_EVERY === 0;
@@ -264,7 +334,7 @@ export function pointingLineFeatures(
         features.push({
           type: 'Feature',
           geometry: { type: 'Point', coordinates: offset(at, LABEL_OFFSET_DP + half) },
-          properties: { kind: 'label', text: tickLabel(d) },
+          properties: { kind: 'label', text: tickLabel(d, tickStep.unit) },
         });
       }
     });

@@ -63,7 +63,7 @@ appId: com.inukshuk.app
 # swap, then back to System so reruns and later flows see the default look.
 - scrollUntilVisible:
     element:
-      text: 'Theme.*'
+      text: 'Dark'
     direction: DOWN
 - tapOn: 'Dark'
 - assertVisible: 'Theme.*'

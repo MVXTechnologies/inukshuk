@@ -5,6 +5,7 @@ import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { subscribeHeading } from '../useCompass';
+import { PUCK_RING_LAYER_ID } from './PuckLayers';
 
 /** Ground radius of the beam, metres. Sized to read clearly at the zooms the
  * map is actually navigated at (z14–18) without dominating the screen. */
@@ -44,12 +45,6 @@ interface HeadingConeProps {
  * `subscribeHeading`) so cone updates re-render only this subtree, gated to
  * ≥1° changes to keep GeoJSON regeneration cheap.
  */
-/**
- * The puck ring layer the cone sits under: `PuckLayers`' `inukshuk-puck-ring`
- * (a test pins that PuckLayers draws a layer with exactly this id).
- */
-export const PUCK_RING_LAYER_ID = 'inukshuk-puck-ring';
-
 export function HeadingCone({ location }: HeadingConeProps) {
   const tokens = useSchemeTokens();
   const [beam, setBeam] = useState<{ headingDeg: number; accuracy: number | null } | null>(null);

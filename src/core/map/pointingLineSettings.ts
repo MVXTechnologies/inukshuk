@@ -1,3 +1,4 @@
+import type { Units } from '@core/format';
 import { normalizeDeg } from '@core/signal/heading';
 
 /**
@@ -81,9 +82,28 @@ export const POINTING_LINE_WIDTH_DP: Record<PointingLineWidth, number> = {
 };
 
 export const POINTING_LINE_TICKS: readonly PointingLineTicks[] = ['off', 10, 50, 100, 'auto'];
-/** A tick choice as its segment reads: "Off", "50 m", "Auto". */
-export function pointingLineTicksLabel(t: PointingLineTicks): string {
-  return t === 'off' ? 'Off' : t === 'auto' ? 'Auto' : `${t} m`;
+
+/** A fixed tick choice (the persisted value is its metric step). */
+export type PointingLineFixedTicks = Exclude<PointingLineTicks, 'off' | 'auto'>;
+
+/**
+ * The imperial step each fixed choice stands for, feet: the 1/2/5 × 10ⁿ ft
+ * value nearest to the metric step (10 m ≈ 33 ft → 50; 50 m ≈ 164 ft → 200;
+ * 100 m ≈ 328 ft → 500). In imperial the ticks fall on round feet, so every
+ * label on the line is a round number ("1000 ft", not "820 ft"); the setting
+ * itself stays one value, so switching units keeps your choice.
+ */
+export const IMPERIAL_TICK_FT: Record<PointingLineFixedTicks, number> = {
+  10: 50,
+  50: 200,
+  100: 500,
+};
+
+/** A tick choice as its segment reads: "Off", "50 m" / "200 ft", "Auto". */
+export function pointingLineTicksLabel(t: PointingLineTicks, units: Units): string {
+  if (t === 'off') return 'Off';
+  if (t === 'auto') return 'Auto';
+  return units === 'imperial' ? `${IMPERIAL_TICK_FT[t]} ft` : `${t} m`;
 }
 
 /** The nine colours (mockup §7): red first, then earth, water, stone and paper. */
@@ -166,11 +186,15 @@ export function pointingLineLengthText(length: PointingLineLength): string {
 }
 
 /** The preview's caption (mockup): "From you · heading · 500 m · ticks every 50 m". */
-export function pointingLineCaption(s: PointingLineSettings): string {
+export function pointingLineCaption(s: PointingLineSettings, units: Units): string {
   const dir = s.direction === 'fixed' ? formatFixedBearing(s.fixedBearingDeg) : s.direction;
   const len = s.length === 'edge' ? 'to the edge' : pointingLineLengthText(s.length);
   const ticks =
-    s.ticks === 'off' ? 'no ticks' : s.ticks === 'auto' ? 'auto ticks' : `ticks every ${s.ticks} m`;
+    s.ticks === 'off'
+      ? 'no ticks'
+      : s.ticks === 'auto'
+        ? 'auto ticks'
+        : `ticks every ${pointingLineTicksLabel(s.ticks, units)}`;
   return `From you · ${dir} · ${len} · ${ticks}`;
 }
 
