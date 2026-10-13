@@ -373,6 +373,27 @@ if [ "$SYSTEM_BROKE" = 0 ]; then
   fi
 fi
 
+# GWP-ASan stress (#648): GWP_ASAN_LAUNCHES more cold starts with GWP-ASan
+# sampling every allocation of the app (scripts/e2e/gwp-asan-stress.sh), so a
+# backtrace walk that can crash does so nearly every launch instead of about
+# one run in four. Last, because it switches adb to root. Crashes fail the
+# shard through launch_health like any other.
+GWP_ASAN_LAUNCHES=${GWP_ASAN_LAUNCHES:-10}
+if [ "$SYSTEM_BROKE" = 0 ] && [ "$GWP_ASAN_LAUNCHES" -gt 0 ] && [[ "$component" == */* ]]; then
+  adb logcat -c || true
+  started=$SECONDS
+  if bash scripts/e2e/gwp-asan-stress.sh "$APP_ID" "$component" "$GWP_ASAN_LAUNCHES"; then
+    stress=PASS
+  else
+    stress="FAIL (sampling not forced)"
+    RC=1
+  fi
+  launch_health "gwp-asan stress"
+  took=$((SECONDS - started))
+  echo "=== gwp-asan stress x$GWP_ASAN_LAUNCHES: $stress, crashes ${HEALTH} ($((took / 60))m$((took % 60))s) ==="
+  SUMMARY+=$'\n'"| gwp-asan stress x$GWP_ASAN_LAUNCHES (every allocation sampled) | $stress | $((took / 60))m$((took % 60))s | $HEALTH |"
+fi
+
 if [ "$NATIVE_CRASHES" -gt 0 ]; then
   RC=1
   SUMMARY+=$'\n'"| native crashes | FAIL: $NATIVE_CRASHES ($(IFS=';'; echo "${CRASH_NOTES[*]}")) | | |"
