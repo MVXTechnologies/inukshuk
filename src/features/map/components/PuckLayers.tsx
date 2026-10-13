@@ -3,6 +3,8 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 
 /** maplibre-react-native's user-location source (see its UserLocation component). */
 const USER_LOCATION_SOURCE = 'mlrn-user-location';
+/** The puck's ring: map aids drawn from you (the pointing line) slot in just below it. */
+export const PUCK_RING_LAYER_ID = 'inukshuk-puck-ring';
 
 /**
  * The revamp's location puck (board `After-Tokens.html`: "paper ring + cone"):
@@ -77,7 +79,7 @@ export function PuckLayers({
         />
       )}
       <Layer
-        id="inukshuk-puck-ring"
+        id={PUCK_RING_LAYER_ID}
         type="circle"
         source={USER_LOCATION_SOURCE}
         paint={{

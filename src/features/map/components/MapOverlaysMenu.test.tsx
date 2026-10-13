@@ -124,9 +124,16 @@ describe('Overlays sheet layout (#484)', () => {
     const tabs: [string, string[], string[]][] = [
       [
         'Map',
-        ['Content: everything', 'PDF maps', 'Parks & protected areas'],
-        // Satellite's and PDF maps' own options live in their sub-panels.
-        ['Shading', 'Personal heatmap', 'Labels on satellite', 'Imagery', 'See-through white'],
+        ['Content: everything', 'PDF maps', 'Parks & protected areas', 'MAP AIDS', 'Pointing line'],
+        // Satellite's, PDF maps' and the pointing line's own options live in their sub-panels.
+        [
+          'Shading',
+          'Personal heatmap',
+          'Labels on satellite',
+          'Imagery',
+          'See-through white',
+          'Tick marks',
+        ],
       ],
       [
         'Terrain',
@@ -566,6 +573,31 @@ describe('Terrain levels', () => {
     expect(screen.getByLabelText('Dramatic').props.accessibilityState).toMatchObject({
       disabled: true,
     });
+  });
+});
+
+describe('Pointing line row and sub-panel (#681)', () => {
+  it('is off by default and says what it would draw; the switch turns it on', async () => {
+    await renderMenu();
+    expect(checked('Pointing line')).toBe(false);
+    expect(screen.getByText('Off · 500 m along your heading')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Pointing line'));
+    expect(useSettingsStore.getState().pointingLine.enabled).toBe(true);
+    expect(screen.getByText('500 m along your heading')).toBeTruthy();
+  });
+
+  it('opens its page from the accessory, and goes back to the Map tab', async () => {
+    onTab('terrain');
+    await renderMenu();
+    await fireEvent.press(screen.getByLabelText('Map tab'));
+    await fireEvent.press(screen.getByLabelText('Options for pointing line'));
+    expect(screen.queryByLabelText('Map tab')).toBeNull();
+    expect(checked('Show pointing line')).toBe(false);
+    await fireEvent.press(screen.getByLabelText('Show pointing line'));
+    expect(useSettingsStore.getState().pointingLine.enabled).toBe(true);
+    await fireEvent.press(screen.getByLabelText('Back to overlays'));
+    expect(selected('Map tab')).toBe(true);
+    expect(checked('Pointing line')).toBe(true);
   });
 });
 

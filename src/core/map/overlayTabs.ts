@@ -37,6 +37,7 @@ export const OVERLAY_ROW_TAB = {
   content: 'map',
   pdfMaps: 'map',
   parks: 'map',
+  pointingLine: 'map',
   seeThroughWhite: 'map',
   basemap: 'terrain',
   satelliteLabels: 'terrain',
@@ -66,6 +67,7 @@ export function tabForRow(row: OverlayRow): OverlayTab {
 export const BUILT_IN_SUB_PANEL_TAB = {
   satellite: 'terrain',
   pdfMaps: 'map',
+  pointingLine: 'map',
   weather: 'sports',
 } as const satisfies Record<string, OverlayTab>;
 

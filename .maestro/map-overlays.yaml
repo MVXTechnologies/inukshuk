@@ -95,6 +95,34 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Terrain tab'
     timeout: 10000
+# --- Pointing line (#681), under Map aids on the Map tab: its accessory
+# ('Options for pointing line') opens a page whose first row is 'Show
+# pointing line', hinted 'Hidden on the map' while off. It is PERSISTED and
+# off by default: make sure it is on, then turn it off and prove it, so the
+# run leaves the default behind.
+- scrollUntilVisible:
+    element: 'Options for pointing line'
+    direction: DOWN
+    timeout: 15000
+    centerElement: true
+- tapOn: 'Options for pointing line'
+- extendedWaitUntil:
+    visible: 'Show pointing line.*'
+    timeout: 10000
+- assertNotVisible: 'Terrain tab'
+- tapOn: 'Show pointing line.*'
+- runFlow:
+    when:
+      visible: 'Hidden on the map.*'
+    commands:
+      - tapOn: 'Show pointing line.*'
+- assertNotVisible: 'Hidden on the map.*'
+- tapOn: 'Show pointing line.*'
+- assertVisible: 'Hidden on the map.*'
+- tapOn: 'Back to overlays'
+- extendedWaitUntil:
+    visible: 'Terrain tab'
+    timeout: 10000
 # --- Terrain: the base map cards on top (#669, the rail's Base map button is
 # gone), Satellite's sub-panel, then Contours with its density, Slope with its
 # window. The cards are asserted, not tapped: switching to Satellite would
