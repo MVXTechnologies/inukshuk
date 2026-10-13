@@ -1,0 +1,48 @@
+# Follow a trail e2e (#678): the trail view's "Follow" sends you back to the
+# map following that trail — the "Following · <name>" chip with its ✕ — and
+# the ✕ stops it.
+#
+# Portability notes:
+# - Runs after category-record.yaml (needs >= 1 saved trail). Cards' a11y
+#   label is "<name> — open trail view, long-press to select" (em dash).
+# - The compass tape is not asserted (it needs a heading; see navigate.yaml).
+# - Following adds the trail to the map's shown trails (persisted), which is
+#   why this flow sits late in its shard: only record.yaml follows it.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- assertVisible: 'Recorded trails.*'
+- tapOn: '.* — open trail view, long-press to select'
+- extendedWaitUntil:
+    visible: 'Follow'
+    timeout: 30000
+- tapOn: 'Follow'
+# Back on the map, following.
+- extendedWaitUntil:
+    visible: 'Stop following'
+    timeout: 30000
+- assertVisible: 'Following · .*'
+- tapOn: 'Stop following'
+- extendedWaitUntil:
+    notVisible: 'Stop following'
+    timeout: 10000
+- assertVisible: 'Map actions'

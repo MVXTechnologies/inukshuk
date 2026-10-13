@@ -157,9 +157,11 @@ describe('leaving a focused trail by tapping the map (2.1.1)', () => {
     expect(block).toContain('selectionCamera.forget();');
     expect(block).toContain('return;');
     expect(block).not.toMatch(/restore|setPointAt|setStop/);
-    // The tap handler never glides the camera back; only the ✕ handlers do.
+    // The tap handler never releases the snapshot; only the two ✕ handlers
+    // and the trail panel's "Follow this trail" (#678, which closes the panel
+    // and leaves the camera where it is) do.
     expect(press).not.toMatch(/releaseCameraOnDeselect\(\)/);
-    expect(map.match(/releaseCameraOnDeselect\(\);/g) ?? []).toHaveLength(2);
+    expect(map.match(/releaseCameraOnDeselect\(\);/g) ?? []).toHaveLength(3);
   });
 });
 

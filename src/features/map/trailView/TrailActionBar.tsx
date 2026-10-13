@@ -18,8 +18,7 @@ export const TRAIL_ACTION_BAR_H = 64;
 
 /**
  * Sticky bottom bar (#511): the trail's actions — only those that exist
- * (Show on map · Share · Export today; "Follow again" waits for route
- * following).
+ * (On map · Follow (#678) · Share · Export).
  */
 export function TrailActionBar({ actions }: { actions: readonly TrailAction[] }) {
   const t = useSchemeTokens();

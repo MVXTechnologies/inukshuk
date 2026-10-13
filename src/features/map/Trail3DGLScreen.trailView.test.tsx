@@ -3,6 +3,7 @@ import { computeSegmentedTrackStats } from '@core/geo/track';
 import { walk } from '@core/geo/track/__fixtures__/walk';
 import type { TrackSummary } from '@core/models';
 import { useLibraryStore } from '@state/libraryStore';
+import { useNavigationStore } from '@state/navigationStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
@@ -304,5 +305,22 @@ it('shows the trail on the main map from the bar', async () => {
   await mount();
   await act(async () => fireEvent.press(screen.getByText('On map')));
   expect(useLibraryStore.getState().activeTrackIds).toEqual(['t1']);
+  expect(mockNavigate).toHaveBeenCalledWith('/');
+});
+
+it('follows the trail from the bar (#678): drawn on the map, compass guiding', async () => {
+  seed(true);
+  useLibraryStore.setState({ activeTrackIds: ['other'] });
+  useNavigationStore.setState({ destination: { latitude: 1, longitude: 2 }, following: null });
+  await mount();
+  await act(async () => fireEvent.press(screen.getByText('Follow')));
+  // Added to what is shown, not replacing it.
+  expect(useLibraryStore.getState().activeTrackIds).toEqual(['other', 't1']);
+  expect(useNavigationStore.getState().following).toEqual({
+    trackId: 't1',
+    name: useLibraryStore.getState().tracks[0]!.name,
+  });
+  // One navigation at a time: the destination pin goes.
+  expect(useNavigationStore.getState().destination).toBeNull();
   expect(mockNavigate).toHaveBeenCalledWith('/');
 });

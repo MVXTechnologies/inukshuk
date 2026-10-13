@@ -410,6 +410,30 @@ ntripClient.ts` over `data/gnss/ntripSocket.ts` (the module's `openTcp` /
   `state/teamStore.ts`, `features/team/*` (a device extension; `TeamHost` runs
   the mesh lifecycle). Decisions and the test plan: docs/design/team-ui.md.
 
+## Navigation: the linear compass and following a trail (#672, #678)
+
+- **One target at a time** (`state/navigationStore`): a point (the destination
+  pin: long-press → Navigate, or Navigate on a waypoint / point card) or a
+  saved trail being followed ("Follow" on the trail view, "Follow this trail"
+  on the map's trail card). Session state, never persisted.
+- **The compass** (`features/map/nav/NavCompass`) is a 44 dp heading tape in
+  its own row of the map's bottom column, just above the ⓘ + scale row, so the
+  recording panel's measured height lifts it like the rest. It subscribes to
+  the heading itself (`subscribeHeading`), drops sub-degree ticks before any
+  state update, and so re-renders only itself; MapScreen never re-renders per
+  heading tick. With no magnetometer the course over ground drives it above
+  0.5 m/s ("COG"); below that it hides. Its geometry, the turn hint and the
+  on-course hysteresis (in at 10°, out past 15°) are pure (`core/nav`).
+- **Following a trail** (`core/nav`, pure): the trail is prepared once (local
+  metres, distance along on the notes' pause-aware axis, a uniform grid of its
+  segments). Each fix updates an incremental tracker that searches only a short
+  window around the last position along the trail, so switchbacks and
+  out-and-backs never jump legs; it falls back to the grid when you leave the
+  trail. Measured on the Québec fixture activities: ~25 segment projections per
+  fix whatever the trail's length. The next target is the next waypoint ahead
+  along the trail, else the next note, else the end, advanced by your furthest
+  progress; off trail latches past 30 m and clears within 20 m.
+
 ## Error reporting ("no silent fails")
 
 - Capture: a chained `ErrorUtils` global handler (fatal + non-fatal), Hermes'

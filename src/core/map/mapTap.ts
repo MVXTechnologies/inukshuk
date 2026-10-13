@@ -34,14 +34,15 @@ export function routeMapTap<P>(chipHit: PointChipHit | null, pin: P | null): Map
 /**
  * Whether the chip stays up after one of its own actions ran.
  *
- * Navigate keeps it (the coordinates dialog opens over it and "Go" re-drops it
- * on the target anyway), and so does Convert (a screen pushed over the map:
- * coming back finds the point still marked). Copy is the dismiss gesture. Waypoint closes it: the
- * pin that is about to be created takes over that exact spot, and a chip left
- * sitting on its own new pin is the stale bubble this module exists for.
+ * Convert keeps it (a screen pushed over the map: coming back finds the point
+ * still marked). Copy is the dismiss gesture. Waypoint and Navigate close it:
+ * the waypoint pin or the destination flag (#672: Navigate now starts
+ * navigating to the point straight away) takes over that exact spot, and a
+ * chip left sitting on its own new pin is the stale bubble this module exists
+ * for.
  */
 export function chipSurvivesHit(hit: PointChipHit): boolean {
-  return hit === 'navigate' || hit === 'convert';
+  return hit === 'convert';
 }
 
 /**

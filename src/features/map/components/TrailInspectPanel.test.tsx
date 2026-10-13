@@ -87,6 +87,7 @@ async function mount(track: TrackSummary, points: TrackPoint[] = POINTS) {
     onClose: jest.fn(),
     onView: jest.fn(),
     onEditRoute: jest.fn(),
+    onFollow: jest.fn(),
   };
   await render(
     <SafeAreaProvider initialMetrics={METRICS}>
@@ -159,5 +160,11 @@ describe('TrailInspectPanel', () => {
     );
     expect(screen.queryByTestId('trail-inspect-profile')).toBeNull();
     expect(screen.getByText('No elevation data')).toBeOnTheScreen();
+  });
+
+  it('offers Follow this trail (#678)', async () => {
+    const { onFollow } = await mount(RECORDED);
+    await fireEvent.press(screen.getByLabelText('Follow this trail'));
+    expect(onFollow).toHaveBeenCalledTimes(1);
   });
 });

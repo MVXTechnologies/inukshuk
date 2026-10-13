@@ -89,6 +89,11 @@ import { BackgroundLocationRationale } from './components/BackgroundLocationRati
 import { CategoryStartSheet } from './components/CategoryStartSheet';
 import { CompassBadge } from './components/CompassBadge';
 import { DestinationChip } from './components/DestinationChip';
+import { FollowChip } from './nav/FollowChip';
+import { FollowGuideLine } from './nav/FollowGuideLine';
+import { NavigationCompassRow } from './nav/NavigationCompassRow';
+import { useFollowTrail } from './nav/useFollowTrail';
+import { useNavigationStore } from '@state/navigationStore';
 import { DestinationMarkerPin } from './components/DestinationMarkerPin';
 import { GoToCoordinatesDialog } from './components/GoToCoordinatesDialog';
 import { MapCreditsButton, MapCreditsSheet } from './components/MapCredits';
@@ -721,7 +726,11 @@ export function MapScreen() {
   //
   // This is emphatically NOT route following: no legs, no turns, no ETA, no
   // snapping to a trail. That is issue #95.
-  const [destination, setDestination] = useState<LatLng | null>(null);
+  // In the navigation store since #672/#678: one target at a time, a point or
+  // a followed trail (started from the trail view, a screen above the map).
+  const destination = useNavigationStore((s) => s.destination);
+  const setDestination = useNavigationStore((s) => s.setDestination);
+  const stopFollowing = useNavigationStore((s) => s.stopFollowing);
   // True while the PERSON pans or zooms. Only the mascot BUBBLE waits on it
   // (none pops mid-gesture or for 5 s after, #476); the mug's loop ignores
   // map interaction entirely (owner). Driven by createGesturePause: taps
@@ -1069,6 +1078,8 @@ export function MapScreen() {
   }, [viewPitch, terrain3d.viewTag, terrain3d.active]);
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
+  // Following a saved trail (#678): its readout, per fix, for the compass.
+  const follow = useFollowTrail(location, showSnack);
 
   // Overlay errors surface through the timed hook too: a raw <Snackbar
   // duration={4000}> never auto-dismisses on Samsung One UI (paper arms its
@@ -1818,7 +1829,8 @@ export function MapScreen() {
     (hit: PointChipHit, at: LatLng) => {
       if (!chipSurvivesHit(hit)) setPointAt(null);
       if (hit === 'navigate') {
-        void openGoToCoordinates(at);
+        // #672: Navigate starts navigating to the point (compass + chip).
+        setDestination(at);
       } else if (hit === 'waypoint') {
         composeWaypointAt(at);
       } else if (hit === 'convert') {
@@ -1830,7 +1842,7 @@ export function MapScreen() {
         setForecastAt(null);
       }
     },
-    [openGoToCoordinates, composeWaypointAt, showSnack, router],
+    [setDestination, composeWaypointAt, showSnack, router],
   );
 
   // "+" actions menu → Add waypoint: compose a standalone waypoint at the
@@ -3157,6 +3169,10 @@ export function MapScreen() {
               dropped: it points along the GPS course (garbage while standing
               still); the cone tracks the smoothed compass instead. */}
             <HeadingCone location={location} />
+            {/* Off a followed trail (#678): the dashed way back to it. */}
+            {location !== null && follow?.readout != null && !follow.readout.onTrail && (
+              <FollowGuideLine from={location} to={follow.readout.nearest} />
+            )}
             {/* Team mode (#589): teammates' positions, shared waypoints and trails. */}
             <TeamMapLayers
               glyphs={style.glyphs}
@@ -3279,6 +3295,14 @@ export function MapScreen() {
             pointerEvents="box-none"
           >
             <DestinationChip readout={destReadout} onClear={() => setDestination(null)} />
+          </View>
+        )}
+        {follow !== null && !marineActive && (
+          <View
+            style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
+            pointerEvents="box-none"
+          >
+            <FollowChip name={follow.name} onStop={stopFollowing} />
           </View>
         )}
 
@@ -3435,6 +3459,17 @@ export function MapScreen() {
             on the map view itself.
             Recording starts from "+" → Record track (owner call, 2026-09-27:
             no separate Record button over the map). */}
+          {/* The navigation compass (#672/#678): its own row, just above the
+            ⓘ + scale row, while navigating to a point or following a trail.
+            Hidden with that row (same reason, below). */}
+          {!selecting && makeMapState === null && (
+            <NavigationCompassRow
+              location={location}
+              destination={destReadout}
+              follow={follow}
+              units={units}
+            />
+          )}
           {/* Not while the region selector or the map maker owns the bottom
             edge: their sheets sit in this column's footprint, and the row
             would draw over their Cancel / Download / Next buttons. */}
@@ -3458,7 +3493,7 @@ export function MapScreen() {
                 dialog is up. */}
               <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="box-none">
                 <TipButton
-                  navigating={destination !== null}
+                  navigating={destination !== null || follow !== null}
                   gestureActive={cameraMoving}
                   focused={isFocused}
                   bubbleBlocked={
@@ -3570,6 +3605,14 @@ export function MapScreen() {
                 .getState()
                 .setDrawRequest({ kind: 'edit-route', trackId: inspectTrack.id })
             }
+            // #678: follow it; the panel closes so the compass row shows.
+            onFollow={() => {
+              useNavigationStore
+                .getState()
+                .follow({ trackId: inspectTrack.id, name: inspectTrack.name });
+              inspect(null);
+              releaseCameraOnDeselect();
+            }}
             onLayout={setInspectPanelHeight}
           />
         )}
@@ -3649,7 +3692,12 @@ export function MapScreen() {
             top={
               insets.top +
               TOP_CHIP_OFFSET +
-              (marineActive || destination !== null || displayCondition === 'night' ? 44 : 0)
+              (marineActive ||
+              destination !== null ||
+              follow !== null ||
+              displayCondition === 'night'
+                ? 44
+                : 0)
             }
             showChip={!recordingPanelUp}
           />
@@ -3822,6 +3870,14 @@ export function MapScreen() {
                 setEditWp(viewWp);
                 setWpName(viewWaypoint?.label ?? '');
                 setWpDraft(viewWaypoint?.note ?? '');
+                setViewWp(null);
+              }}
+              onNavigate={() => {
+                if (!viewWaypoint) return;
+                setDestination({
+                  latitude: viewWaypoint.latitude,
+                  longitude: viewWaypoint.longitude,
+                });
                 setViewWp(null);
               }}
               onDelete={deleteViewedWaypoint}

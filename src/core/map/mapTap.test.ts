@@ -46,16 +46,17 @@ describe('routeMapTap', () => {
 });
 
 describe('chipSurvivesHit', () => {
-  it('keeps the chip for Navigate and Convert (screens over the map)', () => {
-    expect(chipSurvivesHit('navigate')).toBe(true);
+  it('keeps the chip for Convert (a screen over the map)', () => {
     expect(chipSurvivesHit('convert')).toBe(true);
     expect(chipSurvivesHit('copy')).toBe(false);
   });
 
-  // The new pin lands on the chip's own coordinate — leaving the chip there
-  // is exactly the stale bubble of the report.
-  it('closes the chip when it adds a waypoint', () => {
+  // The new pin (or, #672, the destination flag) lands on the chip's own
+  // coordinate — leaving the chip there is exactly the stale bubble of the
+  // report.
+  it('closes the chip when it adds a waypoint or starts navigating', () => {
     expect(chipSurvivesHit('waypoint')).toBe(false);
+    expect(chipSurvivesHit('navigate')).toBe(false);
   });
 });
 
