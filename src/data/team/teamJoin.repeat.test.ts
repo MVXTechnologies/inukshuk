@@ -3,12 +3,14 @@
  * loopback mesh: no session may strike or fail to decrypt a frame.
  *
  * Twice in E2E (runs 37784108605, 37900582863) a join's first session lost a
- * frame: the founder struck once during the handshake, admitted the joiner,
- * then failed to decrypt the next sealed frame (closed(decrypt)). The redial
- * (meshLink) now recovers from that, but the frame loss itself never
- * reproduced here (600 joins, both crypto backends) nor in five traced E2E
- * reruns; this keeps watching for it, and the loopback trace (teamDebug) now
- * names strike reasons for the next E2E occurrence.
+ * frame: the joiner's first sealed frame reached the founder before its hi3
+ * (the loopback hub used one timer per frame, and React Native does not run
+ * equal-delay timers in order), the founder dropped it with a strike and
+ * failed to decrypt the next one. The session now keeps such frames until
+ * hi3 (sync.handshake-order.test.ts), the hub delivers in FIFO order
+ * (loopbackMesh.test.ts), and a joiner redials after any session loss
+ * (meshLink.test.ts, teamJoin.recovery.test.ts). This keeps the whole path
+ * honest.
  */
 import { SyncSession } from '@core/team/sync';
 import { nodeCrypto } from '@core/team/testing/nodeCrypto';

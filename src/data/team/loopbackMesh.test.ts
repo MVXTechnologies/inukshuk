@@ -1,4 +1,4 @@
-import { LoopbackMeshHub } from './loopbackMesh';
+import { fifoScheduler, LoopbackMeshHub } from './loopbackMesh';
 import type { MeshEvent } from './meshTransport';
 
 function manualHub(opts: { maxQueuedBytes?: number; maxFrameBytes?: number } = {}) {
@@ -119,5 +119,30 @@ describe('LoopbackMeshHub', () => {
     await b.stop();
     expect(() => a.connect(b.address, b.port)).toThrow('not started');
     expect(() => a.connectService('nope')).toThrow();
+  });
+
+  it('delivers frames in send order even when the platform runs timers out of order', async () => {
+    // A platform whose equal-delay timers fire newest first (RN does not
+    // promise FIFO): the hub's own queue keeps the order anyway.
+    const timers: (() => void)[] = [];
+    const runTimersReversed = (): void => {
+      while (timers.length > 0) {
+        const batch = timers.splice(0).reverse();
+        for (const fn of batch) fn();
+      }
+    };
+    const hub = new LoopbackMeshHub({ schedule: fifoScheduler((fn) => timers.push(fn)) });
+    const a = hub.createTransport();
+    const b = hub.createTransport();
+    const eb = record(b);
+    await Promise.all([a.start(), b.start()]);
+    await b.startAdvertising('t');
+    a.connect(b.address, b.port);
+    runTimersReversed();
+    const peer = a.stats().peers[0]?.peerId ?? '';
+    for (let i = 1; i <= 5; i++) a.send(peer, bytes(i));
+    runTimersReversed();
+    const got = eb.flatMap((e) => (e.type === 'frame' ? [e.data[0]] : []));
+    expect(got).toEqual([1, 2, 3, 4, 5]);
   });
 });
