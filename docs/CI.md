@@ -224,8 +224,14 @@ flake). Each shard writes a per-flow pass/time table to its job summary.
 
 **ANR dialogs** (run 37914205449, 2026-10-09): "Pixel Launcher isn't
 responding" sat over the app and failed every flow of the extensions shard at
-"Map actions", on the retry too, although `hide_error_dialogs` was set. The
-workflow now also sets `anr_show_background 0` and `show_first_crash_dialog 0`
+"Map actions", on the retry too, although `hide_error_dialogs` was set. Cause,
+established by provoking launcher ANRs on the CI emulator (freeze the launcher,
+touch it): with `hide_error_dialogs=1` applied, the ANR raises no dialog at
+all; with it off, the dialog appears ~15 s after the first unanswered touch.
+The setting used to be applied only after `sys.boot_completed`, so a dialog
+raised during boot was already up and nothing dismissed it. It is now applied
+as soon as the settings provider answers (before the boot wait). The workflow
+also sets `anr_show_background 0` and `show_first_crash_dialog 0`
 and logs the effective values. Before every flow attempt (so also before a
 retry) the runner takes a `uiautomator dump` and looks for the dialog by the
 resource ids seen in that run's hierarchy, `android:id/aerr_close` and
