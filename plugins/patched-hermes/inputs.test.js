@@ -12,7 +12,9 @@ describe('build inputs fingerprint', () => {
   // would refuse it anyway, but say so here first.
   it('artifact.json was built from the current build.json + patches', () => {
     expect(artifact.releaseTag).toBe(build.releaseTag);
-    expect(artifact.inputsSha256).toBe(buildInputsHash());
+    // Until the workflow has published releaseTag, artifact.json pins no files
+    // (and prebuild refuses to run); once it does, it must match the inputs.
+    if (artifact.files.length > 0) expect(artifact.inputsSha256).toBe(buildInputsHash());
   });
 });
 

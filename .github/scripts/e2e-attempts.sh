@@ -298,15 +298,42 @@ adb shell content call --uri content://media --method scan_volume --arg external
 #   holds died ("depends on provider … in dying proc"), e.g. Play services'
 #   FontsProvider when com.google.android.gms.persistent restarts.
 # A non-zero count is a defect even on a green flow, so it is annotated.
+#
+# A native crash FAILS the shard, whatever happened next (#648): a flow whose
+# first attempt died in a native crash and whose retry passed is not a pass,
+# and neither is a cold-start launch that crashed. The crash of #648 hid
+# behind exactly that retry (and the cold-start loop only warned) while the
+# runs stayed green. Stalls and provider kills stay warnings: they are the
+# emulator's, a SIGSEGV in our process is ours. Each crashed attempt keeps its
+# logcat (logcat-crash-*.txt, uploaded) and is named by signature when known.
+NATIVE_CRASHES=0
+CRASH_NOTES=()
+crash_signature() {
+  if grep -q 'android_unsafe_frame_pointer_chase' <<< "$1" && grep -q 'hoost_make_fcontext' <<< "$1"; then
+    echo "#648 GWP-ASan frame-pointer walk off a Hermes fiber stack"
+  elif grep -q 'Failed to allocate in guarded pool allocator memory' <<< "$1"; then
+    echo "GWP-ASan pool could not map a slot (stress settings too large?)"
+  else
+    echo "unclassified (see the logcat)"
+  fi
+}
 launch_health() {
-  local log stalls crashes kills
+  local log stalls crashes kills sig file
   HEALTH=
   log=$(adb logcat -d 2>/dev/null || true)
   stalls=$(grep -c 'Timed out waiting for animations to complete' <<< "$log" || true)
   crashes=$(grep -E 'Fatal signal' <<< "$log" | grep -c 'om\.inukshuk\.app' || true)
   kills=$(grep -E 'Killing [0-9]+:com\.inukshuk\.app/' <<< "$log" | grep -c 'depends on provider' || true)
-  if [ "${stalls:-0}" -gt 0 ] || [ "${crashes:-0}" -gt 0 ] || [ "${kills:-0}" -gt 0 ]; then
-    echo "::warning title=E2E launch health ($SHARD)::$1: $stalls window-animation stall(s), $crashes native crash(es), $kills provider kill(s) in logcat"
+  if [ "${stalls:-0}" -gt 0 ] || [ "${kills:-0}" -gt 0 ]; then
+    echo "::warning title=E2E launch health ($SHARD)::$1: $stalls window-animation stall(s), $kills provider kill(s) in logcat"
+  fi
+  if [ "${crashes:-0}" -gt 0 ]; then
+    NATIVE_CRASHES=$((NATIVE_CRASHES + crashes))
+    sig=$(crash_signature "$log")
+    file="logcat-crash-$(tr -c 'A-Za-z0-9._-' '_' <<< "$1" | sed 's/_*$//').txt"
+    printf '%s\n' "$log" > "$file"
+    CRASH_NOTES+=("$1: $crashes, $sig")
+    echo "::error title=E2E native crash ($SHARD)::$1: $crashes native crash(es), $sig; logcat in $file. A native crash fails the shard even if a retry passes."
   fi
   HEALTH="${stalls:-0}/${crashes:-0}/${kills:-0}"
 }
@@ -434,6 +461,49 @@ if [ "$SYSTEM_BROKE" = 0 ]; then
     echo "::warning title=E2E ($SHARD): no cold-start timing::am start -W returned no TotalTime for '$component'"
     SUMMARY+=$'\n'"| cold start (am start -W) | no timing | | $HEALTH | |"
   fi
+fi
+
+# GWP-ASan stress (#648): GWP_ASAN_LAUNCHES more cold starts with GWP-ASan
+# sampling every allocation of the app (scripts/e2e/gwp-asan-stress.sh), so a
+# backtrace walk that can crash does so nearly every launch instead of about
+# one run in four. Last, because it switches adb to root. Crashes fail the
+# shard through launch_health like any other.
+GWP_ASAN_LAUNCHES=${GWP_ASAN_LAUNCHES:-10}
+if [ "$SYSTEM_BROKE" = 0 ] && [ "$GWP_ASAN_LAUNCHES" -gt 0 ] && [[ "$component" == */* ]]; then
+  adb logcat -c || true
+  started=$SECONDS
+  if bash scripts/e2e/gwp-asan-stress.sh "$APP_ID" "$component" "$GWP_ASAN_LAUNCHES"; then
+    stress=PASS
+  else
+    stress="FAIL (sampling not forced)"
+    RC=1
+  fi
+  launch_health "gwp-asan stress"
+  took=$((SECONDS - started))
+  echo "=== gwp-asan stress x$GWP_ASAN_LAUNCHES: $stress, crashes ${HEALTH} ($((took / 60))m$((took % 60))s) ==="
+  SUMMARY+=$'\n'"| gwp-asan stress x$GWP_ASAN_LAUNCHES (every allocation sampled) | $stress | $((took / 60))m$((took % 60))s | $HEALTH |"
+fi
+
+# Hermes + GWP-ASan harness (#648, scripts/e2e/hermes-gwp-asan): the APK's
+# libhermesvm.so must survive repeated eval() with every allocation sampled,
+# while Meta's fiber build (the control) must crash, or the harness proves
+# nothing. Only where e2e.yml downloaded it (the catalog shard).
+if [ "$SYSTEM_BROKE" = 0 ] && [ -f hermes-gwp-asan/eval_stress ]; then
+  started=$SECONDS
+  if bash scripts/e2e/hermes-gwp-asan/run.sh hermes-gwp-asan 10 300; then
+    harness=PASS
+  else
+    harness=FAIL
+    RC=1
+  fi
+  took=$((SECONDS - started))
+  echo "=== hermes-gwp-asan harness: $harness ($((took / 60))m$((took % 60))s) ==="
+  SUMMARY+=$'\n'"| hermes-gwp-asan harness (ours must not crash, Meta's fiber build must) | $harness | $((took / 60))m$((took % 60))s | |"
+fi
+
+if [ "$NATIVE_CRASHES" -gt 0 ]; then
+  RC=1
+  SUMMARY+=$'\n'"| native crashes | FAIL: $NATIVE_CRASHES ($(IFS=';'; echo "${CRASH_NOTES[*]}")) | | |"
 fi
 
 # pdf-overlays pixels: checked right after the flow (see the loop above).

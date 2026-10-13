@@ -2,92 +2,56 @@
  * @jest-environment node
  */
 const { describe, expect, it } = require('@jest/globals');
-const { Buffer } = require('node:buffer');
 
-const { describeLib, fcontextProblems, fcontextState, packagedProblems } = require('./hermesCheck');
-const {
-  ARM64_PATCHED,
-  ARM64_UNPATCHED,
-  X86_64_PATCHED,
-  X86_64_UNPATCHED,
-  hex,
-  makeElf,
-} = require('./testFixtures');
+const { describeLib, fiberProblems, packagedProblems } = require('./hermesCheck');
+const { X86_64_UNPATCHED, hex, makeElf } = require('./testFixtures');
 
-describe('fcontextState', () => {
-  it("recognises Meta's unpatched 250829098.0.10 code on both 64-bit ABIs", () => {
-    expect(fcontextState('x86_64', X86_64_UNPATCHED)).toBe('unpatched');
-    expect(fcontextState('arm64-v8a', ARM64_UNPATCHED)).toBe('unpatched');
+const withFibers = (/** @type {Partial<Parameters<typeof makeElf>[0]>} */ o) =>
+  describeLib(makeElf({ abi: 'x86_64', code: X86_64_UNPATCHED, ...o }));
+const fiberFree = (/** @type {Partial<Parameters<typeof makeElf>[0]>} */ o) =>
+  describeLib(makeElf({ abi: 'x86_64', code: hex('c3'), symbol: 'hermes_other', ...o }));
+
+describe('describeLib', () => {
+  it('sees fibers when the library exports a hoost_*_fcontext function', () => {
+    expect(withFibers({ buildId: 'aa' })).toMatchObject({ abi: 'x86_64', fibers: 'present' });
+    expect(withFibers({ symbol: 'hoost_jump_fcontext' }).fibers).toBe('present');
+    expect(withFibers({ symbol: 'hoost_ontop_fcontext' }).fibers).toBe('present');
   });
 
-  it('recognises the patched code', () => {
-    expect(fcontextState('x86_64', X86_64_PATCHED)).toBe('patched');
-    expect(fcontextState('arm64-v8a', ARM64_PATCHED)).toBe('patched');
-  });
-
-  it('calls a half-patched x86_64 function unpatched', () => {
-    // RBP slot zeroed, but the trampoline still pushes RBP.
-    const half = Buffer.from(X86_64_PATCHED);
-    half.set(hex('90 55 ff e3'), half.indexOf(hex('41 54 ff e3')));
-    expect(fcontextState('x86_64', half)).toBe('unpatched');
-  });
-
-  it('has nothing to say about the 32-bit ABIs (the upstream fix does not touch them)', () => {
-    expect(fcontextState('armeabi-v7a', hex('00'))).toBe('not-applicable');
-    expect(fcontextState('x86', undefined)).toBe('not-applicable');
-    expect(fcontextState(undefined, hex('00'))).toBe('not-applicable');
-  });
-
-  it('reports a 64-bit library that does not export the function', () => {
-    expect(fcontextState('x86_64', undefined)).toBe('missing');
+  it('sees none in a library without them', () => {
+    expect(fiberFree({ buildId: 'bb' })).toMatchObject({ buildId: 'bb', fibers: 'absent' });
   });
 });
 
-describe('describeLib + checks', () => {
-  const lib = (/** @type {Parameters<typeof makeElf>[0]} */ o) => describeLib(makeElf(o));
+describe('checks', () => {
   const artifact = { buildIds: { x86_64: ['aa11'], 'armeabi-v7a': ['cc33'] } };
 
-  it('passes a patched library whose build-id is pinned', () => {
-    const info = lib({ abi: 'x86_64', code: X86_64_PATCHED, buildId: 'aa11' });
-    expect(info).toMatchObject({ abi: 'x86_64', buildId: 'aa11', fcontext: 'patched' });
-    expect(fcontextProblems(info)).toEqual([]);
+  it('passes a fiber-free library whose build-id is pinned', () => {
+    const info = fiberFree({ buildId: 'aa11' });
+    expect(fiberProblems(info)).toEqual([]);
     expect(packagedProblems(info, artifact)).toEqual([]);
   });
 
-  it("fails Meta's prebuilt: unpinned build-id and unpatched code", () => {
-    const info = lib({ abi: 'x86_64', code: X86_64_UNPATCHED, buildId: '499b43a6' });
-    expect(fcontextProblems(info)).toEqual(['hoost_make_fcontext is the UNPATCHED code']);
+  it("fails Meta's prebuilt (fibers, unpinned build-id) on every ABI, 32-bit included", () => {
+    const info = withFibers({ buildId: '499b43a6' });
     expect(packagedProblems(info, artifact)).toEqual([
-      'hoost_make_fcontext is the UNPATCHED code',
-      'build-id 499b43a6 is not a patched Hermes build pinned in artifact.json (aa11)',
+      'Boost.Context fibers are linked in (hoost_make_fcontext is exported)',
+      'build-id 499b43a6 is not a Hermes build pinned in artifact.json (aa11)',
     ]);
+    const arm = withFibers({ abi: 'armeabi-v7a', buildId: 'cc33' });
+    expect(fiberProblems(arm)).toHaveLength(1);
   });
 
-  it('judges a 32-bit library on its build-id alone', () => {
-    const pinned = lib({ abi: 'armeabi-v7a', code: hex('00'), buildId: 'cc33' });
-    expect(packagedProblems(pinned, artifact)).toEqual([]);
-    const other = lib({ abi: 'x86', code: hex('00'), buildId: 'dd44' });
-    expect(packagedProblems(other, artifact)).toEqual([
-      'build-id dd44 is not a patched Hermes build pinned in artifact.json (none pinned for this ABI)',
+  it('fails an unpinned build-id, or none, even without fibers', () => {
+    expect(packagedProblems(fiberFree({ abi: 'x86', buildId: 'dd44' }), artifact)).toEqual([
+      'build-id dd44 is not a Hermes build pinned in artifact.json (none pinned for this ABI)',
     ]);
-  });
-
-  it('fails a library without a build-id, or with a missing function', () => {
-    const noId = lib({ abi: 'x86_64', code: X86_64_PATCHED });
-    expect(packagedProblems(noId, artifact)).toEqual(['no GNU build-id']);
-    const noFn = lib({
-      abi: 'arm64-v8a',
-      code: ARM64_PATCHED,
-      symbol: 'other_fn',
-      buildId: 'aa11',
-    });
-    expect(fcontextProblems(noFn)).toEqual(['hoost_make_fcontext is not exported']);
+    expect(packagedProblems(fiberFree({}), artifact)).toEqual(['no GNU build-id']);
   });
 
   it('fails an unknown machine', () => {
     const elf = makeElf({ abi: 'x86_64', code: hex('c3') });
     elf.writeUInt16LE(243, 18); // RISC-V
-    const info = describeLib(elf);
-    expect(packagedProblems(info, artifact)).toEqual(['unknown ELF machine']);
+    expect(packagedProblems(describeLib(elf), artifact)).toEqual(['unknown ELF machine']);
   });
 });

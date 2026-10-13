@@ -1,19 +1,25 @@
 // @ts-check
 /**
- * Android ships a patched Hermes (#648).
+ * Android ships a Hermes built without Boost.Context fibers (#648).
  *
  * GWP-ASan (on by default on Android 14+, and in CI's emulator) samples
- * allocations and records a frame-pointer backtrace when it does. Hermes's
- * fibers start on stacks set up by boost.context's make_fcontext, which leaves
- * a code address (x86_64) or garbage (arm64) where the frame-pointer chain
- * should end, so the walk runs off the fiber stack: SIGSEGV in
- * android_unsafe_frame_pointer_chase, about one full E2E run in four.
- * facebook/hermes 73f9af39b1 fixes it, but no 250829098.0.x release (the
- * Hermes line React Native 0.85 pins) contains it, so we build
- * com.facebook.hermes:hermes-android ourselves: the exact commit RN pins,
- * plus that patch (.github/workflows/hermes-android.yml), published once as
- * release assets and pinned by SHA-256 in plugins/patched-hermes/artifact.json.
- * GWP-ASan stays on.
+ * allocations; for each sampled free() it records a backtrace with bionic's
+ * android_unsafe_frame_pointer_chase, which follows the frame-pointer chain
+ * and bounds it only by the CURRENT THREAD's stack. Hermes runs its compiler
+ * (eval, lazy compilation; at our start-up, every launch) on a Boost.Context
+ * fiber, an mmap'd stack that bound does not cover, and x86_64 Hermes code
+ * uses RBP as a general register. A sampled free() on the fiber therefore sent
+ * the walk through garbage until it read past a mapping: SIGSEGV
+ * (SEGV_ACCERR), about one full E2E run in four. facebook/hermes 73f9af39b1
+ * (terminating the chain at the fiber's base) is not enough: the chain is
+ * broken long before the base (#654 shipped it; it still crashed).
+ *
+ * So we build com.facebook.hermes:hermes-android ourselves from the exact
+ * commit React Native pins, with HERMES_ALLOW_BOOST_CONTEXT=0 (the switch
+ * Hermes uses for its own ASan builds): the compiler then runs on a real
+ * pthread (SerialExecutor), whose stack bounds the walk. Built by
+ * .github/workflows/hermes-android.yml, published once as release assets,
+ * pinned by SHA-256 in plugins/patched-hermes/artifact.json. GWP-ASan stays on.
  *
  * At prebuild (Android only) this plugin:
  * 1. refuses to run unless React Native still pins the Hermes version the
@@ -26,11 +32,11 @@
  *    Native's own version pin still applies;
  * 4. adds verifyPatchedHermes<Variant>, which every APK/AAB packaging task
  *    depends on: each libhermesvm.so about to be packaged must have a pinned
- *    build-id and the patched make_fcontext, or the build fails.
+ *    build-id and no fibers (no hoost_*_fcontext), or the build fails.
  *
  * iOS is untouched: it has no GWP-ASan, and keeps React Native's prebuilt
  * hermes-engine. See docs/CI.md › Patched Hermes, which also says how to
- * remove all this once a React Native release brings the upstream fix.
+ * remove all this once a React Native release fixes #648.
  */
 const {
   withAppBuildGradle,
@@ -67,9 +73,9 @@ function assertSameHermes(rnHermes, patched) {
   if (rnHermes !== patched) {
     throw new Error(
       `withPatchedHermes: React Native now pins Hermes ${rnHermes ?? '(unknown)'}, but the patched ` +
-        `Hermes in plugins/patched-hermes was built from ${patched} (#648). If the new Hermes ` +
-        'contains facebook/hermes 73f9af39b1, delete the patched Hermes (docs/CI.md › Patched ' +
-        'Hermes); otherwise rebuild it for the new version (build.json, new releaseTag).',
+        `Hermes in plugins/patched-hermes was built from ${patched} (#648). Rebuild it for the ` +
+        'new version (build.json, new releaseTag), or delete it if that Hermes no longer runs ' +
+        'its compiler on fibers under GWP-ASan (docs/CI.md › Patched Hermes).',
     );
   }
 }
@@ -130,7 +136,7 @@ function addPackagedHermesCheck(src) {
   const block = [
     BEGIN,
     '// Every libhermesvm.so about to be packaged must be the patched Hermes pinned in',
-    '// plugins/patched-hermes/artifact.json (build-id + the patched make_fcontext), or the',
+    '// plugins/patched-hermes/artifact.json (build-id, and no Boost.Context fibers), or the',
     '// build fails here: it can never quietly fall back to the prebuilt Hermes.',
     'def inukshukHermesCheck = new File(rootDir, "../plugins/patched-hermes/verify-hermes.js").canonicalPath',
     'androidComponents {',

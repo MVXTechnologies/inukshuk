@@ -1,6 +1,6 @@
 name: Patched Hermes (Android)
 
-# Builds com.facebook.hermes:hermes-android with the GWP-ASan fiber fix (#648)
+# Builds com.facebook.hermes:hermes-android without Boost.Context fibers (#648)
 # and publishes it once, as the assets of a GitHub release that the Android
 # build consumes (plugins/withPatchedHermes.js, pinned by SHA-256 in
 # plugins/patched-hermes/artifact.json). See docs/CI.md › Patched Hermes.
@@ -11,9 +11,9 @@ name: Patched Hermes (Android)
 #   workflow runs (build-android.yml at that commit: publish to
 #   /tmp/maven-local), with the NDK/CMake/build-tools of that commit's version
 #   catalog, installed up front (no SDK downloads inside Gradle).
-# - Checks: every 64-bit libhermesvm.so of every variant carries the patched
-#   make_fcontext, and Meta's prebuilt from Maven Central does not (so the
-#   check is known to be able to fail).
+# - Checks: no libhermesvm.so of any variant or ABI links Boost.Context
+#   fibers, while Meta's prebuilt from Maven Central does (so the check is
+#   known to be able to fail).
 # - Publish: only when the release tag does not exist yet. A published
 #   release is never replaced.
 # - Plan: the build takes about an hour, so it is skipped when releaseTag is
@@ -193,7 +193,7 @@ jobs:
         working-directory: hermes-src/android
         run: ./gradlew --no-daemon -Pandroid.builder.sdkDownload=false :publishAllPublicationsToMavenTempLocalRepository
 
-      - name: Check the fix is in every library (and not in Meta's prebuilt)
+      - name: Check no library has fibers (and Meta's prebuilt does)
         env:
           VERSION: ${{ steps.inputs.outputs.version }}
         run: |
@@ -205,7 +205,7 @@ jobs:
             dest="$RUNNER_TEMP/libs/$(basename "$aar" .aar)"
             unzip -q -o "$aar" 'jni/*' 'prefab/*' -d "$dest"
           done
-          node plugins/patched-hermes/verify-hermes.js expect-patched "$RUNNER_TEMP/libs"
+          node plugins/patched-hermes/verify-hermes.js expect-fiber-free "$RUNNER_TEMP/libs"
 
           # Negative control: the same check on Meta's release AAR must fail.
           official="$RUNNER_TEMP/official"
@@ -215,7 +215,7 @@ jobs:
           curl -fsSL --retry 3 --retry-all-errors -o "$official/release.aar.sha256" "$url.sha256"
           echo "$(cat "$official/release.aar.sha256")  $official/release.aar" | sha256sum -c
           unzip -q -o "$official/release.aar" 'jni/*' -d "$official/x"
-          node plugins/patched-hermes/verify-hermes.js expect-unpatched "$official/x"
+          node plugins/patched-hermes/verify-hermes.js expect-fibers "$official/x"
 
           # Size: the packaged (stripped, jni/) library, ours vs Meta's.
           node -e '
@@ -227,9 +227,9 @@ jobs:
             const ours = pick(process.argv[1] + "/hermes-android-" + process.argv[3] + "-release");
             const meta = pick(process.argv[2]);
             const rows = Object.keys(meta).sort().map((abi) =>
-              `| ${abi} | ${meta[abi].size} | ${ours[abi]?.size} | ${(ours[abi]?.size ?? 0) - meta[abi].size} | ${ours[abi]?.fcontext} |`);
+              `| ${abi} | ${meta[abi].size} | ${ours[abi]?.size} | ${(ours[abi]?.size ?? 0) - meta[abi].size} | ${ours[abi]?.fibers} |`);
             console.log(["### libhermesvm.so (release, packaged copy)", "",
-              "| ABI | Meta prebuilt (bytes) | patched (bytes) | delta | make_fcontext |",
+              "| ABI | Meta prebuilt (bytes) | ours (bytes) | delta | fibers |",
               "| --- | --- | --- | --- | --- |", ...rows].join("\n"));
           ' "$RUNNER_TEMP/libs" "$official/x" "$VERSION" | tee -a "$GITHUB_STEP_SUMMARY"
 

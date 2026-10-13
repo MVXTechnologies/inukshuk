@@ -68,7 +68,7 @@ describe('React Native still pins the Hermes the patch was built for', () => {
 
   it('refuses another version, saying what to do', () => {
     expect(() => assertSameHermes('250829098.0.11', '250829098.0.10')).toThrow(
-      /pins Hermes 250829098\.0\.11.*built from 250829098\.0\.10.*73f9af39b1/,
+      /pins Hermes 250829098\.0\.11.*built from 250829098\.0\.10.*fibers/,
     );
     expect(() => assertSameHermes(undefined, '250829098.0.10')).toThrow('(unknown)');
   });
@@ -79,7 +79,7 @@ describe('pins', () => {
     for (const p of build.patches) {
       const text = readFileSync(require.resolve(`./patched-hermes/${p.file}`));
       expect(createHash('sha256').update(text).digest('hex')).toBe(p.sha256);
-      expect(text.toString('utf8')).toContain(`From ${p.upstreamCommit}`);
+      expect(text.toString('utf8')).toContain('HERMES_ALLOW_BOOST_CONTEXT=0');
     }
   });
 

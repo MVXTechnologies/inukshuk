@@ -169,6 +169,19 @@ jobs:
           retention-days: 3
           if-no-files-found: error
 
+      # The Hermes + GWP-ASan repro harness (#648): a native executable on the
+      # APK's own libraries, plus Meta's fiber build as the control. The
+      # catalog shard runs it (scripts/e2e/hermes-gwp-asan/run.sh).
+      - name: Build the Hermes GWP-ASan harness (#648)
+        run: bash scripts/e2e/hermes-gwp-asan/build.sh android/app/build/outputs/apk/release/app-release.apk hermes-gwp-asan
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hermes-gwp-asan
+          path: hermes-gwp-asan
+          retention-days: 3
+          if-no-files-found: error
+
   flows:
     name: Flows (${{ matrix.shard }})
     needs: build
@@ -266,6 +279,12 @@ jobs:
         with:
           name: e2e-apk
           path: e2e-apk
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: matrix.shard == 'catalog'
+        with:
+          name: hermes-gwp-asan
+          path: hermes-gwp-asan
 
       # Pinned: an unpinned installer takes whatever Maestro released last
       # night, so a CLI change could turn every shard red with no change of
@@ -413,6 +432,7 @@ jobs:
           path: |
             ~/.maestro/tests
             logcat-failure-*.txt
+            logcat-crash-*.txt
             logcat-system-server-restart-*.txt
             pdf-overlays-map-*.png
           retention-days: 7
