@@ -38,10 +38,9 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
-# Right after a cold launch the JS thread is still busy starting the map
-# (the WebView rasterizer, the style), and a tab press can be dropped
-# (CI run 37776599591: the tap COMPLETED, the map stayed). Tap again only
-# while the screen has not changed (the suite's guarded-tab idiom).
+# retryTapIfNoChange, like library-filter/settings/trail-view: a tab tap fired
+# mid-cold-start can be dropped while the hierarchy is churning (CI
+# 2026-10-09, run 37893244108: the Map was still showing 15 s later).
 - tapOn:
     text: 'Logbook(, tab.*)?'
     retryTapIfNoChange: true

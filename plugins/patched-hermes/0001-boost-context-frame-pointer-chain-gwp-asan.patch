@@ -1,0 +1,184 @@
+From 73f9af39b1c8460d57d6880ae97d2109259812d1 Mon Sep 17 00:00:00 2001
+From: Tzvetan Mikov <tmikov@meta.com>
+Date: Fri, 16 Jan 2026 10:59:15 -0800
+Subject: [PATCH] Fix Boost.Context frame pointer chain for GWP-ASan
+ compatibility (#1874)
+
+Summary:
+Pull Request resolved: https://github.com/facebook/hermes/pull/1874
+
+This fixes a crash on Android x86_64 emulators where GWP-ASan's
+stack unwinder crashes with while recording a backtrace during memory
+deallocation.
+
+GitHub issue: https://github.com/facebook/hermes/issues/1873
+
+Problem Analysis
+----------------
+
+GWP-ASan uses frame pointer-based stack unwinding for performance.
+When it samples an allocation/deallocation, it walks the frame
+pointer chain (RBP on x86_64, FP/x29 on ARM64) to record a
+backtrace.
+
+Boost.Context creates synthetic fiber stacks with make_fcontext.
+The original x86_64 implementation misuses RBP to carry the
+address of the 'finish' label (a code address) into the fiber:
+
+    leaq  finish(%rip), %rcx
+    movq  %rcx, 0x38(%rax)    # Stores code addr in RBP slot
+
+    trampoline:
+        push %rbp             # Pushes code address
+        jmp *%rbx
+
+When GWP-ASan walks this corrupted frame chain:
+1. It reads [RBP] expecting a stack address
+2. It gets the 'finish' label (code address)
+3. Dereferencing code as a frame pointer yields garbage
+4. Following garbage leads to unmapped memory -> CRASH
+
+The ARM64 implementation has a similar issue: FP is left
+uninitialized rather than being explicitly set to a terminator.
+
+The Fix
+-------
+
+x86_64: Use R12 (a callee-saved register) to carry the 'finish'
+address instead of RBP. Explicitly zero RBP to terminate the
+frame pointer chain cleanly:
+
+    movq  %rcx, 0x10(%rax)    # Store finish in R12 slot
+    movq  $0, 0x38(%rax)      # Zero RBP slot
+
+    trampoline:
+        push %r12             # Push finish from R12
+        jmp *%rbx
+
+ARM64: Explicitly zero the FP slot:
+
+    str  xzr, [x0, #0x90]     # Zero FP slot
+
+Now any frame-pointer-based stack walker (GWP-ASan, debuggers,
+profilers) will encounter a null pointer and stop safely at the
+fiber boundary.
+
+Files Modified
+--------------
+
+- make_x86_64_sysv_elf_gas.S   (Linux/Android x86_64)
+- make_x86_64_sysv_macho_gas.S (macOS x86_64)
+- make_arm64_aapcs_elf_gas.S   (Linux/Android ARM64)
+- make_arm64_aapcs_macho_gas.S (macOS/iOS ARM64)
+
+Testing
+-------
+
+- All regular tests pass (2550 expected passes)
+- Assembly verified with objdump -d
+- ASan build works for hermes binary (shermes has unrelated
+  linking issue on Linux with ASan runtimes)
+
+Reviewed By: avp
+
+Differential Revision: D90289761
+
+fbshipit-source-id: 9aa5d8a3f784b00ad6d72fb0af160a9e50c76a5d
+---
+ .../libs/context/src/asm/make_arm64_aapcs_elf_gas.S |  4 ++++
+ .../context/src/asm/make_arm64_aapcs_macho_gas.S    |  4 ++++
+ .../libs/context/src/asm/make_x86_64_sysv_elf_gas.S | 13 +++++++++----
+ .../context/src/asm/make_x86_64_sysv_macho_gas.S    |  9 +++++++--
+ 4 files changed, 24 insertions(+), 6 deletions(-)
+
+diff --git a/external/boost/boost_1_86_0/libs/context/src/asm/make_arm64_aapcs_elf_gas.S b/external/boost/boost_1_86_0/libs/context/src/asm/make_arm64_aapcs_elf_gas.S
+index 1046f7e0e32..6cef1fa7a0d 100644
+--- a/external/boost/boost_1_86_0/libs/context/src/asm/make_arm64_aapcs_elf_gas.S
++++ b/external/boost/boost_1_86_0/libs/context/src/asm/make_arm64_aapcs_elf_gas.S
+@@ -72,6 +72,10 @@ hoost_make_fcontext:
+     adr  x1, finish
+     str  x1, [x0, #0x98]
+ 
++    # clear FP slot to properly terminate frame pointer chain
++    # this allows stack unwinders (e.g. GWP-ASan) to safely walk the stack
++    str  xzr, [x0, #0x90]
++
+     ret  x30 // return pointer to context-data (x0)
+ 
+ finish:
+diff --git a/external/boost/boost_1_86_0/libs/context/src/asm/make_arm64_aapcs_macho_gas.S b/external/boost/boost_1_86_0/libs/context/src/asm/make_arm64_aapcs_macho_gas.S
+index 1465ae6a8fe..57905b99d6c 100644
+--- a/external/boost/boost_1_86_0/libs/context/src/asm/make_arm64_aapcs_macho_gas.S
++++ b/external/boost/boost_1_86_0/libs/context/src/asm/make_arm64_aapcs_macho_gas.S
+@@ -72,6 +72,10 @@ _hoost_make_fcontext:
+     ; will be entered after context-function returns (LR register)
+     str  x1, [x0, #0x98]
+ 
++    ; clear FP slot to properly terminate frame pointer chain
++    ; this allows stack unwinders (e.g. GWP-ASan) to safely walk the stack
++    str  xzr, [x0, #0x90]
++
+     ret  lr ; return pointer to context-data (x0)
+ 
+ finish:
+diff --git a/external/boost/boost_1_86_0/libs/context/src/asm/make_x86_64_sysv_elf_gas.S b/external/boost/boost_1_86_0/libs/context/src/asm/make_x86_64_sysv_elf_gas.S
+index aff0a5c4113..9adf208df48 100644
+--- a/external/boost/boost_1_86_0/libs/context/src/asm/make_x86_64_sysv_elf_gas.S
++++ b/external/boost/boost_1_86_0/libs/context/src/asm/make_x86_64_sysv_elf_gas.S
+@@ -89,7 +89,12 @@ hoost_make_fcontext:
+     leaq  finish(%rip), %rcx
+     /* save address of finish as return-address for context-function */
+     /* will be entered after context-function returns */
+-    movq  %rcx, 0x38(%rax)
++    /* NOTE: stored in R12 slot (not RBP) to avoid corrupting frame pointer chain */
++    movq  %rcx, 0x10(%rax)
++
++    /* clear RBP slot to properly terminate frame pointer chain */
++    /* this allows stack unwinders (e.g. GWP-ASan) to safely walk the stack */
++    movq  $0, 0x38(%rax)
+ 
+ #if BOOST_CONTEXT_SHADOW_STACK
+     /* Populate the shadow stack and normal stack */
+@@ -165,13 +170,13 @@ trampoline:
+     /* fix stack alignment */
+     _CET_ENDBR
+ #if BOOST_CONTEXT_SHADOW_STACK
+-    /* save address of "jmp *%rbp" as return-address */
++    /* save address of "jmp *%r12" as return-address */
+     /* on stack and shadow stack */
+     call  2f
+-    jmp  *%rbp
++    jmp  *%r12
+ 2:
+ #else
+-    push %rbp
++    push %r12
+ #endif
+     /* jump to context-function */
+     jmp *%rbx
+diff --git a/external/boost/boost_1_86_0/libs/context/src/asm/make_x86_64_sysv_macho_gas.S b/external/boost/boost_1_86_0/libs/context/src/asm/make_x86_64_sysv_macho_gas.S
+index 20299379d27..247a24790a2 100644
+--- a/external/boost/boost_1_86_0/libs/context/src/asm/make_x86_64_sysv_macho_gas.S
++++ b/external/boost/boost_1_86_0/libs/context/src/asm/make_x86_64_sysv_macho_gas.S
+@@ -57,14 +57,19 @@ _hoost_make_fcontext:
+     leaq  finish(%rip), %rcx
+     /* save address of finish as return-address for context-function */
+     /* will be entered after context-function returns */
+-    movq  %rcx, 0x30(%rax)
++    /* NOTE: stored in R12 slot (not RBP) to avoid corrupting frame pointer chain */
++    movq  %rcx, 0x8(%rax)
++
++    /* clear RBP slot to properly terminate frame pointer chain */
++    /* this allows stack unwinders (e.g. GWP-ASan) to safely walk the stack */
++    movq  $0, 0x30(%rax)
+ 
+     ret /* return pointer to context-data */
+ 
+ trampoline:
+     /* store return address on stack */
+     /* fix stack alignment */
+-    push %rbp
++    push %r12
+     /* jump to context-function */
+     jmp *%rbx
+ 
