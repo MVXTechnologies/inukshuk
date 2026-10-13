@@ -279,76 +279,109 @@ those launches. The `perf (<flow>)` lines in the log are the app's own
 `PdfPrerender` timings. Both exist to compare builds (a native change must not
 slow launch), and the launches are more chances for a start-up crash to show.
 
+Then it cold-starts the app 10 more times with GWP-ASan forced on for the app
+and **sampling every allocation** (`scripts/e2e/gwp-asan-stress.sh`: `adb
+root`, the per-process `libc.debug.gwp_asan.*` properties, 1024 slots). Every
+free of a sampled allocation then walks the stack, so a walk that can crash
+does so nearly every launch instead of about one run in four (#648). The
+script fails if a surviving launch shows no GWP-ASan mappings, because then
+sampling was not on and the launches prove nothing. Crashes fail the shard
+like any other.
+
 ## Patched Hermes (Android, `hermes-android.yml`)
 
-**Why.** GWP-ASan (on by default on Android 14+, and on the CI emulator)
-samples allocations and records a frame-pointer backtrace for each sampled
-one. Hermes runs code on fibers whose stacks boost.context's `make_fcontext`
-sets up with a broken end to the frame-pointer chain (a code address on
-x86_64, garbage on arm64), so the walk ran off the fiber stack: SIGSEGV in
-`android_unsafe_frame_pointer_chase` at launch, about one full E2E run in four
-(#648). facebook/hermes 73f9af39b1 fixes the four assembly files, but no
-`250829098.0.x` release, the Hermes line React Native 0.85 pins, contains it.
-GWP-ASan stays on (owner decision); we ship that Hermes with the fix instead.
+**Why.** GWP-ASan is on by default on Android 14+, and on the CI emulator. For
+every sampled `free()` it records a backtrace with bionic's
+`android_unsafe_frame_pointer_chase`. That walker follows the frame-pointer
+chain and stops only when the next frame pointer is out of order or outside
+the **current thread's** stack.
 
-**How.**
+Hermes runs its compiler (`eval`, lazy compilation; at our start-up, every
+launch) on a Boost.Context **fiber**: an mmap'd stack outside the thread's
+stack, so that bound means nothing there. On top of that, x86_64 Hermes is
+compiled without frame pointers: RBP is a general register, written about
+2500 times in `libhermesvm.so`, against 36 real frame setups. A sampled
+`free()` on the fiber therefore walked through garbage until it read past a
+mapping: SIGSEGV (`SEGV_ACCERR`) at launch, about one full E2E run in four
+(#648).
 
-- `plugins/patched-hermes/build.json` pins the source (facebook/hermes at the
-  exact commit of the tag React Native pins, `hermes-v250829098.0.10`), the
-  patch (the upstream commit, byte for byte, SHA-256-pinned), the toolchain of
-  that commit's version catalog, and a `releaseTag`.
-- `hermes-android.yml` checks out that commit, applies the patch, and runs
-  Hermes's own Android Gradle build, the publish task Meta's release workflow
-  runs, to a local Maven repository. It then checks that every 64-bit
-  `libhermesvm.so` of every variant carries the patched `make_fcontext`, and
-  that Meta's prebuilt from Maven Central fails that same check (so the check
-  can fail). It publishes the Maven files as the assets of a pre-release named
-  `releaseTag`. It publishes once: an existing release is never replaced. A
-  first `plan` job skips the hour-long build when `releaseTag` is already
-  published from the same inputs (`artifact.json` records the SHA-256 of
-  `build.json` + patches, `inputs.js`) and only checks the published assets'
-  digests against `artifact.json`; inputs changed under a published tag fail
-  (set a new `releaseTag`). **Run workflow → rebuild** builds anyway, to prove
-  the recipe. It runs on push (never `pull_request`, whose path filter
-  matches the whole PR diff) when its inputs change, or manually.
+facebook/hermes 73f9af39b1 (#654) only zeroes the frame pointer at the fiber's
+base. The chain is broken long before it gets there, and it still crashed:
+team-ui run 38334130001 crashed in our patched library, `hoost_make_fcontext+55`,
+reading one word past the top of the fiber stack.
+
+GWP-ASan stays on (owner decision).
+
+**The fix.** No fibers. We build `com.facebook.hermes:hermes-android` from the
+exact commit React Native pins, with `HERMES_ALLOW_BOOST_CONTEXT=0`, the CMake
+switch Hermes itself uses for its ASan builds (`plugins/patched-hermes/0001-…patch`
+adds it to Hermes's Android Gradle build). The compiler then runs on a real
+pthread (`SerialExecutor`, 8 MB stack, which exits after 1 s idle), and the
+walker's stack bound is that thread's own.
+
+**Proof.** After its flows, each E2E shard cold-starts the app with GWP-ASan
+**sampling every allocation** (`scripts/e2e/gwp-asan-stress.sh`, through
+`adb root` and the per-process `libc.debug.gwp_asan.*` properties). With
+fibers, nearly every launch crashes; without them, none may. A native crash
+fails the shard (E2E shards, above).
+
+**How it ships.**
+
+- `plugins/patched-hermes/build.json` pins:
+  - the source: facebook/hermes at the exact commit of the tag React Native
+    pins, `hermes-v250829098.0.10`;
+  - the patch, SHA-256-pinned;
+  - the toolchain of that commit's version catalog;
+  - a `releaseTag`.
+- `hermes-android.yml` builds and publishes it:
+  - It checks out that commit, applies the patch, and runs Hermes's own
+    Android Gradle publish (the task Meta's release workflow runs).
+  - It checks that no `libhermesvm.so` of any variant or ABI exports a
+    `hoost_*_fcontext` function. Meta's prebuilt must fail that check, so the
+    check is proven able to fail.
+  - It publishes the Maven files as a pre-release named `releaseTag`, once:
+    an existing release is never replaced.
+  - A `plan` job skips the hour-long build when `releaseTag` is already
+    published from the same inputs (`artifact.json` records the SHA-256 of
+    `build.json` + patches, `inputs.js`). It then only re-checks the published
+    assets' digests. Inputs that changed under a published tag fail: set a
+    new `releaseTag`.
+  - **Run workflow → rebuild** builds anyway, to prove the recipe.
 - `plugins/patched-hermes/artifact.json`, generated by that run and committed,
   pins every published file (size + SHA-256) and the GNU build-id of every
   `libhermesvm.so` in them.
-- `plugins/withPatchedHermes.js`, at Android prebuild (local, CI, EAS alike):
-  refuses to run unless React Native still pins the Hermes `build.json` was
-  built from; downloads the pinned files once per machine
-  (`~/.cache/inukshuk/patched-hermes`, or `$INUKSHUK_HERMES_CACHE`) with a
-  bounded, logged retry, and uses none whose checksum differs; puts them in a
-  local Maven repository (`android/patched-hermes/m2`) that is the **only**
-  source of `com.facebook.hermes:hermes-android` (Gradle `exclusiveContent`,
-  same coordinates, so React Native's version pin still applies); and makes
-  every APK/AAB packaging task depend on `verifyPatchedHermes<Variant>`.
-- `verifyPatchedHermes<Variant>` (`plugins/patched-hermes/verify-hermes.js
-packaged`) fails the build unless every `libhermesvm.so` about to be
-  packaged has a build-id from `artifact.json` and, on arm64-v8a and x86_64,
-  the patched `make_fcontext`. The build cannot quietly fall back to the
-  prebuilt. `e2e.yml` and `native-build.yml` repeat the check on the APK.
+- `plugins/withPatchedHermes.js` runs at Android prebuild (local, CI and EAS
+  alike):
+  - It refuses to run unless React Native still pins the Hermes `build.json`
+    was built from.
+  - It downloads the pinned files once per machine
+    (`~/.cache/inukshuk/patched-hermes`, or `$INUKSHUK_HERMES_CACHE`), with a
+    bounded, logged retry of the download only.
+  - It uses no file whose checksum differs, and puts them in
+    `android/patched-hermes/m2`.
+  - That local repository is the **only** source of
+    `com.facebook.hermes:hermes-android` (Gradle `exclusiveContent`, same
+    coordinates).
+  - Every APK/AAB packaging task depends on `verifyPatchedHermes<Variant>`.
+- `verifyPatchedHermes<Variant>` (`verify-hermes.js packaged`) fails the build
+  unless every `libhermesvm.so` about to be packaged has a build-id from
+  `artifact.json` and no fibers, on every ABI. `e2e.yml` and
+  `native-build.yml` repeat the check on the APK.
 
-**iOS** keeps React Native's prebuilt `hermes-engine`: iOS has no GWP-ASan, and
-nothing else in the app walks frame pointers in-process. The upstream patch
-also touches the Mach-O variants, but shipping them would mean building the
-Hermes xcframeworks from source on macOS for every iOS build.
-
-**32-bit ABIs.** The upstream fix leaves armeabi-v7a and x86 alone (they are
-built from the same patched source, but their `make_fcontext` is unchanged).
-The check holds them to the pinned build-id only.
+**iOS** keeps React Native's prebuilt `hermes-engine`. iOS has no GWP-ASan,
+and nothing in the app walks frame pointers in-process.
 
 **Bumping React Native.** `withPatchedHermes.test.js` and prebuild both fail
 when React Native pins another Hermes. Then:
 
-- if the new Hermes contains 73f9af39b1 (it is an ancestor of the new
-  `hermes-v…` tag in facebook/hermes): delete `plugins/patched-hermes/`,
-  `plugins/withPatchedHermes*.js`, its line in `app.config.ts`,
-  `hermes-android.yml`, the "Check the APK ships the patched Hermes" steps and
-  this section;
-- otherwise: point `build.json` at the new tag's commit, check the patch still
-  applies, set a new `releaseTag`, push, and commit the `artifact.json` the run
-  prints.
+- If the new Hermes no longer runs its compiler on fibers on Android, or ships
+  a walker-safe fix that the GWP-ASan stress launches confirm, delete all of
+  this: `plugins/patched-hermes/`, `plugins/withPatchedHermes*.js`, its line
+  in `app.config.ts`, `hermes-android.yml`, the "Check the APK ships the
+  patched Hermes" steps, and this section.
+- Otherwise, point `build.json` at the new tag's commit, check the patch still
+  applies, set a new `releaseTag`, push, and commit the `artifact.json` the
+  run prints.
 
 ## Release path (`release-path.yml`)
 

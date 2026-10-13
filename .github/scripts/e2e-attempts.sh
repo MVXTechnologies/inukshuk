@@ -396,6 +396,23 @@ if [ "$SYSTEM_BROKE" = 0 ] && [ "$GWP_ASAN_LAUNCHES" -gt 0 ] && [[ "$component" 
   SUMMARY+=$'\n'"| gwp-asan stress x$GWP_ASAN_LAUNCHES (every allocation sampled) | $stress | $((took / 60))m$((took % 60))s | $HEALTH |"
 fi
 
+# Hermes + GWP-ASan harness (#648, scripts/e2e/hermes-gwp-asan): the APK's
+# libhermesvm.so must survive repeated eval() with every allocation sampled,
+# while Meta's fiber build (the control) must crash, or the harness proves
+# nothing. Only where e2e.yml downloaded it (the catalog shard).
+if [ "$SYSTEM_BROKE" = 0 ] && [ -f hermes-gwp-asan/eval_stress ]; then
+  started=$SECONDS
+  if bash scripts/e2e/hermes-gwp-asan/run.sh hermes-gwp-asan 5 300; then
+    harness=PASS
+  else
+    harness=FAIL
+    RC=1
+  fi
+  took=$((SECONDS - started))
+  echo "=== hermes-gwp-asan harness: $harness ($((took / 60))m$((took % 60))s) ==="
+  SUMMARY+=$'\n'"| hermes-gwp-asan harness (ours must not crash, Meta's fiber build must) | $harness | $((took / 60))m$((took % 60))s | |"
+fi
+
 if [ "$NATIVE_CRASHES" -gt 0 ]; then
   RC=1
   SUMMARY+=$'\n'"| native crashes | FAIL: $NATIVE_CRASHES ($(IFS=';'; echo "${CRASH_NOTES[*]}")) | | |"
