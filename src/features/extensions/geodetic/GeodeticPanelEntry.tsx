@@ -2,33 +2,44 @@ import { EXTENSIONS } from '@core/extensions/registry';
 import { activeFilterCount } from '@core/geodetic/filter';
 import { useSettingsStore } from '@state/settingsStore';
 
-import { GeodeticFilterButton } from '../../map/components/GeodeticFilterPanel';
-import { SwitchRow } from '../../map/components/mapSheet';
+import { SubPanelButton, SwitchRow } from '../../map/components/mapSheet';
 import { setExtensionPrefs, useExtensionPrefs } from '../prefs';
 import type { ExtensionPanelEntryProps } from '../types';
 
+/** The row's line under its name: the active filter count, else the summary. */
+export function geodeticHint(filterCount: number, summary: string): string {
+  return filterCount > 0
+    ? `Filtered · ${filterCount} filter${filterCount === 1 ? '' : 's'}`
+    : summary;
+}
+
 /**
  * Map overlays › Extensions › Geodetic points: one row, its switch, its
- * summary (or the active filter count) and its filter funnel. The mark
- * symbols are in the filter page and in Settings › Extensions' details.
+ * summary (or the active filter count) and the sub-panel accessory, badged
+ * with that count. The filters are in its sub-panel (`GeodeticSubPanel`).
  */
-export function GeodeticPanelEntry({ onOpenGeodeticFilter }: ExtensionPanelEntryProps) {
+export function GeodeticPanelEntry({ onOpenPanel }: ExtensionPanelEntryProps) {
   const { show } = useExtensionPrefs('geodetic');
-  const geodeticFilter = useSettingsStore((s) => s.geodeticFilter);
-  const filterCount = activeFilterCount(geodeticFilter);
+  const filterCount = useSettingsStore((s) => activeFilterCount(s.geodeticFilter));
   const { label, summary } = EXTENSIONS.geodetic;
   return (
     <SwitchRow
       icon="map-marker-radius-outline"
       label={label}
-      hint={
-        filterCount > 0
-          ? `Filtered · ${filterCount} filter${filterCount === 1 ? '' : 's'}`
-          : summary
-      }
+      hint={geodeticHint(filterCount, summary)}
       value={show}
       onToggle={() => setExtensionPrefs('geodetic', { show: !show })}
-      accessory={<GeodeticFilterButton onPress={onOpenGeodeticFilter} />}
+      accessory={
+        <SubPanelButton
+          onPress={onOpenPanel}
+          badge={filterCount}
+          accessibilityLabel={
+            filterCount > 0
+              ? `Options for ${label}, ${filterCount} filter${filterCount === 1 ? '' : 's'} on`
+              : `Options for ${label}`
+          }
+        />
+      }
     />
   );
 }

@@ -1,20 +1,20 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`Overlays › Extensions: both, hidden, dark 1`] = `"3de0042802f4b896"`;
+exports[`Overlays › Extensions: both, hidden, dark 1`] = `"f08b47c3b9d915de"`;
 
-exports[`Overlays › Extensions: both, hidden, light 1`] = `"630637e282c75df4"`;
+exports[`Overlays › Extensions: both, hidden, light 1`] = `"4638f99e078d1224"`;
 
-exports[`Overlays › Extensions: both, shown, dark 1`] = `"5d902d559908ddcc"`;
+exports[`Overlays › Extensions: both, shown, dark 1`] = `"d51fb0a9d3314726"`;
 
-exports[`Overlays › Extensions: both, shown, light 1`] = `"5fdc943197c4376d"`;
+exports[`Overlays › Extensions: both, shown, light 1`] = `"db8ff3c432d59f13"`;
 
-exports[`Overlays › Extensions: geodetic, hidden, dark 1`] = `"2357767feda0eecd"`;
+exports[`Overlays › Extensions: geodetic, hidden, dark 1`] = `"fa4591d8a4d0f6b6"`;
 
-exports[`Overlays › Extensions: geodetic, hidden, light 1`] = `"b6c1e54ffcd04167"`;
+exports[`Overlays › Extensions: geodetic, hidden, light 1`] = `"9ebc5480eb67a027"`;
 
-exports[`Overlays › Extensions: geodetic, shown, dark 1`] = `"65e7b743640f9147"`;
+exports[`Overlays › Extensions: geodetic, shown, dark 1`] = `"99d7c5b4639433a6"`;
 
-exports[`Overlays › Extensions: geodetic, shown, light 1`] = `"6c217d7a0d2d5a77"`;
+exports[`Overlays › Extensions: geodetic, shown, light 1`] = `"e60d407835584d24"`;
 
 exports[`Overlays › Extensions: none, hidden, dark 1`] = `"c7d9fd0bd670b32a"`;
 
@@ -24,13 +24,13 @@ exports[`Overlays › Extensions: none, shown, dark 1`] = `"c7d9fd0bd670b32a"`;
 
 exports[`Overlays › Extensions: none, shown, light 1`] = `"8fb609568d988bfb"`;
 
-exports[`Overlays › Extensions: tides, hidden, dark 1`] = `"29bcdfa30356c496"`;
+exports[`Overlays › Extensions: tides, hidden, dark 1`] = `"dfa2899ac308a22e"`;
 
-exports[`Overlays › Extensions: tides, hidden, light 1`] = `"ed6c362ff753c9d2"`;
+exports[`Overlays › Extensions: tides, hidden, light 1`] = `"06c510dfacf00c93"`;
 
-exports[`Overlays › Extensions: tides, shown, dark 1`] = `"bac514c67de51f94"`;
+exports[`Overlays › Extensions: tides, shown, dark 1`] = `"5b8743d91c77546f"`;
 
-exports[`Overlays › Extensions: tides, shown, light 1`] = `"f4a1e631bde62cd2"`;
+exports[`Overlays › Extensions: tides, shown, light 1`] = `"48f85d73fb6423c9"`;
 
 exports[`Settings → Extensions, geodetic open: both, hidden, dark 1`] = `"fd0252947f3b887b"`;
 

@@ -812,8 +812,12 @@ export function MapScreen() {
   // downloaded Map pack of the area — packs share tiles by URL).
   const satelliteLabels = useSettingsStore((s) => s.satelliteLabels);
   const satelliteImagery = useSettingsStore((s) => s.satelliteImagery);
+  // The same pass draws "Parks & protected areas" alone with the labels off (#669).
   const imageryLabels =
-    VECTOR_BASEMAP_ENABLED && basemap === 'satellite' && satelliteLabels && editorStyle === null;
+    VECTOR_BASEMAP_ENABLED &&
+    basemap === 'satellite' &&
+    (satelliteLabels || showParks) &&
+    editorStyle === null;
   // Contours on satellite (#492): the Map base's served contour tiles, drawn
   // in the style under the roads, names and PDF maps — exactly where the map
   // draws them — instead of the on-device contours, which mounted ABOVE the
@@ -877,6 +881,7 @@ export function MapScreen() {
         ? {
             imageryLabels: {
               ...vectorBasemapOption(theme.dark, false),
+              labels: satelliteLabels,
               peakDensity,
               protectedAreas: showParks,
             },
@@ -993,6 +998,7 @@ export function MapScreen() {
     referenceOverlay,
     vectorBasemap,
     imageryLabels,
+    satelliteLabels,
     imageryContours,
     satelliteImagery,
     extensionStyle,

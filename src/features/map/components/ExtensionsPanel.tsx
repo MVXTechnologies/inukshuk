@@ -1,7 +1,7 @@
 import type { AnyExtensionKey } from '@core/extensions/keys';
 import { installedExtensions } from '@core/extensions/state';
 import { availableDeviceExtensions } from '@features/extensions/availability';
-import { EXTENSION_PANEL_ENTRIES } from '@features/extensions/panelEntries';
+import { EXTENSION_PANELS } from '@features/extensions/panelEntries';
 import { useExtensionsState } from '@features/extensions/prefs';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
@@ -11,16 +11,17 @@ import { NavRow, useSheetAccent } from './mapSheet';
 
 /**
  * Map overlays › Extensions tab (`@core/extensions/state`): each installed
- * extension's row (`@features/extensions/panelEntries`: switch and legend — Geodetic points with
- * its filter funnel and badge), in registry order, then "Get more extensions"
- * (Settings → Extensions). With none installed, a short empty state and a
- * button to Settings → Extensions.
+ * extension's row (`@features/extensions/panelEntries`: its switch, summary
+ * and the accessory into its sub-panel), in registry order, then "Get more
+ * extensions" (Settings → Extensions). With none installed, a short empty
+ * state and a button to Settings → Extensions.
  */
 export function ExtensionsPanel({
-  onOpenGeodeticFilter,
+  onOpenPanel,
   onClose,
 }: {
-  onOpenGeodeticFilter: () => void;
+  /** Open an extension's sub-panel in the sheet. */
+  onOpenPanel: (key: AnyExtensionKey) => void;
   /** Close the overlays sheet (when leaving for Settings). */
   onClose: () => void;
 }) {
@@ -63,10 +64,8 @@ export function ExtensionsPanel({
   return (
     <>
       {installed.map((key) => {
-        const PanelEntry = EXTENSION_PANEL_ENTRIES[key];
-        return (
-          <PanelEntry key={key} onOpenGeodeticFilter={onOpenGeodeticFilter} onClose={onClose} />
-        );
+        const { Entry } = EXTENSION_PANELS[key];
+        return <Entry key={key} onOpenPanel={() => onOpenPanel(key)} onClose={onClose} />;
       })}
       <NavRow
         icon="puzzle-plus-outline"

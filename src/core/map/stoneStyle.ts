@@ -1465,9 +1465,21 @@ export interface StoneImageryLayers {
 
 /** What to draw over the imagery: names and trails, contours, or both. */
 export interface StoneImageryOptions extends StoneStyleOptions {
-  /** Roads, trails and names ("Labels on satellite"). Default true. */
+  /**
+   * Roads, trails and names ("Labels on satellite"). Default true. Off still
+   * draws the parks' boundaries and names while `protectedAreas` is on: "Parks
+   * & protected areas" is its own switch (#669), never tied to the labels.
+   */
   labels?: boolean;
 }
+
+/** The park layers of {@link STONE_IMAGERY_LAYER_KEYS}: all that is left with the labels off. */
+export const STONE_IMAGERY_PARK_KEYS: readonly string[] = [
+  'park-band',
+  'park-outline',
+  'park-line',
+  'park-label',
+];
 
 /**
  * Contour lines over imagery (#492): the same served lines and interval
@@ -1484,18 +1496,20 @@ export const IMAGERY_CONTOUR_PAINT = {
 /**
  * {@link buildStoneLayers} cut down to what still makes sense over satellite
  * imagery, split into the stack's slots: contours (when a contour source is
- * given) and {@link STONE_IMAGERY_LAYER_KEYS} line work and labels (unless
- * `labels` is false). The caller passes a scheme tuned for imagery — light
+ * given) and {@link STONE_IMAGERY_LAYER_KEYS} line work and labels (with
+ * `labels` false, only the parks' {@link STONE_IMAGERY_PARK_KEYS}). The caller passes a scheme tuned for imagery — light
  * ink on a dark halo reads over any photo.
  */
 export function buildStoneImagerySlots(
   scheme: StoneBasemapScheme,
   options: StoneImageryOptions,
 ): StoneImageryLayers {
-  const keep = new Set(STONE_IMAGERY_LAYER_KEYS.map((k) => `${STONE_LAYER_PREFIX}${k}`));
+  const keys = (options.labels ?? true) ? STONE_IMAGERY_LAYER_KEYS : STONE_IMAGERY_PARK_KEYS;
+  const keep = new Set(keys.map((k) => `${STONE_LAYER_PREFIX}${k}`));
   const roads = new Set(ROADS.map((r) => `${STONE_LAYER_PREFIX}road-${r.id}`));
   const { base, labels } = buildStoneLayers(scheme, options);
-  const named = (options.labels ?? true) ? [...base, ...labels].filter((l) => keep.has(l.id)) : [];
+  // Parks come out of `buildStoneLayers` only while `protectedAreas` is on.
+  const named = [...base, ...labels].filter((l) => keep.has(l.id));
 
   const contours: LayerSpecification[] = [];
   for (const kind of ['minor', 'major'] as const) {

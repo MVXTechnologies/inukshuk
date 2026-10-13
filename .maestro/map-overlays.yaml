@@ -7,9 +7,12 @@
 # - Runs standalone (needs no saved trail); geo comes from the launch
 #   permission + the workflow's geo-fix feed.
 # - The overlays menu is ONE themed plain-View sheet under the "Map overlays"
-#   rail button (#484), in four tabs (Map · Terrain · Sports · Extensions,
+#   rail button (#484; titled "Map layers" since #669, the handles are
+#   unchanged), in four tabs (Map · Terrain · Sports · Extensions,
 #   'Map tab'… labels; it reopens on the last one): Switch
-#   rows and segmented level pickers, scrolling inside a capped height. Its ✕
+#   rows and segmented level pickers, scrolling inside a capped height. An
+#   item with options of its own opens them as a sub-panel ('Options for
+#   <item>' accessory, 'Back to overlays' back row; #668). Its ✕
 #   ('Close overlays') is the open-state sentinel — it exists nowhere outside
 #   the open sheet. The sheet mounts fresh (scrolled to the top) on each open.
 # - Guarded-tap idiom on the opener (tap only while 'Close overlays' is not
@@ -79,8 +82,34 @@ appId: com.inukshuk.app
       - tapOn: 'PDF maps.*'
 - assertNotVisible: 'Hidden on the map.*'
 - assertVisible: 'PDF maps.*'
-# --- Terrain: Contours with its density, Slope with its window ---
+# --- PDF maps' sub-panel (#670): its round accessory ('Options for PDF
+# maps', never starting with the row's label, so 'PDF maps.*' above still
+# finds the row) opens a page with the tab strip hidden and See-through white
+# always enabled. Its back row ('Back to overlays') returns to the Map tab.
+- tapOn: 'Options for PDF maps'
+- extendedWaitUntil:
+    visible: 'See-through white.*'
+    timeout: 10000
+- assertNotVisible: 'Terrain tab'
+- tapOn: 'Back to overlays'
+- extendedWaitUntil:
+    visible: 'Terrain tab'
+    timeout: 10000
+# --- Terrain: the base map cards on top (#669, the rail's Base map button is
+# gone), Satellite's sub-panel, then Contours with its density, Slope with its
+# window. The cards are asserted, not tapped: switching to Satellite would
+# leave imagery (network tiles) for later flows.
 - tapOn: 'Terrain tab'
+- assertVisible: 'Map, Trails, contours, names.*'
+- assertVisible: 'Satellite, Aerial imagery.*'
+- tapOn: 'Options for Satellite'
+- extendedWaitUntil:
+    visible: 'Labels on satellite.*'
+    timeout: 10000
+- tapOn: 'Back to overlays'
+- extendedWaitUntil:
+    visible: 'Terrain tab'
+    timeout: 10000
 - scrollUntilVisible:
     element: 'Slope'
     direction: DOWN

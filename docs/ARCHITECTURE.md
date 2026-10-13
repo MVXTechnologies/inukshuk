@@ -62,8 +62,8 @@ four stages:
    (#477). "See-through white" (#489, `core/geo/pdfWhiteKey`) is one more
    pass in the same page: after pdf.js paints, near-white, near-neutral
    pixels are keyed to transparency (colour-to-alpha, so text edges get no
-   halo) at a 5-stop strength (Off, 25–100 %) chosen globally on the Overlays
-   menu slider or per map; the
+   halo) at a 5-stop strength (Off, 25–100 %) chosen globally in Map layers ›
+   PDF maps (its sub-panel) or per map; the
    level is part of the raster's cache name. A detail tile a native renderer
    drew is keyed by the same page afterwards (`__pdfKeyImage`), so a keyed
    map keeps its native tiles. If the server cannot
@@ -218,7 +218,8 @@ one registry, not hand-wired screens (architecture review P1-3):
 - **Platform half**, `src/features/extensions/`, one registry per surface
   so each loads only what it shows: `settingsModules.ts` (the Settings entry
   in the shared `ExtensionSettingsShell`, and the install / remove / offline
-  hooks), `panelEntries.ts` (its row in Map overlays › Extensions) and
+  hooks), `panelEntries.ts` (its row in Map overlays › Extensions and the
+  sub-panel the row's accessory opens, `ExtensionPanelModule`) and
   `mapModules.ts` (style extras, symbol images, tap → card; MapScreen's
   `mapHost` iterates it). `actions.ts` is the one Get / Remove / Offline
   lifecycle; `companions.ts` the companion packs for regions downloaded
@@ -256,7 +257,12 @@ one registry, not hand-wired screens (architecture review P1-3):
    to its details: description, legend, the extension's own rows
    (`children`) and Remove; one entry open at a time, nothing persisted
    (`features/extensions/expansion`). Its overlays row is one line too
-   (`SwitchRow` with the summary as hint, no legend underneath). To link to
+   (`SwitchRow` with the summary as hint, no legend underneath, and a
+   `SubPanelButton` accessory); its overlays **sub-panel** starts with the
+   same switch, then the options you change while looking at the map —
+   reusing its Settings options as shared components drawn in either
+   place (`variant`), so each option has one source. Lifecycle (offline,
+   Remove) stays in Settings. To link to
    its details from elsewhere, push `extensionSettingsHref(key)`
    (`/settings?open=extensions&ext=<key>`), which opens it expanded.
 4. Pick its offline policy (`'installed'` for a few kB a region, `'opt-in'`

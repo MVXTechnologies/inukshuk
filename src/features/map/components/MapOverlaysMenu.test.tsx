@@ -5,6 +5,9 @@ import type { OverlayTab } from '@core/map/overlayTabs';
 import { defaultExtensionPrefs } from '@core/extensions/prefs';
 import type { ExtensionKey } from '@core/extensions/keys';
 import type { ExtensionPrefs } from '@core/extensions/types';
+import { darkTheme, lightTheme } from '@ui/theme';
+import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { PaperProvider } from 'react-native-paper';
 import { OverlaysPanel } from './MapOverlaysMenu';
 
 /**
@@ -32,8 +35,37 @@ jest.mock('@core/features/flags', () => ({
 
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
+// The base-map previews are cached tile fetches (RegionPreviewThumb, covered on
+// its own); here a stub that records what each one was asked to show.
+const mockThumbs: { basemap: string; bbox: unknown }[] = [];
+jest.mock('../RegionPreviewThumb', () => ({
+  RegionPreviewThumb: (props: { basemap: string; bbox: unknown }) => {
+    mockThumbs.push({ basemap: props.basemap, bbox: props.bbox });
+    return null;
+  },
+}));
 
 const noop = (): void => undefined;
+
+interface Node {
+  type: string;
+  props: Record<string, unknown>;
+  children: (Node | string)[] | null;
+}
+
+/** Every host node of a rendered tree (`toJSON()`), depth first. */
+function nodes(tree: unknown): Node[] {
+  const out: Node[] = [];
+  const walk = (n: unknown): void => {
+    if (!n || typeof n !== 'object') return;
+    if (Array.isArray(n)) return n.forEach(walk);
+    const node = n as Node;
+    out.push(node);
+    node.children?.forEach(walk);
+  };
+  walk(tree);
+  return out;
+}
 
 /** Put some extensions' persisted state in the settings store (the rest at defaults). */
 function setExtensions(p: Partial<Record<ExtensionKey, Partial<ExtensionPrefs>>>): void {
@@ -72,6 +104,7 @@ const selected = (label: string): unknown =>
 
 afterEach(async () => {
   mockPush.mockClear();
+  mockThumbs.length = 0;
   mockFlags.WEATHER_ENABLED = false;
   mockFlags.MARINE_ENABLED = false;
   await act(async () => {
@@ -91,19 +124,23 @@ describe('Overlays sheet layout (#484)', () => {
     const tabs: [string, string[], string[]][] = [
       [
         'Map',
-        [
-          'Content: everything',
-          'PDF maps',
-          'Parks & protected areas',
-          'Labels on satellite',
-          'Imagery',
-        ],
-        ['Shading', 'Personal heatmap'],
+        ['Content: everything', 'PDF maps', 'Parks & protected areas'],
+        // Satellite's and PDF maps' own options live in their sub-panels.
+        ['Shading', 'Personal heatmap', 'Labels on satellite', 'Imagery', 'See-through white'],
       ],
       [
         'Terrain',
-        ['Shading', '3D relief', 'Contours', 'Slope', 'Peaks', 'See-through white'],
-        ['PDF maps', 'Personal heatmap'],
+        [
+          'BASE MAP',
+          'Trails, contours, names',
+          'Aerial imagery',
+          'RELIEF',
+          'Shading',
+          '3D relief',
+          'Contours',
+          'Slope',
+        ],
+        ['PDF maps', 'Personal heatmap', 'See-through white', 'Labels on satellite'],
       ],
       ['Sports', ['Personal heatmap', 'LIVE LAYERS'], ['PDF maps', 'Shading']],
     ];
@@ -118,6 +155,35 @@ describe('Overlays sheet layout (#484)', () => {
     expect(screen.getByLabelText('Close overlays')).toBeTruthy();
   });
 
+  it('is titled "Map layers"; the a11y/Maestro handles stay "… overlays"', async () => {
+    await renderMenu();
+    expect(screen.getByText('Map layers')).toBeTruthy();
+    expect(screen.queryByText('Overlays')).toBeNull();
+    expect(screen.getByLabelText('Close overlays')).toBeTruthy();
+  });
+
+  it.each([
+    ['map', 'map'],
+    ['map', 'terrain'],
+    ['satellite', 'map'],
+    ['satellite', 'terrain'],
+  ] as const)('greys out no item on the %s base map, %s tab', async (basemap, tab) => {
+    useMapStore.setState({ basemap });
+    useSettingsStore.setState({ satelliteLabels: false, showPdfOverlay: false });
+    onTab(tab);
+    await renderMenu();
+    const resting = nodes(screen.toJSON())
+      .filter((n) => (n.props.accessibilityState as { disabled?: boolean })?.disabled === true)
+      .map((n) => n.props.accessibilityLabel);
+    // Only a picker that belongs to an OFF switch above it rests (contour
+    // density, the slope window) — and 3D relief on builds without native
+    // terrain, out of scope here (every store build has native 3D).
+    const allowed = ['Off', 'Natural', 'Dramatic', '10 m', '25 m', '50 m', '100 m', 'Auto'];
+    for (const label of resting) {
+      expect([...allowed, 'Slope minimum', 'Slope maximum']).toContain(label);
+    }
+  });
+
   it('reopens on the remembered tab', async () => {
     onTab('terrain');
     await renderMenu();
@@ -127,7 +193,7 @@ describe('Overlays sheet layout (#484)', () => {
     expect(screen.getByText('Peaks')).toBeTruthy();
   });
 
-  it('opens on a row’s tab when asked (the geodetic filter)', async () => {
+  it('opens on a row’s sub-panel when asked (the geodetic filter)', async () => {
     setExtensions({ geodetic: { installedAt: 1 } });
     await render(
       <OverlaysPanel
@@ -137,12 +203,29 @@ describe('Overlays sheet layout (#484)', () => {
         openOn="geodeticFilter"
       />,
     );
-    expect(screen.getByText('Filter geodetic points')).toBeTruthy();
+    expect(screen.getByText('Geodetic points')).toBeTruthy();
+    expect(screen.getByLabelText('Show geodetic points')).toBeTruthy();
+    expect(screen.queryByLabelText('Map tab')).toBeNull();
     await fireEvent.press(screen.getByLabelText('Back to extensions'));
     expect(screen.getByLabelText('Extensions tab').props.accessibilityState).toEqual({
       selected: true,
     });
   });
+
+  it.each([
+    ['seeThroughWhite', 'See-through white', 'Map tab'],
+    ['imagery', 'Labels on satellite', 'Terrain tab'],
+  ] as const)(
+    'opens %s in its sub-panel, whose back returns to its tab',
+    async (row, label, tab) => {
+      await render(
+        <OverlaysPanel onSlopeEnabled={noop} onOpenFolders={noop} onClose={noop} openOn={row} />,
+      );
+      expect(screen.getByText(label)).toBeTruthy();
+      await fireEvent.press(screen.getByLabelText('Back to overlays'));
+      expect(screen.getByLabelText(tab).props.accessibilityState).toEqual({ selected: true });
+    },
+  );
 
   it('closes from the ✕', async () => {
     const onClose = jest.fn();
@@ -224,25 +307,98 @@ describe('switches drive the same settings as the old checkboxes', () => {
   });
 });
 
-describe('Labels on satellite (#484)', () => {
-  it('is on by default and toggles the setting while the base map is Satellite', async () => {
-    useMapStore.setState({ basemap: 'satellite' });
+describe("Base map cards (#669: the rail's Base map, moved into Terrain)", () => {
+  beforeEach(() => onTab('terrain'));
+  const MAP = 'Map, Trails, contours, names';
+  const SATELLITE = 'Satellite, Aerial imagery';
+
+  it.each([false, true])(
+    'marks the current base map, one check, and switches without closing (dark: %s)',
+    async (dark) => {
+      const onClose = jest.fn();
+      useMapStore.setState({ basemap: 'map' });
+      await render(
+        <PaperProvider theme={dark ? darkTheme : lightTheme}>
+          <OverlaysPanel onSlopeEnabled={noop} onOpenFolders={noop} onClose={onClose} />
+        </PaperProvider>,
+      );
+      expect(selected(MAP)).toBe(true);
+      expect(selected(SATELLITE)).toBe(false);
+      expect(screen.getAllByTestId('map-type-check')).toHaveLength(1);
+      await fireEvent.press(screen.getByLabelText(SATELLITE));
+      expect(useMapStore.getState().basemap).toBe('satellite');
+      expect(selected(SATELLITE)).toBe(true);
+      expect(screen.getAllByTestId('map-type-check')).toHaveLength(1);
+      expect(onClose).not.toHaveBeenCalled();
+      // The selection ring is the sheet accent in both themes.
+      const theme = dark ? darkTheme : lightTheme;
+      const ringed = nodes(screen.toJSON()).filter(
+        (n) =>
+          n.type === 'View' &&
+          StyleSheet.flatten(n.props.style as StyleProp<ViewStyle>)?.borderColor ===
+            theme.colors.secondary,
+      );
+      expect(ringed).toHaveLength(1);
+    },
+  );
+
+  it('previews each base map over the user’s own last position', async () => {
+    useSettingsStore.setState({ lastKnownPosition: { latitude: 46.8, longitude: -71.2 } });
     await renderMenu();
-    expect(checked('Labels on satellite')).toBe(true);
-    expect(screen.getByText('Trails and names over imagery')).toBeTruthy();
-    fireEvent.press(screen.getByLabelText('Labels on satellite'));
-    expect(useSettingsStore.getState().satelliteLabels).toBe(false);
+    expect(new Set(mockThumbs.map((t) => t.basemap))).toEqual(new Set(['map', 'satellite']));
+    const bbox = mockThumbs[0]?.bbox as { minLat: number; maxLat: number; minLng: number };
+    expect(bbox.minLat).toBeLessThan(46.8);
+    expect(bbox.maxLat).toBeGreaterThan(46.8);
+    expect(bbox.minLng).toBeCloseTo(-71.22);
   });
 
-  it('is greyed with a hint, and inert, on the Map base', async () => {
-    useMapStore.setState({ basemap: 'map' });
+  it('only Satellite has a sub-panel: Map has no options of its own', async () => {
     await renderMenu();
-    const row = screen.getByLabelText('Labels on satellite');
-    expect(row.props.accessibilityState).toMatchObject({ disabled: true });
-    // Both satellite-only rows (labels, imagery) say where they apply.
-    expect(screen.getAllByText('For the Satellite map type')).toHaveLength(2);
-    fireEvent.press(row);
-    expect(useSettingsStore.getState().satelliteLabels).toBe(true);
+    expect(screen.getByLabelText('Options for Satellite')).toBeTruthy();
+    expect(screen.queryByLabelText('Options for Map')).toBeNull();
+  });
+});
+
+describe('Satellite sub-panel (#669)', () => {
+  beforeEach(() => onTab('terrain'));
+  const open = async () => {
+    await renderMenu();
+    await fireEvent.press(screen.getByLabelText('Options for Satellite'));
+  };
+
+  it('holds Labels on satellite and Imagery, never greyed, even on the Map base', async () => {
+    useMapStore.setState({ basemap: 'map' });
+    await open();
+    expect(screen.queryByLabelText('Terrain tab')).toBeNull(); // the page takes the sheet
+    const labels = screen.getByLabelText('Labels on satellite');
+    expect(labels.props.accessibilityState).toMatchObject({ checked: true, disabled: false });
+    await fireEvent.press(labels);
+    expect(useSettingsStore.getState().satelliteLabels).toBe(false);
+    expect(selected('Brighter')).toBe(true);
+    expect(screen.getByLabelText('Bright').props.accessibilityState).toMatchObject({
+      disabled: false,
+    });
+    await fireEvent.press(screen.getByLabelText('Original'));
+    expect(useSettingsStore.getState().satelliteImagery).toBe('original');
+    // Still on the Map base: setting them never switches it.
+    expect(useMapStore.getState().basemap).toBe('map');
+  });
+
+  it('offers "Use" while Map is the base map, and says "Base map in use" once it is', async () => {
+    useMapStore.setState({ basemap: 'map' });
+    await open();
+    await fireEvent.press(screen.getByLabelText('Use Satellite as the base map'));
+    expect(useMapStore.getState().basemap).toBe('satellite');
+    expect(screen.getByLabelText('Base map in use')).toBeTruthy();
+    expect(screen.queryByLabelText('Use Satellite as the base map')).toBeNull();
+  });
+
+  it('goes back to the Terrain tab', async () => {
+    await open();
+    await fireEvent.press(screen.getByLabelText('Back to overlays'));
+    expect(screen.getByLabelText('Terrain tab').props.accessibilityState).toEqual({
+      selected: true,
+    });
   });
 });
 
@@ -256,25 +412,19 @@ describe('Parks & protected areas', () => {
     expect(useSettingsStore.getState().showParks).toBe(false);
   });
 
-  it('works over Satellite while its labels are on', async () => {
-    useMapStore.setState({ basemap: 'satellite' });
-    useSettingsStore.setState({ satelliteLabels: true, showParks: false });
-    await renderMenu();
-    expect(checked('Parks & protected areas')).toBe(false);
-    fireEvent.press(screen.getByLabelText('Parks & protected areas'));
-    expect(useSettingsStore.getState().showParks).toBe(true);
-  });
-
-  it('rests, with a hint, over Satellite without labels (they carry the parks)', async () => {
-    useMapStore.setState({ basemap: 'satellite' });
-    useSettingsStore.setState({ satelliteLabels: false });
-    await renderMenu();
-    const row = screen.getByLabelText('Parks & protected areas');
-    expect(row.props.accessibilityState).toMatchObject({ disabled: true });
-    expect(screen.getByText('Needs labels on satellite')).toBeTruthy();
-    fireEvent.press(row);
-    expect(useSettingsStore.getState().showParks).toBe(true);
-  });
+  it.each([true, false])(
+    'works over Satellite whatever its labels (labels on: %s) — its own pass (#669)',
+    async (satelliteLabels) => {
+      useMapStore.setState({ basemap: 'satellite' });
+      useSettingsStore.setState({ satelliteLabels, showParks: false });
+      await renderMenu();
+      const row = screen.getByLabelText('Parks & protected areas');
+      expect(row.props.accessibilityState).toMatchObject({ checked: false, disabled: false });
+      expect(screen.getByText('Boundaries and names')).toBeTruthy();
+      await fireEvent.press(row);
+      expect(useSettingsStore.getState().showParks).toBe(true);
+    },
+  );
 });
 
 describe('Extensions tab', () => {
@@ -312,11 +462,12 @@ describe('Extensions tab', () => {
     expect(useSettingsStore.getState().extensions.geodetic.show).toBe(false);
   });
 
-  it('geodetic: filters from its funnel, back to the tab, badge counted, reset', async () => {
+  it('geodetic: filters in its sub-panel, back to the tab, badge counted, reset', async () => {
     setExtensions({ geodetic: { installedAt: 1, show: true } });
     await renderMenu();
-    await fireEvent.press(screen.getByLabelText('Filter geodetic points'));
-    expect(screen.queryByLabelText('Map tab')).toBeNull(); // the filter takes the sheet
+    expect(screen.queryByTestId('sub-panel-badge')).toBeNull();
+    await fireEvent.press(screen.getByLabelText('Options for Geodetic points'));
+    expect(screen.queryByLabelText('Map tab')).toBeNull(); // the sub-panel takes the sheet
     await fireEvent.press(screen.getByLabelText('GNSS'));
     await fireEvent.press(screen.getByLabelText('Has heights'));
     const f = useSettingsStore.getState().geodeticFilter;
@@ -324,10 +475,22 @@ describe('Extensions tab', () => {
     expect(f.hasHeights).toBe(true);
     await fireEvent.press(screen.getByLabelText('Back to extensions'));
     expect(screen.getByText('Filtered · 2 filters')).toBeTruthy();
-    await fireEvent.press(screen.getByLabelText('Filter geodetic points, 2 filters on'));
+    expect(screen.getByTestId('sub-panel-badge')).toBeTruthy();
+    expect(screen.getByText('2')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Options for Geodetic points, 2 filters on'));
     await fireEvent.press(screen.getByLabelText('Reset geodetic filters'));
     expect(useSettingsStore.getState().geodeticFilter.hasHeights).toBe(false);
     expect(useSettingsStore.getState().geodeticFilter.types).toContain('gnss');
+  });
+
+  it('geodetic: its sub-panel starts with the same switch as its row', async () => {
+    setExtensions({ geodetic: { installedAt: 1, show: true } });
+    await renderMenu();
+    await fireEvent.press(screen.getByLabelText('Options for Geodetic points'));
+    await fireEvent.press(screen.getByLabelText('Show geodetic points'));
+    expect(useSettingsStore.getState().extensions.geodetic.show).toBe(false);
+    await fireEvent.press(screen.getByLabelText('Back to extensions'));
+    expect(checked('Geodetic points')).toBe(false);
   });
 
   it('tide stations: its own one-line row once installed', async () => {
@@ -339,29 +502,6 @@ describe('Extensions tab', () => {
     expect(screen.queryByLabelText('Gauge symbols legend')).toBeNull();
     await fireEvent.press(screen.getByLabelText('Tide stations'));
     expect(useSettingsStore.getState().extensions.tides.show).toBe(false);
-  });
-});
-
-describe('Imagery brightness (#495)', () => {
-  it('defaults to Brighter and sets the look while the base map is Satellite', async () => {
-    useMapStore.setState({ basemap: 'satellite' });
-    await renderMenu();
-    expect(screen.getByText('Satellite brightness')).toBeTruthy();
-    expect(selected('Brighter')).toBe(true);
-    await fireEvent.press(screen.getByLabelText('Bright'));
-    expect(useSettingsStore.getState().satelliteImagery).toBe('bright');
-    await fireEvent.press(screen.getByLabelText('Original'));
-    expect(useSettingsStore.getState().satelliteImagery).toBe('original');
-  });
-
-  it('is greyed and inert on the Map base', async () => {
-    useMapStore.setState({ basemap: 'map' });
-    await renderMenu();
-    expect(screen.getByLabelText('Original').props.accessibilityState).toMatchObject({
-      disabled: true,
-    });
-    await fireEvent.press(screen.getByLabelText('Original'));
-    expect(useSettingsStore.getState().satelliteImagery).toBe('brighter');
   });
 });
 
@@ -429,23 +569,36 @@ describe('Terrain levels', () => {
   });
 });
 
-describe('See-through white (PDF maps; last in Terrain)', () => {
-  beforeEach(() => onTab('terrain'));
+describe('PDF maps sub-panel: See-through white (#670)', () => {
   const slider = () => screen.getByLabelText('See-through white');
   const adjust = (actionName: 'increment' | 'decrement') =>
     act(async () => {
       fireEvent(slider(), 'accessibilityAction', { nativeEvent: { actionName } });
     });
+  const open = async () => {
+    await renderMenu();
+    await fireEvent.press(screen.getByLabelText('Options for PDF maps'));
+  };
+
+  it('opens from the PDF maps row, starting with its switch', async () => {
+    await open();
+    expect(screen.queryByLabelText('Map tab')).toBeNull();
+    expect(checked('Show PDF maps')).toBe(true);
+    await fireEvent.press(screen.getByLabelText('Show PDF maps'));
+    expect(useSettingsStore.getState().showPdfOverlay).toBe(false);
+    await fireEvent.press(screen.getByLabelText('Back to overlays'));
+    expect(checked('PDF maps')).toBe(false);
+  });
 
   it('is a 5-stop slider, Off by default', async () => {
-    await renderMenu();
+    await open();
     expect(screen.getByText('See-through white')).toBeTruthy();
     expect(slider().props.accessibilityRole).toBe('adjustable');
     expect(slider().props.accessibilityValue).toEqual({ min: 0, max: 4, now: 0, text: 'Off' });
   });
 
   it('steps through 25 / 50 / 75 / 100 %, each setting the global level', async () => {
-    await renderMenu();
+    await open();
     const seen: string[] = [];
     for (const expected of [1, 2, 3, 4]) {
       await adjust('increment');
@@ -453,31 +606,49 @@ describe('See-through white (PDF maps; last in Terrain)', () => {
       seen.push(String(slider().props.accessibilityValue.text));
     }
     expect(seen).toEqual(['25 %', '50 %', '75 %', '100 %']);
-    expect(screen.getByText('100 %')).toBeTruthy();
     // Clamped at Full.
     await adjust('increment');
     expect(useSettingsStore.getState().pdfWhiteKey).toBe(4);
   });
 
-  it('steps back down to Off and leaves the 3D relief Off alone', async () => {
-    useSettingsStore.setState({ pdfWhiteKey: 1, tiltRelief: 'natural' });
-    await renderMenu();
+  it('steps back down to Off', async () => {
+    useSettingsStore.setState({ pdfWhiteKey: 1 });
+    await open();
     expect(slider().props.accessibilityValue).toMatchObject({ now: 1, text: '25 %' });
     await adjust('decrement');
     expect(useSettingsStore.getState().pdfWhiteKey).toBe(0);
     expect(slider().props.accessibilityValue).toMatchObject({ now: 0, text: 'Off' });
-    expect(useSettingsStore.getState().tiltRelief).toBe('natural');
-    // The 3D relief segment owns the plain 'Off' name.
-    expect(screen.getByLabelText('Off')).toBeTruthy();
   });
 
-  it('rests while PDF maps are hidden', async () => {
+  it('is never greyed: it can be set while the PDF maps are hidden', async () => {
     useSettingsStore.setState({ showPdfOverlay: false, pdfWhiteKey: 2 });
-    await renderMenu();
-    expect(screen.getByText('Needs PDF maps')).toBeTruthy();
-    expect(slider().props.accessibilityState).toMatchObject({ disabled: true });
+    await open();
+    expect(screen.queryByText('Needs PDF maps')).toBeNull();
+    expect(slider().props.accessibilityState?.disabled).not.toBe(true);
     await adjust('increment');
-    expect(useSettingsStore.getState().pdfWhiteKey).toBe(2);
+    expect(useSettingsStore.getState().pdfWhiteKey).toBe(3);
+  });
+
+  it.each([
+    [0, '50 %', 0.5],
+    [1, '25 %', 0.75],
+    [4, '100 %', 0],
+  ] as const)(
+    'its before/after sample shows the level (setting %s → %s, paper %s)',
+    async (level, label, paper) => {
+      useSettingsStore.setState({ pdfWhiteKey: level });
+      await open();
+      expect(screen.getByText('Off · paper white')).toBeTruthy();
+      expect(screen.getByText(`${label} · base map shows`)).toBeTruthy();
+      const sheet = StyleSheet.flatten(screen.getByTestId('pdf-sample-paper').props.style);
+      expect(sheet.opacity).toBeCloseTo(paper);
+      expect(mockThumbs.some((t) => t.basemap === 'map')).toBe(true);
+    },
+  );
+
+  it('says a map can override it from the Library', async () => {
+    await open();
+    expect(screen.getByText(/Library › the map’s ⋮ › See-through white/)).toBeTruthy();
   });
 });
 

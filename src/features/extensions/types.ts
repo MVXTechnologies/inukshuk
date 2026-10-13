@@ -8,15 +8,38 @@
  * See docs/ARCHITECTURE.md § "Adding an extension".
  */
 import type { ConvertRequest } from '@core/convert/prefill';
+import type { OverlaySubPanel } from '@core/map/overlayTabs';
 import type { ComponentType, ReactNode } from 'react';
 import type { ImageRequireSource } from 'react-native';
 
 /** What the overlays sheet hands an extension's row in its Extensions tab. */
 export interface ExtensionPanelEntryProps {
-  /** Open the geodetic filter in the sheet (the one sub-page an entry has today). */
-  onOpenGeodeticFilter: () => void;
-  /** Close the overlays sheet (an entry opening its own sheet, e.g. the receiver). */
+  /** Open this extension's sub-panel in the sheet (its row's accessory). */
+  onOpenPanel: () => void;
+  /** Close the overlays sheet (an entry leaving for a screen of its own). */
   onClose: () => void;
+}
+
+/** What the overlays sheet hands an extension's sub-panel (#668). */
+export interface ExtensionSubPanelProps {
+  /** Back to the Extensions tab. */
+  onBack: () => void;
+  /** Close the overlays sheet (before leaving for a screen or another sheet). */
+  onClose: () => void;
+  /** Open another sub-panel of the sheet (Tide stations → Geodetic points › Tidal). */
+  openSubPanel: (panel: OverlaySubPanel) => void;
+}
+
+/**
+ * An extension in Map overlays (`./panelEntries`): its row in the Extensions
+ * tab, and the sub-panel the row's accessory opens (`ExtensionDescriptor`'s
+ * platform half, as the map and Settings modules are).
+ */
+export interface ExtensionPanelModule {
+  /** Its one-line row: the switch, the summary, the sub-panel accessory. */
+  Entry: ComponentType<ExtensionPanelEntryProps>;
+  /** Its sub-panel: the switch first, then its options. */
+  Panel: ComponentType<ExtensionSubPanelProps>;
 }
 
 /** What the map hands an extension's bottom card: the slot's state and its actions. */

@@ -17,7 +17,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { Badge, Icon, IconButton, Text, TouchableRipple, useTheme } from 'react-native-paper';
+import { Text, useTheme } from 'react-native-paper';
 import { refreshGeodeticCoverage } from '@data/geodeticCoverage';
 import { geodeticImage } from '../geodeticImages';
 import { SectionTitle, Segmented, SwitchRow, useSheetAccent } from './mapSheet';
@@ -103,52 +103,40 @@ function FilterChip({
   );
 }
 
-/**
- * The funnel on the "Geodetic points" overlays row: opens the filter panel;
- * a badge counts the filter groups in effect.
- */
-export function GeodeticFilterButton({ onPress }: { onPress: () => void }) {
+/** "Reset": every geodetic filter back to its default; quiet while none is on. */
+export function GeodeticFilterReset() {
   const tokens = useSchemeTokens();
   const { accent } = useSheetAccent();
   const active = useSettingsStore((s) => activeFilterCount(s.geodeticFilter));
+  const setSetting = useSettingsStore((s) => s.set);
   return (
-    <View>
-      <IconButton
-        icon={active > 0 ? 'filter' : 'filter-outline'}
-        size={22}
-        iconColor={active > 0 ? accent : tokens.inkVariant}
-        onPress={onPress}
-        accessibilityLabel={
-          active > 0
-            ? `Filter geodetic points, ${active} filter${active === 1 ? '' : 's'} on`
-            : 'Filter geodetic points'
-        }
-        style={styles.funnel}
-      />
-      {active > 0 && (
-        <Badge size={16} style={[styles.badge, { backgroundColor: accent }]}>
-          {active}
-        </Badge>
-      )}
-    </View>
+    <Pressable
+      onPress={() => setSetting('geodeticFilter', { ...DEFAULT_GEODETIC_FILTER })}
+      disabled={active === 0}
+      accessibilityRole="button"
+      accessibilityLabel="Reset geodetic filters"
+      accessibilityState={{ disabled: active === 0 }}
+      hitSlop={8}
+    >
+      <Text style={[styles.reset, { color: active === 0 ? tokens.inkMuted : accent }]}>Reset</Text>
+    </Pressable>
   );
 }
 
 /**
  * Filter geodetic points by their attributes (`@core/geodetic/filter`): the
- * overlays sheet's drill-in, in its own idiom (section titles, segmented
- * pickers, switch rows). Every change applies live and is persisted.
+ * body of the Geodetic points sub-panel (`GeodeticSubPanel`), in the sheet's
+ * idiom (section titles, segmented pickers, switch rows). Every change
+ * applies live and is persisted.
  */
-export function GeodeticFilterPanel({ onBack }: { onBack: () => void }) {
+export function GeodeticFilters() {
   const tokens = useSchemeTokens();
   const dark = useTheme().dark;
-  const { accent } = useSheetAccent();
   const filter = useSettingsStore((s) => s.geodeticFilter);
   const setSetting = useSettingsStore((s) => s.set);
   const coverage = useGeodeticStore((s) => s.coverage);
   const set = (patch: Partial<GeodeticFilter>) =>
     setSetting('geodeticFilter', { ...filter, ...patch });
-  const active = activeFilterCount(filter);
 
   useEffect(() => {
     if (coverage === null) void refreshGeodeticCoverage();
@@ -168,32 +156,6 @@ export function GeodeticFilterPanel({ onBack }: { onBack: () => void }) {
 
   return (
     <>
-      <View style={styles.header}>
-        <TouchableRipple
-          onPress={onBack}
-          accessibilityLabel="Back to extensions"
-          style={styles.back}
-          borderless
-        >
-          <View style={styles.backInner}>
-            <Icon source="chevron-left" size={24} color={tokens.ink} />
-            <Text style={[styles.title, { color: tokens.ink }]}>Filter geodetic points</Text>
-          </View>
-        </TouchableRipple>
-        <Pressable
-          onPress={() => setSetting('geodeticFilter', { ...DEFAULT_GEODETIC_FILTER })}
-          disabled={active === 0}
-          accessibilityRole="button"
-          accessibilityLabel="Reset geodetic filters"
-          accessibilityState={{ disabled: active === 0 }}
-          hitSlop={8}
-        >
-          <Text style={[styles.reset, { color: active === 0 ? tokens.inkMuted : accent }]}>
-            Reset
-          </Text>
-        </Pressable>
-      </View>
-
       <SectionTitle>Type</SectionTitle>
       <View style={styles.chips}>
         {FILTER_TYPES.map((k) => (
@@ -306,15 +268,6 @@ export function GeodeticFilterPanel({ onBack }: { onBack: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingRight: 16,
-  },
-  back: { flex: 1, paddingVertical: 10, paddingLeft: 8 },
-  backInner: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  title: { fontSize: 17, fontWeight: '700' },
   reset: { fontSize: 15, fontWeight: '700' },
   pad: { paddingHorizontal: 16, paddingBottom: 4 },
   chips: {
@@ -342,6 +295,4 @@ const styles = StyleSheet.create({
   chipIcon: { width: 16, height: 16 },
   chipLabel: { fontSize: 14, fontWeight: '600' },
   note: { fontSize: 12, paddingHorizontal: 16, paddingTop: 2, paddingBottom: 6 },
-  funnel: { margin: 0, marginRight: 2 },
-  badge: { position: 'absolute', top: 2, right: 0 },
 });

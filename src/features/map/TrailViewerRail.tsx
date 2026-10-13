@@ -13,7 +13,7 @@ import {
  * Right-edge control rail for the focused trail viewer: a layers FAB opening
  * the basemap picker and an overlays FAB opening the analytical-overlay
  * switches (the 2D↔3D toggle left in #480 — two-finger tilt instead) — the same circular-button idiom as
- * the main map's MapControlsRail/LayersMenu.
+ * the main map's MapControlsRail.
  *
  * The rail is strictly for VIEWING the trail. Trim used to live here as a
  * fourth FAB, but it edits the GPX rather than changing how the map is drawn,

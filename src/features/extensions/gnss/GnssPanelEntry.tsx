@@ -1,18 +1,17 @@
 import { DEVICE_EXTENSIONS } from '@core/extensions/registry';
 import { useReceiverChip } from '@features/gnss/useReceiverChip';
-import { useGnssStore } from '@state/gnssStore';
-import { IconButton } from 'react-native-paper';
 
-import { SwitchRow } from '../../map/components/mapSheet';
+import { SubPanelButton, SwitchRow } from '../../map/components/mapSheet';
 import { setExtensionPrefs, useExtensionPrefs } from '../prefs';
 import type { ExtensionPanelEntryProps } from '../types';
 
 /**
  * Map overlays › Extensions › External GNSS receiver: one row, its switch
- * (use the receiver) and the fix state as its hint ("RTK fixed · ±3 cm", or
- * "Not connected"); the chevron opens the receiver sheet.
+ * (use the receiver), the fix state as its hint ("RTK fixed · ±3 cm", or
+ * "Not connected") and the sub-panel accessory (`GnssSubPanel`: status,
+ * receiver, corrections, phone GPS), there whether the switch is on or off.
  */
-export function GnssPanelEntry({ onClose }: ExtensionPanelEntryProps) {
+export function GnssPanelEntry({ onOpenPanel }: ExtensionPanelEntryProps) {
   const { show } = useExtensionPrefs('gnss');
   const chip = useReceiverChip();
   const { label } = DEVICE_EXTENSIONS.gnss;
@@ -25,17 +24,11 @@ export function GnssPanelEntry({ onClose }: ExtensionPanelEntryProps) {
       onToggle={() => setExtensionPrefs('gnss', { show: !show })}
       accessibilityLabel="Use the external receiver"
       accessory={
-        show ? (
-          <IconButton
-            icon="chevron-right"
-            onPress={() => {
-              onClose();
-              useGnssStore.getState().setSheetOpen(true);
-            }}
-            accessibilityLabel="Open the receiver"
-            testID="extension-gnss-open"
-          />
-        ) : undefined
+        <SubPanelButton
+          onPress={onOpenPanel}
+          accessibilityLabel={`Options for ${label}`}
+          testID="extension-gnss-open"
+        />
       }
     />
   );

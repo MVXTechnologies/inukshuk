@@ -1,42 +1,18 @@
-import { stateLabel } from '@core/gnss/chip';
-import { activeProfile, profileLine } from '@core/gnss/config';
-import { projectDatumOption } from '@core/gnss/projectDatum';
-import { useGnssStore, type NtripState } from '@state/gnssStore';
+import { useGnssStore } from '@state/gnssStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Icon, List, Switch, Text } from 'react-native-paper';
+import { Icon, Text } from 'react-native-paper';
 
 import { ExtensionSettingsShell } from '../ExtensionSettingsShell';
 import { useExtensionPrefs } from '../prefs';
-
-function linkLine(link: string, state: string | null): string {
-  switch (link) {
-    case 'connected':
-      return state ? `connected · ${state}` : 'connected';
-    case 'connecting':
-      return 'connecting…';
-    case 'reconnecting':
-      return 'reconnecting…';
-    default:
-      return 'not connected';
-  }
-}
-
-export function ntripLine(ntrip: NtripState): string {
-  switch (ntrip.phase) {
-    case 'streaming':
-      return 'streaming';
-    case 'connecting':
-      return 'connecting…';
-    case 'error':
-    case 'unavailable':
-      return ntrip.message ?? 'not connected';
-    default:
-      return 'starts with the receiver';
-  }
-}
+import {
+  GnssCorrectionsOption,
+  GnssDatumOption,
+  GnssFallbackOption,
+  GnssReceiverOption,
+  GnssStandbyOption,
+} from './options';
 
 /**
  * External GNSS receiver in Settings → Extensions (mockup `gnss-settings`):
@@ -45,23 +21,13 @@ export function ntripLine(ntrip: NtripState): string {
  */
 export function GnssSettings() {
   const t = useSchemeTokens();
-  const router = useRouter();
   const { installedAt } = useExtensionPrefs('gnss');
   const hydrated = useGnssStore((s) => s.hydrated);
-  const config = useGnssStore((s) => s.config);
-  const update = useGnssStore((s) => s.updateConfig);
-  const link = useGnssStore((s) => s.link);
-  const status = useGnssStore((s) => s.status);
-  const ntrip = useGnssStore((s) => s.ntrip);
   const error = useGnssStore((s) => s.error);
 
   useEffect(() => {
     if (installedAt > 0 && !hydrated) void useGnssStore.getState().hydrate();
   }, [installedAt, hydrated]);
-
-  const profile = activeProfile(config);
-  const receiver = config.receiver;
-  const state = status && status.state !== 'no-fix' ? stateLabel(status.state) : null;
 
   return (
     <ExtensionSettingsShell
@@ -94,63 +60,11 @@ export function GnssSettings() {
           </Text>
         </View>
       )}
-      <List.Item
-        title="Receiver"
-        description={
-          receiver ? `${receiver.name} · ${linkLine(link, state)}` : 'None yet — connect one'
-        }
-        onPress={() => router.push('/gnss/pair')}
-        right={(p) => <List.Icon {...p} icon="chevron-right" />}
-        testID="gnss-receiver-row"
-      />
-      <List.Item
-        title="RTK corrections (NTRIP)"
-        description={
-          profile
-            ? `${profileLine(profile)} · ${ntripLine(ntrip)}`
-            : 'Off · add a caster for centimetre RTK'
-        }
-        descriptionNumberOfLines={3}
-        onPress={() => router.push('/gnss/corrections')}
-        right={(p) => <List.Icon {...p} icon="chevron-right" />}
-        testID="gnss-corrections-row"
-      />
-      <List.Item
-        title="Project datum"
-        description={`${projectDatumOption(config.projectDatumId).label} · coordinates in the receiver sheet`}
-        descriptionNumberOfLines={2}
-        onPress={() => router.push('/gnss/datum')}
-        right={(p) => <List.Icon {...p} icon="chevron-right" />}
-        testID="gnss-datum-row"
-      />
-      <List.Item
-        title="Use the phone GPS when the receiver drops"
-        titleNumberOfLines={2}
-        description="The chip says which one you’re on"
-        right={() => (
-          <Switch
-            value={config.fallbackToPhone}
-            onValueChange={(v) => update({ fallbackToPhone: v })}
-            accessibilityLabel="Use the phone GPS when the receiver drops"
-          />
-        )}
-      />
-      <List.Item
-        title="Phone GPS in standby"
-        description={
-          config.phoneWhileGood === 'standby'
-            ? 'Low power while the receiver is good, for an instant fallback'
-            : 'Off while the receiver is good: saves battery, slower fallback'
-        }
-        descriptionNumberOfLines={2}
-        right={() => (
-          <Switch
-            value={config.phoneWhileGood === 'standby'}
-            onValueChange={(v) => update({ phoneWhileGood: v ? 'standby' : 'off' })}
-            accessibilityLabel="Phone GPS in standby"
-          />
-        )}
-      />
+      <GnssReceiverOption variant="settings" />
+      <GnssCorrectionsOption variant="settings" />
+      <GnssDatumOption variant="settings" />
+      <GnssFallbackOption variant="settings" />
+      <GnssStandbyOption variant="settings" />
       <View style={[styles.info, { backgroundColor: t.surfaceVariant }]}>
         <Icon source="information-outline" size={18} color={t.inkVariant} />
         <Text variant="bodySmall" style={[styles.flex, { color: t.inkVariant }]}>

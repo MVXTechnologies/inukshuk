@@ -945,6 +945,22 @@ describe('vector Stone & Paper basemap (VECTOR_BASEMAP_ENABLED)', () => {
       expect(off.sources['basemap-parks']).toBeUndefined();
       expect(off.layers.some((l) => l.id === 'stone-place-town')).toBe(true);
     });
+
+    it('over satellite with the labels off: the parks alone, no names or summits (#669)', () => {
+      const peaks = 'https://peaks.example/{z}/{x}/{y}.mvt';
+      const admin1 = 'https://pages.example/data/admin1-labels-v1.json';
+      const s = buildOsmStyle(TILE, 'satellite', false, {
+        imageryLabels: { tiles: vectorBasemap.tiles, parks, peaks, admin1, labels: false },
+      });
+      expect(parkLayers(s).map((l) => l.id)).toEqual(PARK_LAYERS);
+      expect(s.layers.filter((l) => l.id.startsWith('stone-')).map((l) => l.id)).toEqual(
+        PARK_LAYERS,
+      );
+      expect(s.sources['basemap-parks']).toMatchObject({ type: 'vector' });
+      expect(s.sources['basemap-peaks']).toBeUndefined();
+      expect(s.sources['basemap-admin1']).toBeUndefined();
+      expect(validateStyleMin(s)).toEqual([]);
+    });
   });
 
   describe('province and state names (Natural Earth points)', () => {

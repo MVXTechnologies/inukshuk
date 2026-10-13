@@ -1,9 +1,8 @@
 import { useSettingsStore } from '@state/settingsStore';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { MapTypePanel } from './LayersMenu';
 import { MapActionsMenu, type MapActions } from './MapActionsMenu';
-import { MapButton, MapButtonGroup } from './MapButton';
+import { MapButton } from './MapButton';
 import { MapOverlaysMenu } from './MapOverlaysMenu';
 
 interface Props {
@@ -33,7 +32,7 @@ interface Props {
    */
   compactOpen: boolean;
   onCompactOpenChange: (open: boolean) => void;
-  /** Any of the rail's sheets (map type, overlays, "+" actions) opened or closed. */
+  /** Any of the rail's sheets (Map layers, "+" actions) opened or closed. */
   onMenuOpenChange?: (open: boolean) => void;
   /**
    * The 3D/2D button (Settings → Beta features → 3D terrain only; undefined
@@ -45,18 +44,19 @@ interface Props {
 /**
  * Right-side map controls (revamp `Main.html`, decision 2), top to bottom:
  * the target button (go to my position; tap again to stop following), Fit
- * map while PDF overlays are up, Base map and Map overlays joined in one
- * pill, then "+". Every button is a 48 dp {@link MapButton}; the Maestro
- * labels ('Locate', 'Fit map', 'Base map', 'Map overlays', 'Map actions',
- * 'Map controls', 'Hide map controls') are unchanged.
+ * map while PDF overlays are up, Map overlays (the Map layers sheet, which
+ * holds the base map since #669 — the "Base map" button is gone), then "+".
+ * Every button is a 48 dp {@link MapButton}; the Maestro labels ('Locate',
+ * 'Fit map', 'Map overlays', 'Map actions', 'Map controls', 'Hide map
+ * controls') are unchanged.
  */
 export function MapControlsRail(props: Props) {
   const compact = useSettingsStore((s) => s.compactMapChrome);
   const { compactOpen, onCompactOpenChange } = props;
-  // The Map type panel, the overlays sheet and the "+" actions sheet are all
-  // plain-View sheets in the rail's own column; ONE open at a time, owned
-  // here so an outside tap on the backdrop below closes whichever is up.
-  const [openMenu, setOpenMenu] = useState<null | 'basemap' | 'overlays' | 'actions'>(null);
+  // The Map layers sheet and the "+" actions sheet are plain-View sheets in
+  // the rail's own column; ONE open at a time, owned here so an outside tap
+  // on the backdrop below closes whichever is up.
+  const [openMenu, setOpenMenu] = useState<null | 'overlays' | 'actions'>(null);
   const { onMenuOpenChange } = props;
   useEffect(() => {
     onMenuOpenChange?.(openMenu !== null);
@@ -110,30 +110,14 @@ export function MapControlsRail(props: Props) {
         {showFitControl && (
           <MapButton icon="fit-to-page-outline" onPress={onFit} accessibilityLabel="Fit map" />
         )}
-        <MapButtonGroup>
-          <MapButton
-            icon="layers-outline"
-            grouped
-            onPress={() => setOpenMenu(openMenu === 'basemap' ? null : 'basemap')}
-            accessibilityLabel="Base map"
-          />
-          <MapButton
-            icon="gradient-vertical"
-            grouped
-            onPress={() => setOpenMenu(openMenu === 'overlays' ? null : 'overlays')}
-            accessibilityLabel="Map overlays"
-          />
-        </MapButtonGroup>
-        {openMenu === 'basemap' && <MapTypePanel onClose={() => setOpenMenu(null)} />}
         <MapOverlaysMenu
-          hideTrigger
           open={openMenu === 'overlays'}
           onToggle={(o) => setOpenMenu(o ? 'overlays' : null)}
         />
-        {/* The "+" folds away while the Map type panel or the Overlays sheet
-            is up: under a tall sheet it was pushed onto the attribution chip
-            (#484 emulator pass). It is back the moment the sheet closes. */}
-        {actions !== undefined && openMenu !== 'basemap' && openMenu !== 'overlays' && (
+        {/* The "+" folds away while the Map layers sheet is up: under a tall
+            sheet it was pushed onto the attribution chip (#484 emulator
+            pass). It is back the moment the sheet closes. */}
+        {actions !== undefined && openMenu !== 'overlays' && (
           <MapActionsMenu
             actions={actions}
             open={openMenu === 'actions'}

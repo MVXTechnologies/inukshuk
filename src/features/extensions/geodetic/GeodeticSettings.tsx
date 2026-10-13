@@ -21,7 +21,8 @@ import { GeodeticLegend } from '../../map/components/GeodeticLegend';
 import { geodeticImage } from '../../map/geodeticImages';
 import { setExtensionOffline } from '../actions';
 import { refreshCompanions } from '../companions';
-import { ExtensionSettingsShell, extensionRowStyles as styles } from '../ExtensionSettingsShell';
+import { ExtensionSettingsShell } from '../ExtensionSettingsShell';
+import { extensionRowStyles as styles } from '../rowStyles';
 import { useExtensionPrefs } from '../prefs';
 
 export function GeodeticSettings() {
