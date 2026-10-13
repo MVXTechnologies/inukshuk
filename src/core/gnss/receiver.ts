@@ -197,11 +197,20 @@ export interface MapPosition {
 }
 
 /**
+ * The altitude an external fix records: MSL (the receiver's geoid) when it
+ * reports one, else its ellipsoidal height. The map's coordinates chip (#677)
+ * reads it too, so it shows exactly what the recorder stores.
+ */
+export function fixAltitude(fix: GnssFix): number | null {
+  return fix.hMsl ?? fix.hEll;
+}
+
+/**
  * The track point an external fix becomes. Time is the phone's clock at
  * arrival (the recorder's pauses and the phone feed are on that clock; the
  * receiver's UTC can differ by its latency or a replayed session's date).
- * Altitude is the receiver's MSL height (its geoid), else its ellipsoidal
- * height, like the phone's own. The accuracy is the receiver's 95 % claim.
+ * Altitude is {@link fixAltitude}, like the phone's own. The accuracy is the
+ * receiver's 95 % claim.
  */
 export function trackPointFromFix(fix: GnssFix, pos: MapPosition, nowMs: number): TrackPoint {
   const p: TrackPoint = {
@@ -211,7 +220,7 @@ export function trackPointFromFix(fix: GnssFix, pos: MapPosition, nowMs: number)
     source: 'external',
     gnss: { fix: fix.kind },
   };
-  const alt = fix.hMsl ?? fix.hEll;
+  const alt = fixAltitude(fix);
   if (alt !== null) p.altitude = alt;
   if (fix.accuracy) {
     p.accuracy = fix.accuracy.h95;

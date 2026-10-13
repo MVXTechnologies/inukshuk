@@ -72,6 +72,7 @@ import { useRecorderStore } from '@state/recorderStore';
 import { useMarinePackStore } from '@state/marinePackStore';
 import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
+import { useCoordinateFormatter } from '@state/useCoordinateFormatter';
 import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
 import { createGesturePause } from '@core/support/gesturePause';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -125,6 +126,12 @@ import { ShownTrailLayers } from './longTrail/ShownTrailLayers';
 import { MapControlsRail } from './components/MapControlsRail';
 import { RenderingToasts } from './components/RenderingToasts';
 import { ScaleBar } from './components/ScaleBar';
+import {
+  CenterCoordinatesChip,
+  onChipRowLayout,
+  onTipSlotLayout,
+} from './components/CenterCoordinatesChip';
+import { CenterCursor } from './components/CenterCursor';
 import { metersPerPixel } from '@core/geo/scaleBar';
 import { heatTapRadiusPx } from '@core/heat/heatStyle';
 import { RecordingPanel } from './components/RecordingPanel';
@@ -392,7 +399,8 @@ export function MapScreen() {
   const settingsHydrated = useSettingsStore((s) => s.hydrated);
   const lastKnownPosition = useSettingsStore((s) => s.lastKnownPosition);
 
-  const { permission, location, unavailableKind, unavailableReason } = useLocationTracking();
+  const { permission, location, lastFix, unavailableKind, unavailableReason } =
+    useLocationTracking();
   const headingForCamera = useHeadingCamera();
 
   const maps = useLibraryStore((s) => s.maps);
@@ -1069,6 +1077,8 @@ export function MapScreen() {
   }, [viewPitch, terrain3d.viewTag, terrain3d.active]);
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
+  /** Positions in the user's coordinate format (#677): the point chip and the copy actions. */
+  const formatCoords = useCoordinateFormatter();
 
   // Overlay errors surface through the timed hook too: a raw <Snackbar
   // duration={4000}> never auto-dismisses on Samsung One UI (paper arms its
@@ -1824,13 +1834,13 @@ export function MapScreen() {
       } else if (hit === 'convert') {
         openConvert(router, prefillFromPoint(at.latitude, at.longitude));
       } else {
-        void Clipboard.setStringAsync(formatLatLng(at.latitude, at.longitude));
+        void Clipboard.setStringAsync(formatCoords(at.latitude, at.longitude));
         showSnack('Coordinates copied');
         setViewWp(null);
         setForecastAt(null);
       }
     },
-    [openGoToCoordinates, composeWaypointAt, showSnack, router],
+    [openGoToCoordinates, composeWaypointAt, showSnack, router, formatCoords],
   );
 
   // "+" actions menu → Add waypoint: compose a standalone waypoint at the
@@ -3136,9 +3146,9 @@ export function MapScreen() {
                     ALWAYS — a nav app that hides where you just tapped behind
                     a weather value is answering the wrong question. This is
                     the app's one coordinate readout for a point you can see;
-                    the map CENTRE's readout lives in the coordinates dialog
-                    rather than in a second competing chip. */}
-                  <MapPointLine text={formatLatLng(pointAt.latitude, pointAt.longitude)} />
+                    the map CENTRE's is the bottom-row chip (#677). Both use
+                    the app-wide coordinate format. */}
+                  <MapPointLine text={formatCoords(pointAt.latitude, pointAt.longitude)} />
                   {/* How far and which way from where you stand (#232) — the
                     same two numbers the destination chip shows, straight off
                     the current fix. Silently absent without one. */}
@@ -3197,6 +3207,9 @@ export function MapScreen() {
             settledBounds={windSettledBounds}
           />
         )}
+
+        {/* Centre cursor (#677): a static dot over the map's centre. */}
+        <CenterCursor suppressed={selecting || makeMapState !== null} />
 
         {/* Region select overlay for offline download */}
         {selecting && (
@@ -3456,22 +3469,35 @@ export function MapScreen() {
               {/* The tip button hides itself while recording, while a destination is
                 followed, and while a trail sheet, heat carousel or the coordinate
                 dialog is up. */}
-              <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="box-none">
-                <TipButton
-                  navigating={destination !== null}
-                  gestureActive={cameraMoving}
-                  focused={isFocused}
-                  bubbleBlocked={
-                    railMenuOpen ||
-                    creditsOpen ||
-                    trailSheetUp ||
-                    pickingCategory ||
-                    recordRequested ||
-                    modelSheetOpen ||
-                    selecting ||
-                    makeMapState !== null
-                  }
-                  blocked={inspectId !== null || heatSelection !== null || goToOpen}
+              {/* #677: both onLayouts tell the coordinates chip how much room it has. */}
+              <View
+                style={[styles.bottomSide, styles.bottomSideEnd]}
+                pointerEvents="box-none"
+                onLayout={onChipRowLayout}
+              >
+                <View pointerEvents="box-none" onLayout={onTipSlotLayout}>
+                  <TipButton
+                    navigating={destination !== null}
+                    gestureActive={cameraMoving}
+                    focused={isFocused}
+                    bubbleBlocked={
+                      railMenuOpen ||
+                      creditsOpen ||
+                      trailSheetUp ||
+                      pickingCategory ||
+                      recordRequested ||
+                      modelSheetOpen ||
+                      selecting ||
+                      makeMapState !== null
+                    }
+                    blocked={inspectId !== null || heatSelection !== null || goToOpen}
+                  />
+                </View>
+                {/* #677: the centre's coordinates and altitude (yours while following). */}
+                <CenterCoordinatesChip
+                  you={followUser ? location : null}
+                  youAltitudeM={followUser ? (lastFix?.altitude ?? null) : null}
+                  onCopied={showSnack}
                 />
               </View>
             </View>
@@ -3795,11 +3821,9 @@ export function MapScreen() {
             <WaypointViewerCard
               waypoint={viewWaypoint}
               floating={recordingPanelUp}
-              onCopyCoords={() => {
-                if (!viewWaypoint) return;
-                void Clipboard.setStringAsync(
-                  formatLatLng(viewWaypoint.latitude, viewWaypoint.longitude),
-                );
+              onCopyCoords={(text) => {
+                // The card's own text, so the clipboard matches what it shows.
+                void Clipboard.setStringAsync(text);
                 showSnack('Coordinates copied');
               }}
               onCopyNote={() => {
@@ -4005,8 +4029,15 @@ const styles = StyleSheet.create({
   bottomRow: { flexDirection: 'row', alignItems: 'flex-end' },
   bottomSide: { flex: 1, alignItems: 'flex-start' },
   // ⓘ then the scale bar, one row, the ⓘ centred on the scale bar's height (owner).
-  bottomSideStart: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  bottomSideEnd: { alignItems: 'flex-end' },
+  // Natural width, so the end side gets the rest (the coordinates chip, #677).
+  bottomSideStart: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 0 },
+  bottomSideEnd: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+    marginLeft: 6,
+  },
   panelDock: { position: 'absolute', left: 0, right: 0, bottom: 0, ...BOTTOM_LAYER.recordingPanel },
   // Legend pill + time scrubber, tight together (the bottom column's own gap
   // is for separating whole blocks like the recording bar).

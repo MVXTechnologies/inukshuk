@@ -1,5 +1,10 @@
 import { type Units } from '@core/format';
 import {
+  DEFAULT_COORDINATE_FORMAT,
+  isCoordinateFormat,
+  type CoordinateFormat,
+} from '@core/convert/coordinateDisplay';
+import {
   DEFAULT_GEODETIC_FILTER,
   sanitizeGeodeticFilter,
   type GeodeticFilter,
@@ -183,6 +188,14 @@ export interface Settings {
    */
   showScaleBar: boolean;
   /**
+   * The map's centre cursor (a small dot) and the chip in the bottom row that
+   * reads its coordinates out (#677). On by default; 2.6.0 makes both Custom
+   * view items (#673).
+   */
+  showCenterCursor: boolean;
+  /** How positions are written app-wide: DD (default), DMS, DDM, UTM or MGRS (#677). */
+  coordinateFormat: CoordinateFormat;
+  /**
    * "Labels on satellite" (overlays menu → On the map, #484): while the base
    * map is Satellite, draw our vector map's roads, trails and names over the
    * imagery. No effect on the Map base, which carries its own.
@@ -346,6 +359,8 @@ const DEFAULTS: Settings = {
   showPdfOverlay: true,
   pdfWhiteKey: DEFAULT_WHITE_KEY,
   showScaleBar: true,
+  showCenterCursor: true,
+  coordinateFormat: DEFAULT_COORDINATE_FORMAT,
   satelliteLabels: true,
   satelliteImagery: DEFAULT_IMAGERY_LOOK,
   showHillshade: DEFAULT_SHOW_HILLSHADE,
@@ -442,6 +457,8 @@ function snapshot(s: SettingsState): Settings {
     showPdfOverlay,
     pdfWhiteKey,
     showScaleBar,
+    showCenterCursor,
+    coordinateFormat,
     satelliteLabels,
     satelliteImagery,
     showHillshade,
@@ -500,6 +517,8 @@ function snapshot(s: SettingsState): Settings {
     showPdfOverlay,
     pdfWhiteKey,
     showScaleBar,
+    showCenterCursor,
+    coordinateFormat,
     satelliteLabels,
     satelliteImagery,
     showHillshade,
@@ -583,6 +602,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         next.hillshadeStrength = DEFAULT_HILLSHADE_STRENGTH;
       }
       if (!isPeakDensity(next.peakDensity)) next.peakDensity = DEFAULT_PEAK_DENSITY;
+      if (!isCoordinateFormat(next.coordinateFormat)) {
+        next.coordinateFormat = DEFAULT_COORDINATE_FORMAT;
+      }
       if (!isTiltRelief(next.tiltRelief)) next.tiltRelief = DEFAULT_TILT_RELIEF;
       // See-through white is a slider stop (0–4) now; the feature's first cut
       // stored names, which the ladder's typeof check would DROP against the

@@ -92,6 +92,9 @@ export interface SchemeTokens {
     puck: string;
     puckRing: string;
     puckHalo: string;
+    /** The centre cursor (#677): a small dot in a contrasting ring, readable on any tile. */
+    cursor: string;
+    cursorRing: string;
     /**
      * External GNSS receiver chip on map chrome (#588): the state's icon and
      * dot (graphics, ≥ 3:1 on `chrome`); its words are `chromeInk`.
@@ -322,6 +325,8 @@ export const lightScheme: SchemeTokens = {
     puck: palette.puck,
     puckRing: palette.paper,
     puckHalo: 'rgba(47,127,193,0.18)',
+    cursor: palette.ink,
+    cursorRing: palette.paper,
     gnssFixed: '#7CD69C',
     gnssDgps: '#8CC4F0',
     gnssWarn: '#F2A65A',
@@ -495,6 +500,10 @@ export const darkScheme: SchemeTokens = {
     puck: palette.puck,
     puckRing: palette.paper,
     puckHalo: 'rgba(47,127,193,0.22)',
+    // The same stone-in-paper dot as light: the map tiles, not the theme,
+    // are what it sits on (mockup #677 draws one dot for both).
+    cursor: palette.ink,
+    cursorRing: palette.paper,
     gnssFixed: '#7CD69C',
     gnssDgps: '#8CC4F0',
     gnssWarn: '#F2A65A',
@@ -673,6 +682,8 @@ export const sunlightScheme: SchemeTokens = {
     puck: '#1565C0',
     puckRing: palette.white,
     puckHalo: 'rgba(21,101,192,0.2)',
+    cursor: palette.black,
+    cursorRing: palette.white,
     gnssFixed: '#1E6B43',
     gnssDgps: '#1F5F91',
     gnssWarn: '#8F4206',
@@ -849,6 +860,8 @@ export const nightScheme: SchemeTokens = {
     puck: NIGHT_INK,
     puckRing: palette.black,
     puckHalo: 'rgba(255,59,48,0.2)',
+    cursor: NIGHT_INK,
+    cursorRing: palette.black,
     gnssFixed: NIGHT_INK,
     gnssDgps: NIGHT_INK,
     gnssWarn: NIGHT_INK,

@@ -21,6 +21,7 @@ import { formatBytes } from '@core/format';
 import { useLibraryStore } from '@state/libraryStore';
 import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
 import { BetaFeaturesSection } from './BetaFeaturesSection';
+import { CoordinateFormatSetting } from './CoordinateFormatSetting';
 import { ExtensionsSection } from './ExtensionsSection';
 import Constants from 'expo-constants';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -146,6 +147,7 @@ export function SettingsScreen() {
   const windParticles = useSettingsStore((s) => s.windParticles);
   const minDisplacement = useSettingsStore((s) => s.minDisplacementM);
   const units = useSettingsStore((s) => s.units);
+  const showCenterCursor = useSettingsStore((s) => s.showCenterCursor);
   const themeMode = useSettingsStore((s) => s.themeMode);
   const compactMapChrome = useSettingsStore((s) => s.compactMapChrome);
   const showTipJar = useSettingsStore((s) => s.showTipJar);
@@ -366,6 +368,8 @@ export function SettingsScreen() {
                     buttons={UNITS_OPTIONS}
                   />
                 </View>
+                {/* #677: one app-wide coordinate format (map chip, waypoint cards, copies). */}
+                <CoordinateFormatSetting />
                 <List.Item title="Theme" description="Follow the system, or force light / dark" />
                 <View style={styles.segment}>
                   <SegmentedButtons
@@ -428,6 +432,17 @@ export function SettingsScreen() {
                   description="Distance reference under the compass"
                   right={() => (
                     <Switch value={showScaleBar} onValueChange={(v) => set('showScaleBar', v)} />
+                  )}
+                />
+                <List.Item
+                  title="Centre cursor and coordinates"
+                  description="A dot at the map centre, and its coordinates at the bottom (tap to copy)"
+                  right={() => (
+                    <Switch
+                      value={showCenterCursor}
+                      onValueChange={(v) => set('showCenterCursor', v)}
+                      accessibilityLabel="Centre cursor and coordinates"
+                    />
                   )}
                 />
                 {/* #230: the A/B switch for the under-map hillshade. Defaults

@@ -1,5 +1,5 @@
-import { formatLatLng } from '@core/geo/formatCoords';
 import { waypointIconLabel } from '@core/library/waypointIcons';
+import { useCoordinateFormatter } from '@state/useCoordinateFormatter';
 import type { WaypointIcon } from '@core/models';
 import { useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -21,7 +21,8 @@ export interface ViewableWaypoint {
 
 interface Props {
   waypoint: ViewableWaypoint | null;
-  onCopyCoords: () => void;
+  /** Copy `text`: the coordinates exactly as the card shows them (user's format, #677). */
+  onCopyCoords: (text: string) => void;
   onCopyNote: () => void;
   onSharePhoto: () => void;
   onEdit: () => void;
@@ -59,7 +60,9 @@ export function WaypointViewerCard({
 }: Props) {
   const theme = useTheme();
   const [photoOpen, setPhotoOpen] = useState(false);
+  const formatCoords = useCoordinateFormatter();
   if (!waypoint) return null;
+  const coords = formatCoords(waypoint.latitude, waypoint.longitude);
   // The same mark the pin draws, so the card and the map agree at a glance.
   const glyph = mciGlyph(waypoint.icon);
   const note = waypoint.note?.trim() ?? '';
@@ -145,12 +148,12 @@ export function WaypointViewerCard({
 
       <View style={styles.coordsRow}>
         <Text variant="bodySmall" style={[styles.grow, { color: muted }]} selectable>
-          {formatLatLng(waypoint.latitude, waypoint.longitude)}
+          {coords}
         </Text>
         <IconButton
           icon="content-copy"
           size={16}
-          onPress={onCopyCoords}
+          onPress={() => onCopyCoords(coords)}
           accessibilityLabel="Copy coordinates"
           style={styles.tight}
         />

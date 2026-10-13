@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { Animated } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useSettingsStore } from '@state/settingsStore';
 import { HOLD_MS } from './HoldButton';
 import { WaypointViewerCard, type ViewableWaypoint } from './WaypointViewerCard';
 
@@ -105,6 +106,19 @@ describe('WaypointViewerCard (#505)', () => {
     await fireEvent.press(screen.getByLabelText('Copy coordinates'));
     expect(h.onCopyNote).toHaveBeenCalledTimes(1);
     expect(h.onCopyCoords).toHaveBeenCalledTimes(1);
+    expect(h.onCopyCoords).toHaveBeenCalledWith('46.81390, -71.20800');
+  });
+
+  it('shows and copies the coordinates in the app-wide format (#677)', async () => {
+    useSettingsStore.setState({ coordinateFormat: 'mgrs' });
+    try {
+      const h = await setup();
+      expect(screen.getByText('19T CM 31556 86850')).toBeTruthy();
+      await fireEvent.press(screen.getByLabelText('Copy coordinates'));
+      expect(h.onCopyCoords).toHaveBeenCalledWith('19T CM 31556 86850');
+    } finally {
+      useSettingsStore.setState({ coordinateFormat: 'dd' });
+    }
   });
 
   it('a short press on Delete does nothing', async () => {
