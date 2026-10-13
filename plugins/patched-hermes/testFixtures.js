@@ -1,7 +1,7 @@
 // @ts-check
 /**
  * Test-only: minimal ELF shared objects (one code section exporting one
- * symbol, a GNU build-id note) and the make_fcontext bytes the checks look at.
+ * symbol, a GNU build-id note) and real make_fcontext bytes to fill them with.
  */
 const { Buffer } = require('node:buffer');
 

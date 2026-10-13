@@ -8,7 +8,7 @@ const { join } = require('node:path');
 
 const artifact = require('./artifact.json');
 const { findLibs, main } = require('./verify-hermes');
-const { ARM64_PATCHED, X86_64_PATCHED, X86_64_UNPATCHED, hex, makeElf } = require('./testFixtures');
+const { X86_64_UNPATCHED, hex, makeElf } = require('./testFixtures');
 
 let dir = '';
 /** @type {string[]} */
@@ -35,10 +35,14 @@ function put(abi, elf) {
   writeFileSync(p, elf);
   return p;
 }
+const fibers = (/** @type {any} */ abi, /** @type {string} */ id) =>
+  makeElf({ abi, code: X86_64_UNPATCHED, buildId: id });
+const noFibers = (/** @type {any} */ abi, /** @type {string} */ id) =>
+  makeElf({ abi, code: hex('c3'), symbol: 'hermes_other', buildId: id });
 
 describe('verify-hermes', () => {
   it('finds libhermesvm.so recursively, and nothing else', () => {
-    const a = put('x86_64', makeElf({ abi: 'x86_64', code: X86_64_PATCHED }));
+    const a = put('x86_64', noFibers('x86_64', '01'));
     writeFileSync(join(dir, 'lib', 'x86_64', 'libother.so'), 'x');
     expect(findLibs(dir)).toEqual([a]);
     expect(findLibs(a)).toEqual([a]);
@@ -49,47 +53,44 @@ describe('verify-hermes', () => {
     expect(errors.join('\n')).toContain('No libhermesvm.so found');
   });
 
-  it('expect-patched passes patched 64-bit libraries and ignores 32-bit ones', () => {
-    put('x86_64', makeElf({ abi: 'x86_64', code: X86_64_PATCHED, buildId: '01' }));
-    put('arm64-v8a', makeElf({ abi: 'arm64-v8a', code: ARM64_PATCHED, buildId: '02' }));
-    put('x86', makeElf({ abi: 'x86', code: hex('c3'), buildId: '03' }));
-    expect(main(['expect-patched', dir])).toBe(0);
-    expect(logs).toHaveLength(3);
+  it('expect-fiber-free passes fiber-free libraries of every ABI', () => {
+    for (const abi of ['x86_64', 'arm64-v8a', 'x86', 'armeabi-v7a']) put(abi, noFibers(abi, '01'));
+    expect(main(['expect-fiber-free', dir])).toBe(0);
+    expect(logs).toHaveLength(4);
   });
 
-  it('expect-patched fails on the prebuilt; expect-unpatched passes it', () => {
-    put('x86_64', makeElf({ abi: 'x86_64', code: X86_64_UNPATCHED, buildId: '01' }));
-    put('x86', makeElf({ abi: 'x86', code: hex('c3'), buildId: '03' }));
-    expect(main(['expect-patched', dir])).toBe(1);
-    expect(main(['expect-unpatched', dir])).toBe(0);
+  it("expect-fiber-free fails Meta's prebuilt; expect-fibers passes it", () => {
+    put('x86_64', fibers('x86_64', '01'));
+    put('x86', fibers('x86', '03'));
+    expect(main(['expect-fiber-free', dir])).toBe(1);
+    expect(main(['expect-fibers', dir])).toBe(0);
   });
 
-  it('expect-unpatched fails on the patched build, or with no 64-bit library at all', () => {
-    const p = put('x86_64', makeElf({ abi: 'x86_64', code: X86_64_PATCHED, buildId: '01' }));
-    expect(main(['expect-unpatched', dir])).toBe(1);
-    rmSync(p);
-    put('x86', makeElf({ abi: 'x86', code: hex('c3'), buildId: '03' }));
-    expect(main(['expect-unpatched', dir])).toBe(1);
+  it('expect-fibers fails a fiber-free build (the negative control can fail)', () => {
+    put('x86_64', fibers('x86_64', '01'));
+    put('x86', noFibers('x86', '03'));
+    expect(main(['expect-fibers', dir])).toBe(1);
   });
 
   it('packaged checks the build-ids pinned in artifact.json', () => {
-    const pinned = Object.entries(artifact.buildIds)[0];
-    put('x86_64', makeElf({ abi: 'x86_64', code: X86_64_PATCHED, buildId: 'feedface' }));
+    put('x86_64', noFibers('x86_64', 'feedface'));
     expect(main(['packaged', dir])).toBe(1);
-    expect(errors.join('\n')).toContain('not a patched Hermes build pinned in artifact.json');
+    expect(errors.join('\n')).toContain('not a Hermes build pinned in artifact.json');
+    /** @type {Record<string, string[]>} */
+    const ids = artifact.buildIds;
+    const pinned = Object.entries(ids)[0];
     if (pinned) {
-      const [abi, ids] = pinned;
+      const [abi, list] = pinned;
       rmSync(join(dir, 'lib'), { recursive: true });
-      const code = abi === 'arm64-v8a' ? ARM64_PATCHED : X86_64_PATCHED;
-      put(abi, makeElf({ abi: /** @type {any} */ (abi), code, buildId: ids[0] }));
+      put(abi, noFibers(abi, list[0] ?? ''));
       expect(main(['packaged', dir])).toBe(0);
     }
   });
 
   it('describe prints JSON; bad usage is exit 2', () => {
-    const p = put('x86_64', makeElf({ abi: 'x86_64', code: X86_64_PATCHED, buildId: '01' }));
+    const p = put('x86_64', noFibers('x86_64', '01'));
     expect(main(['describe', dir])).toBe(0);
-    expect(JSON.parse(logs.join('\n'))[p]).toMatchObject({ abi: 'x86_64', fcontext: 'patched' });
+    expect(JSON.parse(logs.join('\n'))[p]).toMatchObject({ abi: 'x86_64', fibers: 'absent' });
     expect(main(['describe'])).toBe(2);
     expect(main(['bogus', dir])).toBe(2);
   });

@@ -1,9 +1,10 @@
 {
   "$comment": [
-    "INPUTS of the patched Hermes for Android (#648). .github/workflows/hermes-android.yml builds",
+    "INPUTS of the Hermes we build for Android (#648). .github/workflows/hermes-android.yml builds",
     "com.facebook.hermes:hermes-android from exactly this Hermes commit, plus the patches below, with",
     "Hermes's own Android Gradle build (the one Meta publishes to Maven Central with) and this",
     "toolchain, then publishes the Maven files as the assets of `releaseTag` on this repository.",
+    "The patch builds it WITHOUT Boost.Context fibers (HERMES_ALLOW_BOOST_CONTEXT=0): see the patch.",
     "What was published is pinned in artifact.json; plugins/withPatchedHermes.js consumes it.",
     "`version` MUST equal HERMES_V1_VERSION_NAME in react-native/sdks/hermes-engine/version.properties:",
     "prebuild fails otherwise, so a React Native bump cannot silently ship another Hermes build.",
@@ -15,9 +16,8 @@
   "commit": "becc964bd16002569bf74c4d8c190cfd2ad38985",
   "patches": [
     {
-      "file": "0001-boost-context-frame-pointer-chain-gwp-asan.patch",
-      "upstreamCommit": "73f9af39b1c8460d57d6880ae97d2109259812d1",
-      "sha256": "d43459401c4e038c608ec2c935014793c7cee915a2b629ddbb023d15b8f389b4"
+      "file": "0001-android-build-without-boost-context-fibers.patch",
+      "sha256": "e647211d6a125110ab3bd151577e8e6d2194cb0c8b84ed583baa6970f9e349a5"
     }
   ],
   "toolchain": {
@@ -26,5 +26,5 @@
     "buildTools": "36.0.0",
     "platform": "android-36"
   },
-  "releaseTag": "hermes-android-250829098.0.10-gwpasan.1"
+  "releaseTag": "hermes-android-250829098.0.10-nofibers.1"
 }

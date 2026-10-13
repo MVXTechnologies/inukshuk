@@ -1,27 +1,27 @@
 #!/usr/bin/env node
 // @ts-check
 /**
- * Checks libhermesvm.so files against the patched Hermes (#648). Directories
+ * Checks libhermesvm.so files against our fiber-free Hermes (#648). Directories
  * are searched recursively for libhermesvm.so; finding none is an error, so a
  * moved AGP output can never pass the check by having nothing to look at.
  *
  *   verify-hermes.js packaged <dir|.so>...
  *       Every Android build (Gradle task verifyPatchedHermes<Variant>, added by
  *       plugins/withPatchedHermes.js): each library about to be packaged must
- *       have a build-id pinned in artifact.json, and on arm64-v8a/x86_64 the
- *       patched hoost_make_fcontext. Exit 1 otherwise: the build fails.
- *   verify-hermes.js expect-patched <dir|.so>...
- *   verify-hermes.js expect-unpatched <dir|.so>...
- *       hermes-android.yml: the fresh build carries the fix on every 64-bit
- *       ABI; Meta's prebuilt does not (the negative control proving the check
- *       can fail).
+ *       have a build-id pinned in artifact.json and no Boost.Context fibers.
+ *       Exit 1 otherwise: the build fails.
+ *   verify-hermes.js expect-fiber-free <dir|.so>...
+ *   verify-hermes.js expect-fibers <dir|.so>...
+ *       hermes-android.yml: no library of the fresh build links fibers; every
+ *       library of Meta's prebuilt does (the negative control proving the
+ *       check can fail).
  *   verify-hermes.js describe <dir|.so>...
- *       JSON: path → { abi, buildId, fcontext, size }.
+ *       JSON: path → { abi, buildId, fibers, size }.
  */
 const { readFileSync, readdirSync, statSync } = require('node:fs');
 const { join, relative } = require('node:path');
 
-const { describeLib, fcontextProblems, packagedProblems } = require('./hermesCheck');
+const { describeLib, fiberProblems, packagedProblems } = require('./hermesCheck');
 
 const LIB = 'libhermesvm.so';
 
@@ -44,7 +44,7 @@ function main(argv) {
   const [mode, ...paths] = argv;
   if (!mode || paths.length === 0) {
     console.error(
-      'usage: verify-hermes.js packaged|expect-patched|expect-unpatched|describe <dir|.so>...',
+      'usage: verify-hermes.js packaged|expect-fiber-free|expect-fibers|describe <dir|.so>...',
     );
     return 2;
   }
@@ -64,18 +64,11 @@ function main(argv) {
   if (mode === 'packaged') {
     const artifact = require('./artifact.json');
     judge = (info) => packagedProblems(info, artifact);
-  } else if (mode === 'expect-patched') {
-    judge = fcontextProblems;
-  } else if (mode === 'expect-unpatched') {
-    // Only the ABIs the patch touches can show it; the others say nothing.
+  } else if (mode === 'expect-fiber-free') {
+    judge = fiberProblems;
+  } else if (mode === 'expect-fibers') {
     judge = (info) =>
-      info.fcontext === 'unpatched' || info.fcontext === 'not-applicable'
-        ? []
-        : [`expected the unpatched make_fcontext, found "${info.fcontext}"`];
-    if (!infos.some((x) => x.info.fcontext === 'unpatched')) {
-      console.error('::error::expect-unpatched: no library with an unpatched make_fcontext');
-      return 1;
-    }
+      info.fibers === 'present' ? [] : ['expected Boost.Context fibers, found none'];
   } else {
     console.error(`unknown mode ${mode}`);
     return 2;
@@ -86,7 +79,7 @@ function main(argv) {
     const problems = judge(info);
     const rel = relative(process.cwd(), path);
     const where = rel && !rel.startsWith('..') ? rel : path;
-    const summary = `${info.abi ?? '?'} build-id ${info.buildId ?? '-'} make_fcontext ${info.fcontext}`;
+    const summary = `${info.abi ?? '?'} build-id ${info.buildId ?? '-'} fibers ${info.fibers}`;
     if (problems.length) {
       failed++;
       for (const p of problems) console.error(`::error::${where}: ${p}`);
@@ -98,7 +91,8 @@ function main(argv) {
     console.error(
       mode === 'packaged'
         ? `Patched Hermes check FAILED (${failed}/${infos.length}): this build would ship a Hermes ` +
-            'without the GWP-ASan fiber fix (#648). See docs/CI.md › Patched Hermes.'
+            'that runs its compiler on fibers, which crashes under GWP-ASan (#648). ' +
+            'See docs/CI.md › Patched Hermes.'
         : `${mode}: ${failed}/${infos.length} libraries failed`,
     );
     return 1;

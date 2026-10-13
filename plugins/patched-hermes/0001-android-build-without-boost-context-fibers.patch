@@ -1,0 +1,24 @@
+Inukshuk patch for facebook/hermes hermes-v250829098.0.10 (#648)
+
+Build hermes-android without Boost.Context fibers (HERMES_ALLOW_BOOST_CONTEXT=0,
+the CMake switch Hermes itself uses for its ASan builds). The compiler (eval,
+lazy compilation) then runs on a SerialExecutor pthread instead of a fiber.
+bionic's android_unsafe_frame_pointer_chase bounds its walk by the CURRENT
+THREAD's stack. On a fiber (an mmap'd stack outside the thread's) that bound
+does not hold, and x86_64 Hermes code uses RBP as a general register, so
+GWP-ASan's backtrace walk followed garbage off the fiber stack (SEGV_ACCERR).
+See docs/CI.md > Patched Hermes.
+
+--- a/android/build.gradle.kts
++++ b/android/build.gradle.kts
+@@ -231,6 +231,10 @@
+             // We intentionally build Hermes with Intl support only. This is to simplify
+             // the build setup and to avoid overcomplicating the build-type matrix.
+             "-DHERMES_ENABLE_INTL=True",
++            // Inukshuk (#648): no Boost.Context fibers. The compiler (eval, lazy
++            // compilation) runs on a real thread (SerialExecutor) instead, whose
++            // stack bounds bionic's frame-pointer walker (GWP-ASan) can trust.
++            "-DHERMES_ALLOW_BOOST_CONTEXT=0",
+         )
+
+         targets("hermesvm")
