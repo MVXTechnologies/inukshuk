@@ -20,7 +20,7 @@ import { installErrorReporting, reportError } from '@lib/errorReporting';
 import { sweepUnfinishedTips } from '@lib/iap';
 import { useImportStore } from '@state/importStore';
 import { useLibraryStore } from '@state/libraryStore';
-import { useSettingsStore } from '@state/settingsStore';
+import { selectShowNavigationBar, useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
 import { useSupportStore } from '@state/supportStore';
 import { DisplayConditionContext } from '@ui/displayCondition';
@@ -118,7 +118,8 @@ export default function RootLayout() {
     return () => clearTimeout(timer);
   }, []);
 
-  useAndroidImmersive();
+  // #682: Android's system navigation bar, hidden unless the user keeps it.
+  useAndroidImmersive(useSettingsStore(selectShowNavigationBar));
 
   // Files opened via the OS "Open with" flow are handled in app/+native-intent.tsx
   // (redirectSystemPath), which intercepts the URI before expo-router routes it.

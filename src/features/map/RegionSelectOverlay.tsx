@@ -25,6 +25,7 @@ import { PanResponder, Pressable, StyleSheet, View } from 'react-native';
 import { Button, Icon, SegmentedButtons, Surface, Text, useTheme } from 'react-native-paper';
 
 import { RegionPreviewThumb } from './RegionPreviewThumb';
+import { useMapBottomInset } from './useMapBottomInset';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -91,6 +92,7 @@ const HANDLE_SIZE = 28; // tap target for each corner handle (px)
 const MIN_BOX = 48; // minimum box dimension (px)
 const MAX_TILES = 25_000; // hard cap on total tiles (summed across layers)
 const THUMB = 60; // preview thumbnail size (px)
+const SHEET_PAD_BOTTOM = 14; // sheet's own bottom padding, before any system inset
 
 const QUALITY_ZOOM: Record<Quality, number> = { standard: 15, high: 16, max: 17 };
 const QUALITY_BUTTONS: { value: Quality; label: string }[] = [
@@ -120,6 +122,9 @@ export function RegionSelectOverlay({
 }: Props): ReactElement {
   const theme = useTheme();
   const makeMapMode = variant === 'makeMap';
+  // #682: while recording the tab bar is hidden, so the sheet clears the
+  // system navigation bar itself.
+  const bottomInset = useMapBottomInset();
 
   // Overlay dimensions, populated via onLayout.
   const overlaySize = useRef({ w: 0, h: 0 });
@@ -522,7 +527,11 @@ export function RegionSelectOverlay({
       )}
 
       {/* Compact bottom sheet */}
-      <Surface style={styles.sheet} elevation={4}>
+      <Surface
+        style={[styles.sheet, { paddingBottom: SHEET_PAD_BOTTOM + bottomInset }]}
+        elevation={4}
+        testID="region-select-sheet"
+      >
         <Text variant="titleSmall" style={styles.title}>
           {makeMapMode ? 'Make a map — choose the area' : 'Download offline area'}
         </Text>
@@ -663,7 +672,7 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: 16,
     paddingTop: 10,
-    paddingBottom: 14,
+    paddingBottom: SHEET_PAD_BOTTOM,
     gap: 8,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
