@@ -32,12 +32,23 @@ for p in process_sampling sample_rate; do adb shell setprop "libc.debug.gwp_asan
 adb shell setprop libc.debug.gwp_asan.max_allocs.eval_stress 1024
 ENV="GWP_ASAN_SAMPLE_RATE=1 GWP_ASAN_PROCESS_SAMPLING=1 GWP_ASAN_MAX_ALLOCS=1024"
 
+# The newest tombstone's header and backtrace: which crash it was.
+tombstone() {
+  local t
+  t=$(adb shell 'ls -t /data/tombstones/ | grep -v pb | head -n 1' 2>/dev/null | tr -d '\r')
+  [ -n "$t" ] || return 0
+  echo "--- /data/tombstones/$t"
+  adb shell "sed -n '1,/^backtrace:/p;/^backtrace:/,/^\$/p' /data/tombstones/$t" 2>/dev/null |
+    grep -E 'Cmdline|pid:|signal|Abort|#[0-9]+ pc' | head -n 40
+}
+
 # Sanity first: without GWP-ASan the harness itself must run to the end, or a
 # crash below says nothing about GWP-ASan.
 sanity=$(adb shell "cd $DEV && LD_LIBRARY_PATH=$DEV/ours ./eval_stress 3; echo rc=\$?" 2>&1 | tr -d '\r')
 echo "hermes-gwp-asan sanity (no forced sampling): $(tr '\n' ' ' <<< "$sanity")"
 if ! grep -q '^done ' <<< "$sanity"; then
-  adb logcat -d | grep -E 'eval_stress|DEBUG' | tail -n 60
+  tombstone
+  adb logcat -d | grep -E 'eval_stress' | tail -n 20
   echo "::error title=Hermes GWP-ASan harness::the harness does not run even without forced sampling; it proves nothing"
   exit 3
 fi
@@ -58,7 +69,7 @@ for variant in ours meta; do
       # The first crash of each variant: its backtrace, to show WHICH crash.
       if [ -z "${shown[$variant]:-}" ]; then
         shown[$variant]=1
-        adb logcat -d | grep -E 'F DEBUG' | grep -E 'signal|Abort|#[0-9]{2} pc' | tail -n 30
+        tombstone
       fi
     fi
     adb logcat -c || true
