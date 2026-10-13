@@ -77,7 +77,7 @@ const LEGACY_SYM: Readonly<Record<string, { sym: string; symAliases: readonly st
 /**
  * Newer icons whose label is already a #350 spelling (Garmin's vocabulary
  * overlaps): they write a `<sym>` of their own so a `<sym>`-only reader can
- * still tell them apart. The `pin:style` extension carries the exact id anyway.
+ * still tell them apart.
  */
 const SYM_OVERRIDE: Readonly<Record<string, string>> = {
   spring: 'Natural Spring',
@@ -169,6 +169,18 @@ export function isWaypointIcon(value: unknown): value is WaypointIcon {
 }
 
 /**
+ * Whether a persisted value has the shape of an icon id (lowercase words
+ * joined by hyphens, like every catalogue id) — known to this build or not.
+ * A newer build's icon passes and is kept (it draws as the default pin here);
+ * junk (non-strings, empty, capitals, spaces, overlong) does not.
+ */
+export function isStorableWaypointIconId(value: unknown): value is string {
+  return (
+    typeof value === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && value.length <= 64
+  );
+}
+
+/**
  * The catalogue row for an icon, or `null` for the default pin — including for
  * an icon id a future build knows and this one does not, which is exactly the
  * downgrade case the library migration tolerates rather than rejects.
@@ -225,8 +237,6 @@ interface SearchEntry {
   label: string;
   /** Label, id and keywords, folded, each split into words. */
   words: readonly string[];
-  /** The same, whole phrases ("eau potable"). */
-  phrases: readonly string[];
 }
 
 let searchIndex: readonly SearchEntry[] | null = null;
@@ -236,8 +246,7 @@ function index(): readonly SearchEntry[] {
     return {
       spec,
       label: foldSearchText(spec.label),
-      phrases,
-      words: phrases.flatMap((p) => p.split(/[\s-]+/)),
+      words: phrases.flatMap((p) => p.split(/[\s,-]+/)).filter((w) => w !== ''),
     };
   });
   return searchIndex;
@@ -245,26 +254,20 @@ function index(): readonly SearchEntry[] {
 
 /**
  * Icons matching a typed query, best first: a label that starts with it, then
- * any name or synonym word that starts with it, then a synonym containing it.
- * Every word of a multi-word query must match. Blank = no results (the picker
- * shows its groups instead). Order within a tier is catalogue order.
+ * any name or synonym WORD that starts with it. Whole words and word prefixes
+ * only, never the middle of a word: "tent" finds Camp (tent, tente), not
+ * Hazard through "attention" (2.5.1 QA). Every word of a multi-word query
+ * must match. Blank = no results (the picker shows its groups instead).
+ * Order within a tier is catalogue order.
  */
 export function searchWaypointIcons(query: string): WaypointIconSpec[] {
   const q = foldSearchText(query);
   if (q === '') return [];
   const terms = q.split(' ');
-  const tiers: WaypointIconSpec[][] = [[], [], []];
+  const tiers: WaypointIconSpec[][] = [[], []];
   for (const entry of index()) {
-    const everyTerm = terms.every(
-      (t) => entry.words.some((w) => w.startsWith(t)) || entry.phrases.some((p) => p.includes(t)),
-    );
-    if (!everyTerm) continue;
-    const tier = entry.label.startsWith(q)
-      ? 0
-      : terms.every((t) => entry.words.some((w) => w.startsWith(t)))
-        ? 1
-        : 2;
-    tiers[tier]?.push(entry.spec);
+    if (!terms.every((t) => entry.words.some((w) => w.startsWith(t)))) continue;
+    tiers[entry.label.startsWith(q) ? 0 : 1]?.push(entry.spec);
   }
   return tiers.flat();
 }

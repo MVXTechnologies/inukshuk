@@ -1,8 +1,15 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { FONT_FAMILY } from '@ui/fonts';
-import { buildTabBarOptions, TAB_PILL, tabBarBottomInset, tabLabelStyle } from '@ui/tabBarStyle';
+import {
+  buildTabBarOptions,
+  TAB_PILL,
+  tabBarBottomInset,
+  tabBarHidden,
+  tabLabelStyle,
+} from '@ui/tabBarStyle';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRecorderStore } from '@state/recorderStore';
+import { useScreenSheetStore } from '@state/screenSheetStore';
 import { useWaypointMoveStore } from '@state/waypointMoveStore';
 import { palette } from '@ui/tokens';
 import { Tabs, usePathname, useRouter } from 'expo-router';
@@ -43,6 +50,9 @@ export default function TabsLayout() {
   const recording = useRecorderStore((s) => s.status !== 'idle');
   // Moving a waypoint (#676) owns the bottom edge too: its Cancel/Confirm bar.
   const movingWaypoint = useWaypointMoveStore((s) => s.moving !== null);
+  // So does a sheet that owns the focused screen (the waypoint editor): tab
+  // screens stay mounted, so switching tabs would strand it open, out of sight.
+  const sheetUp = useScreenSheetStore((s) => s.open > 0);
 
   const icon = (name: IconName) => {
     // Hidden from accessibility: the glyph is an icon-font character, and
@@ -96,10 +106,9 @@ export default function TabsLayout() {
           sceneStyle: { backgroundColor: theme.colors.background },
           tabBarLabel: label,
           ...tabBar,
-          tabBarStyle:
-            (recording || movingWaypoint) && route.name === 'index'
-              ? { ...tabBar.tabBarStyle, display: 'none' }
-              : tabBar.tabBarStyle,
+          tabBarStyle: tabBarHidden(route.name, { recording, movingWaypoint, sheetUp })
+            ? { ...tabBar.tabBarStyle, display: 'none' }
+            : tabBar.tabBarStyle,
         })}
       >
         <Tabs.Screen

@@ -24,12 +24,12 @@
 # - Slope's one-time disclaimer snackbar may cover the bottom of the screen;
 #   it auto-dismisses and nothing below asserts during that window.
 # - Weather and Marine are PARKED behind WEATHER_ENABLED / MARINE_ENABLED in
-#   src/core/features/flags.ts. Their rows stay visible but disabled with a
-#   "Coming soon" hint, and this flow asserts exactly that — the parked
-#   state is shipped behaviour, so it gets coverage like any other. When a
-#   flag flips back to true, delete the parked-row block below (marked) and
-#   re-enable .maestro/weather.yaml / .maestro/marine.yaml (their rows now
-#   need a scrollUntilVisible too).
+#   src/core/features/flags.ts. Since 2.5.1 their rows are not shown at all
+#   (the owner's rule: no greyed-out rows), and this flow asserts exactly
+#   that — the parked state is shipped behaviour, so it gets coverage like
+#   any other. When a flag flips back to true, delete the parked-row block
+#   below (marked) and re-enable .maestro/weather.yaml / .maestro/marine.yaml
+#   (their rows need a scrollUntilVisible).
 appId: com.inukshuk.app
 ---
 - runFlow:
@@ -141,24 +141,18 @@ appId: com.inukshuk.app
     commands:
       - assertVisible: 'Slope minimum, 27°'
       - assertVisible: 'Slope maximum, 90°'
-# --- Parked features (src/core/features/flags.ts): Weather and Marine stay
-# at the bottom of the sheet, greyed, with a "Coming soon" hint. Assert the
-# a11y LABELS, not the visible hint text: the rows set `accessible`, which
-# merges each into one element whose label is authoritative on both
-# platforms. The trailing .* covers iOS merging extra state into the string.
+# --- Parked features (src/core/features/flags.ts): Weather and Marine have
+# no row at all on the Sports tab (no greyed "Coming soon" rows, 2.5.1).
+# The heatmap row is the tab's last row: once it is up, the whole tab is.
 - tapOn: 'Sports tab'
 - scrollUntilVisible:
-    element: 'Marine.*coming soon.*'
+    element: 'Personal heatmap.*'
     direction: DOWN
     timeout: 15000
-- assertVisible: 'Weather.*coming soon.*'
-- assertVisible: 'Marine.*coming soon.*'
-# Disabled means disabled: tapping the parked Weather row must NOT open the
-# weather list. The sheet staying on its rows (no list back button) is the
-# proof.
-- tapOn: 'Weather.*coming soon.*'
+- assertNotVisible: 'Weather.*'
+- assertNotVisible: 'Marine.*'
+- assertNotVisible: '.*[Cc]oming soon.*'
 - assertVisible: 'Close overlays'
-- assertNotVisible: 'Back to overlays'
 # Close the sheet with its ✕; the map beneath must still be responsive while
 # the overlay computes (DEM fetch + raster/contour build are async).
 - tapOn: 'Close overlays'

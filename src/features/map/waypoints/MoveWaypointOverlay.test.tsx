@@ -41,11 +41,11 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
-async function setup(dark = false) {
+async function setup(dark = false, zoom: number | null = null) {
   const handlers = { onCancel: jest.fn(), onConfirm: jest.fn(), onLocate: jest.fn() };
   await render(
     <PaperProvider theme={dark ? darkTheme : lightTheme}>
-      <MoveWaypointOverlay units="metric" {...handlers} />
+      <MoveWaypointOverlay units="metric" zoom={zoom} {...handlers} />
       <MoveWaypointLayers topLayerId="top" />
     </PaperProvider>,
   );
@@ -81,7 +81,22 @@ describe('MoveWaypointOverlay (#676)', () => {
       useMapStore.setState({ mapCenter: { latitude: 46.81418, longitude: -71.20726 } }),
     );
     expect(screen.getByTestId('move-coords')).toHaveTextContent('46.81418, -71.20726');
-    expect(screen.getByText('Moved 38 m NE · zoom in for precision')).toBeOnTheScreen();
+    // No scale known: no zoom hint.
+    expect(screen.getByText('Moved 38 m NE')).toBeOnTheScreen();
+  });
+
+  it.each([
+    // ≈ 2.4 m/px at z16 here: a 200 m scale bar — worth zooming in.
+    [16, 'Moved 38 m NE · zoom in for precision'],
+    // ≈ 0.15 m/px at z20: a 20 m scale bar — finer than GPS, no hint (2.5.1 QA).
+    [20, 'Moved 38 m NE'],
+  ])('at zoom %s says "%s"', async (zoom, text) => {
+    useWaypointMoveStore.setState({ moving: TARGET });
+    await setup(false, zoom);
+    await act(async () =>
+      useMapStore.setState({ mapCenter: { latitude: 46.81418, longitude: -71.20726 } }),
+    );
+    expect(screen.getByText(text)).toBeOnTheScreen();
   });
 
   it('draws the dashed line from the old spot to the settled centre', async () => {

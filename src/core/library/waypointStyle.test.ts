@@ -7,6 +7,7 @@ import {
   WAYPOINT_RING,
   WAYPOINT_RING_ON_PAPER,
   contrastRatio,
+  swatchNeedsOutline,
   isWaypointColor,
   isWaypointSize,
   normalizeWaypointStyle,
@@ -106,5 +107,29 @@ describe('style helpers', () => {
       size: 'S',
     });
     expect(normalizeWaypointStyle({ color: 12, size: 'huge' })).toEqual({});
+  });
+});
+
+describe('swatchNeedsOutline (2.5.1 QA: Stone vanished on the dark sheet)', () => {
+  const LIGHT_SHEET = '#FBF8F2';
+  const DARK_SHEET = '#1A1F24';
+
+  it('outlines Paper on the light sheet and Stone on the dark one', () => {
+    expect(swatchNeedsOutline('#FBF8F2', LIGHT_SHEET)).toBe(true);
+    expect(swatchNeedsOutline('#2D3740', DARK_SHEET)).toBe(true);
+  });
+
+  it('leaves every swatch that stands out alone', () => {
+    expect(swatchNeedsOutline('#2D3740', LIGHT_SHEET)).toBe(false);
+    expect(swatchNeedsOutline('#FBF8F2', DARK_SHEET)).toBe(false);
+    expect(swatchNeedsOutline('#D32F2F', DARK_SHEET)).toBe(false);
+  });
+
+  it('outlines at most a couple of the 18 swatches per theme', () => {
+    for (const sheet of [LIGHT_SHEET, DARK_SHEET]) {
+      const outlined = WAYPOINT_COLORS.filter((c) => swatchNeedsOutline(c.hex, sheet));
+      expect(outlined.length).toBeGreaterThanOrEqual(1);
+      expect(outlined.length).toBeLessThanOrEqual(2);
+    }
   });
 });

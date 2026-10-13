@@ -2,7 +2,7 @@ import { sheetBodyMaxHeight } from '@core/map/sheetFit';
 import { useMapAreaBottom, useWindowEdge } from '../mapAreaBottom';
 import { WEATHER_LAYERS, weatherLayerById, type WeatherLayerId } from '@core/geo/weatherLayers';
 import { MARINE_LAYER_IDS } from '@core/geo/marineLayers';
-import { MARINE_ENABLED, PARKED_LABEL, WEATHER_ENABLED } from '@core/features/flags';
+import { MARINE_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { radarAvailableAt } from '@core/weather/modelCoverage';
 import {
   PEAK_DENSITIES,
@@ -70,8 +70,8 @@ import { SatellitePanel } from './SatellitePanel';
  *   "Base map" panel), then Relief: Shading, 3D relief, Contours (+
  *   density), Slope (+ range), Peaks.
  * - Sports — Personal heatmap; Live layers: Weather (its list) and Marine,
- *   both parked this release (greyed "Coming soon", never removed: a feature
- *   that silently disappears reads as a bug). Climbing crags will join here.
+ *   both parked this release, so not shown at all (no greyed rows, owner
+ *   rule, 2.5.1 QA). Climbing crags will join here.
  * - Extensions — the installed extensions' rows, "Get more extensions"; an
  *   empty state with none.
  *
@@ -82,14 +82,14 @@ import { SatellitePanel } from './SatellitePanel';
  * tab strip hides, a back row leads back to the tab. Satellite (labels,
  * imagery brightness), PDF maps (See-through white), Weather (its list) and
  * every extension (`ExtensionPanelModule.Panel`). Nothing in a tab greys out
- * any more except the parked live layers.
+ * (beyond the network-only rows while offline).
  *
  * A11y/Maestro contract: the opener keeps the EXACT label 'Map overlays';
  * the sheet's ✕ is 'Close overlays' — the open-state sentinel. Rows keep the
  * labels the flows key on: 'Content: …', 'PDF maps', 'Personal heatmap',
  * 'Slope', 'Contours', the level names ('Auto', '50 m', 'Heavy', …), 'Slope
- * minimum/maximum', 'Weather'/'Weather: <layer>'/'Weather (coming soon)',
- * 'Marine'/'Marine (coming soon)'; built-in sub-panels go back with 'Back to
+ * minimum/maximum', 'Weather'/'Weather: <layer>' and 'Marine' (absent while
+ * parked); built-in sub-panels go back with 'Back to
  * overlays', extension ones with 'Back to extensions'. Accessories are named
  * 'Options for <item>' — never starting with the row's own label, so a
  * flow's 'PDF maps.*' still finds the row.
@@ -284,51 +284,40 @@ function OverlayRows({
           onToggle={() => set('showHeatmap', !showHeatmap)}
         />
         {/* Climbing crags will join here (owner, 2026-10-05). */}
-        <SectionTitle>Live layers</SectionTitle>
-        {/* Parked (see `@core/features/flags`) outranks the offline-only hint:
-          it is the permanent condition this release. Otherwise these are
-          network-only: under "Locally downloaded only" the layers are dropped
-          from the style, so the rows are disabled with a hint instead of
-          pretending a pick would show anything. */}
-        <NavRow
-          icon="weather-partly-cloudy"
-          label="Weather"
-          hint={
-            !WEATHER_ENABLED
-              ? PARKED_LABEL
-              : offlineOnly
-                ? 'Needs connection'
-                : (weatherName ?? 'Off')
-          }
-          accessibilityLabel={
-            !WEATHER_ENABLED
-              ? `Weather (${PARKED_LABEL.toLowerCase()})`
-              : offlineOnly
+        {/* Parked layers (see `@core/features/flags`) have NO row: the owner's
+          rule is no greyed-out rows (2.5.1 QA). With both parked the section
+          is gone. Otherwise these are network-only: under "Locally
+          downloaded only" the layers are dropped from the style, so the rows
+          are disabled with a hint instead of pretending a pick would show
+          anything. */}
+        {(WEATHER_ENABLED || MARINE_ENABLED) && <SectionTitle>Live layers</SectionTitle>}
+        {WEATHER_ENABLED && (
+          <NavRow
+            icon="weather-partly-cloudy"
+            label="Weather"
+            hint={offlineOnly ? 'Needs connection' : (weatherName ?? 'Off')}
+            accessibilityLabel={
+              offlineOnly
                 ? 'Weather (needs connection)'
                 : weatherName !== null
                   ? `Weather: ${weatherName}`
                   : 'Weather'
-          }
-          disabled={!WEATHER_ENABLED || offlineOnly}
-          onPress={() => openSubPanel('weather')}
-        />
-        <SwitchRow
-          icon="anchor"
-          label="Marine"
-          hint={
-            !MARINE_ENABLED ? PARKED_LABEL : offlineOnly ? 'Needs connection' : 'Nautical chart'
-          }
-          accessibilityLabel={
-            !MARINE_ENABLED
-              ? `Marine (${PARKED_LABEL.toLowerCase()})`
-              : offlineOnly
-                ? 'Marine (needs connection)'
-                : 'Marine'
-          }
-          value={marineOn}
-          disabled={!MARINE_ENABLED || offlineOnly}
-          onToggle={() => set('marineLayers', marineOn ? [] : [...MARINE_LAYER_IDS])}
-        />
+            }
+            disabled={offlineOnly}
+            onPress={() => openSubPanel('weather')}
+          />
+        )}
+        {MARINE_ENABLED && (
+          <SwitchRow
+            icon="anchor"
+            label="Marine"
+            hint={offlineOnly ? 'Needs connection' : 'Nautical chart'}
+            accessibilityLabel={offlineOnly ? 'Marine (needs connection)' : 'Marine'}
+            value={marineOn}
+            disabled={offlineOnly}
+            onToggle={() => set('marineLayers', marineOn ? [] : [...MARINE_LAYER_IDS])}
+          />
+        )}
       </>
     );
   }

@@ -15,7 +15,7 @@ import { useOverlayStatusStore } from '@state/overlayStatusStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
 import * as Sharing from 'expo-sharing';
-import { useRouter } from 'expo-router';
+import { useIsFocused, useRouter } from 'expo-router';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -143,6 +143,7 @@ const DELETE_COPY: Record<DeleteTarget['kind'], { title: string; body: (name: st
 export function LibraryScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const isFocused = useIsFocused();
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const night = useDisplayCondition() === 'night';
@@ -1508,6 +1509,7 @@ export function LibraryScreen() {
         onSetPhoto={setWaypointPhoto}
         onSetIcon={setWaypointIcon}
         onSetStyle={setWaypointStyle}
+        screenFocused={isFocused}
       />
 
       {/* Trail filter panel (header sort/filter button). Stays mounted so its

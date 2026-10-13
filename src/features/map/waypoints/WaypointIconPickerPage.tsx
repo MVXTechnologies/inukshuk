@@ -33,7 +33,9 @@ function toRows(sections: readonly Section[]): { rows: Row[]; starts: Map<string
   for (const s of sections) {
     if (s.icons.length === 0) continue;
     starts.set(s.id, rows.length);
-    rows.push({ kind: 'header', key: `h-${s.id}`, title: s.title });
+    // Untitled (the search results): no header row — an empty 34 dp row put
+    // the results that much below the count (2.5.1 QA).
+    if (s.title !== '') rows.push({ kind: 'header', key: `h-${s.id}`, title: s.title });
     for (let i = 0; i < s.icons.length; i += COLUMNS) {
       rows.push({ kind: 'tiles', key: `${s.id}-${i}`, icons: s.icons.slice(i, i + COLUMNS) });
     }
@@ -199,6 +201,11 @@ export function WaypointIconPickerPage({
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          // A ScrollView grows by default (flexGrow 1): in this column it took
+          // half the page as blank space above the list (2.5.1 QA). The
+          // strip is exactly its chips' height.
+          style={styles.chipStrip}
+          testID="icon-picker-chips"
           contentContainerStyle={styles.chips}
           keyboardShouldPersistTaps="handled"
         >
@@ -281,6 +288,7 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 15, paddingVertical: 0 },
   clear: { margin: 0 },
+  chipStrip: { flexGrow: 0, flexShrink: 0 },
   chips: { gap: 8, paddingHorizontal: 16, paddingBottom: 6 },
   chip: {
     height: 32,

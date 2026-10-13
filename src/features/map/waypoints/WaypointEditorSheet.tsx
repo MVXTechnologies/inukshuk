@@ -3,19 +3,19 @@ import {
   withFavoriteToggled,
   withRecentIcon,
 } from '@core/library/waypointIconPrefs';
-import { waypointIconLabel } from '@core/library/waypointIcons';
+import { isWaypointIcon, waypointIconLabel } from '@core/library/waypointIcons';
 import {
   WAYPOINT_COLORS,
   WAYPOINT_PIN_DIAMETER,
-  WAYPOINT_RING,
   WAYPOINT_SIZES,
   normalizeWaypointColor,
+  swatchNeedsOutline,
   waypointInk,
   waypointSize,
   waypointSizeName,
   waypointStyleCaption,
 } from '@core/library/waypointStyle';
-import type { WaypointIcon, WaypointSize } from '@core/models';
+import type { StoredWaypointIcon, WaypointIcon, WaypointSize } from '@core/models';
 import * as storage from '@data/storage';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useSettingsStore } from '@state/settingsStore';
@@ -25,9 +25,8 @@ import { KEYBOARD_DONE_BAR_ID, KeyboardDoneBar } from '@ui/components/KeyboardDo
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import * as ImagePicker from 'expo-image-picker';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
-  BackHandler,
   Image,
   Keyboard,
   Pressable,
@@ -40,6 +39,7 @@ import { Button, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useIosKeyboardHeight } from '../../common/useIosKeyboardHeight';
+import { useScreenSheet } from '../../common/useScreenSheet';
 import { Segmented } from '../components/mapSheet';
 import { IconTile } from './IconTile';
 import { WaypointIconPickerPage } from './WaypointIconPickerPage';
@@ -53,7 +53,7 @@ export interface EditableWaypoint {
   label: string;
   photoUri?: string;
   /** Chosen pin icon (#350); standalone waypoints only — see `onSetIcon`. */
-  icon?: WaypointIcon;
+  icon?: StoredWaypointIcon;
   /** Pin colour and size (#675); standalone waypoints only — see `onSetStyle`. */
   color?: string;
   size?: WaypointSize;
@@ -93,6 +93,13 @@ export interface WaypointEditorProps {
   onSetIcon?: (icon: WaypointIcon | undefined) => void;
   /** Change colour or size (#675). Omitted, like `onSetIcon`, for live pins. */
   onSetStyle?: (patch: WaypointStylePatch) => void;
+  /**
+   * Whether the host screen is focused (`useIsFocused()`); default true. The
+   * sheet takes Android Back and hides the tab bar only while it is: tab
+   * screens stay mounted, so an editor left open on the Map must not answer
+   * Back pressed on the Library.
+   */
+  screenFocused?: boolean;
 }
 
 /**
@@ -102,7 +109,9 @@ export interface WaypointEditorProps {
  * the pin, then Name and Note, the icon row (favourites, then recents, then
  * "All icons ›" to the full picker page), 18 colours, the size, the photo,
  * and Delete / Done. Android Back returns from the picker page, else closes
- * (saving), as does a tap on the scrim.
+ * (saving), as does a tap on the scrim. While it is up on a focused screen,
+ * the tab bar hides (`useScreenSheet`), so it cannot be left open behind
+ * another tab.
  *
  * Shared by the map (pins, "Add waypoint here", the snackbar's EDIT) and the
  * Library's waypoint rows.
@@ -123,6 +132,7 @@ function EditorContent({
   onSetPhoto,
   onSetIcon,
   onSetStyle,
+  screenFocused = true,
 }: WaypointEditorProps) {
   const theme = useTheme();
   const tokens = useSchemeTokens();
@@ -133,6 +143,13 @@ function EditorContent({
   const [pendingPhoto, setPendingPhoto] = useState<string | null>(null);
   const [page, setPage] = useState<'main' | 'icons'>('main');
   const iconPrefs = useSettingsStore((s) => s.waypointIcons);
+  // The quick row's order as the sheet opened: starring or picking does not
+  // shuffle the tiles while it is open (the stars themselves stay live).
+  const [rowPrefs] = useState(iconPrefs);
+  // The icon picked in this session: it joins the recents when the sheet is
+  // saved, not on the tap — the quick row must not reorder under the finger
+  // while the editor is open (2.5.1 QA).
+  const [pickedIcon, setPickedIcon] = useState<WaypointIcon | undefined>(undefined);
   const setSetting = useSettingsStore((s) => s.set);
 
   const showError = (err: unknown) =>
@@ -155,9 +172,23 @@ function EditorContent({
     setPendingPhoto(null);
   };
 
+  const rememberRecentIcon = () => {
+    if (pickedIcon === undefined) return;
+    const prefs = useSettingsStore.getState().waypointIcons;
+    const next = withRecentIcon(prefs, pickedIcon);
+    if (next === prefs) return;
+    try {
+      setSetting('waypointIcons', next);
+    } catch {
+      // A recents write is a convenience; the icon itself is saved.
+    }
+  };
+
   const save = () => {
     retryPhoto();
     onSave();
+    // Only once the save went through (onSave throws on a failed commit).
+    rememberRecentIcon();
   };
 
   /**
@@ -170,40 +201,23 @@ function EditorContent({
     perform(then);
   };
 
-  // Android Back: out of the picker page first, then close (saving).
-  const backRef = useRef<() => void>(() => undefined);
-  useEffect(() => {
-    backRef.current = () => {
-      if (page === 'icons') setPage('main');
-      else close(save)();
-    };
+  // Android Back: out of the picker page first, then close (saving). Only
+  // while the host screen is focused, which also hides the tab bar.
+  useScreenSheet(screenFocused, () => {
+    if (page === 'icons') setPage('main');
+    else close(save)();
   });
-  useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      backRef.current();
-      return true;
-    });
-    return () => sub.remove();
-  }, []);
 
   const pickIcon = useCallback(
     (icon: WaypointIcon | undefined) => {
       if (!onSetIcon) return;
       onSetIcon(icon);
-      if (icon !== undefined) {
-        const prefs = useSettingsStore.getState().waypointIcons;
-        const next = withRecentIcon(prefs, icon);
-        if (next !== prefs) {
-          try {
-            setSetting('waypointIcons', next);
-          } catch {
-            // A recents write is a convenience; the icon itself is saved.
-          }
-        }
-      }
+      setPickedIcon(icon);
+      // Coming back from the picker's search: the keyboard goes with it.
+      Keyboard.dismiss();
       setPage('main');
     },
-    [onSetIcon, setSetting],
+    [onSetIcon],
   );
 
   const toggleFavorite = useCallback(
@@ -249,7 +263,9 @@ function EditorContent({
   if (!waypoint) return null;
   const sheetWidth = Math.min(width, 560);
   const styled = onSetIcon !== undefined || onSetStyle !== undefined;
-  const quick = quickRowIcons(waypoint.icon, iconPrefs, 9);
+  // A newer build's icon (kept, drawn as the default pin) selects nothing here.
+  const knownIcon = isWaypointIcon(waypoint.icon) ? waypoint.icon : undefined;
+  const quick = quickRowIcons(knownIcon, rowPrefs, 9);
   const favSet = new Set(iconPrefs.favorites);
   const tileW = 64;
   // Nine swatches a row (two rows of nine), sized to the sheet: 28 dp at 360.
@@ -280,7 +296,7 @@ function EditorContent({
         <View style={[styles.grab, { backgroundColor: tokens.outlineVariant }]} />
         {page === 'icons' ? (
           <WaypointIconPickerPage
-            value={waypoint.icon}
+            value={knownIcon}
             favorites={iconPrefs.favorites}
             recents={iconPrefs.recents}
             onPick={pickIcon}
@@ -367,6 +383,7 @@ function EditorContent({
                         showsHorizontalScrollIndicator={false}
                         keyboardShouldPersistTaps="handled"
                         style={styles.iconScroll}
+                        testID="waypoint-icon-strip"
                         contentContainerStyle={styles.iconScrollContent}
                       >
                         <View
@@ -437,9 +454,9 @@ function EditorContent({
                                 borderRadius: swatch / 2,
                                 backgroundColor: c.hex,
                               },
-                              c.hex === WAYPOINT_RING && {
+                              swatchNeedsOutline(c.hex, tokens.surface) && {
                                 borderWidth: 1,
-                                borderColor: palette.granite,
+                                borderColor: theme.dark ? tokens.outline : palette.granite,
                               },
                               on && { borderWidth: 2.5, borderColor: tokens.ink },
                             ]}
@@ -585,18 +602,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 12,
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    // Pin and caption on one centre line (2.5.1 QA: the pin sat low).
+    alignItems: 'center',
     paddingHorizontal: 24,
-    paddingBottom: 14,
     gap: 16,
     overflow: 'hidden',
   },
   previewPin: { width: MAX_PIN, alignItems: 'center' },
-  caption: { flex: 1, fontSize: 13, fontWeight: '700', alignSelf: 'center' },
+  caption: { flex: 1, fontSize: 13, fontWeight: '700' },
   field: { marginBottom: 10 },
   section: { fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginTop: 18, marginBottom: 6 },
   iconRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  iconScroll: { flex: 1 },
+  // Shrinks to its tiles (scrolls when they overflow), so "All icons ›"
+  // follows the last tile instead of a blank slot.
+  iconScroll: { flexGrow: 0, flexShrink: 1 },
   iconScrollContent: { paddingRight: 4 },
   iconTiles: { flexDirection: 'row', gap: 4 },
   allIcons: {

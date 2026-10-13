@@ -219,6 +219,19 @@ describe('searchWaypointIcons', () => {
     expect(ids('spring')).toEqual(expect.arrayContaining(['water', 'spring']));
   });
 
+  it('matches whole words and word prefixes, never the middle of a word', () => {
+    // "attention", "potentiel"… must not answer "tent".
+    expect(ids('tent')[0]).toBe('camp');
+    for (const notTent of ['hazard', 'important', 'nice-spot']) {
+      expect(ids('tent')).not.toContain(notTent);
+    }
+    expect(ids('tente')).toContain('camp');
+    expect(ids('campsite')).toContain('camp');
+    expect(ids('camping')).toContain('camp');
+    // A prefix still works while typing.
+    expect(ids('wat')).toContain('water');
+  });
+
   it('needs every word of a multi-word query', () => {
     expect(ids('eau potable')).toContain('potable');
     expect(ids('eau potable')).not.toContain('lake');

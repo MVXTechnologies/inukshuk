@@ -77,6 +77,14 @@ export function lookaheadBearingDeg(
 
 export interface FollowSession {
   update(fix: LatLng): FollowReadout;
+  /**
+   * Swap the target list (a waypoint was added, moved or deleted, a note
+   * edited) WITHOUT starting over: where you are on the trail, your furthest
+   * progress and the on/off-trail latch all stay. Rebuilding the session
+   * instead would throw the tracker's window away, and its whole-trail
+   * re-acquisition can land on the other leg of an out-and-back.
+   */
+  setTargets(targets: FollowTargets): void;
 }
 
 export function createFollowSession(
@@ -90,7 +98,11 @@ export function createFollowSession(
   let onTrail = true;
   // Furthest point reached along the trail (see TURN_BACK_M).
   let progressM = -Infinity;
+  let current = targets;
   return {
+    setTargets(next) {
+      current = next;
+    },
     update(fix) {
       const pos = tracker.update(fix);
       if (pos.alongM > progressM || pos.alongM < progressM - TURN_BACK_M) progressM = pos.alongM;
@@ -99,7 +111,7 @@ export function createFollowSession(
       const trailBearingDeg = onTrail
         ? lookaheadBearingDeg(trail, fix, pos.alongM)
         : initialBearingDeg(fix, nearest);
-      const target = nextFollowTarget(targets, progressM);
+      const target = nextFollowTarget(current, progressM);
       const straight = haversineMeters(fix, target.at);
       const viaTrail = Math.max(0, target.alongM - pos.alongM) + pos.distM;
       return {

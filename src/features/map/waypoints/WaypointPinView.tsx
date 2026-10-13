@@ -6,7 +6,7 @@ import {
   waypointRing,
   waypointSize,
 } from '@core/library/waypointStyle';
-import type { WaypointIcon, WaypointSize } from '@core/models';
+import type { StoredWaypointIcon, WaypointSize } from '@core/models';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { InukshukGlyph } from '@ui/components/InukshukGlyph';
 import { palette } from '@ui/tokens';
@@ -15,7 +15,7 @@ import { StyleSheet, View } from 'react-native';
 import { mciGlyph } from '../components/waypointGlyph';
 
 interface Props {
-  icon?: WaypointIcon;
+  icon?: StoredWaypointIcon;
   color?: string;
   size?: WaypointSize;
   /** Override the size's diameter (dp), e.g. to fit a tile. */

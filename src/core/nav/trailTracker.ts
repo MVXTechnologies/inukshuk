@@ -96,8 +96,13 @@ export function createTrailTracker(
   // The fix the last whole-trail search answered (for the far throttle).
   let globalAt: { x: number; y: number } | null = null;
 
-  const window = (px: number, py: number, movedM: number, cost: TrailFix['cost']) => {
-    const prev = last!;
+  const window = (
+    prev: TrailProjection,
+    px: number,
+    py: number,
+    movedM: number,
+    cost: TrailFix['cost'],
+  ) => {
     const from = prev.alongM - (backM + movedM);
     const to = prev.alongM + aheadM + 2 * movedM;
     let best: TrailProjection | null = null;
@@ -110,11 +115,12 @@ export function createTrailTracker(
     const lastSeg = Math.max(0, trail.n - 2);
     // Forward from the current segment (inclusive), then backward.
     for (let s = prev.seg; s <= lastSeg && cost.windowSegments < maxWindowSegments; s++) {
-      if (trail.along[s]! > to) break;
+      // Past the end of the along axis is past `to` too.
+      if ((trail.along[s] ?? Infinity) > to) break;
       if (trail.segActive[s] || trail.n === 1) take(s);
     }
     for (let s = prev.seg - 1; s >= 0 && cost.windowSegments < maxWindowSegments; s--) {
-      if (trail.along[s + 1]! < from) break;
+      if ((trail.along[s + 1] ?? -Infinity) < from) break;
       if (trail.segActive[s]) take(s);
     }
     return best as TrailProjection | null;
@@ -127,7 +133,7 @@ export function createTrailTracker(
       let result: TrailProjection | null = null;
       if (last !== null) {
         const movedM = Math.hypot(px - lastX, py - lastY);
-        const inWindow = window(px, py, movedM, cost);
+        const inWindow = window(last, px, py, movedM, cost);
         if (inWindow !== null && inWindow.distM <= windowTrustM) {
           result = inWindow;
         } else if (

@@ -3,14 +3,13 @@ import {
   PIN_IMAGE,
   PIN_LABEL_MIN_ZOOM,
   glyphImagesInUse,
-  pinBodyLayout,
-  pinBodyPaint,
   pinFeatureCollection,
-  pinGlyphLayout,
-  pinGlyphPaint,
+  pinLabelFilter,
   pinLabelLayout,
   pinLabelPaint,
   pinPhotoFilter,
+  pinLayout,
+  pinPaint,
   pinPhotoLayout,
   type PinInput,
 } from '@core/map/waypointPinStyle';
@@ -23,8 +22,8 @@ import { WAYPOINT_PIN_IMAGES } from './waypointPinImages';
 
 /** Layer ids (stable: e2e and the tap code may name them). */
 export const WAYPOINT_PIN_LAYERS = {
-  body: 'waypoint-pin-body',
-  glyph: 'waypoint-pin-glyph',
+  /** Body and glyph of every pin, back to front (see waypointPinStyle). */
+  pin: 'waypoint-pin',
   photo: 'waypoint-pin-photo',
   label: 'waypoint-pin-label',
 } as const;
@@ -46,7 +45,7 @@ const afterOf = (id: string | undefined): { afterId?: string } =>
 
 /**
  * The main map's waypoint pins (#675): one GeoJSON source, SDF sprites tinted
- * per pin, a fixed four layers however many pins there are. The style and the
+ * per pin, a fixed three layers however many pins there are. The style and the
  * reasoning are in `@core/map/waypointPinStyle`.
  *
  * Taps are still hit-tested at the map level (MapScreen's onMapPress), exactly
@@ -86,25 +85,17 @@ export const WaypointPinLayers = memo(function WaypointPinLayers({
   const layers = useMemo(
     () => [
       <Layer
-        key="body"
-        id={WAYPOINT_PIN_LAYERS.body}
+        key="pin"
+        id={WAYPOINT_PIN_LAYERS.pin}
         {...afterOf(topLayerId)}
         type="symbol"
-        layout={pinBodyLayout}
-        paint={pinBodyPaint}
-      />,
-      <Layer
-        key="glyph"
-        id={WAYPOINT_PIN_LAYERS.glyph}
-        afterId={WAYPOINT_PIN_LAYERS.body}
-        type="symbol"
-        layout={pinGlyphLayout}
-        paint={pinGlyphPaint}
+        layout={pinLayout}
+        paint={pinPaint}
       />,
       <Layer
         key="photo"
         id={WAYPOINT_PIN_LAYERS.photo}
-        afterId={WAYPOINT_PIN_LAYERS.glyph}
+        afterId={WAYPOINT_PIN_LAYERS.pin}
         type="symbol"
         filter={pinPhotoFilter}
         layout={pinPhotoLayout}
@@ -117,6 +108,7 @@ export const WaypointPinLayers = memo(function WaypointPinLayers({
               afterId={WAYPOINT_PIN_LAYERS.photo}
               type="symbol"
               minzoom={PIN_LABEL_MIN_ZOOM}
+              filter={pinLabelFilter}
               layout={pinLabelLayout(font)}
               paint={pinLabelPaint(mapInk, mapHalo)}
             />,

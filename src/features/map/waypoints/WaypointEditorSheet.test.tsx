@@ -1,6 +1,7 @@
 import { EMPTY_WAYPOINT_ICON_PREFS } from '@core/library/waypointIconPrefs';
 import type { WaypointIcon, WaypointSize } from '@core/models';
 import * as storage from '@data/storage';
+import { useScreenSheetStore } from '@state/screenSheetStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { darkTheme, lightTheme } from '@ui/theme';
@@ -123,6 +124,70 @@ describe('WaypointEditorSheet: name and note (#232, kept by #675)', () => {
   });
 });
 
+describe('Back and the tab bar follow the host screen’s focus (2.5.1 review)', () => {
+  const props = (screenFocused: boolean, onSave = jest.fn()): WaypointEditorProps => ({
+    waypoint: { label: 'Waypoint 7' },
+    name: 'Waypoint 7',
+    onChangeName: jest.fn(),
+    draft: '',
+    onChangeDraft: jest.fn(),
+    onSave,
+    onDelete: jest.fn(),
+    onSetPhoto: jest.fn(),
+    screenFocused,
+  });
+  const sheet = (p: WaypointEditorProps) => (
+    <PaperProvider theme={lightTheme}>
+      <WaypointEditorSheet {...p} />
+    </PaperProvider>
+  );
+  const sheetsUp = () => useScreenSheetStore.getState().open;
+
+  beforeEach(() => useScreenSheetStore.setState({ open: 0 }));
+
+  it('takes Back and hides the tab bar while its screen is focused', async () => {
+    const onSave = jest.fn();
+    const view = await render(sheet(props(true, onSave)));
+    expect(backHandlers).toHaveLength(1);
+    expect(sheetsUp()).toBe(1);
+    await pressBack();
+    expect(onSave).toHaveBeenCalledTimes(1);
+    await view.unmount();
+    expect(backHandlers).toHaveLength(0);
+    expect(sheetsUp()).toBe(0);
+  });
+
+  it('leaves Back alone and the tab bar up once its screen loses focus (Map → Library)', async () => {
+    const onSave = jest.fn();
+    const view = await render(sheet(props(true, onSave)));
+    await view.rerender(sheet(props(false, onSave)));
+    // Back on the other tab navigates: nothing of the hidden editor answers it.
+    expect(backHandlers).toHaveLength(0);
+    expect(sheetsUp()).toBe(0);
+    expect(onSave).not.toHaveBeenCalled();
+    // Back on the Map again: the editor is still there and takes Back again.
+    await view.rerender(sheet(props(true, onSave)));
+    expect(backHandlers).toHaveLength(1);
+    expect(sheetsUp()).toBe(1);
+    await pressBack();
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('registers nothing when it opens on an unfocused screen', async () => {
+    await render(sheet(props(false)));
+    expect(backHandlers).toHaveLength(0);
+    expect(sheetsUp()).toBe(0);
+  });
+
+  it('keeps one listener across re-renders (no re-registration per keystroke)', async () => {
+    const view = await render(sheet(props(true)));
+    const first = backHandlers[0];
+    await view.rerender(sheet({ ...props(true), name: 'Waypoint 7b' }));
+    expect(backHandlers).toEqual([first]);
+    expect(sheetsUp()).toBe(1);
+  });
+});
+
 describe('persistence failure feedback', () => {
   it.each(['Done', 'Delete'])('keeps drafts and permits retry after %s fails', async (action) => {
     const h = await setup({ name: 'Spring' });
@@ -192,11 +257,68 @@ describe('icon (#675)', () => {
     expect(labels.slice(0, 2)).toEqual(['Fire', 'Bike']);
   });
 
-  it('picks from the quick row and remembers it as recent', async () => {
+  it('picks from the quick row and remembers it as recent on save, not on the tap', async () => {
     const h = await setup();
+    const order = () =>
+      within(screen.getByLabelText('Pin icon'))
+        .getAllByRole('radio')
+        .map((t) => t.props.accessibilityLabel as string);
+    const before = order();
     await fireEvent.press(screen.getByLabelText('Summit'));
     expect(h.onSetIcon).toHaveBeenCalledWith('summit');
+    // Open editor: the recents and the row's order stand still.
+    expect(useSettingsStore.getState().waypointIcons.recents).toEqual([]);
+    expect(order()).toEqual(before);
+    await fireEvent.press(sheetDone());
     expect(useSettingsStore.getState().waypointIcons.recents[0]).toBe('summit');
+  });
+
+  it('keeps the recents untouched when the save fails', async () => {
+    const h = await setup();
+    h.onSave.mockImplementation(() => {
+      throw new Error('disk full');
+    });
+    await fireEvent.press(screen.getByLabelText('Summit'));
+    await fireEvent.press(sheetDone());
+    expect(useSettingsStore.getState().waypointIcons.recents).toEqual([]);
+  });
+
+  it('puts "All icons" right after the tiles (no blank slot)', async () => {
+    await setup();
+    // The tile strip shrinks to its tiles instead of filling the row.
+    const flat = StyleSheet.flatten(screen.getByTestId('waypoint-icon-strip').props.style) as {
+      flexGrow?: number;
+      flex?: number;
+    };
+    expect(flat.flexGrow).toBe(0);
+    expect(flat.flex).toBeUndefined();
+  });
+
+  it('dismisses the keyboard when an icon is picked from the search', async () => {
+    const dismiss = jest.spyOn(Keyboard, 'dismiss');
+    await setup();
+    await fireEvent.press(screen.getByLabelText('All icons'));
+    await fireEvent.changeText(await screen.findByLabelText('Search icons'), 'chute');
+    dismiss.mockClear();
+    await fireEvent.press(screen.getByLabelText('Waterfall'));
+    expect(dismiss).toHaveBeenCalled();
+    expect(await screen.findByLabelText('Waypoint name')).toBeOnTheScreen();
+  });
+
+  it('lays the icon picker out without a blank band, and the results right under the count', async () => {
+    await setup();
+    await fireEvent.press(screen.getByLabelText('All icons'));
+    await screen.findByLabelText('Search icons');
+    // The chip strip is a ScrollView: by default it grows and split the page
+    // with the list (≈650 dp of blank before the first section).
+    const chips = StyleSheet.flatten(screen.getByTestId('icon-picker-chips').props.style) as {
+      flexGrow?: number;
+    };
+    expect(chips.flexGrow).toBe(0);
+    // Search results: no empty header row above them.
+    await fireEvent.changeText(screen.getByLabelText('Search icons'), 'chute');
+    const list = screen.getByTestId('icon-picker-list');
+    expect(within(list).queryAllByRole('header')).toHaveLength(0);
   });
 
   it('opens the full picker, searches in French, picks and returns', async () => {
@@ -248,6 +370,33 @@ describe('icon (#675)', () => {
     await screen.findByLabelText('Search icons');
     // Virtualized: the first screenfuls, not the whole catalogue.
     expect(screen.getAllByRole('radio').length).toBeLessThan(80);
+  });
+});
+
+describe('preview and swatches (2.5.1 QA)', () => {
+  it('centres the pin and its caption on one line', async () => {
+    await setup({ icon: 'camp' });
+    const preview = StyleSheet.flatten(screen.getByTestId('waypoint-preview').props.style) as {
+      alignItems?: string;
+    };
+    expect(preview.alignItems).toBe('center');
+  });
+
+  it.each([
+    ['light', false, 'Paper'],
+    ['dark', true, 'Stone'],
+  ])('outlines the swatch that melts into the %s sheet', async (_n, dark, name) => {
+    await setup({ dark });
+    const group = screen.getByLabelText('Pin colour');
+    const style = StyleSheet.flatten(within(group).getByLabelText(name).props.style) as {
+      borderWidth?: number;
+    };
+    expect(style.borderWidth).toBe(1);
+    // A swatch that stands out on its own gets no outline.
+    const red = StyleSheet.flatten(within(group).getByLabelText('Red').props.style) as {
+      borderWidth?: number;
+    };
+    expect(red.borderWidth).toBeUndefined();
   });
 });
 

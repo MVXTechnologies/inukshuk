@@ -127,8 +127,8 @@ export function prepareTrail(
   let minLon = Infinity;
   let maxLon = -Infinity;
   for (let i = 0; i < n; i++) {
-    const la = lat[i]!;
-    const lo = lon[i]!;
+    const la = lat[i] ?? 0;
+    const lo = lon[i] ?? 0;
     if (la < minLat) minLat = la;
     if (la > maxLat) maxLat = la;
     if (lo < minLon) minLon = lo;
@@ -144,8 +144,8 @@ export function prepareTrail(
   const x = new Float64Array(n);
   const y = new Float64Array(n);
   for (let i = 0; i < n; i++) {
-    x[i] = (lonA[i]! - lon0) * kx;
-    y[i] = (latA[i]! - lat0) * ky;
+    x[i] = ((lonA[i] ?? 0) - lon0) * kx;
+    y[i] = ((latA[i] ?? 0) - lat0) * ky;
   }
 
   const along = new Float64Array(n);
@@ -156,12 +156,12 @@ export function prepareTrail(
     segActive[i] = active ? 1 : 0;
     const len = active
       ? haversineMeters(
-          { latitude: latA[i]!, longitude: lonA[i]! },
-          { latitude: latA[i + 1]!, longitude: lonA[i + 1]! },
+          { latitude: latA[i] ?? 0, longitude: lonA[i] ?? 0 },
+          { latitude: latA[i + 1] ?? 0, longitude: lonA[i + 1] ?? 0 },
         )
       : 0;
     edgeLen[i] = len;
-    along[i + 1] = along[i]! + len;
+    along[i + 1] = (along[i] ?? 0) + len;
   }
 
   const grid = buildGrid(x, y, segActive, n);
@@ -174,7 +174,7 @@ export function prepareTrail(
     along,
     edgeLen,
     segActive,
-    lengthM: along[n - 1]!,
+    lengthM: along[n - 1] ?? 0,
     kx,
     ky,
     lon0,
@@ -189,10 +189,10 @@ function buildGrid(x: Float64Array, y: Float64Array, segActive: Uint8Array, n: n
   let maxX = -Infinity;
   let maxY = -Infinity;
   for (let i = 0; i < n; i++) {
-    minX = Math.min(minX, x[i]!);
-    maxX = Math.max(maxX, x[i]!);
-    minY = Math.min(minY, y[i]!);
-    maxY = Math.max(maxY, y[i]!);
+    minX = Math.min(minX, x[i] ?? 0);
+    maxX = Math.max(maxX, x[i] ?? 0);
+    minY = Math.min(minY, y[i] ?? 0);
+    maxY = Math.max(maxY, y[i] ?? 0);
   }
   const extent = Math.max(maxX - minX, maxY - minY);
   const cellM = Math.max(GRID_MIN_CELL_M, extent / GRID_MAX_SIDE);
@@ -210,10 +210,10 @@ function buildGrid(x: Float64Array, y: Float64Array, segActive: Uint8Array, n: n
   // query's one-cell acceptance margin covers (see nearestOnTrail).
   for (let i = 0; i + 1 < n; i++) {
     if (!segActive[i]) continue;
-    const ax = x[i]!;
-    const ay = y[i]!;
-    const dx = x[i + 1]! - ax;
-    const dy = y[i + 1]! - ay;
+    const ax = x[i] ?? 0;
+    const ay = y[i] ?? 0;
+    const dx = (x[i + 1] ?? 0) - ax;
+    const dy = (y[i + 1] ?? 0) - ay;
     const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / (cellM / 2)));
     for (let s = 0; s <= steps; s++) {
       const px = ax + (dx * s) / steps;
@@ -251,14 +251,14 @@ export function projectOnSegment(
     return {
       seg: Math.max(0, Math.min(seg, trail.n - 2)),
       t: 0,
-      alongM: trail.along[i]!,
-      distM: Math.hypot(px - trail.x[i]!, py - trail.y[i]!),
+      alongM: trail.along[i] ?? 0,
+      distM: Math.hypot(px - (trail.x[i] ?? 0), py - (trail.y[i] ?? 0)),
     };
   }
-  const ax = trail.x[seg]!;
-  const ay = trail.y[seg]!;
-  const dx = trail.x[seg + 1]! - ax;
-  const dy = trail.y[seg + 1]! - ay;
+  const ax = trail.x[seg] ?? 0;
+  const ay = trail.y[seg] ?? 0;
+  const dx = (trail.x[seg + 1] ?? 0) - ax;
+  const dy = (trail.y[seg + 1] ?? 0) - ay;
   const len2 = dx * dx + dy * dy;
   let t = len2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
   if (t < 0) t = 0;
@@ -268,7 +268,7 @@ export function projectOnSegment(
   return {
     seg,
     t,
-    alongM: trail.along[seg]! + trail.edgeLen[seg]! * t,
+    alongM: (trail.along[seg] ?? 0) + (trail.edgeLen[seg] ?? 0) * t,
     distM: Math.hypot(px - qx, py - qy),
   };
 }
@@ -356,18 +356,18 @@ export function pointAtAlong(trail: PreparedTrail, alongM: number): LatLng {
   let hi = n - 1;
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1;
-    if (along[mid]! <= alongM) lo = mid;
+    if ((along[mid] ?? 0) <= alongM) lo = mid;
     else hi = mid - 1;
   }
   // Across a pause gap the edge has zero length: skip to its far end.
   let i = lo;
   while (i + 1 < n && trail.edgeLen[i] === 0) i++;
   if (i + 1 >= n) return vertex(trail, n - 1);
-  const t = (alongM - along[i]!) / trail.edgeLen[i]!;
+  const t = (alongM - (along[i] ?? 0)) / (trail.edgeLen[i] ?? 0);
   const tc = Math.min(1, Math.max(0, t));
   return {
-    latitude: trail.lat[i]! + (trail.lat[i + 1]! - trail.lat[i]!) * tc,
-    longitude: trail.lon[i]! + (trail.lon[i + 1]! - trail.lon[i]!) * tc,
+    latitude: (trail.lat[i] ?? 0) + ((trail.lat[i + 1] ?? 0) - (trail.lat[i] ?? 0)) * tc,
+    longitude: (trail.lon[i] ?? 0) + ((trail.lon[i + 1] ?? 0) - (trail.lon[i] ?? 0)) * tc,
   };
 }
 
@@ -377,11 +377,30 @@ export function projectionPoint(trail: PreparedTrail, proj: TrailProjection): La
   if (trail.n === 1) return vertex(trail, 0);
   const j = Math.min(i + 1, trail.n - 1);
   return {
-    latitude: trail.lat[i]! + (trail.lat[j]! - trail.lat[i]!) * proj.t,
-    longitude: trail.lon[i]! + (trail.lon[j]! - trail.lon[i]!) * proj.t,
+    latitude: (trail.lat[i] ?? 0) + ((trail.lat[j] ?? 0) - (trail.lat[i] ?? 0)) * proj.t,
+    longitude: (trail.lon[i] ?? 0) + ((trail.lon[j] ?? 0) - (trail.lon[i] ?? 0)) * proj.t,
   };
 }
 
 function vertex(trail: PreparedTrail, i: number): LatLng {
-  return { latitude: trail.lat[i]!, longitude: trail.lon[i]! };
+  return { latitude: trail.lat[i] ?? 0, longitude: trail.lon[i] ?? 0 };
+}
+
+/**
+ * The trail as drawable lines, `[lon, lat]` pairs, split at pause gaps (a
+ * pause is not walked, so it is not drawn either). For the followed trail's
+ * own line on the map; O(n) once per followed trail.
+ */
+export function trailPathCoordinates(trail: PreparedTrail): [number, number][][] {
+  const parts: [number, number][][] = [];
+  let part: [number, number][] = [];
+  for (let i = 0; i < trail.n; i++) {
+    part.push([trail.lon[i] ?? 0, trail.lat[i] ?? 0]);
+    if (i + 1 < trail.n && !trail.segActive[i]) {
+      if (part.length > 1) parts.push(part);
+      part = [];
+    }
+  }
+  if (part.length > 1) parts.push(part);
+  return parts;
 }

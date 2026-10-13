@@ -30,7 +30,6 @@ jest.mock('@core/features/flags', () => ({
   get MARINE_ENABLED() {
     return mockFlags.MARINE_ENABLED;
   },
-  PARKED_LABEL: 'Coming soon',
 }));
 
 const mockPush = jest.fn();
@@ -142,7 +141,8 @@ describe('Overlays sheet layout (#484)', () => {
         ],
         ['PDF maps', 'Personal heatmap', 'See-through white', 'Labels on satellite'],
       ],
-      ['Sports', ['Personal heatmap', 'LIVE LAYERS'], ['PDF maps', 'Shading']],
+      // Weather and Marine are parked: no Live layers section at all.
+      ['Sports', ['Personal heatmap'], ['PDF maps', 'Shading', 'LIVE LAYERS']],
     ];
     for (const [tab, shown, hidden] of tabs) {
       await fireEvent.press(screen.getByLabelText(`${tab} tab`));
@@ -655,25 +655,22 @@ describe('PDF maps sub-panel: See-through white (#670)', () => {
 describe('Live layers (Sports tab)', () => {
   beforeEach(() => onTab('sports'));
   describe('with weather and marine parked', () => {
-    it('keeps both rows visible, greyed and labelled "Coming soon"', async () => {
+    it('shows no row for them at all — no greyed "Coming soon" rows (owner rule)', async () => {
       await renderMenu();
-      // Visible, not removed — the row is the only place the user is told
-      // this is deliberate rather than broken.
-      const weather = screen.getByLabelText('Weather (coming soon)');
-      const marine = screen.getByLabelText('Marine (coming soon)');
-      expect(weather.props.accessibilityState).toMatchObject({ disabled: true });
-      // The marine row must not advertise a chart mode the map is not drawing.
-      expect(marine.props.accessibilityState).toMatchObject({ disabled: true, checked: false });
-      expect(screen.getByText('Weather')).toBeTruthy();
-      expect(screen.getByText('Marine')).toBeTruthy();
-      expect(screen.getAllByText('Coming soon')).toHaveLength(2);
+      expect(screen.queryByText('Weather')).toBeNull();
+      expect(screen.queryByText('Marine')).toBeNull();
+      expect(screen.queryByText('Coming soon')).toBeNull();
+      // With nothing live, the section title goes too.
+      expect(screen.queryByText(/live layers/i)).toBeNull();
+      // The heatmap stays.
+      expect(screen.getByLabelText('Personal heatmap')).toBeTruthy();
     });
 
-    it('does not open the weather list when the row is pressed', async () => {
+    it('shows the one layer that is back, alone', async () => {
+      mockFlags.MARINE_ENABLED = true;
       await renderMenu();
-      fireEvent.press(screen.getByLabelText('Weather (coming soon)'));
-      expect(await screen.findByLabelText('Weather (coming soon)')).toBeTruthy();
-      expect(screen.queryByLabelText('Back to overlays')).toBeNull();
+      expect(screen.getByLabelText('Marine')).toBeTruthy();
+      expect(screen.queryByText('Weather')).toBeNull();
     });
   });
 

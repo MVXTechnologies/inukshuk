@@ -59,14 +59,14 @@ async function draw(p: PinInput[], glyphs: string | null = OFM_GLYPHS) {
 }
 
 describe('WaypointPinLayers (#675)', () => {
-  it('draws 500 pins with ONE source and four layers — no view per pin', async () => {
+  it('draws 500 pins with ONE source and three layers — no view per pin', async () => {
     await draw(pins(500));
     expect(mockSources).toHaveLength(1);
     const data = mockSources[0]?.data as { features: unknown[] };
-    expect(data.features).toHaveLength(500);
+    // A body and a glyph feature per pin, in one layer (drawn in source order).
+    expect(data.features).toHaveLength(1000);
     expect(mockLayers.map((l) => l.id)).toEqual([
-      WAYPOINT_PIN_LAYERS.body,
-      WAYPOINT_PIN_LAYERS.glyph,
+      WAYPOINT_PIN_LAYERS.pin,
       WAYPOINT_PIN_LAYERS.photo,
       WAYPOINT_PIN_LAYERS.label,
     ]);

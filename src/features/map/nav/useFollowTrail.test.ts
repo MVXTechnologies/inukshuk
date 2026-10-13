@@ -90,7 +90,9 @@ describe('useFollowTrail', () => {
     useNavigationStore.getState().follow({ trackId: 't1', name: 'X' });
     const { result } = await mount(null);
     await waitFor(() => expect(mockRead).toHaveBeenCalled());
-    expect(result.current).toEqual({ name: 'Sentier des Crêtes', readout: null });
+    expect(result.current).toMatchObject({ name: 'Sentier des Crêtes', readout: null });
+    // The trail's own line is ready before the first fix (one line, no pause).
+    expect(result.current?.path).toHaveLength(1);
   });
 
   it('stops, and says so, when the trail cannot be read', async () => {
@@ -99,6 +101,42 @@ describe('useFollowTrail', () => {
     const { onMessage } = await mount();
     await waitFor(() => expect(useNavigationStore.getState().following).toBeNull());
     expect(onMessage).toHaveBeenCalledWith("Couldn't read that trail to follow it");
+  });
+
+  it('keeps your progress on an out-and-back when a waypoint is added mid-follow', async () => {
+    // Out 1000 m east, back 6 m north of it: the two legs are closer than GPS noise.
+    const outAndBack = polyline(
+      [
+        [0, 0],
+        [1000, 0],
+        [1000, 6],
+        [0, 6],
+      ],
+      5,
+    );
+    mockRead.mockResolvedValue({ points: outAndBack, segmentStarts: [] });
+    useNavigationStore.getState().follow({ trackId: 't1', name: 'X' });
+    const { result, rerender } = await mount(at(0, 0));
+    await waitFor(() => expect(result.current?.readout).not.toBeNull());
+    // Walk out and most of the way back.
+    for (let x = 0; x <= 1000; x += 20) await rerender({ loc: at(x, 0) });
+    for (let x = 1000; x >= 500; x -= 20) await rerender({ loc: at(x, 6) });
+    // A noisy fix between the legs, nearer the OUTBOUND one: still on the way back.
+    const between = at(500, 2);
+    await rerender({ loc: between });
+    const before = result.current?.readout?.alongM ?? 0;
+    expect(before).toBeGreaterThan(1400);
+    // Drop a waypoint just ahead on the way back (before Camp lac, at x = 400).
+    await act(async () =>
+      useLibraryStore.setState((s) => ({
+        waypoints: [...s.waypoints, { id: 'w2', label: 'Ruisseau', createdAt: 0, ...at(450, 6) }],
+      })),
+    );
+    await rerender({ loc: between });
+    // Same place on the trail — not snapped to the outbound leg 1000 m earlier…
+    expect(result.current?.readout?.alongM).toBeCloseTo(before, 6);
+    // …and the new waypoint is the next target straight away.
+    expect(result.current?.readout?.target.name).toBe('Ruisseau');
   });
 
   it('stops when the followed trail is deleted', async () => {

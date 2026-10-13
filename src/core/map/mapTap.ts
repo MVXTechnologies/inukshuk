@@ -109,3 +109,35 @@ export function readMapPress(e: MapPressEvent): MapPress | null {
     lngLat: lngLat ? [lngLat[0], lngLat[1]] : null,
   };
 }
+
+/** The point chip's widest (its action row plus padding), px — `MapPointChip`'s maxWidth. */
+export const POINT_CHIP_MAX_W = 240;
+/** Air kept between the chip and the screen edge, px. */
+export const POINT_CHIP_EDGE_MARGIN = 8;
+/** The tail must stay under the chip: never shift the chip past this from its anchor, px. */
+const POINT_CHIP_TAIL_KEEP = 18;
+
+/**
+ * How far to slide the point chip sideways so it stays inside the screen
+ * when the point is near an edge (2.5.1 QA: a long-press near the left edge
+ * opened a chip half off screen). Positive = right. The tail and the dot
+ * stay on the point; only the bubble moves, never so far that the tail
+ * leaves it. `pointX` is the point's screen x, `viewWidth` the map's width.
+ * The map-level hit-test subtracts the same shift (`hitMapPointChip`).
+ */
+export function pointChipShiftX(
+  pointX: number,
+  viewWidth: number,
+  chipWidth = POINT_CHIP_MAX_W,
+  margin = POINT_CHIP_EDGE_MARGIN,
+): number {
+  if (!Number.isFinite(pointX) || !(viewWidth > 0)) return 0;
+  const half = chipWidth / 2;
+  const left = pointX - half;
+  const right = pointX + half;
+  let shift = 0;
+  if (left < margin) shift = margin - left;
+  else if (right > viewWidth - margin) shift = viewWidth - margin - right;
+  const max = half - POINT_CHIP_TAIL_KEEP;
+  return Math.max(-max, Math.min(max, shift));
+}

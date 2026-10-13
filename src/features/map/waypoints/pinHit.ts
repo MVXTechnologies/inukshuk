@@ -1,5 +1,4 @@
 import {
-  WAYPOINT_PIN_HIT,
   nearestPinAt,
   projectablePins,
   type PinCandidate,
@@ -36,8 +35,8 @@ interface Projector {
 }
 
 /**
- * The pin under a screen point, or null (#676 long-press → Move). The same
- * rule as a tap (#343): every pin is projected through the real camera, one
+ * The pin under a long-press, or null (#676 long-press → Move). The same
+ * rule as a tap (#343), with the tighter long-press disc: every pin is projected through the real camera, one
  * that cannot be projected is skipped, never fatal.
  */
 export async function pinAtPoint<T extends PinCandidate>(
@@ -58,11 +57,6 @@ export async function pinAtPoint<T extends PinCandidate>(
       projected[r.value.index] = [r.value.point[0], r.value.point[1]];
     }
   }
-  return nearestPinAt(
-    pins,
-    projected,
-    point,
-    WAYPOINT_PIN_HIT.radiusPx,
-    WAYPOINT_PIN_HIT.badgeOffsetPx,
-  );
+  // Long-press: the tight disc, so one next to a pin stays the coordinates chip.
+  return nearestPinAt(pins, projected, point, 'longPress');
 }

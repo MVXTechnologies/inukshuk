@@ -147,11 +147,14 @@ four stages:
   recording (map "+" speed-dial, one tap since #671) are standalone: they keep
   their coordinate and persist in the library index (`waypoints`), with an
   optional icon (`@core/library/waypointIconCatalog`, ~350 ids), colour and
-  size (#675; GPX `<sym>` + a `pin:style` extension, team shares `ic`/`co`/`sz`).
+  size (#675; team shares carry them as `ic`/`co`/`sz`; standalone waypoints
+  are not exported to GPX).
   The main map draws them in one GeoJSON source and SDF symbol layers
   (`@core/map/waypointPinStyle`, sprites from `scripts/map/build-waypoint-icons.mjs`),
   never one view per pin; Move (#676) pans the map under a fixed centre pin
-  (`waypointMoveStore`).
+  (`waypointMoveStore`). Symbols have no accessibility nodes, so while a
+  screen reader is on the map offers the pins as a list, nearest first
+  (`WaypointScreenReaderList`); a row opens the pin's card.
 
 ## Activity-file import (Strava / Garmin exports)
 

@@ -75,6 +75,8 @@ export function SatellitePanel({ onBack }: { onBack: () => void }) {
           width={stripW - 2 * RING}
           height={STRIP_H - 2 * RING}
           radius={11}
+          // Four tiles across, one zoom pair deeper: sharp at the strip's width.
+          columns={4}
         />
       </View>
       <SwitchRow

@@ -18,12 +18,12 @@ import { Linking, View } from 'react-native';
 import { List, Switch, Text, TouchableRipple, useTheme } from 'react-native-paper';
 
 import { GeodeticLegend } from '../../map/components/GeodeticLegend';
-import { geodeticImage } from '../../map/geodeticImages';
 import { setExtensionOffline } from '../actions';
 import { refreshCompanions } from '../companions';
 import { ExtensionSettingsShell } from '../ExtensionSettingsShell';
 import { extensionRowStyles as styles } from '../rowStyles';
 import { useExtensionPrefs } from '../prefs';
+import { GEODETIC_ICON } from './icon';
 
 export function GeodeticSettings() {
   const tokens = useSchemeTokens();
@@ -39,7 +39,6 @@ export function GeodeticSettings() {
     void refreshCompanions('geodetic');
   }, []);
 
-  const badge = geodeticImage(theme.dark ? 'dark' : 'light', '3d');
   const companionBytes = companions.reduce((n, c) => n + c.sizeBytes, 0);
   const covered = regions.filter(
     (r) =>
@@ -62,8 +61,9 @@ export function GeodeticSettings() {
   return (
     <ExtensionSettingsShell
       extKey="geodetic"
-      badge={badge}
-      badgeIconSize={18}
+      badge={undefined}
+      badgeIcon={GEODETIC_ICON}
+      badgeIconSize={20}
       description="Every known survey mark and benchmark: 3D, horizontal, vertical and GNSS stations. Tap one for its summary and datasheet."
       legend={<GeodeticLegend />}
       note="Free · usually under 1 MB per offline region · included in the regions you download"

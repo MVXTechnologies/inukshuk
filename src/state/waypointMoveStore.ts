@@ -1,4 +1,4 @@
-import type { LatLng, WaypointIcon, WaypointSize } from '@core/models';
+import type { LatLng, StoredWaypointIcon, WaypointSize } from '@core/models';
 import { create } from 'zustand';
 
 /** The saved waypoint being moved (#676), as it was when Move started. */
@@ -7,7 +7,7 @@ export interface WaypointMoveTarget {
   label: string;
   /** Where it was: the dashed line starts here, Cancel and Undo return here. */
   from: LatLng;
-  icon?: WaypointIcon;
+  icon?: StoredWaypointIcon;
   color?: string;
   size?: WaypointSize;
 }

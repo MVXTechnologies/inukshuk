@@ -3,6 +3,8 @@ import {
   chooseTapeSource,
   COG_MIN_SPEED_MPS,
   createCourseTracker,
+  tapeLabelClear,
+  tapeLabelHalfWidth,
   tapeMarker,
   tapeTicks,
   turnHint,
@@ -43,6 +45,39 @@ describe('tapeMarker', () => {
   it('pins a bearing beyond ±60° to the edge to turn towards (the 340 → 042 mockup)', () => {
     expect(tapeMarker(340, 42)).toEqual({ kind: 'edge', side: 'right', deltaDeg: 62 });
     expect(tapeMarker(90, 0)).toEqual({ kind: 'edge', side: 'left', deltaDeg: -90 });
+  });
+});
+
+describe('tapeLabelClear', () => {
+  it('keeps a label clear of nothing', () => {
+    expect(tapeLabelClear(50, '60', [])).toBe(true);
+  });
+
+  it('hides a label under a marker, and shows it once clear', () => {
+    const flag: [number, number] = [44, 56];
+    expect(tapeLabelClear(50, '60', [flag])).toBe(false);
+    // Just touching the edge (label half width + 2 px air) is still hidden…
+    const half = tapeLabelHalfWidth('60') + 2;
+    expect(tapeLabelClear(56 + half - 0.5, '60', [flag])).toBe(false);
+    // …and clear beyond it, on either side.
+    expect(tapeLabelClear(56 + half, '60', [flag])).toBe(true);
+    expect(tapeLabelClear(44 - half, '60', [flag])).toBe(true);
+  });
+
+  it('checks every span (edge arrow, trail bar, COG)', () => {
+    const spans: [number, number][] = [
+      [0, 36],
+      [100, 118],
+      [190, 200],
+    ];
+    expect(tapeLabelClear(20, 'N', spans)).toBe(false);
+    expect(tapeLabelClear(110, '330', spans)).toBe(false);
+    expect(tapeLabelClear(195, 'E', spans)).toBe(false);
+    expect(tapeLabelClear(70, '300', spans)).toBe(true);
+  });
+
+  it('gives three-digit labels more room than a cardinal', () => {
+    expect(tapeLabelHalfWidth('330')).toBeGreaterThan(tapeLabelHalfWidth('N'));
   });
 });
 

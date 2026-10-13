@@ -96,6 +96,15 @@ export function contrastRatio(a: string, b: string): number {
 }
 
 /**
+ * Whether a colour swatch needs an outline to be seen on `surface`: a swatch
+ * within 1.5:1 of the sheet behind it all but vanishes (Paper on the light
+ * sheet, Stone on the dark one — 2.5.1 QA).
+ */
+export function swatchNeedsOutline(hex: string, surface: string): boolean {
+  return contrastRatio(hex, surface) < 1.5;
+}
+
+/**
  * The glyph ink for a fill: white wherever white keeps 3:1 (the WCAG ratio
  * for graphics), else the dark stone ink — amber, yellow, lime, paper, and
  * also cyan and pumpkin, whose white glyphs measured 2.7:1.

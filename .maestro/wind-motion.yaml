@@ -1,7 +1,7 @@
 # ============================================================================
 # PARKED — cannot pass on the shipping build; see WEATHER_ENABLED in
-# src/core/features/flags.ts. The Weather row in the Overlays menu is disabled
-# ("Coming soon") this release, so there is no live Wind layer to drive to.
+# src/core/features/flags.ts. The Weather row is not in the Overlays
+# menu this release (no greyed rows since 2.5.1), so there is no live Wind layer to drive to.
 # Its driver, `npm run wind:motion` (scripts/wind-motion-check.mjs), reads the
 # same flag and refuses to run rather than pretending to gate a dead feature.
 # Kept so that flipping the flag back to true restores the feature, this flow

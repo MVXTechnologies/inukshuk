@@ -31,7 +31,12 @@ export function NavigationCompassRow({
         ? null
         : readout.onTrail
           ? { text: 'On trail', warn: false }
-          : { text: `Off trail ${formatDistance(readout.crossTrackM, units)}`, warn: true },
+          : (() => {
+              // Short on screen ("Off 120 m" fits the right block whole; the
+              // longer "Off trail 1…" was cut), full for screen readers.
+              const d = formatDistance(readout.crossTrackM, units);
+              return { text: `Off ${d}`, warn: true, spoken: `Off trail, ${d}` };
+            })(),
     [readout, units],
   );
 

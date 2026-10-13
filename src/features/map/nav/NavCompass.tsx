@@ -6,10 +6,12 @@ import {
   ON_COURSE_IN_DEG,
   ON_COURSE_OUT_DEG,
   TAPE_HALF_SPAN_DEG,
+  tapeLabelClear,
   tapeMarker,
   tapeTicks,
   turnHint,
   type CourseSample,
+  type TapeSpan,
 } from '@core/nav';
 import { signedDeltaDeg } from '@core/signal/heading';
 import { palette } from '@ui/tokens';
@@ -60,7 +62,7 @@ export interface NavCompassProps {
    * Right side while following a trail ("On trail" / "Off trail 62 m").
    * Absent: the turn hint ("Right 62°") or "On course".
    */
-  status?: { text: string; warn: boolean } | null;
+  status?: { text: string; warn: boolean; spoken?: string } | null;
 }
 
 /**
@@ -158,6 +160,24 @@ export const NavCompass = memo(function NavCompass({
   const H = NAV_COMPASS_H;
   const cx = tapeW / 2;
   const px = (offset: number) => cx + offset * (tapeW / 2);
+  // What is drawn over the tick labels: a label under any of these is left
+  // out rather than half covered (2.5.1 QA: the edge arrow on "300", the
+  // flag and the bar stacked on "60", "COG" against "N").
+  const blocked: TapeSpan[] = [];
+  if (marker.kind === 'on') {
+    const fx = px(marker.offset);
+    blocked.push([fx - 8, fx + 8]);
+  } else {
+    blocked.push(marker.side === 'right' ? [tapeW - 16, tapeW] : [0, 16]);
+  }
+  if (trailBearingDeg != null) {
+    const delta = signedDeltaDeg(heading, trailBearingDeg);
+    if (Math.abs(delta) <= TAPE_HALF_SPAN_DEG) {
+      const bx = px(delta / TAPE_HALF_SPAN_DEG);
+      blocked.push([bx - 6, bx + 6]);
+    }
+  }
+  if (source.kind === 'cog') blocked.push([0, 34]);
 
   return (
     <View
@@ -172,7 +192,7 @@ export const NavCompass = memo(function NavCompass({
       ]}
       onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
       accessible
-      accessibilityLabel={`Navigation compass. ${distance}, ${detail}. ${rightText}`}
+      accessibilityLabel={`Navigation compass. ${distance}, ${detail}. ${following ? (status.spoken ?? status.text) : rightText}`}
       testID="nav-compass"
     >
       <View style={styles.left}>
@@ -208,19 +228,23 @@ export const NavCompass = memo(function NavCompass({
                     strokeOpacity={tick.major ? 0.85 : 0.4}
                     strokeWidth={tick.major ? 1.5 : 1}
                   />
-                  {tick.label !== null && x > 12 && x < tapeW - 12 && (
-                    <SvgText
-                      x={x}
-                      y={H - 19}
-                      textAnchor="middle"
-                      fontSize={tick.label.length === 1 ? 13 : 10.5}
-                      fontWeight="800"
-                      fill={tick.deg === 0 ? t.map.compassNorth : t.map.chromeInk}
-                      fillOpacity={tick.label.length === 1 ? 1 : 0.7}
-                    >
-                      {tick.label}
-                    </SvgText>
-                  )}
+                  {tick.label !== null &&
+                    x > 12 &&
+                    x < tapeW - 12 &&
+                    tapeLabelClear(x, tick.label, blocked) && (
+                      <SvgText
+                        testID={`nav-compass-label-${tick.deg}`}
+                        x={x}
+                        y={H - 19}
+                        textAnchor="middle"
+                        fontSize={tick.label.length === 1 ? 13 : 10.5}
+                        fontWeight="800"
+                        fill={tick.deg === 0 ? t.map.compassNorth : t.map.chromeInk}
+                        fillOpacity={tick.label.length === 1 ? 1 : 0.7}
+                      >
+                        {tick.label}
+                      </SvgText>
+                    )}
                 </G>
               );
             })}
@@ -269,7 +293,14 @@ export const NavCompass = memo(function NavCompass({
         )}
       </View>
       <View style={styles.right}>
-        <Text style={[styles.status, { color: rightColor }]} numberOfLines={1}>
+        {/* The number is the point: shrink to fit rather than cut it off. */}
+        <Text
+          style={[styles.status, { color: rightColor }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.7}
+          testID="nav-compass-status"
+        >
           {rightText}
         </Text>
       </View>

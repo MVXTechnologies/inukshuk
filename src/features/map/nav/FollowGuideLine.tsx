@@ -1,7 +1,14 @@
 import type { LatLng } from '@core/models';
+import type { LineLayerSpecification } from '@maplibre/maplibre-gl-style-spec';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useMemo } from 'react';
+
+type LineLayout = NonNullable<LineLayerSpecification['layout']>;
+type LinePaint = NonNullable<LineLayerSpecification['paint']>;
+
+/** Fixed, so the native layer is not re-diffed on every fix. */
+const LAYOUT: LineLayout = { 'line-cap': 'round' };
 
 /**
  * Off the followed trail (#678): a dashed amber line from you to the nearest
@@ -11,6 +18,12 @@ import { useMemo } from 'react';
  */
 export function FollowGuideLine({ from, to }: { from: LatLng; to: LatLng }) {
   const t = useSchemeTokens();
+  const color = t.map.gnssWarn;
+  // Changes with the theme only, never per fix.
+  const paint = useMemo<LinePaint>(
+    () => ({ 'line-color': color, 'line-width': 2, 'line-dasharray': [2, 2] }),
+    [color],
+  );
   const data = useMemo(
     () => ({
       type: 'Feature' as const,
@@ -27,12 +40,7 @@ export function FollowGuideLine({ from, to }: { from: LatLng; to: LatLng }) {
   );
   return (
     <GeoJSONSource id="follow-guide" data={data}>
-      <Layer
-        id="follow-guide-line"
-        type="line"
-        layout={{ 'line-cap': 'round' }}
-        paint={{ 'line-color': t.map.gnssWarn, 'line-width': 2, 'line-dasharray': [2, 2] }}
-      />
+      <Layer id="follow-guide-line" type="line" layout={LAYOUT} paint={paint} />
     </GeoJSONSource>
   );
 }

@@ -73,6 +73,30 @@ export function tapeMarker(
   return { kind: 'edge', side: deltaDeg > 0 ? 'right' : 'left', deltaDeg };
 }
 
+/** A horizontal span of the tape something is drawn over, px: [from, to]. */
+export type TapeSpan = readonly [number, number];
+
+/** Half the width a tick label takes, px (bold ~10.5 pt digits, 13 pt cardinals). */
+export function tapeLabelHalfWidth(label: string): number {
+  return label.length === 1 ? 6 : label.length * 3.6 + 1;
+}
+
+/**
+ * Whether a tick label centred at `x` stays clear of everything drawn over
+ * the tape (the target flag, the edge arrow, the trail bar, "COG"). A label
+ * that would sit under one is not drawn: a half-hidden "60" reads as a wrong
+ * number (2.5.1 QA). `gapPx` keeps a little air between them.
+ */
+export function tapeLabelClear(
+  x: number,
+  label: string,
+  blocked: readonly TapeSpan[],
+  gapPx = 2,
+): boolean {
+  const half = tapeLabelHalfWidth(label) + gapPx;
+  return blocked.every(([from, to]) => x + half <= from || x - half >= to);
+}
+
 /** "Right 62°" / "Left 12°" — whole degrees, the way to turn. */
 export function turnHint(deltaDeg: number): string {
   const whole = Math.round(Math.abs(deltaDeg));

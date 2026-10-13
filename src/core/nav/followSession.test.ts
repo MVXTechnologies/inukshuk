@@ -178,6 +178,45 @@ describe('createFollowSession', () => {
     expect(s.update(at(250, 0)).target.id).toBe('w');
   });
 
+  it('setTargets swaps the targets and keeps where you are and how far you got', () => {
+    // Out and back, the legs 6 m apart (closer than GPS noise).
+    const trail = prepareTrail(
+      polyline(
+        [
+          [0, 0],
+          [1000, 0],
+          [1000, 6],
+          [0, 6],
+        ],
+        5,
+      ),
+    )!;
+    const s = createFollowSession(trail, buildFollowTargets(trail, [], []));
+    for (let x = 0; x <= 1000; x += 10) s.update(at(x, 0));
+    for (let x = 1000; x >= 500; x -= 10) s.update(at(x, 6));
+    const before = s.update(at(500, 2));
+    expect(before.alongM).toBeGreaterThan(1400);
+    expect(before.target.kind).toBe('end');
+    // A waypoint on the way back, ahead, and one on the way out, long passed.
+    s.setTargets(
+      buildFollowTargets(
+        trail,
+        [
+          { id: 'ahead', label: 'Ruisseau', ...at(300, 6) },
+          { id: 'passed', label: 'Pont', ...at(700, 0) },
+        ],
+        [],
+      ),
+    );
+    const after = s.update(at(500, 2));
+    // Same place on the same leg — a fresh session would snap to the outbound one.
+    expect(after.alongM).toBeCloseTo(before.alongM, 6);
+    expect(after.target.id).toBe('ahead');
+    expect(
+      createFollowSession(trail, buildFollowTargets(trail, [], [])).update(at(500, 2)).alongM,
+    ).toBeLessThan(600);
+  });
+
   it('constants are the agreed ones', () => {
     expect(LOOKAHEAD_M).toBe(40);
     expect(TURN_BACK_M).toBe(30);

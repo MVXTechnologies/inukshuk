@@ -115,7 +115,8 @@ function firstAhead(list: readonly FollowTarget[], alongM: number): FollowTarget
   let hi = list.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (list[mid]!.alongM > limit) hi = mid;
+    // `mid` < `hi` <= length: always an element; a hole would read as "ahead".
+    if ((list[mid]?.alongM ?? Infinity) > limit) hi = mid;
     else lo = mid + 1;
   }
   return list[lo] ?? null;

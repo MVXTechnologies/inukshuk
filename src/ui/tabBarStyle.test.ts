@@ -3,6 +3,7 @@ import {
   buildTabBarOptions,
   TAB_PILL,
   tabBarBottomInset,
+  tabBarHidden,
   tabLabelStyle,
   type TabBarColors,
 } from './tabBarStyle';
@@ -54,5 +55,25 @@ describe('tabBarBottomInset', () => {
   it('leaves iOS home-indicator insets alone', () => {
     expect(tabBarBottomInset(34, 'ios')).toBe(34);
     expect(tabBarBottomInset(0, 'ios')).toBe(0);
+  });
+});
+
+describe('tabBarHidden', () => {
+  const none = { recording: false, movingWaypoint: false, sheetUp: false };
+  const routes = ['index', 'library', 'maps', 'logbook'];
+
+  it('shows the bar when nothing owns the bottom edge', () => {
+    for (const route of routes) expect(tabBarHidden(route, none)).toBe(false);
+  });
+
+  it('hides it on the Map only while recording or moving a waypoint', () => {
+    for (const owner of ['recording', 'movingWaypoint'] as const) {
+      expect(tabBarHidden('index', { ...none, [owner]: true })).toBe(true);
+      expect(tabBarHidden('library', { ...none, [owner]: true })).toBe(false);
+    }
+  });
+
+  it('hides it on any screen while a sheet owns the focused screen', () => {
+    for (const route of routes) expect(tabBarHidden(route, { ...none, sheetUp: true })).toBe(true);
   });
 });

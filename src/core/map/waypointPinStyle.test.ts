@@ -7,9 +7,12 @@ import {
   glyphImageName,
   glyphImagesInUse,
   glyphSpriteSize,
-  pinBodyLayout,
+  pinDrawOrder,
   pinFeatureCollection,
-  pinGlyphLayout,
+  pinLabelFilter,
+  pinLayout,
+  pinPaint,
+  pinPhotoFilter,
   pinSpriteSize,
   type PinInput,
 } from './waypointPinStyle';
@@ -22,45 +25,57 @@ const pin = (over: Partial<PinInput> = {}): PinInput => ({
   ...over,
 });
 
+const body = (fc: ReturnType<typeof pinFeatureCollection>, key: string) =>
+  fc.features.find((f) => f.properties.key === key && f.properties.part === 'body')?.properties;
+const glyph = (fc: ReturnType<typeof pinFeatureCollection>, key: string) =>
+  fc.features.find((f) => f.properties.key === key && f.properties.part === 'glyph')?.properties;
+
 describe('waypoint pin features (#675)', () => {
-  it('carries colour, ink, ring, glyph and sizes per pin', () => {
-    const [f] = pinFeatureCollection(
+  it('draws each pin as a body then a glyph, with colour, ink, ring and sizes', () => {
+    const fc = pinFeatureCollection(
       [pin({ icon: 'camp', color: '#FBC02D', size: 'L', hasPhoto: true })],
       null,
-    ).features;
-    expect(f?.geometry.coordinates).toEqual([-71.2, 46.8]);
-    expect(f?.properties).toMatchObject({
+    );
+    expect(fc.features.map((f) => f.id)).toEqual(['saved-a:body', 'saved-a:glyph']);
+    expect(fc.features[0]?.geometry.coordinates).toEqual([-71.2, 46.8]);
+    expect(fc.features[1]?.geometry.coordinates).toEqual([-71.2, 46.8]);
+    expect(body(fc, 'saved-a')).toMatchObject({
       key: 'saved-a',
       label: 'A',
-      fill: '#FBC02D',
-      ink: WAYPOINT_INK_DARK,
+      img: 'wp-pin',
+      tint: '#FBC02D',
       ring: '#FBF8F2',
-      glyph: 'wpg-camp',
       photo: true,
-      s: 0.8, // 40 / 50
-      gs: 0.4,
+      sz: 0.8, // 40 / 50
       z: 0,
+    });
+    expect(glyph(fc, 'saved-a')).toMatchObject({
+      img: 'wpg-camp',
+      tint: WAYPOINT_INK_DARK,
+      sz: 0.4,
     });
   });
 
   it('draws a plain pin as today: sage, inukshuk, M', () => {
-    const [f] = pinFeatureCollection([pin()], null).features;
-    expect(f?.properties).toMatchObject({
-      fill: '#566B33',
-      glyph: DEFAULT_GLYPH_IMAGE,
-      s: 0.64,
-      photo: false,
-    });
+    const fc = pinFeatureCollection([pin()], null);
+    expect(body(fc, 'saved-a')).toMatchObject({ tint: '#566B33', sz: 0.64, photo: false });
+    expect(glyph(fc, 'saved-a')).toMatchObject({ img: DEFAULT_GLYPH_IMAGE });
   });
 
-  it('grows the selected pin, rings it amber and draws it on top', () => {
+  it('grows the selected pin, rings it amber and draws it last (on top)', () => {
     const fc = pinFeatureCollection(
-      [pin({ key: 'saved-a' }), pin({ key: 'saved-b', size: 'XL' })],
+      [pin({ key: 'saved-a', latitude: 46 }), pin({ key: 'saved-b', size: 'XL', latitude: 47 })],
       'saved-b',
     );
-    const b = fc.features.find((f) => f.properties.key === 'saved-b')?.properties;
-    expect(b).toMatchObject({ ring: SELECTED_RING, z: 1, s: 1.2 });
-    expect(fc.features.find((f) => f.properties.key === 'saved-a')?.properties.z).toBe(0);
+    expect(body(fc, 'saved-b')).toMatchObject({ ring: SELECTED_RING, z: 1, sz: 1.2 });
+    expect(body(fc, 'saved-a')?.z).toBe(0);
+    // b is north (would be behind), but selected: it goes last.
+    expect(fc.features.map((f) => f.id)).toEqual([
+      'saved-a:body',
+      'saved-a:glyph',
+      'saved-b:body',
+      'saved-b:glyph',
+    ]);
   });
 
   it('leaves out the pin being moved, and any non-finite coordinate', () => {
@@ -69,7 +84,7 @@ describe('waypoint pin features (#675)', () => {
       null,
       'saved-a',
     );
-    expect(fc.features.map((f) => f.properties.key)).toEqual(['saved-b']);
+    expect(new Set(fc.features.map((f) => f.properties.key))).toEqual(new Set(['saved-b']));
   });
 
   it('falls back to the inukshuk for an icon a later build wrote', () => {
@@ -85,10 +100,10 @@ describe('waypoint pin features (#675)', () => {
   });
 
   /**
-   * Measure, don't assert wall-clock: 500 pins are ONE collection of 500
+   * Measure, don't assert wall-clock: 500 pins are ONE collection of 1000
    * features (one source update, one native call), the per-pin work is a
-   * constant number of style lookups, and the layer count does not depend on
-   * the pin count at all.
+   * constant number of style lookups plus one sort, and the layer count does
+   * not depend on the pin count at all.
    */
   it('builds 500 pins as one collection, linear in the pin count', () => {
     const pins = Array.from({ length: 500 }, (_, i) =>
@@ -104,12 +119,85 @@ describe('waypoint pin features (#675)', () => {
     const t0 = Date.now();
     const fc = pinFeatureCollection(pins, 'saved-3');
     const elapsed = Date.now() - t0;
-    expect(fc.features).toHaveLength(500);
-    expect(new Set(fc.features.map((f) => f.id)).size).toBe(500);
+    expect(fc.features).toHaveLength(1000);
+    expect(new Set(fc.features.map((f) => f.id)).size).toBe(1000);
     // Generous ceiling only; the counts above are the measurement.
     expect(elapsed).toBeLessThan(500);
     // Even all distinct icons is a bounded registration (≤ catalogue + 1).
     expect(glyphImagesInUse(pins).length).toBeLessThanOrEqual(WAYPOINT_ICONS.length + 1);
+  });
+});
+
+/**
+ * 2.5.1 QA (overlapping pins): every glyph drew above every body, because a
+ * glyph LAYER drew above a body LAYER. Now each pin's body and glyph are
+ * consecutive features of ONE layer drawn in source order, back to front —
+ * so whatever overlaps, a pin in front covers the whole pin behind it.
+ */
+describe('overlapping pins stack whole (body + glyph together)', () => {
+  it('emits the features back to front, each body immediately followed by its glyph', () => {
+    const fc = pinFeatureCollection(
+      [
+        pin({ key: 'south', latitude: 46.79 }),
+        pin({ key: 'north', latitude: 46.81 }),
+        pin({ key: 'mid', latitude: 46.8 }),
+      ],
+      null,
+    );
+    expect(fc.features.map((f) => f.id)).toEqual([
+      'north:body',
+      'north:glyph',
+      'mid:body',
+      'mid:glyph',
+      'south:body',
+      'south:glyph',
+    ]);
+  });
+
+  it('keeps input order for pins at the same latitude', () => {
+    const fc = pinFeatureCollection([pin({ key: 'first' }), pin({ key: 'second' })], null);
+    expect(fc.features.map((f) => f.id)).toEqual([
+      'first:body',
+      'first:glyph',
+      'second:body',
+      'second:glyph',
+    ]);
+  });
+
+  it('draws body and glyph from one layer, in source order, with no sort key', () => {
+    // Source order is the draw order only without a sort key (style spec).
+    expect(pinLayout['symbol-z-order']).toBe('source');
+    expect(pinLayout).not.toHaveProperty('symbol-sort-key');
+    expect(pinLayout['icon-image']).toEqual(['get', 'img']);
+    expect(pinLayout['icon-size']).toEqual(['get', 'sz']);
+    // Each part keeps its own anchor, offset, tint and ring.
+    expect(pinLayout['icon-anchor']).toEqual([
+      'match',
+      ['get', 'part'],
+      'glyph',
+      'center',
+      'bottom',
+    ]);
+    expect(pinPaint['icon-color']).toEqual(['get', 'tint']);
+    expect(pinPaint['icon-halo-width']).toEqual(['match', ['get', 'part'], 'glyph', 0, 2]);
+  });
+
+  it('draws the badge and the label once per pin, from its body', () => {
+    expect(JSON.stringify(pinPhotoFilter)).toContain('"body"');
+    expect(pinLabelFilter).toEqual(['==', ['get', 'part'], 'body']);
+  });
+
+  it('pinDrawOrder: north behind, input order on ties, selected last', () => {
+    const order = pinDrawOrder(
+      [
+        { key: 'a', latitude: 1 },
+        { key: 'b', latitude: 3 },
+        { key: 'c', latitude: 1 },
+        { key: 'd', latitude: 2 },
+      ],
+      'b',
+    );
+    expect(order.map((p) => p.key)).toEqual(['d', 'a', 'c', 'b']);
   });
 });
 
@@ -120,15 +208,11 @@ describe('sprite geometry', () => {
   });
 
   it('never culls a pin and sizes it per feature', () => {
-    for (const layout of [pinBodyLayout, pinGlyphLayout]) {
-      expect(layout['icon-allow-overlap']).toBe(true);
-      expect(layout['icon-ignore-placement']).toBe(true);
-    }
-    expect(pinBodyLayout['icon-size']).toEqual(['get', 's']);
-    expect(pinGlyphLayout['icon-image']).toEqual(['get', 'glyph']);
+    expect(pinLayout['icon-allow-overlap']).toBe(true);
+    expect(pinLayout['icon-ignore-placement']).toBe(true);
   });
 
   it('keeps zoom out of the per-feature expressions (iOS crashes on ["zoom"] in match/case)', () => {
-    expect(JSON.stringify([pinBodyLayout, pinGlyphLayout])).not.toContain('zoom');
+    expect(JSON.stringify([pinLayout, pinPaint])).not.toContain('zoom');
   });
 });

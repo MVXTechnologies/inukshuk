@@ -3,6 +3,7 @@ import { useMapStore } from '@state/mapStore';
 import { useWaypointMoveStore } from '@state/waypointMoveStore';
 import { act, renderHook } from '@testing-library/react-native';
 
+import { useActionSnackbar } from '../../common/useActionSnackbar';
 import { useWaypointQuickActions } from './useWaypointQuickActions';
 
 jest.mock('@data/storage', () => ({
@@ -24,7 +25,9 @@ beforeEach(() => {
   useMapStore.setState({ mapCenter: null });
 });
 
-async function setup(over: Partial<Parameters<typeof useWaypointQuickActions>[0]> = {}) {
+type Options = Parameters<typeof useWaypointQuickActions>[0];
+
+async function setup(over: Partial<Omit<Options, 'snack'>> = {}) {
   const options = {
     location: FIX,
     accuracyM: 5,
@@ -34,7 +37,9 @@ async function setup(over: Partial<Parameters<typeof useWaypointQuickActions>[0]
     getCenter: jest.fn(async () => null),
     ...over,
   };
-  const hook = await renderHook(() => useWaypointQuickActions(options));
+  const hook = await renderHook(() =>
+    useWaypointQuickActions({ ...options, snack: useActionSnackbar(8000) }),
+  );
   return { ...hook, options };
 }
 

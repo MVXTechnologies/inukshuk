@@ -84,7 +84,12 @@ describe('NavigationCompassRow', () => {
       follow: { name: 'T', readout: readout({ onTrail: false, crossTrackM: 62 }) },
       units: 'imperial',
     });
-    expect(screen.getByText('Off trail 203 ft')).toBeTruthy();
+    // Short enough to fit whole ("Off trail 1…" was cut, 2.5.1 QA)…
+    expect(screen.getByText('Off 203 ft')).toBeTruthy();
+    // …and said in full to screen readers.
+    expect(screen.getByTestId('nav-compass').props.accessibilityLabel).toContain(
+      'Off trail, 203 ft',
+    );
   });
 
   it('following wins over a stale destination, and waits for its readout', async () => {

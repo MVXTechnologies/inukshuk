@@ -3,6 +3,7 @@ import {
   buildFollowTargets,
   createFollowSession,
   prepareTrail,
+  trailPathCoordinates,
   type FollowReadout,
   type PreparedTrail,
 } from '@core/nav';
@@ -16,6 +17,8 @@ export interface FollowState {
   name: string;
   /** Null until the trail is loaded and there is a fix. */
   readout: FollowReadout | null;
+  /** The followed trail's lines (`[lon, lat]`, split at pauses), once loaded. */
+  path?: [number, number][][] | null;
 }
 
 /**
@@ -28,6 +31,11 @@ export interface FollowState {
  * `@core/nav/trailTracker`) — run in a memo on the fix MapScreen already
  * re-renders for, so it adds no render of its own. Heading never reaches
  * here: the compass leaf subscribes to it.
+ *
+ * The session (your place on the trail and your progress) lives as long as
+ * the trail: a library change only swaps its targets (`setTargets`), and only
+ * when the targets of THIS trail actually changed — adding a waypoint
+ * mid-follow must not send you back to the start of an out-and-back.
  *
  * Stops following (and says so) if the trail can't be read or is deleted.
  */
@@ -72,20 +80,30 @@ export function useFollowTrail(
 
   const trail = prepared !== null && prepared.fileUri === fileUri ? prepared.trail : null;
   const notes = track?.notes;
-  const session = useMemo(
-    () =>
-      trail === null
-        ? null
-        : createFollowSession(trail, buildFollowTargets(trail, waypoints, notes ?? [])),
+  // The targets, derived per library change: one grid query per waypoint,
+  // never per fix.
+  const targets = useMemo(
+    () => (trail === null ? null : buildFollowTargets(trail, waypoints, notes ?? [])),
     [trail, waypoints, notes],
+  );
+  // Its line for the map, built once per trail (O(n)), never per fix.
+  const path = useMemo(() => (trail === null ? null : trailPathCoordinates(trail)), [trail]);
+  // One session per trail: it holds your progress, so it never restarts on a
+  // target change (see setTargets).
+  const session = useMemo(
+    () => (trail === null ? null : createFollowSession(trail, buildFollowTargets(trail, [], []))),
+    [trail],
   );
   // The session is stateful (it tracks your progress), and updating it twice
   // with the same fix is harmless, so a memo on the fix is the right home.
-  const readout = useMemo(
-    () => (session !== null && location !== null ? session.update(location) : null),
-    [session, location],
-  );
+  // New targets re-run it once on the current fix, so the flag moves at once
+  // (one tracker update on a fix it already holds: a few projections).
+  const readout = useMemo(() => {
+    if (session === null || targets === null || location === null) return null;
+    session.setTargets(targets);
+    return session.update(location);
+  }, [session, targets, location]);
 
   if (following === null) return null;
-  return { name: track?.name ?? following.name, readout };
+  return { name: track?.name ?? following.name, readout, path };
 }

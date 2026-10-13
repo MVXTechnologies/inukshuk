@@ -29,9 +29,13 @@ interface HeadingConeProps {
  * Its angular width tracks the sensor's reported calibration: the worse the
  * compass accuracy, the wider (vaguer) the beam.
  *
- * Render inside <Map>. `beforeId` slots the fill beneath the puck's white
- * ring — the native side waits for that layer to exist before inserting, so
- * mount order relative to <UserLocation> doesn't matter. The translucent blue
+ * Render inside <Map>. `beforeId` slots the fill beneath the puck's ring —
+ * OUR ring (`PuckLayers`' {@link PUCK_RING_LAYER_ID}): PuckLayers are the
+ * children of <UserLocation>, which replaces MapLibre's default puck, so its
+ * `mlrn-user-location-puck-white` layer (the old anchor) never exists and
+ * the cone was never inserted (2.5.1 review). The native side waits for the
+ * anchor layer to exist before inserting, so mount order relative to
+ * <UserLocation> doesn't matter. The translucent blue
  * stays subtle on both the light and dark basemaps (same approach Google Maps
  * uses in both themes), and it fades out below z12 where the cone would
  * collapse into the dot anyway.
@@ -40,6 +44,12 @@ interface HeadingConeProps {
  * `subscribeHeading`) so cone updates re-render only this subtree, gated to
  * ≥1° changes to keep GeoJSON regeneration cheap.
  */
+/**
+ * The puck ring layer the cone sits under: `PuckLayers`' `inukshuk-puck-ring`
+ * (a test pins that PuckLayers draws a layer with exactly this id).
+ */
+export const PUCK_RING_LAYER_ID = 'inukshuk-puck-ring';
+
 export function HeadingCone({ location }: HeadingConeProps) {
   const tokens = useSchemeTokens();
   const [beam, setBeam] = useState<{ headingDeg: number; accuracy: number | null } | null>(null);
@@ -77,7 +87,7 @@ export function HeadingCone({ location }: HeadingConeProps) {
       <Layer
         id="heading-cone-fill"
         type="fill"
-        beforeId="mlrn-user-location-puck-white"
+        beforeId={PUCK_RING_LAYER_ID}
         paint={{
           'fill-color': tokens.map.puck,
           'fill-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0, 13, 0.18],

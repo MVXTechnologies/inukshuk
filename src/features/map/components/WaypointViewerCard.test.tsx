@@ -80,6 +80,19 @@ describe('WaypointViewerCard (#505)', () => {
     expect(screen.getByTestId('waypoint-note').props.numberOfLines).toBeUndefined();
   });
 
+  it('gives a long name its own line (two lines), not a sliver beside the actions', async () => {
+    const label = 'Stationnement du belvédère de la Citadelle nord';
+    await setup({ ...WITH_NOTE, label });
+    const name = screen.getByTestId('waypoint-card-name');
+    expect(name.props.children).toBe(label);
+    expect(name.props.numberOfLines).toBe(2);
+    // Not in the actions' row: that row holds only the buttons.
+    const actionsRow = screen.getByLabelText('Edit waypoint').parent?.parent;
+    expect(actionsRow).toBeTruthy();
+    expect(screen.getByLabelText('Navigate to waypoint')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Close waypoint')).toBeOnTheScreen();
+  });
+
   it('says how to add a note when there is none', async () => {
     await setup({ label: 'Waypoint 1', latitude: 46, longitude: -71 });
     expect(screen.getByText(/No note or photo yet/)).toBeTruthy();

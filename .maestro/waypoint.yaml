@@ -3,6 +3,7 @@
 # with EDIT and UNDO. The flow opens the editor from EDIT, annotates and
 # saves, then drops a SECOND waypoint and asserts its auto number is higher
 # ("Waypoint N+…") — only true if the first one reached the persisted store.
+# It ends by deleting every waypoint it dropped (see the tidy-up at the end).
 #
 # Why not re-open the pin to check the note? Neither driver can target it:
 # the pins are MapLibre symbols (#675), with no view and no a11y node, and on
@@ -124,3 +125,40 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 60000
+# …and every other waypoint this flow dropped (the first one, and any a retry
+# added), from the Library. A pin left at the fix sits where navigate.yaml,
+# next in this shard, long-presses the map centre — and a long-press on a
+# saved pin starts Move (#676) instead of opening the coordinates chip.
+# Same row idiom as heatmap.yaml: long-press → "Delete waypoint" → confirm.
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Import'
+    timeout: 15000
+- repeat:
+    times: 8
+    while:
+      visible: 'Waypoint \d+.*'
+    commands:
+      - longPressOn: 'Waypoint \d+.*'
+      - extendedWaitUntil:
+          visible: 'Delete waypoint'
+          timeout: 8000
+      - tapOn: 'Delete waypoint'
+      # Confirm dialog: title 'Delete waypoint', buttons Cancel / Delete —
+      # 'Delete' matches only the button (Maestro text match is exact).
+      - extendedWaitUntil:
+          visible: 'Cancel'
+          timeout: 8000
+      - tapOn: 'Delete'
+      - extendedWaitUntil:
+          notVisible: 'Cancel'
+          timeout: 8000
+- assertNotVisible: 'Waypoint \d+.*'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 15000

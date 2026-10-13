@@ -40,17 +40,6 @@ export interface MapActions {
   onDownload?: () => void;
   /** Open the map maker. Omitted in 3D. */
   onMakeMap?: () => void;
-  /**
-   * Open the coordinate readout/entry dialog (#97). This is the entry point
-   * for BOTH halves of that feature — read the map centre out, or type a
-   * coordinate to fly to / aim a destination at — which is why one row buys
-   * the whole thing instead of two.
-   *
-   * Since #232 the PRIMARY way in is the map-tap chip's "Navigate to
-   * coordinates", which opens the same dialog seeded with the tapped point.
-   * This row survives as the way to type a coordinate you have not tapped.
-   */
-  onGoToCoordinates?: () => void;
   /** Open Settings (a stack route since Settings left the tab bar). */
   onOpenSettings?: () => void;
   /**
@@ -118,8 +107,6 @@ export function MapActionsMenu({
           {actions.onDownload !== undefined &&
             row('tray-arrow-down', 'Download offline area', run(actions.onDownload))}
           {actions.onMakeMap !== undefined && row('map-plus', 'Make a map', run(actions.onMakeMap))}
-          {actions.onGoToCoordinates !== undefined &&
-            row('crosshairs', 'Navigate to coordinates', run(actions.onGoToCoordinates))}
           {actions.onOpenSettings !== undefined &&
             row('cog-outline', 'Settings', run(actions.onOpenSettings))}
           {actions.onDraw !== undefined && row('draw', 'Draw', run(actions.onDraw))}

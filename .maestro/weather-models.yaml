@@ -1,7 +1,7 @@
 # ============================================================================
 # PARKED — cannot pass on the shipping build; see WEATHER_ENABLED in
-# src/core/features/flags.ts. The Weather row in the Overlays menu is disabled
-# ("Coming soon") this release, so the sub-menu this flow drills into never
+# src/core/features/flags.ts. The Weather row is not in the Overlays
+# menu this release (no greyed rows since 2.5.1), so the sub-menu this flow drills into never
 # opens. Kept so that flipping the flag back to true restores the feature and
 # its coverage together. Parked in
 # .maestro/shards.json (no Android CI shard runs it), so CI is unaffected.

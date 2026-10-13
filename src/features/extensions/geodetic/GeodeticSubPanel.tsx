@@ -7,6 +7,7 @@ import { SubPanelHeader, SwitchRow } from '../../map/components/mapSheet';
 import { setExtensionPrefs, useExtensionPrefs } from '../prefs';
 import type { ExtensionSubPanelProps } from '../types';
 import { geodeticHint } from './GeodeticPanelEntry';
+import { GEODETIC_ICON } from './icon';
 
 /**
  * Map overlays › Extensions › Geodetic points (#668): the extension's switch
@@ -27,7 +28,7 @@ export function GeodeticSubPanel({ onBack }: ExtensionSubPanelProps) {
         right={<GeodeticFilterReset />}
       />
       <SwitchRow
-        icon="map-marker-radius-outline"
+        icon={GEODETIC_ICON}
         label="Show geodetic points"
         hint={geodeticHint(filterCount, summary)}
         value={show}

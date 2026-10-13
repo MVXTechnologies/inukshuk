@@ -1,6 +1,6 @@
 import { waypointIconLabel } from '@core/library/waypointIcons';
 import { useCoordinateFormatter } from '@state/useCoordinateFormatter';
-import type { WaypointIcon } from '@core/models';
+import type { StoredWaypointIcon } from '@core/models';
 import { useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Surface, Text, useTheme } from 'react-native-paper';
@@ -16,7 +16,7 @@ export interface ViewableWaypoint {
   note?: string;
   photoUri?: string;
   /** Chosen pin icon (#350); absent = the default pin. */
-  icon?: WaypointIcon;
+  icon?: StoredWaypointIcon;
 }
 
 interface Props {
@@ -78,26 +78,9 @@ export function WaypointViewerCard({
   const muted = theme.colors.onSurfaceVariant;
   return (
     <Surface style={[styles.card, floating && styles.floating]} elevation={4}>
+      {/* The name gets its own line under the actions (2.5.1 QA): beside five
+          buttons it was cut to a dozen characters. Up to two lines here. */}
       <View style={styles.header}>
-        <View
-          style={styles.icon}
-          accessible
-          accessibilityLabel={`${waypointIconLabel(waypoint.icon)} icon`}
-        >
-          {glyph === null ? (
-            <InukshukGlyph size={22} frame="square" tone="mono" color={muted} />
-          ) : (
-            <Icon source={glyph} size={22} color={muted} />
-          )}
-        </View>
-        <Text
-          variant="titleMedium"
-          numberOfLines={1}
-          style={styles.title}
-          accessibilityRole="header"
-        >
-          {waypoint.label}
-        </Text>
         {onNavigate && (
           <IconButton
             icon="navigation-variant-outline"
@@ -135,6 +118,28 @@ export function WaypointViewerCard({
           <Icon source="trash-can-outline" size={20} color={theme.colors.error} />
         </HoldButton>
         <IconButton icon="close" size={20} onPress={onClose} accessibilityLabel="Close waypoint" />
+      </View>
+      <View style={styles.nameRow}>
+        <View
+          style={styles.icon}
+          accessible
+          accessibilityLabel={`${waypointIconLabel(waypoint.icon)} icon`}
+        >
+          {glyph === null ? (
+            <InukshukGlyph size={22} frame="square" tone="mono" color={muted} />
+          ) : (
+            <Icon source={glyph} size={22} color={muted} />
+          )}
+        </View>
+        <Text
+          variant="titleMedium"
+          numberOfLines={2}
+          style={styles.title}
+          accessibilityRole="header"
+          testID="waypoint-card-name"
+        >
+          {waypoint.label}
+        </Text>
       </View>
 
       {note !== '' && (
@@ -259,7 +264,8 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   floating: { borderRadius: 16 },
-  header: { flexDirection: 'row', alignItems: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   icon: { marginRight: 10 },
   title: { flex: 1 },
   delete: { marginHorizontal: 4 },

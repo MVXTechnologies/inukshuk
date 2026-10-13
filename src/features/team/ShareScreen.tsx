@@ -4,6 +4,7 @@
  * shared records any member may delete; a trail belongs to whoever shared it
  * (they or an admin can take it back). Photos are not shared in this version.
  */
+import { isWaypointIcon } from '@core/library/waypointIcons';
 import { loadTrackGeometry } from '@data/trackGeometry';
 import { reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
@@ -135,7 +136,7 @@ export function ShareScreen() {
                     longitude: w.longitude,
                     label: w.label,
                     ...(w.note ? { note: w.note } : {}),
-                    ...(w.icon ? { icon: w.icon } : {}),
+                    ...(isWaypointIcon(w.icon) ? { icon: w.icon } : {}),
                     ...(w.color ? { color: w.color } : {}),
                     ...(w.size ? { size: w.size } : {}),
                   }),

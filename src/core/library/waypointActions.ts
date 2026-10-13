@@ -48,11 +48,23 @@ export function moveSummary(from: LatLng, to: LatLng, units: Units): MoveSummary
   };
 }
 
-/** The move bar's second line. */
-export function moveBarHint(summary: MoveSummary): string {
-  return summary.text === null
-    ? 'Pan the map to put the pin in its new place'
-    : `Moved ${summary.text} · zoom in for precision`;
+/**
+ * Above this many ground metres per screen pixel, "zoom in for precision" is
+ * worth saying: at 0.5 m/px the scale bar reads about 50 m. Closer in (a
+ * 20 m scale) a pixel is a few decimetres, finer than GPS — the hint was
+ * noise there (2.5.1 QA).
+ */
+export const MOVE_PRECISION_HINT_MPP = 0.5;
+
+/**
+ * The move bar's second line. `metersPerPixel` is the map's scale where the
+ * pin is; the zoom hint shows only while it is coarser than
+ * {@link MOVE_PRECISION_HINT_MPP} (unknown scale: no hint).
+ */
+export function moveBarHint(summary: MoveSummary, metersPerPixel: number | null = null): string {
+  if (summary.text === null) return 'Pan the map to put the pin in its new place';
+  const coarse = metersPerPixel !== null && metersPerPixel > MOVE_PRECISION_HINT_MPP;
+  return coarse ? `Moved ${summary.text} · zoom in for precision` : `Moved ${summary.text}`;
 }
 
 /** The snackbar after Confirm: "Moved 38 m". */

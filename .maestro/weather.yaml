@@ -3,8 +3,8 @@
 #
 # Weather is parked behind WEATHER_ENABLED in src/core/features/flags.ts
 # (owner call, 2026-09: park the weather features and grey them out for the
-# next release). The Weather row in the Overlays menu is present but DISABLED
-# with a "Coming soon" subtitle, so every step below that drills into the
+# next release). The Weather row is not in the Overlays menu while parked (no
+# greyed rows since 2.5.1), so every step below that drills into the
 # Weather sub-menu will fail at the first tap.
 #
 # It is kept, not deleted, because flipping WEATHER_ENABLED back to true must

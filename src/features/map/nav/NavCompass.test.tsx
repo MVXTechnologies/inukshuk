@@ -134,6 +134,38 @@ describe('NavCompass', () => {
     expect(screen.getByTestId('nav-compass-trail-bar')).toBeTruthy();
   });
 
+  it('shrinks the status to fit instead of cutting the number off', async () => {
+    await mount({ trailBearingDeg: 252, status: { text: 'Off 1.25 km', warn: true } });
+    await heading(300);
+    await layout();
+    const status = screen.getByTestId('nav-compass-status');
+    expect(status.props.adjustsFontSizeToFit).toBe(true);
+    expect(status.props.numberOfLines).toBe(1);
+  });
+
+  it('leaves out a tick label the edge arrow would cover', async () => {
+    await mount(); // target 042°
+    await heading(340);
+    await layout();
+    expect(screen.getByTestId('nav-compass-edge-right')).toBeTruthy();
+    // "30" sits at the right edge, under the arrow; "N" is clear.
+    expect(screen.queryByTestId('nav-compass-label-30')).toBeNull();
+    expect(screen.getByTestId('nav-compass-label-0')).toBeTruthy();
+  });
+
+  it('leaves out a tick label under the flag and the trail bar', async () => {
+    await mount({
+      targetBearingDeg: 60,
+      trailBearingDeg: 60,
+      status: { text: 'On trail', warn: false },
+    });
+    await heading(30);
+    await layout();
+    expect(screen.getByTestId('nav-compass-flag')).toBeTruthy();
+    expect(screen.queryByTestId('nav-compass-label-60')).toBeNull();
+    expect(screen.getByTestId('nav-compass-label-30')).toBeTruthy();
+  });
+
   it('hides the trail bar outside the window', async () => {
     await mount({ trailBearingDeg: 180, status: { text: 'On trail', warn: false } });
     await heading(0);

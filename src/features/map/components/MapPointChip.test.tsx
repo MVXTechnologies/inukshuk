@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
 import {
@@ -203,5 +204,50 @@ describe('hitMapPointChip', () => {
   it('is not a chip tap anywhere else', () => {
     expect(hitMapPointChip(0, MAP_POINT_COPY_HIT.radius)).toBeNull();
     expect(hitMapPointChip(200, 0)).toBeNull();
+  });
+});
+
+describe('near a screen edge (2.5.1 QA)', () => {
+  const { buttonWidth, buttonHeight, gap, bottomOffset } = MAP_POINT_ACTION_LAYOUT;
+  const midY = -(bottomOffset + buttonHeight / 2);
+
+  it('hit-tests the buttons where the shifted bubble draws them', () => {
+    const shift = 90;
+    // The row's centre moved right by `shift`.
+    expect(hitMapPointChip(shift - (buttonWidth + gap), midY, shift)).toBe('navigate');
+    expect(hitMapPointChip(shift, midY, shift)).toBe('waypoint');
+    expect(hitMapPointChip(shift + buttonWidth + gap, midY, shift)).toBe('convert');
+    // Unshifted positions no longer hit the same buttons.
+    expect(hitMapPointChip(-(buttonWidth + gap), midY, shift)).not.toBe('navigate');
+  });
+
+  it('slides the bubble, not the tail or the dot', async () => {
+    await render(
+      <PaperProvider>
+        <MapPointChip accessibilityLabel="Point" shiftX={60}>
+          <MapPointLine text="46.81390, -71.20820" />
+        </MapPointChip>
+      </PaperProvider>,
+    );
+    const chip = StyleSheet.flatten(screen.getByTestId('map-point-chip').props.style) as {
+      transform?: { translateX: number }[];
+    };
+    expect(chip.transform).toEqual([{ translateX: 60 }]);
+  });
+
+  it('reads the readout as ONE labelled element, the buttons as buttons', async () => {
+    await render(
+      <PaperProvider>
+        <MapPointChip
+          accessibilityLabel="Point 46.81390, -71.20820, 120 m, 042° NE"
+          actions={{ onNavigate: jest.fn(), onAddWaypoint: jest.fn(), onConvert: jest.fn() }}
+        >
+          <MapPointLine text="46.81390, -71.20820" />
+        </MapPointChip>
+      </PaperProvider>,
+    );
+    const readout = screen.getByLabelText('Point 46.81390, -71.20820, 120 m, 042° NE');
+    expect(readout.props.accessible).toBe(true);
+    expect(screen.getAllByRole('button')).toHaveLength(3);
   });
 });

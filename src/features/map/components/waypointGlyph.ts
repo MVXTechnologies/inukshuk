@@ -1,5 +1,5 @@
 import { waypointIconGlyph } from '@core/library/waypointIcons';
-import type { WaypointIcon } from '@core/models';
+import type { StoredWaypointIcon } from '@core/models';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
 /** The glyph names `MaterialCommunityIcons` actually ships, as a type. */
@@ -15,7 +15,7 @@ export type MciGlyph = keyof typeof MaterialCommunityIcons.glyphMap;
  * better than a tofu box on a map. `waypointGlyph.test.ts` fails CI before it
  * can come to that.
  */
-export function mciGlyph(icon: WaypointIcon | undefined): MciGlyph | null {
+export function mciGlyph(icon: StoredWaypointIcon | undefined): MciGlyph | null {
   const glyph = waypointIconGlyph(icon);
   return glyph !== null && isMciGlyph(glyph) ? glyph : null;
 }

@@ -12,7 +12,7 @@ import { useMapStore } from '@state/mapStore';
 import { useWaypointMoveStore } from '@state/waypointMoveStore';
 import { useCallback, useEffect, useRef } from 'react';
 
-import { useActionSnackbar, type ActionSnackbarState } from '../../common/useActionSnackbar';
+import type { ActionSnackbarState } from '../../common/useActionSnackbar';
 
 interface Options {
   /** The GPS fix, or null before the first one. */
@@ -29,6 +29,11 @@ interface Options {
   onBeforeMove: (at: LatLng) => void;
   /** The map's centre right now (fresh from the camera), or null if unknown. */
   getCenter: () => Promise<LatLng | null>;
+  /**
+   * The EDIT / UNDO bar to show on: the map's, shared with its plain
+   * messages so the two never stack (`useMapSnackbars`).
+   */
+  snack: ActionSnackbarState;
 }
 
 export interface WaypointQuickActions {
@@ -59,8 +64,8 @@ export function useWaypointQuickActions({
   onEdit,
   onBeforeMove,
   getCenter,
+  snack,
 }: Options): WaypointQuickActions {
-  const snack = useActionSnackbar(8000);
   const { show } = snack;
   // Handlers read the latest options through a ref, so the returned
   // callbacks keep their identity across the map screen's renders.

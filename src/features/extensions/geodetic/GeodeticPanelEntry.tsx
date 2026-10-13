@@ -5,6 +5,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { SubPanelButton, SwitchRow } from '../../map/components/mapSheet';
 import { setExtensionPrefs, useExtensionPrefs } from '../prefs';
 import type { ExtensionPanelEntryProps } from '../types';
+import { GEODETIC_ICON } from './icon';
 
 /** The row's line under its name: the active filter count, else the summary. */
 export function geodeticHint(filterCount: number, summary: string): string {
@@ -24,7 +25,7 @@ export function GeodeticPanelEntry({ onOpenPanel }: ExtensionPanelEntryProps) {
   const { label, summary } = EXTENSIONS.geodetic;
   return (
     <SwitchRow
-      icon="map-marker-radius-outline"
+      icon={GEODETIC_ICON}
       label={label}
       hint={geodeticHint(filterCount, summary)}
       value={show}

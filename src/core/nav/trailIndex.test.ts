@@ -3,6 +3,7 @@ import { largeLibrary } from '@core/heat/__fixtures__/quebecLibrary';
 import type { LatLng } from '@core/models';
 import { at, noise, offset, polyline } from './__fixtures__/paths';
 import {
+  trailPathCoordinates,
   nearestOnTrail,
   pointAtAlong,
   prepareTrail,
@@ -158,5 +159,40 @@ describe('pointAtAlong', () => {
     const a = projectionPoint(trail, proj);
     const b = pointAtAlong(trail, proj.alongM);
     expect(haversineMeters(a, b)).toBeLessThan(0.01);
+  });
+});
+
+describe('trailPathCoordinates', () => {
+  it('draws the trail as [lon, lat] lines, split at a pause', () => {
+    const pts = [
+      { latitude: 46, longitude: -71 },
+      { latitude: 46.001, longitude: -71 },
+      { latitude: 46.002, longitude: -71 },
+      { latitude: 46.003, longitude: -71 },
+    ];
+    const whole = trailPathCoordinates(prepareTrail(pts)!);
+    expect(whole).toEqual([
+      [
+        [-71, 46],
+        [-71, 46.001],
+        [-71, 46.002],
+        [-71, 46.003],
+      ],
+    ]);
+    const paused = trailPathCoordinates(prepareTrail(pts, [2])!);
+    expect(paused).toEqual([
+      [
+        [-71, 46],
+        [-71, 46.001],
+      ],
+      [
+        [-71, 46.002],
+        [-71, 46.003],
+      ],
+    ]);
+  });
+
+  it('draws nothing for a one-point trail', () => {
+    expect(trailPathCoordinates(prepareTrail([{ latitude: 46, longitude: -71 }])!)).toEqual([]);
   });
 });

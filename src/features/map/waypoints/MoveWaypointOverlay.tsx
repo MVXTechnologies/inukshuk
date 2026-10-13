@@ -1,3 +1,4 @@
+import { metersPerPixel } from '@core/geo/scaleBar';
 import { moveBarHint, moveSummary } from '@core/library/waypointActions';
 import { pinGeometry, WAYPOINT_PIN_DIAMETER, waypointSize } from '@core/library/waypointStyle';
 import type { Units } from '@core/format';
@@ -16,6 +17,8 @@ import { formatWaypointCoords } from './formatWaypointCoords';
 import { WaypointPinView } from './WaypointPinView';
 
 interface Props {
+  /** The map's settled zoom (for the precision hint), null before the first settle. */
+  zoom?: number | null;
   units: Units;
   /** Put the pin back where it was and leave move mode. */
   onCancel: () => void;
@@ -38,7 +41,7 @@ interface Props {
  * (onRegionDidChange) — so this re-renders once per pan, on idle. Android
  * Back cancels.
  */
-export function MoveWaypointOverlay({ units, onCancel, onConfirm, onLocate }: Props) {
+export function MoveWaypointOverlay({ units, zoom = null, onCancel, onConfirm, onLocate }: Props) {
   const target = useWaypointMoveStore((s) => s.moving);
   const center = useMapStore((s) => s.mapCenter);
   const theme = useTheme();
@@ -122,7 +125,7 @@ export function MoveWaypointOverlay({ units, onCancel, onConfirm, onLocate }: Pr
           {formatWaypointCoords(at.latitude, at.longitude)}
         </Text>
         <Text style={[styles.hint, { color: theme.colors.onSurfaceVariant }]}>
-          {moveBarHint(summary)}
+          {moveBarHint(summary, zoom === null ? null : metersPerPixel(zoom, at.latitude))}
         </Text>
         <View style={styles.buttons}>
           <Button

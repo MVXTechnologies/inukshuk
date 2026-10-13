@@ -1,5 +1,11 @@
 import type { GeoReference } from '@core/models';
 import {
+  DEFAULT_WAYPOINT_ICON_LABEL,
+  isWaypointIcon,
+  waypointIconLabel,
+  waypointIconSpec,
+} from './waypointIcons';
+import {
   LIBRARY_SCHEMA_VERSION,
   SETTINGS_SCHEMA_VERSION,
   mapLibraryIndexPaths,
@@ -742,8 +748,35 @@ describe('malformed nested library records', () => {
     expect(index.waypoints[0]?.icon).toBe('camp');
   });
 
-  it('drops an unknown or junk waypoint icon rather than asking for a glyph that does not exist (#350)', () => {
-    for (const icon of ['zipline', '', 'Camp', 42, null, {}, ['camp'], 'toString']) {
+  it("keeps a newer build's icon id, which draws as the default pin (rollback safety)", () => {
+    for (const icon of ['zipline', 'via-ferrata', 'hut-2']) {
+      const index = migrateLibraryIndex({
+        schemaVersion: LIBRARY_SCHEMA_VERSION,
+        waypoints: [{ id: 'w1', latitude: 46, longitude: -71, label: 'W', createdAt: 1, icon }],
+      });
+      // Kept, so the next save writes it back and an upgrade gets the icon again…
+      expect(index.waypoints[0]?.icon).toBe(icon);
+      // …and drawn as the default pin by this build, which does not know it.
+      expect(isWaypointIcon(index.waypoints[0]?.icon)).toBe(false);
+      expect(waypointIconSpec(index.waypoints[0]?.icon)).toBeNull();
+      expect(waypointIconLabel(index.waypoints[0]?.icon)).toBe(DEFAULT_WAYPOINT_ICON_LABEL);
+    }
+  });
+
+  it('drops a junk waypoint icon (#350)', () => {
+    const junk = [
+      '',
+      'Camp',
+      'two words',
+      '-camp',
+      'camp-',
+      'a'.repeat(65),
+      42,
+      null,
+      {},
+      ['camp'],
+    ];
+    for (const icon of junk) {
       const index = migrateLibraryIndex({
         schemaVersion: LIBRARY_SCHEMA_VERSION,
         waypoints: [{ id: 'w1', latitude: 46, longitude: -71, label: 'W', createdAt: 1, icon }],
