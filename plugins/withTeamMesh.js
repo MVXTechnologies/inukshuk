@@ -22,6 +22,7 @@ const { AndroidConfig, withInfoPlist } = require('@expo/config-plugins');
  * - INTERNET, ACCESS_NETWORK_STATE (Wi-Fi network routing), ACCESS_WIFI_STATE,
  *   CHANGE_WIFI_MULTICAST_STATE (the multicast lock that keeps mDNS alive on
  *   Wi-Fi drivers that filter multicast in power save).
+ * - VIBRATE: a team message routed as an alert (urgent, a mention) buzzes.
  * - NOT NEARBY_WIFI_DEVICES: only Wi-Fi Direct / Aware / LocalOnlyHotspot need
  *   it, and the MVP uses none of them.
  */
@@ -29,13 +30,15 @@ const { AndroidConfig, withInfoPlist } = require('@expo/config-plugins');
 const SERVICE_TYPE = '_inukshuk-team._tcp';
 
 const LOCAL_NETWORK_USAGE =
-  'Inukshuk finds your team’s phones on the same Wi-Fi or hotspot so you can share points, tasks, tracks and messages directly between phones, without any server.';
+  'Inukshuk finds your team’s phones on the same Wi-Fi or hotspot so you can share positions, waypoints, trails and messages directly between phones, without any server.';
 
 const ANDROID_PERMISSIONS = [
   'android.permission.INTERNET',
   'android.permission.ACCESS_NETWORK_STATE',
   'android.permission.ACCESS_WIFI_STATE',
   'android.permission.CHANGE_WIFI_MULTICAST_STATE',
+  // The team UI buzzes for urgent messages and mentions (#589 stage 3).
+  'android.permission.VIBRATE',
 ];
 
 /**

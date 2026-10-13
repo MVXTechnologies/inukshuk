@@ -18,7 +18,7 @@ export function isExtensionKey(value: unknown): value is ExtensionKey {
  * — no tiles, no style, no offline packs, no overlays row. Listed after the
  * map extensions, in this order.
  */
-export const DEVICE_EXTENSION_KEYS = ['gnss'] as const;
+export const DEVICE_EXTENSION_KEYS = ['gnss', 'team'] as const;
 
 export type DeviceExtensionKey = (typeof DEVICE_EXTENSION_KEYS)[number];
 

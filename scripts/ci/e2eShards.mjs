@@ -70,6 +70,20 @@ export function ownsLocation(flowSource) {
 }
 
 /**
+ * Does the flow start from a clean app? Declared with the tag `clean-state`.
+ * The runner clears the app's data before EVERY attempt (a retry included,
+ * so it never inherits a half-done first attempt), then waits for Android to
+ * finish removing the old task before Maestro launches the app. Maestro's own
+ * `clearState: true` launches at once, and on the API 34 emulator the pending
+ * task removal killed the new process ("Destroy timeout of remove-task …
+ * start not valid"), which then only started 30 s later (E2E run 37909729348).
+ * Like `clearState`, it wipes what earlier flows left: last of its shard.
+ */
+export function startsClean(flowSource) {
+  return flowTags(flowSource).includes('clean-state');
+}
+
+/**
  * Every problem with the plan, as human-readable strings (empty = valid).
  * `flowFiles` is the list of .yaml files in .maestro/, `sources` maps each
  * to its text.
@@ -120,7 +134,8 @@ export function validateShards(manifest, flowFiles, sources) {
   }
   const mustBeLast = new Set(Object.keys(last));
   for (const flow of flowFiles) {
-    if (clearsState(sources[flow] ?? '')) mustBeLast.add(flow);
+    const source = sources[flow] ?? '';
+    if (clearsState(source) || startsClean(source)) mustBeLast.add(flow);
   }
   for (const flow of mustBeLast) {
     const at = where.get(flow);

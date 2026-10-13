@@ -12,6 +12,7 @@ import {
 } from '@core/extensions/registry';
 import { datasetTilesUrl } from '@data/datasets';
 import { gnssLinkAvailable } from '@data/gnss/link';
+import { teamAvailability } from '@data/team/appTeam';
 
 /** An extension's tile template, or null while its dataset is unpublished. */
 export function extensionTilesUrl(key: ExtensionKey): string | null {
@@ -27,6 +28,8 @@ export function availableExtensions(): ExtensionKey[] {
 const DEVICE_AVAILABLE: Record<DeviceExtensionKey, () => boolean> = {
   // The receiver needs the native module, or the simulated receiver (debug / E2E builds).
   gnss: gnssLinkAvailable,
+  // Team mode needs the mesh module, the CSPRNG and the secure store (2.5.0+).
+  team: () => teamAvailability() === 'ok',
 };
 
 /** The device extensions this build offers, in registry order. */

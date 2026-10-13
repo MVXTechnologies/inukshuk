@@ -44,8 +44,12 @@ export function canManage(actor: Role, target: Role): boolean {
   return false;
 }
 
-/** Data op types a guest may author; members and up may author all of them. */
-const GUEST_TYPES: readonly string[] = ['pos', 'msg'];
+/**
+ * Data op types a guest may author; members and up may author all of them.
+ * Guests "only comment": entity writes are let through here and narrowed to
+ * their own `comment` records by the data fold (`data.ts`, `GUEST_KINDS`).
+ */
+const GUEST_TYPES: readonly string[] = ['pos', 'msg', 'e.set', 'e.del'];
 
 export function canWriteData(role: Role, type: string): boolean {
   return roleRank(role) >= roleRank('member') || GUEST_TYPES.includes(type);

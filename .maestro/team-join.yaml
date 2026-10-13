@@ -1,0 +1,141 @@
+# Team mode e2e (#589), joiner side, on the loopback mesh (a build made with
+# EXPO_PUBLIC_MESH_LOOPBACK=1, see team.yaml): a simulated team "Relevé MSA"
+# is founded nearby by a simulated phone; I paste its invite link, give my
+# name, compare the six-digit safety code, keep the team, and see the
+# founder's message and position, then leave.
+appId: com.inukshuk.app
+tags:
+  - clean-state
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            notifications: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+            notifications: allow
+# A clean start: the runner clears the app's data before every attempt (the
+# `clean-state` tag), so no team, join or invite is left over from an earlier
+# flow or a failed attempt. Android's one-time "Viewing full screen" hint can
+# then sit over the map.
+- tapOn:
+    text: 'Got it'
+    optional: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- setLocation:
+    latitude: 47.0745
+    longitude: -70.9065
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Settings'
+    timeout: 15000
+- tapOn: 'Settings'
+- scrollUntilVisible:
+    element: 'Extensions.*'
+    direction: DOWN
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: '.*Team mode.*'
+          commands:
+            - tapOn: 'Extensions.*'
+      - scrollUntilVisible:
+          element: '.*Team mode.*'
+          direction: DOWN
+          timeout: 5000
+# Compact list (#633): a one-line row, Get before the install and its switch
+# after; the team rows are in its details, opened by tapping the row (only
+# when they are closed: a second tap would close them again).
+- scrollUntilVisible:
+    element:
+      id: 'extension-row-team'
+    direction: DOWN
+- runFlow:
+    when:
+      visible: 'Get Team mode'
+    commands:
+      - tapOn: 'Get Team mode'
+- runFlow:
+    when:
+      notVisible:
+        id: 'extension-details-team'
+    commands:
+      - tapOn:
+          id: 'extension-row-team'
+- scrollUntilVisible:
+    element:
+      id: 'team-join-row'
+    direction: DOWN
+- tapOn:
+    id: 'team-join-row'
+- extendedWaitUntil:
+    visible:
+      id: 'team-join-screen'
+    timeout: 10000
+# The simulated team's invite link lands in the paste field.
+- tapOn:
+    id: 'team-sim-team'
+- extendedWaitUntil:
+    visible: '.*inukshuk://team/join.*'
+    timeout: 15000
+- tapOn:
+    id: 'team-join-paste-go'
+- extendedWaitUntil:
+    visible:
+      id: 'team-join-name'
+    timeout: 5000
+- tapOn:
+    id: 'team-join-myname'
+- eraseText: 40
+- inputText: 'Simon'
+- hideKeyboard
+- tapOn:
+    id: 'team-join-start'
+# Admitted: the safety code to compare.
+- extendedWaitUntil:
+    visible:
+      id: 'team-join-code'
+    timeout: 20000
+- takeScreenshot: team-join-code
+- tapOn:
+    id: 'team-join-match'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 10000
+- extendedWaitUntil:
+    visible: 'Relevé MSA'
+    timeout: 10000
+- assertVisible: '.*Julie Tremblay.*'
+- tapOn:
+    id: 'team-chat-button'
+- extendedWaitUntil:
+    visible: '.*Départ 9 h au stationnement P2.*'
+    timeout: 15000
+- tapOn: 'Back'
+# Leave.
+- scrollUntilVisible:
+    element: 'Leave team'
+    direction: DOWN
+- tapOn: 'Leave team'
+- tapOn: 'Leave'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-hub-screen'
+    timeout: 10000

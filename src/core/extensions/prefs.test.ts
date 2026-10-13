@@ -23,6 +23,7 @@ describe('migrateExtensionPrefs: settings files from before the registry', () =>
       geodetic: { installedAt: 0, show: true, offline: true },
       tides: { installedAt: 0, show: true, offline: false },
       gnss: { installedAt: 0, show: true, offline: false },
+      team: { installedAt: 0, show: true, offline: false },
     });
   });
 
@@ -31,6 +32,7 @@ describe('migrateExtensionPrefs: settings files from before the registry', () =>
       geodetic: { installedAt: 1_759_683_600_000, show: false, offline: false },
       tides: { installedAt: 0, show: true, offline: false },
       gnss: { installedAt: 0, show: true, offline: false },
+      team: { installedAt: 0, show: true, offline: false },
     });
   });
 
@@ -39,6 +41,7 @@ describe('migrateExtensionPrefs: settings files from before the registry', () =>
       geodetic: { installedAt: 1_759_683_600_000, show: true, offline: true },
       tides: { installedAt: 1_759_770_000_000, show: false, offline: false },
       gnss: { installedAt: 0, show: true, offline: false },
+      team: { installedAt: 0, show: true, offline: false },
     });
   });
 
@@ -64,6 +67,7 @@ describe('the registry format and its legacy mirror', () => {
     geodetic: { installedAt: 1_759_683_600_000, show: false, offline: true },
     tides: { installedAt: 1_759_770_000_000, show: true, offline: false },
     gnss: { installedAt: 0, show: true, offline: false },
+    team: { installedAt: 0, show: true, offline: false },
   };
 
   it('writes the pre-registry flat keys next to `extensions`', () => {

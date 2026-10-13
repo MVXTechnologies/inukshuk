@@ -1,4 +1,5 @@
 import { parseGpx } from '@core/geo/gpx';
+import { PhotoBottomCard, usePhotoCard } from '@features/photos/PhotoBottomCard';
 import { routeClimb } from '@core/draw/elevation';
 import {
   averageHeartRate,
@@ -40,7 +41,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
@@ -90,7 +91,6 @@ import { indexTrack } from '@core/photos/trackIndex';
 import { photosEditable, useTrailPhotos, useTrailPhotosStore } from '@state/trailPhotosStore';
 import { usePhotoFocusStore } from '@state/photoFocusStore';
 import { AddPhotosSheet } from '../photos/AddPhotosSheet';
-import { photoViewerHref } from '../photos/photoUri';
 import { ShareTrailSheet } from '../photos/ShareTrailSheet';
 
 interface Props {
@@ -114,9 +114,15 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const router = useRouter();
   // Library's "Trim" menu item routes here with ?trim=1 to enter trim mode
   // as soon as this trail's points are loaded (see the effect below).
-  const { trim: trimParam, addPhotos: addPhotosParam } = useLocalSearchParams<{
+  const {
+    trim: trimParam,
+    addPhotos: addPhotosParam,
+    photo: photoParam,
+  } = useLocalSearchParams<{
     trim?: string;
     addPhotos?: string;
+    /** A photo to show (a team comment notification on it): ringed, its card open. */
+    photo?: string;
   }>();
   const track = useLibraryStore((s) => s.tracks.find((t) => t.id === trackId));
   const addTrack = useLibraryStore((s) => s.addTrack);
@@ -464,9 +470,25 @@ export function Trail3DGLScreen({ trackId }: Props) {
     () => shownPhotos.filter((p) => !isNotePhoto(p)).length,
     [shownPhotos],
   );
+  // A photo tap (map circles, the Overview strip, the profile lane, the
+  // timeline) opens the bottom card (there is no full-screen viewer).
   const openPhoto = useCallback(
-    (photoId: string) => router.push(photoViewerHref(trackId, photoId) as never),
-    [router, trackId],
+    (photoId: string) => usePhotoCard.getState().show({ kind: 'own', trackId, photoId }),
+    [trackId],
+  );
+  // The card is app-wide state: it closes when this screen loses focus (a
+  // deep link to the map, Back), so it never shows over another screen. A
+  // `?photo=` (a team comment notification) opens its card once focused.
+  const paramShown = useRef<string | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      if (photoParam && paramShown.current !== photoParam) {
+        paramShown.current = photoParam;
+        usePhotoFocusStore.getState().focus(trackId, photoParam);
+        usePhotoCard.getState().show({ kind: 'own', trackId, photoId: photoParam });
+      }
+      return () => usePhotoCard.getState().close();
+    }, [photoParam, trackId]),
   );
   const openAddPhotos = useCallback(() => {
     if (!canEditPhotos) {
@@ -1093,6 +1115,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
         </View>
       )}
 
+      <PhotoBottomCard dockStyle={styles.photoCardDock} />
       <Snackbar
         visible={snack !== null}
         onDismiss={dismissSnack}
@@ -1105,6 +1128,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
 }
 
 const styles = StyleSheet.create({
+  photoCardDock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20 },
   fill: { flex: 1 },
   pad: { paddingHorizontal: 16 },
   mapBox: { backgroundColor: '#dfe9f2' },

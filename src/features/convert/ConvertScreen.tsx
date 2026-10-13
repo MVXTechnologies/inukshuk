@@ -1,3 +1,4 @@
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { plan as makePlan, resolveHeight } from '@core/convert/graph';
 import { packsForGrids, type Pack } from '@core/convert/packs';
 import { coordinateSections, heightSections } from '@core/convert/picker';
@@ -21,16 +22,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  Share,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { Platform, Pressable, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native';
 import { Button, Icon, IconButton, Snackbar, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -295,10 +287,7 @@ export function ConvertScreen({ params }: { params: Record<string, unknown> }) {
           accessibilityLabel="History"
         />
       </View>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {/* FROM */}
           <View style={[styles.card, card]} testID="convert-from">

@@ -7,8 +7,10 @@
  *
  * - **display** — long edge ≤ 2048 px, JPEG q 0.82 (≈ 0.5–0.7 MB): the viewer.
  * - **thumb** — 240 px centre square, JPEG q 0.8 (≈ 15 KB): strips, filmstrip, lane.
- * - **sprite** — 132 px circle (44 pt at 3×) with a light ring and transparent
- *   corners, PNG: the map symbol. The ring is a neutral paper white that reads
+ * - **sprite** — 264 px circle (44 pt at 6×: sharp up to 2× on a 3× screen,
+ *   as the map grows photos when zoomed in) with a light ring and transparent
+ *   corners, PNG: the map symbol. Sprites made before 2026-10-07 are 132 px
+ *   (`.map.png`); the new ones are `.map2.png` (`spritePixelRatio`). The ring is a neutral paper white that reads
  *   on both the light and dark maps, so nothing is regenerated per theme.
  *
  * The page is the same pattern as the PDF rasterizer: one hidden WebView,
@@ -23,9 +25,9 @@ export const DISPLAY_MAX_PX = 2048;
 export const DISPLAY_QUALITY = 0.82;
 export const THUMB_PX = 240;
 export const THUMB_QUALITY = 0.8;
-export const SPRITE_PX = 132;
-/** Ring width inside the sprite, px (≈ 2.3 pt at 3×). */
-export const SPRITE_RING_PX = 7;
+export const SPRITE_PX = 264;
+/** Ring width inside the sprite, px (≈ 2.3 pt at 6×). */
+export const SPRITE_RING_PX = 14;
 export const SPRITE_RING_COLOR = '#F7F4EE';
 
 /** Fit `w × h` within a long edge of `maxPx`, never upscaling, at least 1 px. */

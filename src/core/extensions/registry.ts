@@ -7,6 +7,7 @@
  */
 import { GEODETIC_EXTENSION } from './descriptors/geodetic';
 import { GNSS_EXTENSION } from './descriptors/gnss';
+import { TEAM_EXTENSION } from './descriptors/team';
 import { TIDES_EXTENSION } from './descriptors/tides';
 import {
   EXTENSION_KEYS,
@@ -35,6 +36,7 @@ export function extensionDescriptor(key: ExtensionKey): ExtensionDescriptor {
 /** The device extensions' descriptors (no map half), by key. */
 export const DEVICE_EXTENSIONS = {
   gnss: GNSS_EXTENSION,
+  team: TEAM_EXTENSION,
 } satisfies Record<DeviceExtensionKey, DeviceExtensionDescriptor>;
 
 /** What every extension, map or device, has: its name, its teaser, its first switches. */

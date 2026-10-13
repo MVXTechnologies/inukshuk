@@ -57,7 +57,14 @@ tags:
 # Self-healing: on a fresh install (standalone rerun) no waypoint card
 # exists and the whole block is skipped. In suite context the list is short
 # (1 trail, 1 waypoint) so no scrolling is needed.
-- tapOn: 'Library(, tab.*)?'
+# The tab tap lands ~1 s after launch, while the app is still starting the
+# map (CI 2026-10-08, run 37827237154: the tap COMPLETED on the tab, nothing
+# covered it, the main thread skipped 52 frames, the map stayed for 16 s in
+# both attempts). Re-tap only while the screen has not changed (the suite's
+# guarded-tab idiom, as in dashboard.yaml).
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible: 'Import'
     timeout: 15000
@@ -80,7 +87,9 @@ tags:
       - extendedWaitUntil:
           notVisible: 'Cancel'
           timeout: 8000
-- tapOn: 'Map(, tab.*)?'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 15000

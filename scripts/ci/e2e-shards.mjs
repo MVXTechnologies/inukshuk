@@ -5,14 +5,14 @@
  *   node scripts/ci/e2e-shards.mjs names [only]   JSON array of shard names
  *                                                 (the e2e.yml job matrix)
  *   node scripts/ci/e2e-shards.mjs flows <shard>  one line per flow, in order:
- *                                                 "<path> <own-location 0|1>"
+ *                                                 "<path> <own-location 0|1> <clean-state 0|1>"
  *   node scripts/ci/e2e-shards.mjs check          validate the plan
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { ownsLocation, shardFlows, shardNames, validateShards } from './e2eShards.mjs';
+import { ownsLocation, shardFlows, shardNames, startsClean, validateShards } from './e2eShards.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const maestroDir = join(repoRoot, '.maestro');
@@ -25,7 +25,10 @@ try {
     process.stdout.write(`${JSON.stringify(shardNames(manifest, arg))}\n`);
   } else if (command === 'flows') {
     for (const flow of shardFlows(manifest, arg)) {
-      process.stdout.write(`.maestro/${flow} ${ownsLocation(read(flow)) ? 1 : 0}\n`);
+      const source = read(flow);
+      process.stdout.write(
+        `.maestro/${flow} ${ownsLocation(source) ? 1 : 0} ${startsClean(source) ? 1 : 0}\n`,
+      );
     }
   } else if (command === 'check') {
     const files = readdirSync(maestroDir).filter((f) => f.endsWith('.yaml'));
