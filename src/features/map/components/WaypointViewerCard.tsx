@@ -26,6 +26,8 @@ interface Props {
   onCopyNote: () => void;
   onSharePhoto: () => void;
   onEdit: () => void;
+  /** Navigate to the waypoint (#672): the compass takes it as the target. */
+  onNavigate?: () => void;
   /** Delete the waypoint — fired only after a completed hold (or a screen-reader action). */
   onDelete: () => void;
   onClose: () => void;
@@ -54,6 +56,7 @@ export function WaypointViewerCard({
   onCopyNote,
   onSharePhoto,
   onEdit,
+  onNavigate,
   onDelete,
   onClose,
   floating = false,
@@ -89,6 +92,14 @@ export function WaypointViewerCard({
         >
           {waypoint.label}
         </Text>
+        {onNavigate && (
+          <IconButton
+            icon="navigation-variant-outline"
+            size={20}
+            onPress={onNavigate}
+            accessibilityLabel="Navigate to waypoint"
+          />
+        )}
         <IconButton
           icon="pencil-outline"
           size={20}

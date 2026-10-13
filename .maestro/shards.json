@@ -19,11 +19,13 @@
       "photos-review.yaml",
       "dashboard.yaml",
       "folders.yaml",
+      "follow-trail.yaml",
       "record.yaml"
     ],
     "map": [
       "smoke.yaml",
       "waypoint.yaml",
+      "navigate.yaml",
       "map-overlays.yaml",
       "settings.yaml",
       "recording-check.yaml"
@@ -45,6 +47,7 @@
     "trail-view.yaml": ["category-record.yaml"],
     "dashboard.yaml": ["category-record.yaml"],
     "folders.yaml": ["category-record.yaml", "library-filter.yaml", "trail-view.yaml"],
+    "follow-trail.yaml": ["category-record.yaml"],
     "photos-add.yaml": ["category-record.yaml"],
     "photos-viewer.yaml": ["category-record.yaml", "photos-add.yaml"],
     "photos-share.yaml": ["category-record.yaml", "photos-add.yaml"],

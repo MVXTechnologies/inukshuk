@@ -19,8 +19,9 @@ const WITH_NOTE: ViewableWaypoint = {
   photoUri: 'file:///photos/wp3.jpg',
 };
 
-async function setup(waypoint: ViewableWaypoint | null = WITH_NOTE) {
+async function setup(waypoint: ViewableWaypoint | null = WITH_NOTE, navigable = true) {
   const handlers = {
+    onNavigate: navigable ? jest.fn() : undefined,
     onCopyCoords: jest.fn(),
     onCopyNote: jest.fn(),
     onSharePhoto: jest.fn(),
@@ -150,5 +151,16 @@ describe('WaypointViewerCard (#505)', () => {
     );
     await fireEvent(del, 'accessibilityAction', { nativeEvent: { actionName: 'delete' } });
     expect(h.onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('navigates to the waypoint (#672)', async () => {
+    const { onNavigate } = await setup();
+    await fireEvent.press(screen.getByLabelText('Navigate to waypoint'));
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+  });
+
+  it('has no Navigate button without a handler', async () => {
+    await setup(WITH_NOTE, false);
+    expect(screen.queryByLabelText('Navigate to waypoint')).toBeNull();
   });
 });
