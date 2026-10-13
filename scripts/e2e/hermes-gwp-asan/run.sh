@@ -26,12 +26,6 @@ adb shell "cp $DEV/ours/*.so $DEV/meta/"
 adb push "$DIR/meta/libhermesvm.so" "$DEV/meta/libhermesvm.so" >/dev/null
 adb shell chmod 755 "$DEV/eval_stress"
 
-# Both the environment (native processes, Android 14+) and the per-program
-# properties force sampling; the harness prints its GWP-ASan mappings.
-for p in process_sampling sample_rate; do adb shell setprop "libc.debug.gwp_asan.$p.eval_stress" 1; done
-adb shell setprop libc.debug.gwp_asan.max_allocs.eval_stress 1024
-ENV="GWP_ASAN_SAMPLE_RATE=1 GWP_ASAN_PROCESS_SAMPLING=1 GWP_ASAN_MAX_ALLOCS=1024"
-
 # The newest tombstone's header and backtrace: which crash it was.
 tombstone() {
   local t
@@ -52,6 +46,12 @@ if ! grep -q '^done ' <<< "$sanity"; then
   echo "::error title=Hermes GWP-ASan harness::the harness does not run even without forced sampling; it proves nothing"
   exit 3
 fi
+
+# Both the environment (native processes, Android 14+) and the per-program
+# properties force sampling; the harness prints its GWP-ASan mappings.
+for p in process_sampling sample_rate; do adb shell setprop "libc.debug.gwp_asan.$p.eval_stress" 1; done
+adb shell setprop libc.debug.gwp_asan.max_allocs.eval_stress 1024
+ENV="GWP_ASAN_SAMPLE_RATE=1 GWP_ASAN_PROCESS_SAMPLING=1 GWP_ASAN_MAX_ALLOCS=1024"
 
 declare -A crashes=() unsampled=() shown=()
 for variant in ours meta; do

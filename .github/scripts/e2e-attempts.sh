@@ -402,7 +402,7 @@ fi
 # nothing. Only where e2e.yml downloaded it (the catalog shard).
 if [ "$SYSTEM_BROKE" = 0 ] && [ -f hermes-gwp-asan/eval_stress ]; then
   started=$SECONDS
-  if bash scripts/e2e/hermes-gwp-asan/run.sh hermes-gwp-asan 5 300; then
+  if bash scripts/e2e/hermes-gwp-asan/run.sh hermes-gwp-asan 10 300; then
     harness=PASS
   else
     harness=FAIL

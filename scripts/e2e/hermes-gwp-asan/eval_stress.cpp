@@ -34,6 +34,8 @@ static int gwpAsanMappings() {
 
 int main(int argc, char **argv) {
   const int evals = argc > 1 ? std::atoi(argv[1]) : 200;
+  std::printf("starting, %d evals\n", evals);
+  std::fflush(stdout);
   auto runtime = facebook::hermes::makeHermesRuntime();
   std::printf("gwp-asan mappings: %d\n", gwpAsanMappings());
   std::fflush(stdout);

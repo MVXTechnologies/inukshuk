@@ -32,7 +32,13 @@ unzip -q -o "$OUT/meta.aar" 'prefab/modules/hermesvm/include/*' -d "$OUT/aar"
 cp -R "$OUT/aar/prefab/modules/hermesvm/include/." "$OUT/include/"
 rm -rf "$OUT/aar" "$OUT/meta.aar"
 
-NDK=$(find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+# The NDK the APK's libraries (libc++_shared above all) were built with.
+NDK_VERSION=$(node -p "require('$ROOT/plugins/patched-hermes/build.json').toolchain.ndk")
+NDK="$ANDROID_HOME/ndk/$NDK_VERSION"
+[ -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++" ] || {
+  echo "::error::NDK $NDK_VERSION is not installed under $ANDROID_HOME/ndk"
+  exit 1
+}
 CXX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++"
 # The APK's libc++_shared, not a static libc++: JSI passes std:: types across
 # the library boundary.
@@ -40,5 +46,14 @@ CXX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++"
   -I "$OUT/include" -I "$ROOT/node_modules/react-native/ReactCommon/jsi" \
   "$HERE/eval_stress.cpp" -o "$OUT/eval_stress" \
   -nostdlib++ -L "$OUT/ours" -lhermesvm -ljsi -lc++_shared
+# libfbjni (needed by libhermesvm) lists libandroid.so as NEEDED but uses none
+# of its symbols. The real one drags in most of the platform (libcrypto
+# among others), and a plain shell executable crashed loading it before main
+# (BoringSSL's HMAC, run 38351876994). An empty stand-in on LD_LIBRARY_PATH
+# keeps the harness to Hermes and its own dependencies.
+printf '/* empty: see build.sh */\n' > "$OUT/empty.c"
+"${CXX%++}" --target="$ABI-linux-android24" -shared -o "$OUT/ours/libandroid.so" \
+  -Wl,-soname,libandroid.so "$OUT/empty.c"
+rm -f "$OUT/empty.c"
 echo "built $OUT/eval_stress with $(basename "$NDK")"
 node "$ROOT/plugins/patched-hermes/verify-hermes.js" describe "$OUT/ours" "$OUT/meta"
