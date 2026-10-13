@@ -258,7 +258,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'expo-image-picker',
       {
         photosPermission: 'Inukshuk lets you attach photos from your library to trail notes.',
-        cameraPermission: 'Inukshuk uses the camera to attach photos to trail notes.',
+        // The same camera string covers the team invite QR scanner (expo-camera,
+        // #589); expo-camera's own plugin is left out so no microphone purpose
+        // string or RECORD_AUDIO permission is added (Android gets CAMERA from
+        // the library manifest).
+        cameraPermission:
+          'Inukshuk uses the camera to attach photos to trail notes and to scan team invite QR codes.',
       },
     ],
     // Raise Gradle heap/metaspace so :expo-updates:kspReleaseKotlin doesn't OOM

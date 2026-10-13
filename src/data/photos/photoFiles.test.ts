@@ -40,17 +40,17 @@ describe('writePhotoCopies', () => {
     expect(w.paths).toEqual({
       file: 'photos/t1/p1.jpg',
       thumb: 'photos/t1/p1.sq.jpg',
-      sprite: 'photos/t1/p1.map.png',
+      sprite: 'photos/t1/p1.map2.png',
     });
     expect(fs.text('/doc/photos/t1/p1.jpg')).toBe('DISPLAY-JPEG');
-    expect(fs.text('/doc/photos/t1/p1.map.png')).toBe('SPRITE-PNG');
+    expect(fs.text('/doc/photos/t1/p1.map2.png')).toBe('SPRITE-PNG');
     expect(w.bytes).toBe(12 + 5 + 10);
     expect(w.contentHash).toMatch(/^md5:[0-9a-f]+$/);
     expect(fs.list('/doc/photos/t1/').filter((p) => p.endsWith('.tmp'))).toEqual([]);
   });
 
   it('names a full disk and leaves no partial copies behind', () => {
-    fs.failWrite = { match: /p1\.map\.png\.tmp$/, message: 'ENOSPC: no space left on device' };
+    fs.failWrite = { match: /p1\.map2\.png\.tmp$/, message: 'ENOSPC: no space left on device' };
     expect(() => writePhotoCopies('t1', 'p1', outputs)).toThrow(StorageFullError);
     expect(fs.list('/doc/photos/t1/')).toEqual([]);
   });
@@ -117,9 +117,9 @@ describe('deletion and housekeeping', () => {
       sprite: 'photos/t1/gone.png',
     });
     expect(listTrailPhotoFiles('t1').sort()).toEqual([
-      'a.map.png',
+      'a.map2.png',
       'b.jpg',
-      'b.map.png',
+      'b.map2.png',
       'b.sq.jpg',
       'photos.json',
     ]);
@@ -129,7 +129,7 @@ describe('deletion and housekeeping', () => {
     expect(sweepTrailOrphans('t1', new Set(['a']))).toBe(3);
     expect(listTrailPhotoFiles('t1').sort()).toEqual([
       'a.jpg',
-      'a.map.png',
+      'a.map2.png',
       'a.sq.jpg',
       'photos.json',
     ]);

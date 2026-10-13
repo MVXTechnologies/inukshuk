@@ -117,6 +117,14 @@ export const MAX_OPS_PER_FRAME = 1024;
 export const MAX_WANT_ROUNDS = 64;
 /** Ops served per `want` (the requester asks again for the rest). */
 export const MAX_SERVE_OPS = 4096;
+/**
+ * Sealed frames the responder keeps while it still waits for hi3. The
+ * initiator seals its first frames right behind hi3; a transport that
+ * delivers them first must not cost the stream (they decrypt in order once
+ * hi3 derived the keys). More than this before hi3 ends the session
+ * ('early-frames'): an honest peer sends one or two.
+ */
+export const MAX_EARLY_FRAMES = 8;
 /** Room left in a frame for the JSON around the ops and the AEAD tag. */
 const FRAME_OVERHEAD = 256;
 
@@ -172,6 +180,8 @@ export class SyncSession {
   private recvKey: Uint8Array | undefined;
   private sendCounter = 0;
   private recvCounter = 0;
+  /** Sealed frames that overtook hi3 (responder): replayed in order once open. */
+  private early: Uint8Array[] = [];
   private peerVv: VersionVector | undefined;
   /** Ranges we asked for and have not fully received: author → highest wanted seq. */
   private outstanding = new Map<string, number>();
@@ -247,7 +257,12 @@ export class SyncSession {
       if (this.phase === 'open') this.onSealed(frame, now, step);
       else this.onHandshake(frame, now, step);
     } catch {
-      this.strike(step, 'malformed', now);
+      // Open: the frame's counter is already consumed, so the stream stays in
+      // step; a strike. Handshaking: the session cannot know what it half did
+      // (an admission written, keys not derived), so it ends, named, rather
+      // than wait for an hello that never comes again.
+      if (this.phase === 'open') this.strike(step, 'malformed', now);
+      else this.fail(step, 'error');
     }
     return step;
   }
@@ -295,6 +310,14 @@ export class SyncSession {
 
   private onHandshake(frame: Uint8Array, now: number, step: Step): void {
     const f = parseFrame(frame);
+    if (f === undefined && this.phase === 'await-hi3') {
+      // Not JSON while we wait for hi3: the initiator's first sealed frame,
+      // delivered ahead of its hi3. Dropping it cost the stream its counter
+      // (the next frame failed to decrypt: E2E runs 37784108605, 37900582863).
+      if (this.early.length >= MAX_EARLY_FRAMES) return this.fail(step, 'early-frames');
+      this.early.push(frame);
+      return;
+    }
     if (f === undefined) return this.strike(step, 'malformed', now);
     if (f['t'] === 'bye') {
       return this.finish(step, typeof f['why'] === 'string' ? f['why'].slice(0, 64) : 'bye');
@@ -431,6 +454,11 @@ export class SyncSession {
     this.deriveKeys(t3);
     this.peer = peer;
     this.open(step, inner['join'] !== undefined, now);
+    // Sealed frames that overtook hi3, now that their keys exist, in order.
+    for (const frame of this.early.splice(0)) {
+      if (this.phase !== 'open') break;
+      this.onSealed(frame, now, step);
+    }
   }
 
   /** T1 binds the hello and the responder's ephemeral key. */
@@ -719,6 +747,7 @@ export class SyncSession {
     this.phase = 'closed';
     this.sendKey = undefined;
     this.recvKey = undefined;
+    this.early = [];
     step.events.push({ type: 'closed', why });
   }
 }

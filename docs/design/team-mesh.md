@@ -15,7 +15,7 @@ to let any peer make it spend unbounded memory, CPU or bridge traffic.
         └── LoopbackMeshTransport (loopbackMesh.ts) ── dev / E2E only
 ```
 
-Status: built and host-tested; not wired to any screen yet (the UI stage).
+Status: built and host-tested; wired to the team UI in stage 3 ([team-ui.md](team-ui.md)).
 
 ## Files
 

@@ -9,6 +9,7 @@ import type { ComponentType } from 'react';
 
 import { GeodeticPanelEntry } from './geodetic/GeodeticPanelEntry';
 import { GnssPanelEntry } from './gnss/GnssPanelEntry';
+import { TeamPanelEntry } from './team/TeamPanelEntry';
 import { TidePanelEntry } from './tides/TidePanelEntry';
 import type { ExtensionPanelEntryProps } from './types';
 
@@ -19,4 +20,5 @@ export const EXTENSION_PANEL_ENTRIES: Record<
   geodetic: GeodeticPanelEntry,
   tides: TidePanelEntry,
   gnss: GnssPanelEntry,
+  team: TeamPanelEntry,
 };

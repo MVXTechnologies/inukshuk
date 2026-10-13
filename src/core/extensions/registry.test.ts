@@ -97,8 +97,8 @@ describe('the extension registry', () => {
 
 describe('device extensions (#588)', () => {
   it('are listed after the map ones, never in the map registry, with their own basics', () => {
-    expect(DEVICE_EXTENSION_KEYS).toEqual(['gnss']);
-    expect(ALL_EXTENSION_KEYS).toEqual(['geodetic', 'tides', 'gnss']);
+    expect(DEVICE_EXTENSION_KEYS).toEqual(['gnss', 'team']);
+    expect(ALL_EXTENSION_KEYS).toEqual(['geodetic', 'tides', 'gnss', 'team']);
     expect(Object.keys(DEVICE_EXTENSIONS)).toEqual([...DEVICE_EXTENSION_KEYS]);
     expect(isExtensionKey('gnss')).toBe(false);
     expect(extensionBasics('gnss')).toBe(DEVICE_EXTENSIONS.gnss);

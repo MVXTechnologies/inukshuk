@@ -32,6 +32,7 @@ describe('withTeamMesh', () => {
   it('asks for normal Android permissions only', () => {
     expect(ANDROID_PERMISSIONS).not.toContain('android.permission.NEARBY_WIFI_DEVICES');
     expect(ANDROID_PERMISSIONS).toContain('android.permission.CHANGE_WIFI_MULTICAST_STATE');
+    expect(ANDROID_PERMISSIONS).toContain('android.permission.VIBRATE');
   });
 
   it('adds the iOS and Android mods to an Expo config', () => {

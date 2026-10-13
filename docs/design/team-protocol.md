@@ -591,15 +591,141 @@ read-only `session.safetyCode` after open. Changed on the wire: the `hi1`/`hi2`/
 
 ### 11.2 Kinds
 
-| Kind                        | Ownership                      | Notes                                                |
-| --------------------------- | ------------------------------ | ---------------------------------------------------- |
-| `wpt`, `point`, `task`      | shared                         | anyone writes or deletes                             |
-| `track`, `photo`, `comment` | owned: key `(kind, owner, id)` | only the owner writes; the owner or an admin deletes |
-| `msg`                       | owned, immutable               | the first write wins; redaction is `e.del`           |
-| positions                   | one register per member        | only that member writes                              |
+| Kind               | Ownership                      | Notes                                                                                 |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------------- |
+| Kind               | Ownership                      | Notes                                                                                 |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------------- |
+| `wpt`, `point`     | shared                         | any member writes or deletes                                                          |
+| `task`             | owned: key `(task, owner, id)` | the owner writes; its assignee writes only the status; admins write; see §11.4        |
+| `track`, `photo`   | owned: key `(kind, owner, id)` | only the owner writes; the owner or an admin deletes                                  |
+| `comment`          | owned: key `(kind, owner, id)` | only the owner writes (guests too); the owner or an admin deletes                     |
+| `msg`              | owned, immutable               | the first write wins; redaction is `e.del`; a pin is a `msg` with an anchor (§11.4)   |
+| positions          | one register per member        | only that member writes                                                               |
 
 Owned keys include the owner, so nobody can hijack a record by backdating a
 write to its id.
+
+**Guests only comment.** A guest may author `pos` and `msg` ops and `e.set` /
+`e.del` of their **own** `comment` records. The op-type gate
+(`roles.canWriteData`) lets guest `e.set`/`e.del` through and the data fold
+narrows them by kind (`data.GUEST_KINDS`); every other guest entity write is
+skipped as `forbidden`. The fold fails closed: an entity op without a
+recorded role (`state.roleAt`) is forbidden.
+
+### 11.4 Tasks and pins (`tasks.ts`, `teamui/pins.ts`)
+
+**Tasks** are owned `task` entities, so the creator is part of the key and
+can't be forged. Fields (each validated on every write; an unknown or
+malformed field makes the whole op `invalid`):
+
+| Field                    | Meaning                                                           |
+| ------------------------ | ----------------------------------------------------------------- |
+| `title`                  | 1–500 chars, not blank                                            |
+| `assignee`               | a member id                                                       |
+| `due`                    | epoch ms or `null`                                                |
+| `ak`, `ao`, `ai`         | anchor: `photo` / `pin` / `trail` + its owner and id              |
+| `ak = point`, `la`, `lo` | anchor: a place                                                   |
+| `so`, `sc`               | the comment or message it was made from (`+task @name …`)         |
+| `done`, `dby`, `dat`     | status; `dby` must equal the op's author (no "done in your name") |
+
+Authorization, by the author's role **at the op's place in the fold**:
+
+- `e.set {k: 'task', id, f}` without `o` writes the author's own task;
+- `e.set {k: 'task', id, o, f}` updates `o`'s **existing, live** task
+  (nobody, admins included, creates a task in another member's name):
+  allowed for an admin (any field), or for the task's **current** assignee (the visible
+  `assignee` at that point of the fold) when `f` holds only `done`, `dby`,
+  `dat`. Anything else is `forbidden`. `o` is accepted on tasks only;
+- the owner or an admin deletes (`e.del` with `o`, the owned rule);
+- guests write no tasks.
+
+Because the fold is in the team's total order and the replica rebuilds when
+an op lands in the middle, "current assignee" is the same on every phone:
+a status write after a reassignment (in that order) by the old assignee is
+`forbidden` everywhere. **Accepted residual:** order is by HLC stamp, which an
+author chooses within the clock-skew bound, so a former assignee can backdate
+a completion to before the reassignment. Readers flag it: a task whose `done`
+register is older than its `assignee` register shows "completed before
+reassignment" (`TeamTask.doneBeforeReassignment`). Property tests replay random histories from five
+roles (owner, creator, assignee, another member, guest) in shuffled orders
+and check convergence and that no guest owns or completes a task.
+
+**Pins** (comments anchored to a place) are messages on the thread
+`pin:<owner>:<id>`. The root is `<owner>`'s message whose own id is `<id>`,
+carrying `ll = [lng, lat]` (finite, in range). An anchored message on any
+other thread, or by anyone but the owner the thread names, is `invalid`, so
+nobody can root, backdate or move someone else's pin; messages are immutable,
+so the owner can't move it either (a new pin is a new thread). Replies are
+plain messages on the thread, from anyone. Guests may pin and reply.
+Redacting the root removes the pin. "On the trail" vs "off the trail" is computed by the reader
+(distance to a shown trail ≤ 40 m), never stored.
+
+**Alerts** (`teamui/alerts.ts`) fire only for ops the fold **applied**
+(accepted with a role and not skipped as forbidden or invalid), and a task
+alert's text comes from the merged, validated task (title capped at 120
+chars), never from the op body. A task whose `assignee` becomes me alerts
+me; my own task marked done by someone else alerts me; a reply on my pin
+alerts me; a new pin follows the normal-message rule. Task alerts from one
+teammate collapse: the first in 60 s notifies, the rest only update the
+banner ("3 task updates for you"). The throttle is per author and per device, so colluding
+members can each still raise one full alert per 60 s (accepted).
+
+### 11.5 Team trails, SOS, rally points, resolved messages (`records.ts`)
+
+Owner decisions 2026-10-07. Every field is validated on every write; a
+malformed op is `invalid`, a well-formed one the author may not write is
+`forbidden`; authority is the author's role at the op's place in the fold.
+
+| Kind                    | Key                                                                                                                            | Writes                                                                                                                                                                   | Deletes                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- |
+| `trl` team trail        | owned (creator)                                                                                                                | creator: all fields; members: `name`, `desc`, `color` of a live trail; `base` only at creation, never again (not even by the creator)                                    | creator or admin                  |
+| `tve` trail vertex      | keyed by the TRAIL's owner, `tve:<to>:<id>`; id `<trail>_b<i>` (base) or `<trail>_<random>` (inserted); trail ids carry no `_` | members, only on a live `trl` (`to`, `tr` and the id prefix must agree); a base vertex never takes a key; at most 2,000 live vertices and 4,000 vertex records per trail | members (`o` = the trail's owner) |
+| `sos`                   | owned (raiser)                                                                                                                 | the raiser, guests too (a raise needs `la`, `lo`); the raiser or an admin: the resolution only                                                                           | raiser or admin                   |
+| `rly` rally point       | owned (creator)                                                                                                                | the creator (members; no `o`)                                                                                                                                            | creator or admin                  |
+| `mres` message resolved | owned by the **message's** author, id = the message id                                                                         | its author, an admin, or a member the message mentions (guests too); the message must be live                                                                            | author or admin                   |
+
+**Trail editing CRDT.** A team trail's `base` is an immutable polyline;
+vertex `i` of it has the fractional key `h` + 4 base-36 digits. A `tve`
+record moves a base vertex (`la`, `lo`, LWW per field), an `e.del` deletes it
+(a newer move resurrects it), and an inserted vertex carries its own key `k`,
+made between its neighbours' keys (`keyBetween`; ties break on the id). The
+trail is the live vertices sorted by key: a function of the op set, so every
+phone converges (property test: random concurrent moves, inserts and deletes
+from three members, shuffled). Undo is the client re-writing the previous
+value of its own last edit; "editing" presence is an ordinary message.
+
+Keys are canonical (base-36, at most 256 characters, never ending in `0`),
+so two different keys always have room between them; `keyBetween` returns
+null when there is none within the bound (the app then says the point can't
+be added there; the editing UI then re-keys by delete and re-insert, and
+says so if it can't) and never an out-of-order key (property test). Honest
+end-appends run out after about 1,500 points at one end. Edits whose
+fields name another trail than their key are ignored, never applied as
+deletions.
+
+**Status writes are whole**: `res: true` with `rby` = the author and `rat`;
+`res: false` with both null (as tasks).
+
+**SOS alerts** every active member except the raiser at once: always an
+`alert`, priority 2, never collapsed by the task throttle and not subject to
+the 30-member rule; the text comes from the merged record. A resolution is a
+badge (the raiser: "Your SOS was resolved"). Spam guard: a member holds at most one open SOS,
+and raises the next one at least 60 s after their last was resolved (by the
+resolution's stamp, which its writer chooses within the clock-skew bound);
+only the creating write alerts, so re-writing an open SOS's place doesn't
+re-alert. Accepted residual (review): the cooldown reads the resolution's own stamp,
+and a raiser can toggle resolve/reopen; the per-device limit of one alarm
+per raiser per 5 minutes bounds that to about twelve alarms an hour. The fold
+authorizes these writes in constant time from counters it keeps (per trail:
+base length, vertex records, live inserts, deleted base points; per member:
+open SOS ids, newest resolve), never by scanning. The raiser's live position is the
+ordinary position register.
+
+A resolved SOS opens again only with the whole trio (`res: false, rby: null, rat: null`); that write alerts like a raise. Each phone also caps SOS alarms at one per raiser per 5 minutes (more update the banner).
+
+**Resolved messages** (pins, notifies) leave the map and the unread counts and
+stay listed under "Resolved"; nothing is deleted (an `e.del` of `mres` is forbidden). Resolving is reversible by
+the same set of people.
 
 ### 11.3 Blobs (stage 3)
 
