@@ -35,7 +35,13 @@ fi
 props=(
   "libc.debug.gwp_asan.process_sampling.$PKG=1"
   "libc.debug.gwp_asan.sample_rate.$PKG=1"
-  "libc.debug.gwp_asan.max_allocs.$PKG=40000"
+  # Slots alive at once. Each is a page plus guards, and every one splits the
+  # pool's mapping: 40000 overran the kernel's map-count limit and GWP-ASan
+  # aborted the app at allocation ("Failed to allocate in guarded pool
+  # allocator memory", run 38338453153). Slots recycle on free, and every free
+  # of a sampled allocation records a backtrace, so 1024 still walks the stack
+  # thousands of times per launch.
+  "libc.debug.gwp_asan.max_allocs.$PKG=1024"
 )
 cleanup() {
   for p in "${props[@]}"; do adb shell setprop "${p%%=*}" "''" >/dev/null 2>&1 || true; done
@@ -47,7 +53,7 @@ unsampled=0
 for i in $(seq "$LAUNCHES"); do
   adb shell am start -W -S -n "$COMPONENT" >/dev/null 2>&1 || true
   sleep "$HOLD"
-  pid=$(adb shell pidof "$PKG" 2>/dev/null | tr -d '\r')
+  pid=$(adb shell pidof -s "$PKG" 2>/dev/null | tr -d '\r')
   if [ -n "$pid" ]; then
     slots=$(adb shell "grep -c 'GWP-ASan' /proc/$pid/maps" 2>/dev/null | tr -d '\r')
     echo "gwp-asan stress launch $i/$LAUNCHES: pid $pid alive, ${slots:-0} GWP-ASan mappings"

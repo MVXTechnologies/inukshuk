@@ -224,6 +224,8 @@ CRASH_NOTES=()
 crash_signature() {
   if grep -q 'android_unsafe_frame_pointer_chase' <<< "$1" && grep -q 'hoost_make_fcontext' <<< "$1"; then
     echo "#648 GWP-ASan frame-pointer walk off a Hermes fiber stack"
+  elif grep -q 'Failed to allocate in guarded pool allocator memory' <<< "$1"; then
+    echo "GWP-ASan pool could not map a slot (stress settings too large?)"
   else
     echo "unclassified (see the logcat)"
   fi
