@@ -141,22 +141,26 @@ describe('the team hub', () => {
   });
 
   it('shows rotation advice with Rotate now for admins, and the Local Network denial', async () => {
-    const rotate = jest.spyOn(app.active!, 'rotateKey');
-    const view = useTeamStore.getState().view!;
-    await act(() =>
-      useTeamStore.setState({
-        view: { ...view, rotationAdvised: true },
-        mesh: {
-          running: false,
-          port: null,
-          advertising: false,
-          browsing: false,
-          localNetwork: 'denied',
-          discovered: 0,
-          error: null,
-        },
-      }),
-    );
+    const session = app.active!;
+    const rotate = jest.spyOn(session, 'rotateKey');
+    // Stub the session, not the store: the service refreshes the store from the
+    // session (throttled, after any change), so a value written into the store
+    // could be overwritten before the render (release run 38347909294).
+    const realView = session.view.bind(session);
+    jest.spyOn(session, 'view').mockImplementation(() => ({
+      ...realView(),
+      rotationAdvised: true,
+    }));
+    jest.spyOn(session, 'meshStatus').mockReturnValue({
+      running: false,
+      port: null,
+      advertising: false,
+      browsing: false,
+      localNetwork: 'denied',
+      discovered: 0,
+      error: null,
+    });
+    await act(() => useTeamStore.getState().refresh());
     const open = jest.spyOn(Linking, 'openSettings').mockResolvedValue(undefined);
     await render(wrap(<TeamHubScreen />));
     expect(screen.getByTestId('team-rotation-advised')).toBeTruthy();
