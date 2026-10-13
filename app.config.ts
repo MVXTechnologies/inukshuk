@@ -318,6 +318,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'react-native-health-connect',
     // Health Connect's client library needs minSdk 26 (was React Native's 24).
     ['expo-build-properties', { android: { minSdkVersion: 26 } }],
+    // Team notifications are local only: no Push entitlement, which prebuild
+    // otherwise adds through expo-notifications' plugin (2.5.0 iOS signing
+    // failure). Keep last; CI checks the final entitlements.
+    './plugins/withoutPushEntitlement',
   ],
   experiments: {
     typedRoutes: true,
