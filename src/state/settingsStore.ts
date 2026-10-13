@@ -123,6 +123,12 @@ export interface Settings {
    */
   compactMapChrome: boolean;
   /**
+   * Android only (#682): keep the system navigation bar (Back / Home /
+   * Recents, or the gesture handle) on screen instead of hiding it. Off by
+   * default: the app has hidden it since 2.0.0.
+   */
+  showNavigationButtons: boolean;
+  /**
    * Display mode the user chose (decision 4): Normal by default; Sunlight and
    * Night red are opt-in. The mode in effect also depends on the toggles.
    */
@@ -368,6 +374,7 @@ const DEFAULTS: Settings = {
   units: 'metric',
   themeMode: 'system',
   compactMapChrome: false,
+  showNavigationButtons: false,
   displayCondition: 'normal',
   autoNightAtSunset: false,
   sunlightWhileRecording: false,
@@ -468,6 +475,7 @@ function snapshot(s: SettingsState): Settings {
     units,
     themeMode,
     compactMapChrome,
+    showNavigationButtons,
     displayCondition,
     autoNightAtSunset,
     sunlightWhileRecording,
@@ -530,6 +538,7 @@ function snapshot(s: SettingsState): Settings {
     units,
     themeMode,
     compactMapChrome,
+    showNavigationButtons,
     displayCondition,
     autoNightAtSunset,
     sunlightWhileRecording,
@@ -702,3 +711,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     persist(DEFAULTS);
   },
 }));
+
+/**
+ * Whether Android's system navigation bar should be on screen (#682). False
+ * until settings.json has been read: the app launches with the bar hidden,
+ * and showing it on the default only to hide it again would jump the layout.
+ */
+export function selectShowNavigationBar(s: { hydrated: boolean } & Settings): boolean {
+  return s.hydrated && s.showNavigationButtons;
+}

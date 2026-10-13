@@ -22,6 +22,7 @@ import { useLibraryStore } from '@state/libraryStore';
 import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
 import { BetaFeaturesSection } from './BetaFeaturesSection';
 import { CoordinateFormatSetting } from './CoordinateFormatSetting';
+import { NavigationButtonsSetting } from './NavigationButtonsSetting';
 import { ExtensionsSection } from './ExtensionsSection';
 import Constants from 'expo-constants';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -400,6 +401,8 @@ export function SettingsScreen() {
                     />
                   )}
                 />
+                {/* #682: Android only (renders nothing on iOS). */}
+                <NavigationButtonsSetting />
                 <List.Item
                   title="Show the tip button"
                   description="A small button on the map that opens Support Inukshuk"
