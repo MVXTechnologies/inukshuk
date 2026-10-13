@@ -316,6 +316,16 @@ jobs:
             # Wait until the system is fully booted before letting Maestro attach,
             # otherwise the driver races package-manager readiness.
             adb wait-for-device
+            # Hide error dialogs from the FIRST moment the settings provider
+            # answers, not after boot. Provoked on CI (diagnostic runs of
+            # ci/launcher-anr-provoke): with hide_error_dialogs=1 a launcher
+            # ANR raises NO dialog (the process is just killed and restarts),
+            # with it off the "Pixel Launcher isn't responding" dialog appears
+            # 15 s after the first unanswered touch. In run 37914205449 the
+            # setting was only applied after boot_completed, so a dialog raised
+            # during boot was already up, and nothing ever dismissed it.
+            # (One line: the runner executes the script line by line.)
+            for i in $(seq 1 120); do adb shell settings put global hide_error_dialogs 1 >/dev/null 2>&1 && [ "$(adb shell settings get global hide_error_dialogs | tr -d '\r')" = 1 ] && break; sleep 1; done
             adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 1; done'
             # Kill animations so Maestro's element waits don't flake on transitions.
             adb shell settings put global window_animation_scale 0
@@ -327,6 +337,13 @@ jobs:
             # the app in the a11y tree and failed EVERY flow's first assert on
             # 6 of the 7 red nightlies between 07-25 and 08-02.
             adb shell settings put global hide_error_dialogs 1
+            # Also turn off the other two switches that gate crash/ANR UI, and
+            # log the effective values. A dialog already up (raised before the
+            # settings applied) or any that still slips through is caught,
+            # counted and dismissed by the ANR guard in e2e-attempts.sh.
+            adb shell settings put secure anr_show_background 0
+            adb shell settings put global show_first_crash_dialog 0
+            echo "error-dialog settings: hide_error_dialogs=$(adb shell settings get global hide_error_dialogs) anr_show_background=$(adb shell settings get secure anr_show_background) show_first_crash_dialog=$(adb shell settings get global show_first_crash_dialog)"
             # Pre-acknowledge Android's "Viewing full screen — swipe down from
             # the top to exit" cling. Since 2.0.0 the app hides the system
             # navigation bar (useAndroidImmersive / expo-navigation-bar), and
