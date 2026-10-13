@@ -12,6 +12,7 @@ import { sanitizeTrackOrigin } from '@core/import/origin';
 import { toDocumentRelativePath } from '@core/storage/documentPaths';
 import type { CustomCategory } from './categories';
 import { isWaypointIcon } from './waypointIcons';
+import { normalizeWaypointStyle } from './waypointStyle';
 import { normalizeArea } from './areas';
 import { sanitizeRoutePlan } from '@core/draw/serialize';
 
@@ -177,11 +178,18 @@ function normalizePhoto<T extends { photoUri?: unknown }>(raw: T) {
  * unknown `icon` is DROPPED rather than carried, so the pin falls back to the
  * default instead of asking the renderer for a glyph that does not exist. That
  * also covers the downgrade case — an index written by a build whose catalogue
- * has icons this one lacks loads fine, it just draws default pins.
+ * has icons this one lacks loads fine, it just draws default pins. The #675
+ * `color` and `size` fields are optional too: no schema bump, no migration.
  */
 function normalizeWaypoint(raw: Waypoint): Waypoint {
-  const { icon, ...rest } = normalizePhoto(raw);
-  return { ...rest, ...(isWaypointIcon(icon) ? { icon } : {}) };
+  const { icon, color, size, ...rest } = normalizePhoto(raw);
+  // #675 — colour and size get the same treatment: optional, validated, and a
+  // junk value is dropped (the pin draws at the default) rather than rejected.
+  return {
+    ...rest,
+    ...(isWaypointIcon(icon) ? { icon } : {}),
+    ...normalizeWaypointStyle({ color, size }),
+  };
 }
 
 function normalizeNotes(raw: unknown): TrackNote[] {

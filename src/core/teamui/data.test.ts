@@ -154,6 +154,8 @@ describe('shares', () => {
       lon: -70.9,
       note: 'Washed out',
       icon: 'hazard',
+      color: null,
+      size: null,
       by: 'me',
       at: T0,
     });

@@ -144,8 +144,14 @@ four stages:
   the screen comes back on) and after Stop.
 - Waypoints dropped during recording become distance-anchored trail notes
   (optionally with photos) on the saved track. Waypoints dropped outside a
-  recording (map "+" speed-dial) are standalone: they keep their coordinate
-  and persist in the library index (`waypoints`).
+  recording (map "+" speed-dial, one tap since #671) are standalone: they keep
+  their coordinate and persist in the library index (`waypoints`), with an
+  optional icon (`@core/library/waypointIconCatalog`, ~350 ids), colour and
+  size (#675; GPX `<sym>` + a `pin:style` extension, team shares `ic`/`co`/`sz`).
+  The main map draws them in one GeoJSON source and SDF symbol layers
+  (`@core/map/waypointPinStyle`, sprites from `scripts/map/build-waypoint-icons.mjs`),
+  never one view per pin; Move (#676) pans the map under a fixed centre pin
+  (`waypointMoveStore`).
 
 ## Activity-file import (Strava / Garmin exports)
 

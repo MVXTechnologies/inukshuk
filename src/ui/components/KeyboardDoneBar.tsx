@@ -73,7 +73,7 @@ function DoneBarIos() {
           // Reads "Done" (the iOS idiom, and what the owner asked for) but
           // announces itself as "Hide keyboard": VoiceOver gets the more
           // useful phrasing, and — crucially — the bar stops colliding with
-          // the "Done" BUTTON that WaypointEditorDialog uses to save, which
+          // the "Done" BUTTON that WaypointEditorSheet uses to save, which
           // `waypoint.yaml` taps while the keyboard is still up on iOS.
           accessibilityLabel="Hide keyboard"
           testID="keyboard-done"

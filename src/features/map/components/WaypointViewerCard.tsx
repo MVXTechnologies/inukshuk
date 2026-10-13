@@ -25,6 +25,11 @@ interface Props {
   onCopyNote: () => void;
   onSharePhoto: () => void;
   onEdit: () => void;
+  /**
+   * Move the pin (#676): pan the map under it. Omitted where a move cannot be
+   * stored — a live recording pin, which becomes a distance-anchored note.
+   */
+  onMove?: () => void;
   /** Delete the waypoint — fired only after a completed hold (or a screen-reader action). */
   onDelete: () => void;
   onClose: () => void;
@@ -53,6 +58,7 @@ export function WaypointViewerCard({
   onCopyNote,
   onSharePhoto,
   onEdit,
+  onMove,
   onDelete,
   onClose,
   floating = false,
@@ -92,6 +98,15 @@ export function WaypointViewerCard({
           onPress={onEdit}
           accessibilityLabel="Edit waypoint"
         />
+        {onMove && (
+          <IconButton
+            icon="arrow-all"
+            size={20}
+            onPress={onMove}
+            accessibilityLabel="Move waypoint"
+            accessibilityHint="Pan the map under the pin, then confirm"
+          />
+        )}
         <HoldButton
           size={40}
           onConfirm={onDelete}

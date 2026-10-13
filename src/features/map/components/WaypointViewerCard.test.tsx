@@ -138,3 +138,32 @@ describe('WaypointViewerCard (#505)', () => {
     expect(h.onDelete).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('WaypointViewerCard Move (#676)', () => {
+  it('offers Move in the header when the pin can be moved', async () => {
+    const onMove = jest.fn();
+    await render(
+      <SafeAreaProvider initialMetrics={METRICS}>
+        <PaperProvider>
+          <WaypointViewerCard
+            waypoint={WITH_NOTE}
+            onCopyCoords={jest.fn()}
+            onCopyNote={jest.fn()}
+            onSharePhoto={jest.fn()}
+            onEdit={jest.fn()}
+            onMove={onMove}
+            onDelete={jest.fn()}
+            onClose={jest.fn()}
+          />
+        </PaperProvider>
+      </SafeAreaProvider>,
+    );
+    await fireEvent.press(screen.getByLabelText('Move waypoint'));
+    expect(onMove).toHaveBeenCalledTimes(1);
+  });
+
+  it('has no Move for a pin that cannot be moved (a live recording pin)', async () => {
+    await setup();
+    expect(screen.queryByLabelText('Move waypoint')).toBeNull();
+  });
+});

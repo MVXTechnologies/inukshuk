@@ -121,6 +121,9 @@ export function TeamMapOverlay({
   const member = hit?.kind === 'member' ? positions.find((p) => p.id === hit.id) : undefined;
   const row = member ? view.members.find((m) => m.id === member.id) : undefined;
   const wpt = hit?.kind === 'waypoint' ? shares.waypoints.find((w) => w.id === hit.id) : undefined;
+  // #676 — a shared pin is not one of mine: its card says whose share it is
+  // instead of offering Move (the team record has its own edit rules).
+  const sharer = wpt?.by ? view.members.find((m) => m.id === wpt.by) : undefined;
   const target = member
     ? { lat: member.lat, lon: member.lon }
     : wpt
@@ -287,7 +290,9 @@ export function TeamMapOverlay({
                 </Text>
                 <Text variant="bodySmall" style={{ color: t.inkVariant }} numberOfLines={2}>
                   {[
-                    `Shared waypoint${wpt.note ? ` · ${wpt.note}` : ''}`,
+                    `${sharer ? `Shared by ${sharer.isMe ? 'you' : sharer.name}` : 'Shared waypoint'}${
+                      wpt.note ? ` · ${wpt.note}` : ''
+                    }`,
                     rb ? `${dist(rb.meters)} ${rb.compass}` : null,
                   ]
                     .filter(Boolean)

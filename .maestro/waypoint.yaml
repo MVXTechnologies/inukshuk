@@ -1,27 +1,30 @@
-# Standalone waypoint e2e (#135): drop a waypoint from the "+" speed-dial,
-# annotate it in the editor dialog, save, then drop a SECOND waypoint and
-# assert the auto-label counter advanced by exactly one ("Waypoint N+1") —
-# which is only true if the first waypoint reached the persisted store.
+# Standalone waypoint e2e (#135, one-tap since #671): "Add waypoint" in the
+# "+" menu saves a waypoint at the GPS fix straight away and shows a snackbar
+# with EDIT and UNDO. The flow opens the editor from EDIT, annotates and
+# saves, then drops a SECOND waypoint and asserts its auto number is higher
+# ("Waypoint N+…") — only true if the first one reached the persisted store.
 #
 # Why not re-open the pin to check the note? Neither driver can target it:
-# Android rasterizes MapLibre Marker children (no view, no a11y node), and on
-# iOS the map view masks its children's accessibility elements from XCUITest.
-# The pin still carries an accessibility label (WaypointMarkerPin) for screen
-# readers; blind coordinate taps were tried and are flaky because the camera
-# follows the runner's alternating geo-fix loop (~86 m oscillation).
+# the pins are MapLibre symbols (#675), with no view and no a11y node, and on
+# iOS the map view masks its children from XCUITest anyway; blind coordinate
+# taps were tried and are flaky because the camera follows the runner's
+# alternating geo-fix loop (~86 m oscillation).
 #
 # Portability notes (same rules as smoke.yaml / record.yaml):
 # - Per-platform launchApp permission values (#128).
-# - The editor is a Paper Dialog titled "Waypoint N"; the note input is
-#   labelled "Note"; save is "Done" (there is no "Save" button).
-# - A waypoint needs a GPS fix: if none is ingested yet, "Add waypoint" shows
-#   the "Waiting for a GPS fix…" snackbar instead of the editor — the retry
-#   blocks simply try again.
+# - The editor is a bottom sheet titled "Waypoint"; its name field holds
+#   "Waypoint N", the note input is labelled "Note"; save is "Done" (header
+#   and footer both save), discard is "Delete".
+# - A waypoint needs a GPS fix: before one, "Add waypoint" only shows the
+#   "Waiting for a GPS fix…" snackbar — the retry blocks simply try again.
+# - The EDIT/UNDO snackbar lives 8 s. A retry after a missed EDIT drops one
+#   more waypoint, which is why the second number is checked with ">" and
+#   not "== n1 + 1".
 # - The note is a single token: iOS autocorrect rewrites multi-word input.
-# - Typing waits for the dialog animation to settle: the iOS driver scrambles
-#   characters typed mid-animation.
-# - hideKeyboard is Android-only (the iOS driver has no dismiss action; the
-#   dialog is keyboard-shifted on iOS so Done stays reachable).
+# - The editor does not focus the note by itself (#675), so there is no
+#   keyboard to hide until a field is tapped; hideKeyboard is Android-only
+#   and, with no keyboard up, Maestro's Android hideKeyboard presses BACK,
+#   which closes the sheet — so it only follows typing.
 appId: com.inukshuk.app
 ---
 - runFlow:
@@ -44,11 +47,10 @@ appId: com.inukshuk.app
 - setLocation:
     latitude: 46.8139
     longitude: -71.2082
-# Open the dial and drop the first waypoint. Retries absorb both the
-# cold-start tap race and the no-fix-yet snackbar path. The dial tap is
-# GUARDED (only when the actions aren't visible): a blind re-tap on retry
-# toggled a slow-but-open dial closed again — with four actions the CI
-# software-GL hierarchy fetch got slow enough to hit that trap nightly.
+# Open the dial and drop the first waypoint, then open it from the snackbar's
+# EDIT. Retries absorb the cold-start tap race and the no-fix-yet snackbar.
+# The dial tap is GUARDED (only when the actions aren't visible): a blind
+# re-tap on retry toggled a slow-but-open dial closed again.
 - retry:
     maxRetries: 3
     commands:
@@ -63,10 +65,13 @@ appId: com.inukshuk.app
           timeout: 60000
       - tapOn: 'Add waypoint'
       - extendedWaitUntil:
+          visible: 'Waypoint \d+ added at your position.*'
+          timeout: 8000
+      - tapOn: 'Edit|EDIT'
+      - extendedWaitUntil:
           visible: 'Note'
           timeout: 8000
-# Editor is up ("Waypoint N" — N grows across runs). Remember N, then type a
-# note and save.
+# Editor is up on the saved waypoint: remember N, type a note and save.
 - copyTextFrom: 'Waypoint \d+'
 - evalScript: ${output.n1 = parseInt(maestro.copiedText.replace(/\D+/g, ''))}
 - tapOn: 'Note'
@@ -80,40 +85,42 @@ appId: com.inukshuk.app
       - hideKeyboard
 - tapOn: 'Done'
 - extendedWaitUntil:
-    notVisible: 'Done'
+    notVisible: 'Note'
     timeout: 60000
-# Drop a second waypoint: its title must be "Waypoint N+1", proving the first
-# one landed in the persisted store (the auto label is derived from it).
+# Drop a second waypoint: its number must be higher, proving the first one
+# landed in the persisted store (the auto label is derived from it).
 - retry:
     maxRetries: 3
     commands:
-      - tapOn: 'Map actions'
-      # 60 s: on software-GL emulators one hierarchy fetch can take that long;
-      # a shorter wait makes the retry re-tap the FAB and toggle the freshly
-      # opened dial closed again.
+      - runFlow:
+          when:
+            notVisible: 'Add waypoint'
+          commands:
+            - tapOn: 'Map actions'
       - extendedWaitUntil:
           visible: 'Add waypoint'
           timeout: 60000
       - tapOn: 'Add waypoint'
       - extendedWaitUntil:
+          visible: 'Waypoint \d+ added at your position.*'
+          timeout: 8000
+      - tapOn: 'Edit|EDIT'
+      - extendedWaitUntil:
           visible: 'Note'
           timeout: 8000
 - copyTextFrom: 'Waypoint \d+'
 - evalScript: ${output.n2 = parseInt(maestro.copiedText.replace(/\D+/g, ''))}
-- assertTrue: ${output.n2 === output.n1 + 1}
-# Tidy up: delete the empty second waypoint and confirm the map is back.
-- runFlow:
-    when:
-      platform: Android
-    commands:
-      - hideKeyboard
+- assertTrue: ${output.n2 > output.n1}
+# Tidy up: delete the second waypoint from its editor (Delete closes the
+# sheet's scroll, below the colours and sizes) and confirm the map is back.
+- scrollUntilVisible:
+    element: 'Delete'
+    direction: DOWN
+    timeout: 20000
 - tapOn: 'Delete'
 - extendedWaitUntil:
     notVisible: 'Delete'
     timeout: 60000
-# No hideKeyboard here: the keyboard auto-hides when the dialog unmounts, and
-# Maestro's Android hideKeyboard falls back to a BACK press when no keyboard
-# is up — which exits the app from the map screen.
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 60000

@@ -15,6 +15,11 @@ import {
 import type { ExtensionPrefsMap } from '@core/extensions/types';
 import { DEFAULT_CATEGORY_ID } from '@core/library/categories';
 import { SETTINGS_SCHEMA_VERSION, migrateSettings } from '@core/library/migrations';
+import {
+  EMPTY_WAYPOINT_ICON_PREFS,
+  sanitizeWaypointIconPrefs,
+  type WaypointIconPrefs,
+} from '@core/library/waypointIconPrefs';
 import { DEFAULT_SORT, isSortKey, type SortKey } from '@core/library/sortTracks';
 import { effectiveTrailViewTab, type TrailViewTab } from '@core/library/trailViewTabs';
 import type { LatLng } from '@core/models';
@@ -321,6 +326,12 @@ export interface Settings {
   includePhotosWhenSharing: boolean;
   /** The one-time "Add photos from this outing?" after saving a recording (owner Q6). */
   photoPromptAfterSaveShown: boolean;
+  /**
+   * The waypoint editor's starred and recent icons (#675): favourites first
+   * in its quick row and at the top of the icon picker, then the last five
+   * picked. Sanitized on read (unknown ids dropped).
+   */
+  waypointIcons: WaypointIconPrefs;
 }
 
 const DEFAULTS: Settings = {
@@ -380,6 +391,7 @@ const DEFAULTS: Settings = {
   photoCopySize: DEFAULT_PHOTO_COPY_SIZE,
   includePhotosWhenSharing: false,
   photoPromptAfterSaveShown: false,
+  waypointIcons: EMPTY_WAYPOINT_ICON_PREFS,
 };
 
 interface SettingsState extends Settings {
@@ -476,6 +488,7 @@ function snapshot(s: SettingsState): Settings {
     photoCopySize,
     includePhotosWhenSharing,
     photoPromptAfterSaveShown,
+    waypointIcons,
   } = s;
   return {
     tileUrl,
@@ -534,6 +547,7 @@ function snapshot(s: SettingsState): Settings {
     photoCopySize,
     includePhotosWhenSharing,
     photoPromptAfterSaveShown,
+    waypointIcons,
   };
 }
 
@@ -598,6 +612,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         next.photoCirclesAppear = DEFAULT_PHOTO_CIRCLES_APPEAR;
       }
       if (!isPhotoCopySize(next.photoCopySize)) next.photoCopySize = DEFAULT_PHOTO_COPY_SIZE;
+      // An object default: the ladder's typeof check would pass object junk.
+      next.waypointIcons = sanitizeWaypointIconPrefs(next.waypointIcons);
       if (!isImageryLook(next.satelliteImagery)) next.satelliteImagery = DEFAULT_IMAGERY_LOOK;
       // 0 (estimate) or a plausible typed max; anything else falls back to the estimate.
       if (

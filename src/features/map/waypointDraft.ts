@@ -1,4 +1,5 @@
-import type { WaypointIcon } from '@core/models';
+import { isWaypointSize, normalizeWaypointColor } from '@core/library/waypointStyle';
+import type { WaypointIcon, WaypointSize } from '@core/models';
 import * as storage from '@data/storage';
 
 /**
@@ -15,6 +16,9 @@ export interface WaypointDraft {
   photoUri?: string;
   /** Chosen pin icon (#350); absent = the default pin. Saved on Done. */
   icon?: WaypointIcon;
+  /** Pin colour and size (#675); absent = the defaults. Saved on Done. */
+  color?: string;
+  size?: WaypointSize;
 }
 
 function discard(uri: string | undefined): void {
@@ -41,4 +45,20 @@ export function withDraftPhoto(draft: WaypointDraft, uri: string): WaypointDraft
 /** Abandon a draft without creating a waypoint: its photo copy has no owner left. */
 export function discardDraftPhoto(draft: WaypointDraft | null): void {
   discard(draft?.photoUri);
+}
+
+/** Apply the editor's colour / size change to a draft; `null` clears a field. */
+export function withDraftStyle(
+  draft: WaypointDraft,
+  patch: { color?: string | null; size?: WaypointSize | null },
+): WaypointDraft {
+  const { color: oldColor, size: oldSize, ...rest } = draft;
+  const color = patch.color === undefined ? oldColor : normalizeWaypointColor(patch.color);
+  const size =
+    patch.size === undefined ? oldSize : isWaypointSize(patch.size) ? patch.size : undefined;
+  return {
+    ...rest,
+    ...(color !== undefined ? { color } : {}),
+    ...(size !== undefined ? { size } : {}),
+  };
 }

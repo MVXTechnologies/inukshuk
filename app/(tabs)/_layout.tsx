@@ -3,6 +3,7 @@ import { FONT_FAMILY } from '@ui/fonts';
 import { buildTabBarOptions, TAB_PILL, tabBarBottomInset, tabLabelStyle } from '@ui/tabBarStyle';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRecorderStore } from '@state/recorderStore';
+import { useWaypointMoveStore } from '@state/waypointMoveStore';
 import { palette } from '@ui/tokens';
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Platform, Pressable, StyleSheet, Text, View, type ColorValue } from 'react-native';
@@ -40,6 +41,8 @@ export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const bottomInset = tabBarBottomInset(insets.bottom, Platform.OS);
   const recording = useRecorderStore((s) => s.status !== 'idle');
+  // Moving a waypoint (#676) owns the bottom edge too: its Cancel/Confirm bar.
+  const movingWaypoint = useWaypointMoveStore((s) => s.moving !== null);
 
   const icon = (name: IconName) => {
     // Hidden from accessibility: the glyph is an icon-font character, and
@@ -94,7 +97,7 @@ export default function TabsLayout() {
           tabBarLabel: label,
           ...tabBar,
           tabBarStyle:
-            recording && route.name === 'index'
+            (recording || movingWaypoint) && route.name === 'index'
               ? { ...tabBar.tabBarStyle, display: 'none' }
               : tabBar.tabBarStyle,
         })}
