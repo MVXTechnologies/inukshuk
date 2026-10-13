@@ -250,8 +250,8 @@ holds GMS's FontsProvider (through the System WebView, #643), so the shard's
 first flow used to lose its app mid-flow.
 
 The table also counts, per attempt, three launch-health signals in the flow's
-logcat (`stalls/crashes/provider kills`), and any non-zero count is a warning
-annotation even on a green flow:
+logcat (`stalls/crashes/provider kills`). Stalls and provider kills are warning
+annotations, even on a green flow. A native crash **fails the shard**:
 
 - **Window-animation stalls**: `Timed out waiting for animations to complete`.
   When a window's animation never ends, every synced input that Maestro injects
@@ -259,9 +259,14 @@ annotation even on a green flow:
   was the `store.yaml` flake (#643). The splash screen's reveal animation got
   stuck after Android's splash hand-off to the app timed out on a busy main
   thread. `plugins/withSplashNoExitTransfer.js` removes that hand-off.
-- **Native crashes** of the app (`Fatal signal`). The known one was #648's
-  GWP-ASan unwinder crash on a Hermes fiber stack (upstream facebook/hermes#2225),
-  fixed by the patched Hermes (below).
+- **Native crashes** of the app (`Fatal signal`) fail the shard, in any
+  attempt: a flow whose first attempt crashed natively is not a pass because
+  its retry passed, and a crashed cold-start launch (below) fails too. The
+  crash of #648 (GWP-ASan's frame-pointer walk running off a Hermes fiber
+  stack, upstream facebook/hermes#2225) hid behind exactly that retry and the
+  cold-start loop's warning, with the runs green. Each crashed attempt's logcat
+  is kept as `logcat-crash-<flow>.txt` in the shard's debug artifact, and the
+  error annotation names the signature when it is a known one.
 - **Provider kills**: `Killing …com.inukshuk.app… depends on provider … in
 dying proc`. Play services restarts `com.google.android.gms.persistent` soon after
   boot, and Android kills every client of its FontsProvider. The Android System
