@@ -105,6 +105,7 @@ import { MapCreditsButton, MapCreditsSheet } from './components/MapCredits';
 import { mapCredits } from '@core/map/mapCredits';
 import { bareTapAfterFocus } from '@core/map/mapTap';
 import { HeadingCone } from './components/HeadingCone';
+import { PointingLine } from './components/PointingLine';
 import { MapSearchPill } from './components/MapSearchPill';
 import { PlaceSearchSheet } from './search/PlaceSearchSheet';
 import { SearchHitMarker } from './search/SearchHitMarker';
@@ -3251,6 +3252,14 @@ export function MapScreen() {
               dropped: it points along the GPS course (garbage while standing
               still); the cone tracks the smoothed compass instead. */}
             <HeadingCone location={location} />
+            {/* The pointing line (#681): a leaf with its own heading subscription. */}
+            <PointingLine
+              location={location}
+              bounds={settledBounds}
+              zoom={scaleAt?.zoom ?? null}
+              glyphs={style.glyphs}
+              suppressed={selecting || makeMapState !== null || movingWp !== null}
+            />
             {/* Off a followed trail (#678): the dashed way back to it. */}
             {/* The followed trail itself (#678), bright on both grounds. */}
             {follow?.path != null && <FollowedTrailLine path={follow.path} />}

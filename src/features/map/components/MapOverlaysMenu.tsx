@@ -56,6 +56,7 @@ import {
   useSheetWidth,
 } from './mapSheet';
 import { PdfMapsPanel } from './PdfMapsPanel';
+import { PointingLinePanel, PointingLineRow } from './PointingLinePanel';
 import { RangeSlider } from './RangeSlider';
 import { SatellitePanel } from './SatellitePanel';
 
@@ -356,6 +357,9 @@ function OverlayRows({
         value={showParks}
         onToggle={() => set('showParks', !showParks)}
       />
+      {/* Map aids (#681): drawn on the map from you; options in its own page. */}
+      <SectionTitle>Map aids</SectionTitle>
+      <PointingLineRow onOpen={() => openSubPanel('pointingLine')} />
     </>
   );
 }
@@ -490,6 +494,8 @@ function SubPanel({
       return <SatellitePanel onBack={onBack} />;
     case 'pdfMaps':
       return <PdfMapsPanel onBack={onBack} />;
+    case 'pointingLine':
+      return <PointingLinePanel onBack={onBack} />;
     default: {
       const { Panel } = EXTENSION_PANELS[panel];
       return <Panel onBack={onBack} onClose={onClose} openSubPanel={openSubPanel} />;

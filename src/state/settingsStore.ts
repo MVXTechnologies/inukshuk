@@ -13,6 +13,11 @@ import { isDisplayCondition, type DisplayCondition } from '@core/display/conditi
 import { sanitizeLastKnownPosition } from '@core/geo/lastKnownPosition';
 import { sanitizeOverlayTab, type OverlayTab } from '@core/map/overlayTabs';
 import {
+  DEFAULT_POINTING_LINE,
+  sanitizePointingLine,
+  type PointingLineSettings,
+} from '@core/map/pointingLineSettings';
+import {
   defaultExtensionPrefs,
   legacyExtensionFields,
   migrateExtensionPrefs,
@@ -345,6 +350,12 @@ export interface Settings {
    * picked. Sanitized on read (unknown ids dropped).
    */
   waypointIcons: WaypointIconPrefs;
+  /**
+   * The pointing line (#681): Map layers › Map › Pointing line. One object
+   * key, off by default; an older build drops it (unknown key), a malformed
+   * field falls back to its default (`@core/map/pointingLineSettings`).
+   */
+  pointingLine: PointingLineSettings;
 }
 
 const DEFAULTS: Settings = {
@@ -407,6 +418,7 @@ const DEFAULTS: Settings = {
   includePhotosWhenSharing: false,
   photoPromptAfterSaveShown: false,
   waypointIcons: EMPTY_WAYPOINT_ICON_PREFS,
+  pointingLine: DEFAULT_POINTING_LINE,
 };
 
 interface SettingsState extends Settings {
@@ -506,6 +518,7 @@ function snapshot(s: SettingsState): Settings {
     includePhotosWhenSharing,
     photoPromptAfterSaveShown,
     waypointIcons,
+    pointingLine,
   } = s;
   return {
     tileUrl,
@@ -567,6 +580,7 @@ function snapshot(s: SettingsState): Settings {
     includePhotosWhenSharing,
     photoPromptAfterSaveShown,
     waypointIcons,
+    pointingLine,
   };
 }
 
@@ -636,6 +650,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (!isPhotoCopySize(next.photoCopySize)) next.photoCopySize = DEFAULT_PHOTO_COPY_SIZE;
       // An object default: the ladder's typeof check would pass object junk.
       next.waypointIcons = sanitizeWaypointIconPrefs(next.waypointIcons);
+      next.pointingLine = sanitizePointingLine(next.pointingLine);
       if (!isImageryLook(next.satelliteImagery)) next.satelliteImagery = DEFAULT_IMAGERY_LOOK;
       // 0 (estimate) or a plausible typed max; anything else falls back to the estimate.
       if (
