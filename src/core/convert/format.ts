@@ -104,23 +104,41 @@ export function formatMetres(v: number, decimals = 3): string {
   return group(v.toFixed(decimals)).replace(/^-/, '−');
 }
 
-/** Degrees: DD (9 decimals ≈ 0.1 mm), DDM or DMS, with the hemisphere letter. */
-export function formatAngle(v: number, axis: 'lat' | 'lon', fmt: AngleFormat = 'dd'): string {
+/**
+ * Degrees: DD (9 decimals ≈ 0.1 mm), DDM or DMS, with the hemisphere letter.
+ *
+ * `decimals` sets the last component's decimals (defaults: 9 for DD, 7 for
+ * DDM's minutes, 5 for DMS's seconds: Convert's millimetre output).
+ * `compact` drops the spaces (`46°48′50.2″N`) for a one-line readout such as
+ * the map's coordinates chip (#677). Rounding CARRIES at every precision:
+ * 59.96″ shown to one decimal is 60.0″, which must become the next minute.
+ */
+export function formatAngle(
+  v: number,
+  axis: 'lat' | 'lon',
+  fmt: AngleFormat = 'dd',
+  opts: { decimals?: number; compact?: boolean } = {},
+): string {
   const hemi = axis === 'lat' ? (v >= 0 ? 'N' : 'S') : v >= 0 ? 'E' : 'W';
+  const sp = opts.compact === true ? '' : ' ';
   const a = Math.abs(v);
-  if (fmt === 'dd') return `${a.toFixed(9)}° ${hemi}`;
+  if (fmt === 'dd') return `${a.toFixed(opts.decimals ?? 9)}°${sp}${hemi}`;
   let d = Math.floor(a);
+  /** Zero-padded to two integer digits: 7.5 → "07.5". */
+  const two = (x: number, dec: number) => x.toFixed(dec).padStart(dec > 0 ? dec + 3 : 2, '0');
   if (fmt === 'ddm') {
+    const dec = opts.decimals ?? 7;
     let mins = (a - d) * 60;
-    if (Number(mins.toFixed(7)) >= 60) {
+    if (Number(mins.toFixed(dec)) >= 60) {
       d += 1;
       mins = 0;
     }
-    return `${d}° ${mins.toFixed(7).padStart(10, '0')}′ ${hemi}`;
+    return `${d}°${sp}${two(mins, dec)}′${sp}${hemi}`;
   }
+  const dec = opts.decimals ?? 5;
   let mm = Math.floor((a - d) * 60);
   let ss = ((a - d) * 60 - mm) * 60;
-  if (Number(ss.toFixed(5)) >= 60) {
+  if (Number(ss.toFixed(dec)) >= 60) {
     ss = 0;
     mm += 1;
   }
@@ -128,7 +146,7 @@ export function formatAngle(v: number, axis: 'lat' | 'lon', fmt: AngleFormat = '
     mm = 0;
     d += 1;
   }
-  return `${d}° ${String(mm).padStart(2, '0')}′ ${ss.toFixed(5).padStart(8, '0')}″ ${hemi}`;
+  return `${d}°${sp}${String(mm).padStart(2, '0')}′${sp}${two(ss, dec)}″${sp}${hemi}`;
 }
 
 /** Height with sign and unit: "24.487 m", "−21.680 m". */

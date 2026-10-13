@@ -68,4 +68,15 @@ describe('formatting', () => {
     expect(formatAngle(46.5, 'lat', 'ddm')).toBe('46° 30.0000000′ N');
     expect(formatAngle(45.99999999999, 'lat', 'dms')).toBe('46° 00′ 00.00000″ N');
   });
+
+  it('takes a precision and a compact form, carrying at every precision', () => {
+    const c = { compact: true };
+    expect(formatAngle(46.851168, 'lat', 'dd', { decimals: 4, ...c })).toBe('46.8512°N');
+    expect(formatAngle(-71.238585, 'lon', 'dms', { decimals: 1, ...c })).toBe('71°14′18.9″W');
+    expect(formatAngle(-71.238585, 'lon', 'dms', { decimals: 0, ...c })).toBe('71°14′19″W');
+    expect(formatAngle(46.5, 'lat', 'ddm', { decimals: 3 })).toBe('46° 30.000′ N');
+    expect(formatAngle(46.1, 'lat', 'ddm', { decimals: 0, ...c })).toBe('46°06′N');
+    expect(formatAngle(45.99999, 'lat', 'dms', { decimals: 1, ...c })).toBe('46°00′00.0″N');
+    expect(formatAngle(45.99999, 'lat', 'ddm', { decimals: 2, ...c })).toBe('46°00.00′N');
+  });
 });

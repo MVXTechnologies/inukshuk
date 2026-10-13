@@ -15,7 +15,6 @@ import {
   type TimelineEvent,
   type TrackPointAt,
 } from '@core/geo/track';
-import { formatLatLng } from '@core/geo/formatCoords';
 import { findCategory } from '@core/library/categories';
 import {
   effectiveTrailViewTab,
@@ -1080,10 +1079,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
               note: viewedNote.note.text,
               ...(viewedNote.note.photoUri ? { photoUri: viewedNote.note.photoUri } : {}),
             }}
-            onCopyCoords={() => {
-              void Clipboard.setStringAsync(
-                formatLatLng(viewedNote.latitude, viewedNote.longitude),
-              );
+            onCopyCoords={(text) => {
+              void Clipboard.setStringAsync(text);
               showSnack('Coordinates copied');
             }}
             onCopyNote={() => {

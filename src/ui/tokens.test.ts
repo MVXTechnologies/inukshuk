@@ -85,6 +85,7 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
     ['chip ink on chip', t.map.chipInk, t.map.chip, TEXT],
     ['chip muted ink on chip', t.map.chipInkMuted, t.map.chip, TEXT],
     ['puck on its ring', t.map.puck, t.map.puckRing, GRAPHIC],
+    ['centre cursor on its ring', t.map.cursor, t.map.cursorRing, GRAPHIC],
     // Status (text + shape).
     ['text on paused fill', t.status.onPaused, t.status.paused, TEXT],
     ['paused ink on surface', t.status.pausedInk, t.surface, TEXT],
