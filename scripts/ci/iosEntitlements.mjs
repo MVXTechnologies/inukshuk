@@ -8,7 +8,12 @@
  * Adding one: enable the capability on the App ID in the Apple Developer
  * portal first, let EAS regenerate the profile, then add it here.
  */
-export const ALLOWED_ENTITLEMENTS = ['com.apple.developer.healthkit'];
+export const ALLOWED_ENTITLEMENTS = [
+  'com.apple.developer.healthkit',
+  // Team SOS (#708, 2.6.1). OWNER ACTION before the 2.6.1 iOS store build:
+  // enable "Time Sensitive Notifications" on the com.inukshuk.app App ID.
+  'com.apple.developer.usernotifications.time-sensitive',
+];
 
 /**
  * @param {Record<string, unknown>} entitlements the introspected ios.entitlements

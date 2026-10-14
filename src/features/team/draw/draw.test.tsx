@@ -76,6 +76,8 @@ const mockNotify = jest.fn(async (_n: unknown) => undefined);
 jest.mock('@data/team/teamNotifications', () => ({
   notifyTeam: (n: unknown) => mockNotify(n),
   onTeamNotificationTap: () => () => undefined,
+  dismissTeamNotification: async () => undefined,
+  setInAppAlarm: () => undefined,
 }));
 jest.mock('@lib/errorReporting', () => ({ addBreadcrumb: jest.fn(), reportError: jest.fn() }));
 /** Renders of the drawing components (each reads the scheme tokens once per render). */
