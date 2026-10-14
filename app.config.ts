@@ -28,6 +28,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     bundleIdentifier: 'com.inukshuk.app',
     // Increase for every App Store Connect upload.
     buildNumber: '23',
+    // Team SOS (#708): a time-sensitive local notification breaks through
+    // Focus. iOS needs the Time Sensitive Notifications capability for it
+    // (without it the SOS is delivered as an ordinary notification). The
+    // capability must be enabled on the App ID before a store build signs
+    // with it (scripts/ci/iosEntitlements.mjs). No push: no aps-environment.
+    entitlements: {
+      'com.apple.developer.usernotifications.time-sensitive': true,
+    },
     infoPlist: {
       // Trail recording keeps running with the screen off / app backgrounded.
       // The expo-location plugin (isIosBackgroundLocationEnabled) also adds
@@ -318,6 +326,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'react-native-health-connect',
     // Health Connect's client library needs minSdk 26 (was React Native's 24).
     ['expo-build-properties', { android: { minSdkVersion: 26 } }],
+    // Team SOS tone (#708): our own synthesized alarm (scripts/audio/sosTone.js),
+    // copied into the iOS bundle and Android res/raw for the "Team SOS"
+    // channel. Not expo-notifications' plugin itself: it would add push.
+    './plugins/withTeamSosSound',
     // Team notifications are local only: no Push entitlement, which prebuild
     // otherwise adds through expo-notifications' plugin (2.5.0 iOS signing
     // failure). Keep last; CI checks the final entitlements.

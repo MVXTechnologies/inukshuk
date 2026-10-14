@@ -24,4 +24,12 @@ describe('unexpectedEntitlements', () => {
   it('allows HealthKit, which 2.0+ store builds already sign with', () => {
     assert.ok(ALLOWED_ENTITLEMENTS.includes('com.apple.developer.healthkit'));
   });
+
+  it('allows time-sensitive notifications (Team SOS, #708), never push', () => {
+    assert.deepEqual(
+      unexpectedEntitlements({ 'com.apple.developer.usernotifications.time-sensitive': true }),
+      [],
+    );
+    assert.ok(!ALLOWED_ENTITLEMENTS.includes('aps-environment'));
+  });
 });
