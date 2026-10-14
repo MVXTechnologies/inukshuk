@@ -4357,7 +4357,7 @@ export function MapScreen() {
           visible={snack !== null}
           onDismiss={dismissSnack}
           duration={Number.POSITIVE_INFINITY}
-          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
+          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight, drawing.panelHeight)}
         >
           {snack ?? ''}
         </Snackbar>
@@ -4365,7 +4365,7 @@ export function MapScreen() {
           visible={overlaySnack !== null}
           onDismiss={dismissOverlaySnack}
           duration={Number.POSITIVE_INFINITY}
-          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
+          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight, drawing.panelHeight)}
         >
           {overlaySnack ?? ''}
         </Snackbar>
@@ -4380,7 +4380,7 @@ export function MapScreen() {
           visible={healthNotice.message !== null}
           onDismiss={healthNotice.dismiss}
           duration={Number.POSITIVE_INFINITY}
-          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
+          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight, drawing.panelHeight)}
           // Settings › Data settings holds the offline maps and their Update buttons.
           action={{ label: 'View', onPress: () => router.push('/settings?open=data') }}
         >
@@ -4391,7 +4391,7 @@ export function MapScreen() {
             visible
             onDismiss={() => undefined}
             duration={Number.POSITIVE_INFINITY}
-            wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
+            wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight, drawing.panelHeight)}
           >
             {`Downloading ${downloadProgress.label}… ${Math.floor(downloadProgress.pct)}%`}
           </Snackbar>

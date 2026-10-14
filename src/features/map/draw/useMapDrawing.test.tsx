@@ -383,6 +383,16 @@ describe('route drawing (#502)', () => {
     expect(drawing().active).toBe(false);
   });
 
+  it('an area with one corner placed: ✕ cancels at once (QA 2.6.1)', async () => {
+    await mount();
+    await act(async () => drawing().startArea());
+    await tap(P1);
+    expect(screen.getByText('Draw an area')).toBeOnTheScreen();
+    await press('Exit drawing');
+    expect(drawing().active).toBe(false);
+    expect(snack).not.toHaveBeenCalledWith('Tap ✕ again to discard this drawing');
+  });
+
   it('"Edit route" reopens a saved route on its vertices and saves in place', async () => {
     await mount();
     await act(async () => {

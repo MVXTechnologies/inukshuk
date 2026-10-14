@@ -69,11 +69,21 @@ export function waypointCardDockStyle(
  * The map screen's snackbars: above every bottom dock, and lifted over the
  * recording panel while it is up — they used to render under it, so the
  * "Waypoint dropped" / "Waypoint deleted" feedback never showed mid-recording.
+ * Likewise over the drawing panel (`drawPanelHeight`): "Tap ✕ again to
+ * discard this drawing" sat on the panel's own buttons (QA 2.6.1).
  */
-export function snackbarWrapperStyle(recordingPanelUp: boolean, panelHeight: number): ViewStyle {
+export function snackbarWrapperStyle(
+  recordingPanelUp: boolean,
+  panelHeight: number,
+  drawPanelHeight = 0,
+): ViewStyle {
   return {
     ...BOTTOM_LAYER.snackbar,
-    ...(recordingPanelUp ? { bottom: panelHeight } : {}),
+    ...(drawPanelHeight > 0
+      ? { bottom: drawPanelHeight }
+      : recordingPanelUp
+        ? { bottom: panelHeight }
+        : {}),
   };
 }
 
