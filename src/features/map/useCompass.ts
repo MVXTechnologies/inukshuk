@@ -1,4 +1,4 @@
-import { createHeadingFilter } from '@core/signal/heading';
+import { createBearingFilter } from '@core/signal/bearingFilter';
 import * as Location from 'expo-location';
 
 /** One smoothed compass update delivered to subscribers. */
@@ -25,14 +25,14 @@ type Listener = (sample: CompassSample) => void;
 // want the same stream; three separate `watchHeadingAsync` subscriptions would
 // triple the sensor churn and each filter independently (three needles that
 // disagree). Instead a single ref-counted watch feeds one heading filter
-// (see @core/signal/heading) and fans the result out to listeners.
+// (see @core/signal/bearingFilter, #704) and fans the result out to listeners.
 //
 // A note on what this stream actually is, because it drives the filter design:
 // on Android `watchHeadingAsync` is **not** the gyro-fused rotation vector. It
 // is the accelerometer+magnetometer azimuth (several degrees of noise, even on
 // a table), rate-limited to 50 ms and — crucially — only emitted when it has
 // moved ≥2° from the last value sent. At rest we therefore receive a stream
-// made purely of noise excursions. `createHeadingFilter` is built for exactly
+// made purely of noise excursions. `createBearingFilter` is built for exactly
 // that: see its module header.
 //
 // It does report *true* heading (declination-corrected via GeomagneticField)
@@ -44,7 +44,7 @@ const listeners = new Set<Listener>();
 let subscription: Location.LocationSubscription | null = null;
 let starting = false;
 let latest: CompassSample | null = null;
-const filter = createHeadingFilter();
+const filter = createBearingFilter();
 
 /** The north the filter's history is on: switching restarts it (no smoothing across the declination). */
 let filterReference: CompassSample['reference'] | null = null;

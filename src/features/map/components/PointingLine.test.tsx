@@ -1,7 +1,7 @@
 /**
  * The pointing line on the map (#681): hidden/visible rules, the
  * no-magnetometer COG fallback, Edge, the layers, both themes — and, measured,
- * that heading ticks re-render this leaf only, at 4 Hz at most.
+ * that heading ticks re-render this leaf only, at 10 Hz at most (#704).
  */
 import { LIVE_LAYER_ORDER, liveLayerAnchor, type LiveLayerId } from '@core/map/liveLayerOrder';
 import { haversineMeters, initialBearingDeg } from '@core/geo/geomath';
@@ -308,7 +308,7 @@ describe('PointingLine render cost (measured)', () => {
     }
     expect(leafCommits).toBe(commitsBefore);
 
-    // A steady 3°-per-sample turn at 20 Hz for 2 s: ≤ 4 Hz → at most 8 commits (+1 trailing).
+    // A steady 3°-per-sample turn at 20 Hz for 2 s: ≤ 10 Hz → at most 20 commits (+1 trailing).
     for (let i = 1; i <= 40; i++) {
       await heading(100 + i * 3);
       await act(async () => {
@@ -319,8 +319,8 @@ describe('PointingLine render cost (measured)', () => {
       jest.advanceTimersByTime(500);
     });
     const commits = leafCommits - commitsBefore;
-    expect(commits).toBeGreaterThanOrEqual(7);
-    expect(commits).toBeLessThanOrEqual(9);
+    expect(commits).toBeGreaterThanOrEqual(19);
+    expect(commits).toBeLessThanOrEqual(21);
     // One native source update per commit, and the turn's last heading is the one drawn.
     expect(mockSources.length - sourcesBefore).toBe(commits);
     const { from, to } = lineOf(drawn()!);
