@@ -1,4 +1,4 @@
-import { activeAlerts, bandModel, bandStack, MAX_STACKED_BANDS } from './alertBands';
+import { activeAlerts, bandModel, bandStack, gatherEtas, MAX_STACKED_BANDS } from './alertBands';
 import type { TeamRally, TeamSos } from './field';
 
 const NOW = 1_800_000_000_000;
@@ -113,6 +113,39 @@ describe('bandModel', () => {
       sub: 'You called it · Sent',
       actions: ['end'],
     });
+  });
+});
+
+describe('gatherEtas (the old rally pill’s ETA list)', () => {
+  const r = rally('noe', { lat: 46.81, lng: -71.2, radius: 60 });
+  const members = [
+    { id: 'me', name: 'Marc', isMe: true, active: true },
+    { id: 'julie', name: 'Julie Tremblay', isMe: false, active: true },
+    { id: 'noe', name: 'Noé Gagnon', isMe: false, active: true },
+    { id: 'sam', name: 'Sam Bouchard', isMe: false, active: true },
+    { id: 'lea', name: 'Léa Pelletier', isMe: false, active: true },
+    { id: 'gone', name: 'Gone', isMe: false, active: false },
+  ];
+  const positions = [
+    { id: 'julie', lat: 46.8, lon: -71.2, ageMs: 0 },
+    { id: 'noe', lat: 46.8101, lon: -71.2, ageMs: 30_000 },
+    // 34 min old: not recent.
+    { id: 'lea', lat: 46.809, lon: -71.2, ageMs: 34 * MIN },
+  ];
+
+  it('arrived first, then by ETA; no recent position last with "—"; never the inactive', () => {
+    const rows = gatherEtas(r, members, positions, { latitude: 46.79, longitude: -71.2 });
+    expect(rows.map((x) => x.id)).toEqual(['noe', 'julie', 'me', 'lea', 'sam']);
+    expect(rows[0]).toMatchObject({ arrived: true, eta: 'there', distance: '11 m' });
+    expect(rows[1]).toMatchObject({ eta: '~15 min', distance: '1.1 km' });
+    expect(rows[2]).toMatchObject({ name: 'You', isMe: true, eta: '~31 min', distance: '2.2 km' });
+    expect(rows[3]).toMatchObject({ eta: '—', distance: '—', distanceM: null, etaMin: null });
+    expect(rows[4]).toMatchObject({ eta: '—', distance: '—' });
+  });
+
+  it('without my fix, my row is "—" too', () => {
+    const rows = gatherEtas(r, members, positions, null);
+    expect(rows.find((x) => x.isMe)).toMatchObject({ eta: '—', distance: '—' });
   });
 });
 

@@ -309,6 +309,51 @@ describe('the alert bands (#708)', () => {
     expect(screen.queryByTestId('team-band-gather')).toBeNull();
   });
 
+  it.each(THEMES)(
+    'a tap on the gather’s words lists who gets there when; Navigate stays (dark: %s)',
+    async (dark) => {
+      fakeClock();
+      crew({ rally });
+      const nav = jest.fn();
+      await render(wrap(<AlertBands here={HERE} onNavigate={nav} />, dark));
+      expect(screen.queryByTestId('team-gather-etas')).toBeNull();
+      await fireEvent.press(screen.getByTestId('team-band-gather-text'));
+      expect(screen.getByTestId('team-gather-etas')).toBeTruthy();
+      const rows = screen
+        .queryAllByTestId(/^team-gather-eta-/)
+        .map((n) => n.props.testID as string)
+        .filter((id, k, all) => all.indexOf(id) === k);
+      // Nearest to arrive first; no recent position (Léa: 34 min; Sam: none) last.
+      expect(rows).toEqual([
+        'team-gather-eta-Alex Lavoie',
+        'team-gather-eta-Julie Tremblay',
+        'team-gather-eta-You',
+        'team-gather-eta-Noé Gagnon',
+        'team-gather-eta-Léa Pelletier',
+        'team-gather-eta-Sam Bouchard',
+      ]);
+      expect(screen.getByLabelText('Alex Lavoie: 111 m, about 2 minutes')).toBeTruthy();
+      expect(screen.getByLabelText('Léa Pelletier: position unknown')).toBeTruthy();
+      expect(screen.getByLabelText('Sam Bouchard: position unknown')).toBeTruthy();
+      // Navigate stays on the band, list open.
+      await fireEvent.press(screen.getByTestId('team-band-gather-navigate'));
+      expect(nav).toHaveBeenCalledWith(46.81, -71.2);
+      // The list follows the team: Sam's first fix puts him in it.
+      await act(async () => {
+        jest.advanceTimersByTime(60_000);
+        useTeamStore.setState((st) => ({
+          positions: [
+            ...st.positions,
+            { ...st.positions[0]!, id: 'sam', lat: 46.8099, lon: -71.2, ageMs: 0 },
+          ],
+        }));
+      });
+      expect(screen.getByLabelText('Sam Bouchard: there')).toBeTruthy();
+      await fireEvent.press(screen.getByTestId('team-band-gather-text'));
+      expect(screen.queryByTestId('team-gather-etas')).toBeNull();
+    },
+  );
+
   it('the strip variant is one compact line', async () => {
     crew({ rally });
     await render(wrap(<AlertBands here={HERE} onNavigate={jest.fn()} variant="strip" />));

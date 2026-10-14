@@ -14,9 +14,9 @@
  *   "Gather · Lac-Delage" / "1.2 km · by Noé", its creator's
  *   "You called it · 4 of 5 received".
  */
-import type { TeamRally, TeamSos } from './field';
+import { rallyArrivals, type TeamRally, type TeamSos } from './field';
 import { rallyEntity, sosEntity } from './alertLedger';
-import { rangeAndBearing, shortAge } from './positions';
+import { rangeAndBearing, shortAge, STALE_MS } from './positions';
 import type { AlertRef } from './receipts';
 import { distanceText } from './teamBar';
 
@@ -150,6 +150,64 @@ export function bandModel(
     a11y: `${title}, ${sub}`,
     actions: o.isAdmin ? ['navigate', 'end'] : ['navigate'],
   };
+}
+
+/** One member's way to the gather (#708; the old rally pill's ETA list). */
+export interface GatherEta {
+  id: string;
+  name: string;
+  isMe: boolean;
+  /** Metres to the rally point, null without a recent position. */
+  distanceM: number | null;
+  /** Minutes at walking pace (`rallyArrivals`), null without a recent position. */
+  etaMin: number | null;
+  arrived: boolean;
+  /** "there", "~12 min" or "—". */
+  eta: string;
+  /** "640 m" or "—". */
+  distance: string;
+}
+
+/**
+ * Every active member's distance and ETA to the rally point, nearest to
+ * arrive first: those already inside its circle, then by ETA (then
+ * distance), then members without a recent position (none, or older than
+ * {@link STALE_MS}), shown "—". My own row uses my live fix.
+ */
+export function gatherEtas(
+  rally: TeamRally,
+  members: readonly { id: string; name: string; isMe: boolean; active: boolean }[],
+  positions: readonly { id: string; lat: number; lon: number; ageMs: number }[],
+  here: { latitude: number; longitude: number } | null,
+): GatherEta[] {
+  const active = members.filter((m) => m.active);
+  const people = active.map((m) => {
+    if (m.isMe) return { id: m.id, at: here ? ([here.longitude, here.latitude] as const) : null };
+    const p = positions.find((x) => x.id === m.id);
+    return { id: m.id, at: p && p.ageMs <= STALE_MS ? ([p.lon, p.lat] as const) : null };
+  });
+  const arrivals = new Map(rallyArrivals(rally, people).map((a) => [a.id, a]));
+  const rows = active.map((m): GatherEta => {
+    const a = arrivals.get(m.id) ?? { distanceM: null, etaMin: null, arrived: false };
+    return {
+      id: m.id,
+      name: m.isMe ? 'You' : m.name,
+      isMe: m.isMe,
+      distanceM: a.distanceM,
+      etaMin: a.etaMin,
+      arrived: a.arrived,
+      eta: a.arrived ? 'there' : a.etaMin === null ? '—' : `~${a.etaMin} min`,
+      distance: a.distanceM === null ? '—' : distanceText(a.distanceM),
+    };
+  });
+  const FAR = Number.MAX_SAFE_INTEGER;
+  return rows.sort(
+    (a, b) =>
+      Number(b.arrived) - Number(a.arrived) ||
+      (a.etaMin ?? FAR) - (b.etaMin ?? FAR) ||
+      (a.distanceM ?? FAR) - (b.distanceM ?? FAR) ||
+      (a.name < b.name ? -1 : 1),
+  );
 }
 
 /** The bands to draw: the top one and a count, or (expanded) up to three. */

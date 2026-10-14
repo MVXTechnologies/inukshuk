@@ -8,7 +8,9 @@
  * - My SOS: "Your SOS is active" / "3 of 5 received · 1 min", Resolve,
  *   confirmed inline ("Resolve for everyone?").
  * - A gather (amber, dark ink): "Gather · Lac-Delage" / "1.2 km · by Noé",
- *   Navigate; its creator (or an admin) End, confirmed inline.
+ *   Navigate; its creator (or an admin) End, confirmed inline. A tap on its
+ *   words expands who gets there when under it (name, distance, ETA,
+ *   nearest to arrive first; "—" without a recent position).
  * - SOS outranks; "+1" expands to stacked bands (up to three).
  *
  * Ranking and texts are `@core/teamui/alertBands`; receipts come from the
@@ -18,6 +20,7 @@ import {
   activeAlerts,
   bandModel,
   bandStack,
+  gatherEtas,
   type ActiveAlert,
   type BandAction,
 } from '@core/teamui/alertBands';
@@ -120,6 +123,7 @@ function Band({
   // Receipts are re-read whenever team data changes.
   useTeamStore((s) => s.dataVersion);
   const [confirm, setConfirm] = useState(false);
+  const [etasOpen, setEtasOpen] = useState(false);
   const sos = alert.kind === 'sos';
   const bg = sos ? t.team.sos : t.team.gather;
   const ink = sos ? t.team.sosInk : t.team.gatherInk;
@@ -215,7 +219,9 @@ function Band({
     }
   };
 
-  return (
+  // A gather's words open who gets there when (the old rally pill's list).
+  const etaToggle = !sos && !compact;
+  const band = (
     <View
       style={[
         styles.band,
@@ -226,11 +232,18 @@ function Band({
       testID={id}
     >
       <Pressable
-        onPress={() => onCentre(alert.lat, alert.lng)}
+        onPress={() => (etaToggle ? setEtasOpen((o) => !o) : onCentre(alert.lat, alert.lng))}
         style={styles.textArea}
         accessibilityRole="button"
         accessibilityLabel={m.a11y}
-        accessibilityHint="Centres the map on it"
+        accessibilityHint={
+          etaToggle
+            ? etasOpen
+              ? 'Hides who gets there when'
+              : 'Shows who gets there when'
+            : 'Centres the map on it'
+        }
+        accessibilityState={etaToggle ? { expanded: etasOpen } : undefined}
         testID={`${id}-text`}
       >
         <View style={[styles.icon, sos ? styles.iconSos : styles.iconGather]}>
@@ -246,6 +259,9 @@ function Band({
             </Text>
           )}
         </View>
+        {etaToggle && (
+          <Icon source={etasOpen ? 'chevron-up' : 'chevron-down'} size={20} color={ink} />
+        )}
       </Pressable>
       {more !== 0 && (
         <Pressable
@@ -266,6 +282,64 @@ function Band({
         </Pressable>
       )}
       {m.actions.map(button)}
+    </View>
+  );
+  if (!etaToggle || !etasOpen) return band;
+  return (
+    <View style={styles.column} pointerEvents="box-none">
+      {band}
+      <GatherEtaList here={here} />
+    </View>
+  );
+}
+
+/**
+ * Who gets there when (the old rally pill's ETA list): every member's
+ * distance and ETA to the rally point, nearest to arrive first; "—" without
+ * a recent position (`gatherEtas`). Redraws with team changes only.
+ */
+function GatherEtaList({ here }: { here: { latitude: number; longitude: number } | null }) {
+  const t = useSchemeTokens();
+  const rally = useTeamStore((s) => s.rally);
+  const view = useTeamStore((s) => s.view);
+  const positions = useTeamStore((s) => s.positions);
+  const rows = useMemo(
+    () => (rally && view ? gatherEtas(rally, view.members, positions, here) : []),
+    [rally, view, positions, here],
+  );
+  return (
+    <View
+      style={[styles.etas, { backgroundColor: t.surface, borderColor: t.team.gather }, shadow]}
+      testID="team-gather-etas"
+    >
+      {rows.map((r) => (
+        <View
+          key={r.id}
+          style={styles.etaRow}
+          accessible
+          accessibilityLabel={
+            r.etaMin === null && !r.arrived
+              ? `${r.name}: position unknown`
+              : r.arrived
+                ? `${r.name}: there`
+                : `${r.name}: ${r.distance}, about ${r.etaMin} minutes`
+          }
+          testID={`team-gather-eta-${r.name}`}
+        >
+          <Text style={[styles.etaName, { color: t.ink }]} numberOfLines={1}>
+            {r.name}
+          </Text>
+          <Text style={[styles.etaDist, { color: t.inkMuted }]}>{r.distance}</Text>
+          <Text
+            style={[
+              styles.etaEta,
+              { color: r.arrived ? t.status.gnssFixed : r.etaMin === null ? t.inkMuted : t.ink },
+            ]}
+          >
+            {r.eta}
+          </Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -311,6 +385,11 @@ const shadow = {
 
 const styles = StyleSheet.create({
   column: { gap: 8 },
+  etas: { borderRadius: 16, borderWidth: 1.5, paddingVertical: 4, paddingHorizontal: 12 },
+  etaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 36 },
+  etaName: { flex: 1, minWidth: 0, fontSize: 14, fontWeight: '700' },
+  etaDist: { fontSize: 13, fontWeight: '700', minWidth: 56, textAlign: 'right' },
+  etaEta: { fontSize: 13.5, fontWeight: '800', minWidth: 64, textAlign: 'right' },
   flex: { flex: 1, minWidth: 0 },
   band: {
     minHeight: 56,
