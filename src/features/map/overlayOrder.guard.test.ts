@@ -94,6 +94,7 @@ describe('the info strip is the lowest overlay', () => {
       'src/features/recording/RecordingCheckPanel.tsx',
       'src/features/map/components/BackgroundLocationRationale.tsx',
       'src/features/map/infoStrip/editor/InfoStripEditor.tsx',
+      'src/features/team/map/TeamCards.tsx',
     ]) {
       const src = read(file);
       expect({ file, table: src.includes('MAP_OVERLAY_Z.') }).toEqual({ file, table: true });
@@ -106,6 +107,14 @@ describe('the info strip is the lowest overlay', () => {
   it('the strip host itself carries no zIndex', () => {
     const host = read('src/features/map/infoStrip/InfoStripHost.tsx');
     expect(host).not.toMatch(/zIndex:|elevation:/);
+  });
+});
+
+describe('the team button (QA 2.6.0, 09b)', () => {
+  it('closed, it sits under the bottom cards; open, its menu over them', () => {
+    expect(MAP_OVERLAY_Z.teamButton).toBeLessThan(MAP_OVERLAY_Z.waypointCard);
+    expect(MAP_OVERLAY_Z.teamMenu).toBeGreaterThan(MAP_OVERLAY_Z.waypointCard);
+    expect(BOTTOM_LAYER.waypointCard.zIndex).toBe(MAP_OVERLAY_Z.waypointCard);
   });
 });
 

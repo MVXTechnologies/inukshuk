@@ -25,11 +25,15 @@
  * | topChip          | 5      | the top-centre lane (destination, night, receiver)     |
  * | recordingPanel   | 6      | the recording panel's dock (above the glove shield:    |
  * |                  |        | its hold-to-unlock stays live)                         |
+ * | teamButton       | 6      | the team button, closed: UNDER the bottom cards (QA    |
+ * |                  |        | 2.6.0: it hid a cluster row's chevron); by tree order  |
+ * |                  |        | over the panel, which it never overlaps                |
  * | waypointCard     | 7      | the bottom cards: a waypoint's, a cluster's list       |
  * |                  |        | (2.5.2), a team point's, a photo's, an extension's;    |
  * |                  |        | docked ON a bottom strip (`waypointCardDockStyle`)     |
  * | snackbar         | 8      | confirmations, EDIT / UNDO                             |
  * | moveOverlay      | 9      | moving a waypoint owns the screen                      |
+ * | teamMenu         | 9      | the team button's open menu and its scrim              |
  * | teamPick         | 9      | picking a teammate's point                             |
  * | drawingMode      | 9      | team drawing mode (#683, 2.5.2): its canvas and bars   |
  * |                  |        | own the screen; the strip is hidden while it is on     |
@@ -63,9 +67,11 @@ export const MAP_OVERLAY_Z = {
   shownTrailSheet: 4,
   topChip: 5,
   recordingPanel: 6,
+  teamButton: 6,
   waypointCard: 7,
   snackbar: 8,
   moveOverlay: 9,
+  teamMenu: 9,
   teamPick: 9,
   drawingMode: 9,
   overDrawMode: 10,
