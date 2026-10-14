@@ -26,6 +26,7 @@
       "smoke.yaml",
       "waypoint.yaml",
       "waypoint-cluster.yaml",
+      "library-select.yaml",
       "navigate.yaml",
       "map-overlays.yaml",
       "info-strip.yaml",

@@ -145,18 +145,18 @@ tags:
     while:
       visible: 'Waypoint \d+.*'
     commands:
+      # A long-press selects the row (#711); the action bar's Delete takes
+      # it out at once, with Undo (no confirm dialog).
       - longPressOn: 'Waypoint \d+.*'
       - extendedWaitUntil:
-          visible: 'Delete waypoint'
+          visible:
+            id: 'library-action-delete'
           timeout: 8000
-      - tapOn: 'Delete waypoint'
-      # Confirm dialog: title 'Delete waypoint', buttons Cancel / Delete.
+      - tapOn:
+          id: 'library-action-delete'
       - extendedWaitUntil:
-          visible: 'Cancel'
-          timeout: 8000
-      - tapOn: 'Delete'
-      - extendedWaitUntil:
-          notVisible: 'Cancel'
+          notVisible:
+            id: 'library-action-bar'
           timeout: 8000
 - assertNotVisible: 'Waypoint \d+.*'
 - tapOn:

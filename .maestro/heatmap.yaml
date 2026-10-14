@@ -72,20 +72,18 @@ tags:
     when:
       visible: 'Waypoint 1.*'
     commands:
-      # Long-press opens the card's ⋮ menu (its a11y label documents this).
+      # A long-press selects the row (#711); the action bar's Delete takes
+      # it out at once, with Undo (no confirm dialog).
       - longPressOn: 'Waypoint 1.*'
       - extendedWaitUntil:
-          visible: 'Delete waypoint'
+          visible:
+            id: 'library-action-delete'
           timeout: 8000
-      - tapOn: 'Delete waypoint'
-      # Confirm dialog: title 'Delete waypoint', buttons Cancel / Delete —
-      # 'Delete' matches only the button (Maestro text match is exact).
+      - tapOn:
+          id: 'library-action-delete'
       - extendedWaitUntil:
-          visible: 'Cancel'
-          timeout: 8000
-      - tapOn: 'Delete'
-      - extendedWaitUntil:
-          notVisible: 'Cancel'
+          notVisible:
+            id: 'library-action-bar'
           timeout: 8000
 - tapOn:
     text: 'Map(, tab.*)?'
