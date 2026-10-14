@@ -1249,6 +1249,7 @@ export function MapScreen() {
       cameraRef,
       mapRef,
       overlays,
+      ready: mapLoaded && screenFocused,
     });
   // Settled map bearing → the compass badge's red north needle, plus the
   // snap-back detent that undoes the rotation a zoom pinch leaks in (#248).
