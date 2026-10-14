@@ -15,7 +15,7 @@ import { useOverlayStatusStore } from '@state/overlayStatusStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
 import * as Sharing from 'expo-sharing';
-import { useRouter } from 'expo-router';
+import { useIsFocused, useRouter } from 'expo-router';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -69,7 +69,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { ScreenHeader } from '@ui/components/ScreenHeader';
 import { waypointIconGlyph } from '@core/library/waypointIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { WaypointEditorDialog } from '../map/components/WaypointEditorDialog';
+import { WaypointEditorSheet, type WaypointStylePatch } from '../map/waypoints/WaypointEditorSheet';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
 import {
   ContourTexture,
@@ -143,6 +143,7 @@ const DELETE_COPY: Record<DeleteTarget['kind'], { title: string; body: (name: st
 export function LibraryScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const isFocused = useIsFocused();
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const night = useDisplayCondition() === 'night';
@@ -474,6 +475,10 @@ export function LibraryScreen() {
     // Applied straight away, like the photo: the row behind the dialog redraws
     // with the new mark, which is the whole point of choosing one.
     if (editWpId) updateWaypoint(editWpId, { icon: icon ?? null });
+  };
+  const setWaypointStyle = (patch: WaypointStylePatch) => {
+    // Colour and size (#675), applied straight away like the icon.
+    if (editWpId) updateWaypoint(editWpId, patch);
   };
   const setWaypointPhoto = (uri: string) => {
     if (editWpId) updateWaypoint(editWpId, { photoUri: uri });
@@ -1491,9 +1496,9 @@ export function LibraryScreen() {
       {/* "Set category" for an existing trail (⋮ menu → Set category). */}
       <SetCategoryDialog trackId={categoryTarget} onDismiss={() => setCategoryTarget(null)} />
 
-      {/* Waypoint note + photo editor (row tap) — the same dialog the map's
-          pins open, dispatching to the same libraryStore actions. */}
-      <WaypointEditorDialog
+      {/* Waypoint editor (row tap) — the same sheet the map's pins open,
+          dispatching to the same libraryStore actions. */}
+      <WaypointEditorSheet
         waypoint={editWaypoint}
         name={wpName}
         onChangeName={setWpName}
@@ -1503,6 +1508,8 @@ export function LibraryScreen() {
         onDelete={deleteWaypointFromEditor}
         onSetPhoto={setWaypointPhoto}
         onSetIcon={setWaypointIcon}
+        onSetStyle={setWaypointStyle}
+        screenFocused={isFocused}
       />
 
       {/* Trail filter panel (header sort/filter button). Stays mounted so its

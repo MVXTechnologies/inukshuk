@@ -24,6 +24,7 @@
  * | `pdf`       | PDF maps                              | PDF maps                           |
  * | `trails`    | heat, trail lines, highlights, markers | same                              |
  * | `reference` | weather/marine reference labels       | same                               |
+ * | `live`      | one invisible anchor per live layer (followed trail, puck, cone, pointing line, team, pins) — `@core/map/liveLayerOrder` | same |
  *
  * so the visible order — ground, contours, roads and trails, relief, slope,
  * names, PDF maps, your trails — is the same on both, and PDF maps always
@@ -69,6 +70,7 @@ export const MAP_LAYER_SLOTS = [
   'pdf',
   'trails',
   'reference',
+  'live',
 ] as const;
 
 export type MapLayerSlot = (typeof MAP_LAYER_SLOTS)[number];

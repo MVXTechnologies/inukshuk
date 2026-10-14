@@ -5,6 +5,7 @@ import type { TrackPointAt } from '@core/geo/track';
 import { splitSegments } from '@core/geo/track/segments';
 import { numberNotesOnTrack } from '@core/library/notes';
 import { bboxFromLngLats } from '@core/geo/geomath';
+import { overlayAnchor } from '@core/map/layerSlots';
 import { useSettingsStore } from '@state/settingsStore';
 import { useMapStore, type MapBasemap } from '@state/mapStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -246,12 +247,14 @@ export function Trail2DView({
             reads on the map, the hillshade and satellite alike. */}
         <Layer
           id="trail-2d-casing"
+          beforeId={TRAIL_LINES_ANCHOR}
           type="line"
           layout={{ 'line-cap': 'round', 'line-join': 'round' }}
           paint={{ 'line-color': tokens.explore.trailHalo, 'line-width': 8, 'line-opacity': 0.9 }}
         />
         <Layer
           id="trail-2d-line"
+          beforeId={TRAIL_LINES_ANCHOR}
           type="line"
           layout={{ 'line-cap': 'round', 'line-join': 'round' }}
           paint={{ 'line-color': tokens.explore.trail, 'line-width': 4.5 }}
@@ -263,6 +266,7 @@ export function Trail2DView({
         <GeoJSONSource id="trail-2d-scrub" data={scrubFeature}>
           <Layer
             id="trail-2d-scrub-dot"
+            beforeId={MARKERS_ANCHOR}
             type="circle"
             paint={{
               'circle-radius': 8,
@@ -303,5 +307,10 @@ export function Trail2DView({
     </Map>
   );
 }
+
+// Under the live stack (the photos' anchors, `@core/map/liveLayerOrder`): the
+// trail and its scrub dot never cover a photo after a style reload.
+const TRAIL_LINES_ANCHOR = overlayAnchor('trailLines');
+const MARKERS_ANCHOR = overlayAnchor('markers');
 
 const styles = StyleSheet.create({ fill: { flex: 1 } });

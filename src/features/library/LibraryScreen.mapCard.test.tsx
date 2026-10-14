@@ -48,6 +48,7 @@ jest.mock('react-native-paper', () => {
   return { ...paper, Menu };
 });
 jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
   useRouter: () => ({ navigate: jest.fn(), push: jest.fn() }),
 }));
 jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(), shareAsync: jest.fn() }));

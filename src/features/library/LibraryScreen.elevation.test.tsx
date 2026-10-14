@@ -51,7 +51,10 @@ jest.mock('react-native-paper', () => {
   };
 });
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ navigate: jest.fn(), push: jest.fn() }) }));
+jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
+  useRouter: () => ({ navigate: jest.fn(), push: jest.fn() }),
+}));
 jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(), shareAsync: jest.fn() }));
 jest.mock('@data/storage', () => ({
   newId: () => 'id',

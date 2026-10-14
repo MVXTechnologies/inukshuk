@@ -2,8 +2,7 @@ import { sheetBodyMaxHeight } from '@core/map/sheetFit';
 import { useMapAreaBottom, useWindowEdge } from '../mapAreaBottom';
 import { WEATHER_LAYERS, weatherLayerById, type WeatherLayerId } from '@core/geo/weatherLayers';
 import { MARINE_LAYER_IDS } from '@core/geo/marineLayers';
-import { MARINE_ENABLED, PARKED_LABEL, WEATHER_ENABLED } from '@core/features/flags';
-import { WHITE_KEY_LEVELS, nearestWhiteKeyLevel, whiteKeyLabel } from '@core/geo/pdfWhiteKey';
+import { MARINE_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { radarAvailableAt } from '@core/weather/modelCoverage';
 import {
   PEAK_DENSITIES,
@@ -14,20 +13,23 @@ import {
 } from '@core/map/terrainOptions';
 import { TILT_RELIEF_LABEL, TILT_RELIEFS } from '@core/map/tiltRelief';
 import { nativeTerrainAvailable } from '@lib/nativeTerrain';
-import { IMAGERY_LOOK_LABEL, IMAGERY_LOOKS } from '@core/map/satelliteImagery';
+import { EXTENSION_PANELS } from '@features/extensions/panelEntries';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
-import { GeodeticFilterPanel } from './GeodeticFilterPanel';
+import { BaseMapCards } from './BaseMapCards';
 import { ExtensionsPanel } from './ExtensionsPanel';
 import {
   OVERLAY_TABS,
   OVERLAY_TAB_LABEL,
   OVERLAY_TAB_SHORT,
+  panelForRow,
   tabForRow,
+  tabForSubPanel,
   type OverlayRow,
+  type OverlaySubPanel,
   type OverlayTab,
 } from '@core/map/overlayTabs';
 import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -41,56 +43,61 @@ import {
 import { FolderPickerDialog } from './FolderPickerDialog';
 import { MapButton } from './MapButton';
 import {
-  ControlRow,
   LevelsRow,
   MapSheet,
   NavRow,
   SectionTitle,
   Segmented,
   SheetHeader,
+  SubPanelButton,
+  SubPanelHeader,
   SwitchRow,
   useSheetAccent,
   useSheetWidth,
 } from './mapSheet';
+import { PdfMapsPanel } from './PdfMapsPanel';
+import { PointingLinePanel, PointingLineRow } from './PointingLinePanel';
 import { RangeSlider } from './RangeSlider';
-import { StepSlider } from './StepSlider';
+import { SatellitePanel } from './SatellitePanel';
 
 /**
- * THE overlays menu (#484 redesign): everything drawn on top of the base map,
- * as ONE themed, scrolling sheet in the Map type panel's visual language —
- * section titles, icon + label + one-line hint rows, Switches instead of
- * checkboxes, segmented pickers where a row has levels. It replaces the
- * D-6 drill-down (top-level groups → Topology sub-menu on a fixed dark slab):
+ * THE overlays menu, titled "Map layers" (#484 redesign; #668–#670): how the
+ * map looks, as ONE themed, scrolling sheet — section titles, icon + label +
+ * one-line hint rows, Switches, segmented pickers where a row has levels.
  *
  * Four tabs (`@core/map/overlayTabs`; the last one is remembered):
- * - Map — Content (folder picker), PDF maps, Parks, Labels on satellite,
- *   Imagery.
- * - Terrain — Shading, 3D relief, Contours (+ density), Slope (+ range),
- *   Peaks, and last See-through white (the PDF maps' white paper, a 5-stop
- *   slider: Off, 25 / 50 / 75 / 100 %; needs PDF maps).
- * - Sports — Personal heatmap; Live layers: Weather (drills into its list)
- *   and Marine, both parked this release (greyed "Coming soon", never
- *   removed: a feature that silently disappears reads as a bug). Climbing
- *   crags will join here.
- * - Extensions — the installed extensions' switches and legends (geodetic
- *   filter funnel), "Get more extensions"; an empty state with none.
+ * - Map — Content (folder picker), PDF maps, Parks & protected areas.
+ * - Terrain — the base map (Map / Satellite cards, #669; it was the rail's
+ *   "Base map" panel), then Relief: Shading, 3D relief, Contours (+
+ *   density), Slope (+ range), Peaks.
+ * - Sports — Personal heatmap; Live layers: Weather (its list) and Marine,
+ *   both parked this release, so not shown at all (no greyed rows, owner
+ *   rule, 2.5.1 QA). Climbing crags will join here.
+ * - Extensions — the installed extensions' rows, "Get more extensions"; an
+ *   empty state with none.
  *
- * Every setting it drives is the one the old rows drove, with the same
- * semantics (Shading None = hillshade off; a level turns it on at that
- * strength; 3D relief rests with Shading None).
+ * Sub-panels (#668, the owner's sub-menu rule: what relates to one item only
+ * lives in that item's page, never in a greyed-out row): an item with
+ * options of its own carries the round chevron accessory (`SubPanelButton`)
+ * and opens them as a page of the sheet, through ONE `openSubPanel(id)`: the
+ * tab strip hides, a back row leads back to the tab. Satellite (labels,
+ * imagery brightness), PDF maps (See-through white), Weather (its list) and
+ * every extension (`ExtensionPanelModule.Panel`). Nothing in a tab greys out
+ * (beyond the network-only rows while offline).
  *
  * A11y/Maestro contract: the opener keeps the EXACT label 'Map overlays';
- * the sheet's ✕ is 'Close overlays' — the open-state sentinel now that
- * 'Topology' is gone. Rows keep the labels the flows key on: 'Content: …',
- * 'PDF maps', 'Personal heatmap', 'Slope', 'Contours', the level names
- * ('Auto', '50 m', 'Heavy', …), 'Slope minimum/maximum', 'Weather'/
- * 'Weather: <layer>'/'Weather (coming soon)', 'Marine'/'Marine (coming
- * soon)'; the weather list's back row stays 'Back to overlays'.
+ * the sheet's ✕ is 'Close overlays' — the open-state sentinel. Rows keep the
+ * labels the flows key on: 'Content: …', 'PDF maps', 'Personal heatmap',
+ * 'Slope', 'Contours', the level names ('Auto', '50 m', 'Heavy', …), 'Slope
+ * minimum/maximum', 'Weather'/'Weather: <layer>' and 'Marine' (absent while
+ * parked); built-in sub-panels go back with 'Back to
+ * overlays', extension ones with 'Back to extensions'. Accessories are named
+ * 'Options for <item>' — never starting with the row's own label, so a
+ * flow's 'PDF maps.*' still finds the row.
  *
  * The rows scroll inside a capped height. The slope RangeSlider and the
- * see-through StepSlider ('See-through white', one adjustable element) claim
- * their touches at touch-down and refuse termination, so a drag beats the
- * ScrollView; the level pickers are taps.
+ * see-through StepSlider claim their touches at touch-down and refuse
+ * termination, so a drag beats the ScrollView; the level pickers are taps.
  */
 
 /** Per-layer icon (MaterialCommunityIcons). UI-only mapping — the catalog in
@@ -112,9 +119,6 @@ const BELOW_INSET = 52 + 16;
 
 const SHADING = SHADING_LEVELS.map((l) => ({ value: l, label: SHADING_LABEL[l] }));
 const TILT = TILT_RELIEFS.map((r) => ({ value: r, label: TILT_RELIEF_LABEL[r] }));
-/** See-through white's slider stops: Off, 25 %, 50 %, 75 %, 100 %. */
-const WHITE_KEY_STOPS = WHITE_KEY_LEVELS.map(whiteKeyLabel);
-const IMAGERY = IMAGERY_LOOKS.map((l) => ({ value: l, label: IMAGERY_LOOK_LABEL[l] }));
 const PEAKS = PEAK_DENSITIES.map((d) => ({ value: d, label: PEAK_DENSITY_LABEL[d] }));
 const CONTOUR_DENSITY = CONTOUR_INTERVALS.map((m) => ({
   value: m,
@@ -122,24 +126,23 @@ const CONTOUR_DENSITY = CONTOUR_INTERVALS.map((m) => ({
 }));
 
 /**
- * The overlay rows (everything but the sheet chrome). `onOpenWeather` drills
- * into the weather list.
+ * The overlay rows of the Map, Terrain and Sports tabs (everything but the
+ * sheet chrome). `openSubPanel` opens an item's own page.
  */
 function OverlayRows({
   tab,
   onSlopeEnabled,
   onOpenFolders,
-  onOpenWeather,
+  openSubPanel,
 }: {
   tab: Exclude<OverlayTab, 'extensions'>;
   onSlopeEnabled: () => void;
   onOpenFolders: () => void;
-  onOpenWeather: () => void;
+  openSubPanel: (panel: OverlaySubPanel) => void;
 }) {
   const { accent } = useSheetAccent();
   const tokens = useSchemeTokens();
   const sheetW = useSheetWidth();
-  const basemap = useMapStore((s) => s.basemap);
   const mapVisibilityMode = useLibraryStore((s) => s.mapVisibilityMode);
   const visibleFolderIds = useLibraryStore((s) => s.visibleFolderIds);
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
@@ -152,9 +155,6 @@ function OverlayRows({
   const slopeMaxDeg = useSettingsStore((s) => s.terrainSlopeMaxDeg);
   const showHeatmap = useSettingsStore((s) => s.showHeatmap);
   const showPdfMaps = useSettingsStore((s) => s.showPdfOverlay);
-  const pdfWhiteKey = useSettingsStore((s) => s.pdfWhiteKey);
-  const satelliteLabels = useSettingsStore((s) => s.satelliteLabels);
-  const satelliteImagery = useSettingsStore((s) => s.satelliteImagery);
   const showHillshade = useSettingsStore((s) => s.showHillshade);
   const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
   const peakDensity = useSettingsStore((s) => s.peakDensity);
@@ -180,11 +180,6 @@ function OverlayRows({
     ? 'Content: everything'
     : `Content: ${visibleFolderIds.length} folder${visibleFolderIds.length === 1 ? '' : 's'}`;
 
-  // Only meaningful over imagery: on the Map base the row stays visible but
-  // greyed, saying where it applies.
-  const onSatellite = basemap === 'satellite';
-  const parksAvailable = !onSatellite || satelliteLabels;
-
   // Marine chart mode is all-or-nothing (D-6 amendment): on = every catalog
   // layer, off = none. While parked the persisted array is left ALONE but
   // reads as off, so the row never shows a mode the map is not drawing.
@@ -196,6 +191,9 @@ function OverlayRows({
   if (tab === 'terrain') {
     return (
       <>
+        <SectionTitle>Base map</SectionTitle>
+        <BaseMapCards onOpenSatellite={() => openSubPanel('satellite')} />
+        <SectionTitle>Relief</SectionTitle>
         <LevelsRow
           icon="image-filter-hdr"
           label="Shading"
@@ -272,28 +270,6 @@ function OverlayRows({
           selected={peakDensity}
           onSelect={(d) => set('peakDensity', d)}
         />
-        {/* How see-through the PDF maps' white paper is, so the base map shows
-          through open land and margins. The default for every PDF map; a
-          map can override it from its Library ⋮ menu. Last in Terrain (owner,
-          2026-10-05: less important than the rest); still needs PDF maps. */}
-        <ControlRow
-          icon="circle-opacity"
-          label="See-through white"
-          hint={showPdfMaps ? 'See the map below white areas' : 'Needs PDF maps'}
-          disabled={!showPdfMaps}
-        >
-          <StepSlider
-            labels={WHITE_KEY_STOPS}
-            value={pdfWhiteKey}
-            onChange={(stop) => set('pdfWhiteKey', nearestWhiteKeyLevel(stop))}
-            width={sheetW - BELOW_INSET - RANGE_VALUE_W}
-            disabled={!showPdfMaps}
-            accessibilityLabel="See-through white"
-            accentColor={accent}
-            trackColor={tokens.surfaceVariant}
-            tickColor={tokens.inkMuted}
-          />
-        </ControlRow>
       </>
     );
   }
@@ -309,51 +285,40 @@ function OverlayRows({
           onToggle={() => set('showHeatmap', !showHeatmap)}
         />
         {/* Climbing crags will join here (owner, 2026-10-05). */}
-        <SectionTitle>Live layers</SectionTitle>
-        {/* Parked (see `@core/features/flags`) outranks the offline-only hint:
-          it is the permanent condition this release. Otherwise these are
-          network-only: under "Locally downloaded only" the layers are dropped
-          from the style, so the rows are disabled with a hint instead of
-          pretending a pick would show anything. */}
-        <NavRow
-          icon="weather-partly-cloudy"
-          label="Weather"
-          hint={
-            !WEATHER_ENABLED
-              ? PARKED_LABEL
-              : offlineOnly
-                ? 'Needs connection'
-                : (weatherName ?? 'Off')
-          }
-          accessibilityLabel={
-            !WEATHER_ENABLED
-              ? `Weather (${PARKED_LABEL.toLowerCase()})`
-              : offlineOnly
+        {/* Parked layers (see `@core/features/flags`) have NO row: the owner's
+          rule is no greyed-out rows (2.5.1 QA). With both parked the section
+          is gone. Otherwise these are network-only: under "Locally
+          downloaded only" the layers are dropped from the style, so the rows
+          are disabled with a hint instead of pretending a pick would show
+          anything. */}
+        {(WEATHER_ENABLED || MARINE_ENABLED) && <SectionTitle>Live layers</SectionTitle>}
+        {WEATHER_ENABLED && (
+          <NavRow
+            icon="weather-partly-cloudy"
+            label="Weather"
+            hint={offlineOnly ? 'Needs connection' : (weatherName ?? 'Off')}
+            accessibilityLabel={
+              offlineOnly
                 ? 'Weather (needs connection)'
                 : weatherName !== null
                   ? `Weather: ${weatherName}`
                   : 'Weather'
-          }
-          disabled={!WEATHER_ENABLED || offlineOnly}
-          onPress={onOpenWeather}
-        />
-        <SwitchRow
-          icon="anchor"
-          label="Marine"
-          hint={
-            !MARINE_ENABLED ? PARKED_LABEL : offlineOnly ? 'Needs connection' : 'Nautical chart'
-          }
-          accessibilityLabel={
-            !MARINE_ENABLED
-              ? `Marine (${PARKED_LABEL.toLowerCase()})`
-              : offlineOnly
-                ? 'Marine (needs connection)'
-                : 'Marine'
-          }
-          value={marineOn}
-          disabled={!MARINE_ENABLED || offlineOnly}
-          onToggle={() => set('marineLayers', marineOn ? [] : [...MARINE_LAYER_IDS])}
-        />
+            }
+            disabled={offlineOnly}
+            onPress={() => openSubPanel('weather')}
+          />
+        )}
+        {MARINE_ENABLED && (
+          <SwitchRow
+            icon="anchor"
+            label="Marine"
+            hint={offlineOnly ? 'Needs connection' : 'Nautical chart'}
+            accessibilityLabel={offlineOnly ? 'Marine (needs connection)' : 'Marine'}
+            value={marineOn}
+            disabled={offlineOnly}
+            onToggle={() => set('marineLayers', marineOn ? [] : [...MARINE_LAYER_IDS])}
+          />
+        )}
       </>
     );
   }
@@ -367,44 +332,34 @@ function OverlayRows({
         onPress={onOpenFolders}
       />
       {/* The "PDF maps" master switch (#233): the one way to clear the map of
-          imported/made sheets whatever the Content picker says. */}
+          imported/made sheets whatever the Content picker says. Its page holds
+          See-through white (#670). */}
       <SwitchRow
         icon="map-legend"
         label="PDF maps"
         hint={showPdfMaps ? 'Your imported and made maps' : 'Hidden on the map'}
         value={showPdfMaps}
         onToggle={() => set('showPdfOverlay', !showPdfMaps)}
+        accessory={
+          <SubPanelButton
+            onPress={() => openSubPanel('pdfMaps')}
+            accessibilityLabel="Options for PDF maps"
+          />
+        }
       />
-      {/* National parks, reserves and protected areas: boundary and name on
-          the vector map. Over imagery they ride "Labels on satellite" (the
-          same vector pass), so the row rests while that is off. */}
+      {/* National parks, reserves and protected areas: boundary and name, on
+          the Map base and over Satellite alike — its own pass there, with or
+          without the labels (#669), so it never greys out. */}
       <SwitchRow
         icon="pine-tree"
         label="Parks & protected areas"
-        hint={parksAvailable ? 'Boundaries and names' : 'Needs labels on satellite'}
+        hint="Boundaries and names"
         value={showParks}
-        disabled={!parksAvailable}
         onToggle={() => set('showParks', !showParks)}
       />
-      <SwitchRow
-        icon="label-outline"
-        label="Labels on satellite"
-        hint={onSatellite ? 'Trails and names over imagery' : 'For the Satellite map type'}
-        value={satelliteLabels}
-        disabled={!onSatellite}
-        onToggle={() => set('satelliteLabels', !satelliteLabels)}
-      />
-      {/* #495: Esri's imagery reads dark under forest and in shadow; a
-          client-side lift (Brighter by default) or the tiles as served. */}
-      <LevelsRow
-        icon="brightness-6"
-        label="Imagery"
-        hint={onSatellite ? 'Satellite brightness' : 'For the Satellite map type'}
-        levels={IMAGERY}
-        selected={satelliteImagery}
-        onSelect={(l) => set('satelliteImagery', l)}
-        disabled={!onSatellite}
-      />
+      {/* Map aids (#681): drawn on the map from you; options in its own page. */}
+      <SectionTitle>Map aids</SectionTitle>
+      <PointingLineRow onOpen={() => openSubPanel('pointingLine')} />
     </>
   );
 }
@@ -471,17 +426,7 @@ function WeatherList({ onBack }: { onBack: () => void }) {
 
   return (
     <>
-      <TouchableRipple
-        onPress={onBack}
-        accessibilityLabel="Back to overlays"
-        style={styles.backRow}
-        borderless
-      >
-        <View style={styles.backInner}>
-          <Icon source="chevron-left" size={24} color={tokens.ink} />
-          <Text style={[styles.backTitle, { color: tokens.ink }]}>Weather</Text>
-        </View>
-      </TouchableRipple>
+      <SubPanelHeader title="Weather" backLabel="Back to overlays" onBack={onBack} />
       {row(null, 'None')}
       {WEATHER_LAYERS.map((l) =>
         row(l.id, l.label, l.timeline === 'past' && radarOutside ? 'Canada only' : undefined),
@@ -528,8 +473,40 @@ function OverlayTabBar({ tab, onSelect }: { tab: OverlayTab; onSelect: (t: Overl
 }
 
 /**
- * The sheet's content: title + ✕, then the scrolling rows (or the weather
- * list). Mounted only while the menu is open, so it always opens at the top.
+ * The page a sub-panel id opens: a built-in one (Satellite, PDF maps,
+ * Weather) or an extension's (`EXTENSION_PANELS[key].Panel`).
+ */
+function SubPanel({
+  panel,
+  onBack,
+  onClose,
+  openSubPanel,
+}: {
+  panel: OverlaySubPanel;
+  onBack: () => void;
+  onClose: () => void;
+  openSubPanel: (panel: OverlaySubPanel) => void;
+}) {
+  switch (panel) {
+    case 'weather':
+      return <WeatherList onBack={onBack} />;
+    case 'satellite':
+      return <SatellitePanel onBack={onBack} />;
+    case 'pdfMaps':
+      return <PdfMapsPanel onBack={onBack} />;
+    case 'pointingLine':
+      return <PointingLinePanel onBack={onBack} />;
+    default: {
+      const { Panel } = EXTENSION_PANELS[panel];
+      return <Panel onBack={onBack} onClose={onClose} openSubPanel={openSubPanel} />;
+    }
+  }
+}
+
+/**
+ * The sheet's content: title + ✕, the tabs, then the scrolling rows — or one
+ * item's sub-panel in their place. Mounted only while the menu is open, so
+ * it always opens at the top.
  */
 export function OverlaysPanel({
   onSlopeEnabled,
@@ -541,12 +518,11 @@ export function OverlaysPanel({
   onOpenFolders: () => void;
   onClose: () => void;
   /**
-   * Open on this row's tab (`@core/map/overlayTabs`, e.g. 'geodeticFilter')
-   * instead of the remembered one. The geodetic filter also opens itself.
+   * Open on this row (`@core/map/overlayTabs`, e.g. 'geodeticFilter'): on its
+   * tab, or in the sub-panel it lives in, instead of the remembered tab.
    */
   openOn?: OverlayRow;
 }) {
-  const [weatherOpen, setWeatherOpen] = useState(false);
   // The remembered tab (persisted), unless a caller asked for a row.
   const savedTab = useSettingsStore((s) => s.overlaysTab);
   const setSetting = useSettingsStore((s) => s.set);
@@ -557,8 +533,15 @@ export function OverlaysPanel({
     setTabState(t);
     setSetting('overlaysTab', t);
   };
-  // The Extensions tab's drill-in: the geodetic filter.
-  const [filterOpen, setFilterOpen] = useState(openOn === 'geodeticFilter');
+  // The open sub-panel, if any: it takes the body and hides the tab strip.
+  const [subPanel, setSubPanel] = useState<OverlaySubPanel | null>(() =>
+    openOn !== undefined ? panelForRow(openOn) : null,
+  );
+  const openSubPanel = (panel: OverlaySubPanel) => {
+    const t = tabForSubPanel(panel);
+    if (t !== tab) setTab(t);
+    setSubPanel(panel);
+  };
   const { height: windowH } = useWindowDimensions();
   // Stay above the tab bar: capped at 60 % of the window alone, the sheet ran
   // behind it on a phone and "Live layers" could never be scrolled to.
@@ -566,9 +549,11 @@ export function OverlaysPanel({
   const { ref: bodyRef, onLayout: onBodyLayout, value: bodyTop } = useWindowEdge('top');
   return (
     <>
-      <SheetHeader title="Overlays" closeLabel="Close overlays" onClose={onClose} />
-      {!weatherOpen && !filterOpen && <OverlayTabBar tab={tab} onSelect={setTab} />}
+      <SheetHeader title="Map layers" closeLabel="Close overlays" onClose={onClose} />
+      {subPanel === null && <OverlayTabBar tab={tab} onSelect={setTab} />}
       <ScrollView
+        // A sub-panel opens at its top (and the tab's list comes back at its own).
+        key={subPanel ?? 'tabs'}
         ref={bodyRef as never}
         onLayout={onBodyLayout}
         style={{
@@ -583,18 +568,21 @@ export function OverlaysPanel({
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled"
       >
-        {weatherOpen ? (
-          <WeatherList onBack={() => setWeatherOpen(false)} />
-        ) : tab === 'extensions' && filterOpen ? (
-          <GeodeticFilterPanel onBack={() => setFilterOpen(false)} />
+        {subPanel !== null ? (
+          <SubPanel
+            panel={subPanel}
+            onBack={() => setSubPanel(null)}
+            onClose={onClose}
+            openSubPanel={openSubPanel}
+          />
         ) : tab === 'extensions' ? (
-          <ExtensionsPanel onOpenGeodeticFilter={() => setFilterOpen(true)} onClose={onClose} />
+          <ExtensionsPanel onOpenPanel={openSubPanel} onClose={onClose} />
         ) : (
           <OverlayRows
             tab={tab}
             onSlopeEnabled={onSlopeEnabled}
             onOpenFolders={onOpenFolders}
-            onOpenWeather={() => setWeatherOpen(true)}
+            openSubPanel={openSubPanel}
           />
         )}
       </ScrollView>
@@ -624,30 +612,26 @@ export function OverlaysDialogs({
  * The overlays button + the sheet unfolding beneath it in the rail's own
  * column (the MapActionsMenu idiom). `open` is owned by the rail so it can
  * drop the map-covering backdrop that closes the sheet on an outside tap.
- * `hideTrigger` lets the rail draw the button itself, joined with Base map in
- * one pill (revamp `Main.html`); the sheet and dialogs still live here.
+ * The button is the one way in to how the map looks (#669: the base map
+ * moved in), hence the layers icon.
  */
 export function MapOverlaysMenu({
   open,
   onToggle,
-  hideTrigger = false,
 }: {
   open: boolean;
   onToggle: (open: boolean) => void;
-  hideTrigger?: boolean;
 }) {
   const [foldersOpen, setFoldersOpen] = useState(false);
   const { snackbar, onSlopeEnabled } = useSlopeDisclaimer();
 
   return (
     <>
-      {!hideTrigger && (
-        <MapButton
-          icon="gradient-vertical"
-          onPress={() => onToggle(!open)}
-          accessibilityLabel="Map overlays"
-        />
-      )}
+      <MapButton
+        icon="layers-outline"
+        onPress={() => onToggle(!open)}
+        accessibilityLabel="Map overlays"
+      />
       {open && (
         <MapSheet>
           <OverlaysPanel
@@ -671,7 +655,6 @@ export function MapOverlaysMenu({
 
 const styles = StyleSheet.create({
   body: { paddingBottom: 4 },
-  backRow: { borderRadius: 12, marginHorizontal: 4 },
   tabBar: {
     flexDirection: 'row',
     borderRadius: 12,
@@ -688,14 +671,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabLabel: { fontSize: 14, fontWeight: '600' },
-  backInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    minHeight: 48,
-    paddingHorizontal: 8,
-  },
-  backTitle: { fontSize: 15, lineHeight: 20, fontWeight: '700' },
   weatherRow: { borderRadius: 12, marginHorizontal: 4 },
   weatherRowInner: {
     flexDirection: 'row',

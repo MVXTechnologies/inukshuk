@@ -20,7 +20,7 @@
 # by its Waypoint button: that button sits at a FIXED offset from the tapped
 # point (MAP_POINT_ACTION_LAYOUT: +55 dp, -31 dp = +13.4 %, -3.4 % here;
 # Maestro takes whole percentages only, and the 104x28 dp button absorbs the
-# rounding), and tapping it opens the waypoint editor ("Note"). Where no
+# rounding), and tapping it opens the waypoint editor sheet ("Note"). Where no
 # bubble is open, the same tap just drops a fresh bubble and no editor appears.
 # Verified 2026-09-28: fails on the unfixed build at the (a) assert, passes
 # with the fix (animations off).
@@ -78,7 +78,8 @@ tags:
 - extendedWaitUntil:
     visible: 'Note'
     timeout: 10000
-- hideKeyboard
+# No hideKeyboard: the editor sheet (#675) opens without a keyboard, and
+# Android's hideKeyboard with none up presses BACK, which closes the sheet.
 - tapOn: 'Done'
 - extendedWaitUntil:
     notVisible: 'Done'
@@ -93,8 +94,11 @@ tags:
 - extendedWaitUntil:
     visible: 'Note'
     timeout: 10000
-# Discard that second, unsaved waypoint.
-- hideKeyboard
+# Discard that second, unsaved waypoint (Delete is at the end of the sheet).
+- scrollUntilVisible:
+    element: 'Delete'
+    direction: DOWN
+    timeout: 20000
 - tapOn: 'Delete'
 - extendedWaitUntil:
     notVisible: 'Delete'

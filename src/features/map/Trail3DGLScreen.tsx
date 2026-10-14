@@ -15,7 +15,6 @@ import {
   type TimelineEvent,
   type TrackPointAt,
 } from '@core/geo/track';
-import { formatLatLng } from '@core/geo/formatCoords';
 import { findCategory } from '@core/library/categories';
 import {
   effectiveTrailViewTab,
@@ -37,6 +36,7 @@ import * as storage from '@data/storage';
 import { formatDistance } from '@state/formatters';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore, type MapBasemap } from '@state/mapStore';
+import { useNavigationStore } from '@state/navigationStore';
 import { useSettingsStore } from '@state/settingsStore';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
@@ -669,9 +669,17 @@ export function Trail3DGLScreen({ trackId }: Props) {
     if (track.stats.bbox) setFocusBounds(track.stats.bbox);
     router.navigate('/');
   };
-  // Only actions that exist today; "Follow again" waits for route following.
+  // "Follow this trail" (#678): back to the map with the trail drawn and the
+  // compass guiding along it.
+  const onFollow = () => {
+    const shown = useLibraryStore.getState().activeTrackIds;
+    if (!shown.includes(track.id)) setActiveTrackIds([...shown, track.id]);
+    useNavigationStore.getState().follow({ trackId: track.id, name: track.name });
+    router.navigate('/');
+  };
   const actions: TrailAction[] = [
     { key: 'map', label: 'On map', icon: 'map-outline', onPress: onShowOnMap },
+    { key: 'follow', label: 'Follow', icon: 'map-marker-path', onPress: onFollow },
     {
       key: 'share',
       label: 'Share',
@@ -966,7 +974,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
 
         {/* #235 — every exit from this dialog puts the keyboard away first;
             unmounting the note field's accessory bar under a live keyboard
-            leaves a dangling accessory (see WaypointEditorDialog's `close`). */}
+            leaves a dangling accessory (see WaypointEditorSheet's `close`). */}
         <Dialog
           visible={editing !== null}
           onDismiss={closeNoteEditor}
@@ -1005,7 +1013,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
               )}
             </KeyboardDismissArea>
             {/* Mounted with the dialog, not at the app root — see the note in
-                WaypointEditorDialog: the native accessory binds to its field
+                WaypointEditorSheet: the native accessory binds to its field
                 once, when it moves to the window. */}
             <KeyboardDoneBar />
           </Dialog.Content>
@@ -1080,10 +1088,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
               note: viewedNote.note.text,
               ...(viewedNote.note.photoUri ? { photoUri: viewedNote.note.photoUri } : {}),
             }}
-            onCopyCoords={() => {
-              void Clipboard.setStringAsync(
-                formatLatLng(viewedNote.latitude, viewedNote.longitude),
-              );
+            onCopyCoords={(text) => {
+              void Clipboard.setStringAsync(text);
               showSnack('Coordinates copied');
             }}
             onCopyNote={() => {

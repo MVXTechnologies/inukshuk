@@ -896,12 +896,13 @@ describe('contour steepness emphasis (#509)', () => {
 });
 
 describe('buildStoneImagerySlots (contours on satellite, #492)', () => {
-  const slots = (scheme: StoneBasemapScheme, labels = true) =>
+  const slots = (scheme: StoneBasemapScheme, labels = true, protectedAreas = true) =>
     buildStoneImagerySlots(scheme, {
       source: SOURCE,
       peaks: PEAKS,
       contours: { ...CONTOURS, levelField: 'level' },
       labels,
+      protectedAreas,
     });
   const strip = (l: LayerSpecification) => l.id.slice(STONE_LAYER_PREFIX.length);
 
@@ -949,11 +950,21 @@ describe('buildStoneImagerySlots (contours on satellite, #492)', () => {
     expect({ ...casing, id: '', paint: {} }).toEqual({ ...minor, id: '', paint: {} });
   });
 
-  it('draws only the contours (and their heights) with labels off', () => {
-    const { contours, linework, labels } = slots(DARK, false);
+  it('draws only the contours (and their heights) with labels and parks off', () => {
+    const { contours, linework, labels } = slots(DARK, false, false);
     expect(contours.length).toBe(4);
     expect(linework).toEqual([]);
     expect(labels.map(strip)).toEqual(['contour-label']);
+  });
+
+  it('keeps the parks with labels off: their own switch, never tied to the labels (#669)', () => {
+    const { linework, labels } = slots(DARK, false);
+    expect(linework.map(strip)).toEqual(['park-band', 'park-outline', 'park-line']);
+    expect(labels.map(strip)).toEqual(['contour-label', 'park-label']);
+    // The same park layers as with the labels on.
+    const on = slots(DARK);
+    const parks = (ls: LayerSpecification[]) => ls.filter((l) => strip(l).startsWith('park-'));
+    expect(parks([...linework, ...labels])).toEqual(parks([...on.linework, ...on.labels]));
   });
 
   it('draws no contours without a contour source', () => {

@@ -215,6 +215,103 @@ export function SwitchRow({
 
 /** The accessory slot's width: one compact icon button. */
 const ACCESSORY_W = 40;
+/** The sub-panel button's round well: 36 dp, a 48-dp target with its slop. */
+const WELL = 36;
+const WELL_SLOP = 6;
+
+/**
+ * "This item has its own page" (#668): a chevron in a round tonal well, the
+ * one accessory idiom of the sheet (extension rows, PDF maps, the Satellite
+ * card). A separate button from its row, never disabled — an item's options
+ * can be set before it is turned on. `badge` carries one number when there
+ * is something to say (active filters, unread messages); 0 shows none.
+ */
+export function SubPanelButton({
+  accessibilityLabel,
+  onPress,
+  badge = 0,
+  testID,
+}: {
+  accessibilityLabel: string;
+  onPress: () => void;
+  badge?: number;
+  testID?: string;
+}) {
+  const tokens = useSchemeTokens();
+  const { accent, onAccent } = useSheetAccent();
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={WELL_SLOP}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      testID={testID}
+      style={[styles.well, { backgroundColor: tokens.surfaceVariant }]}
+    >
+      <Icon source="chevron-right" size={22} color={tokens.inkVariant} />
+      {badge > 0 && (
+        <View style={[styles.wellBadge, { backgroundColor: accent }]} testID="sub-panel-badge">
+          <Text style={[styles.wellBadgeText, { color: onAccent }]}>
+            {badge > 99 ? '99+' : String(badge)}
+          </Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+/**
+ * A sub-panel's head (#668): ‹ and its title, one button back to the tab
+ * (`backLabel` is its a11y/Maestro handle), and an optional action on the
+ * right (Reset, "Base map in use").
+ */
+export function SubPanelHeader({
+  title,
+  backLabel,
+  onBack,
+  right,
+}: {
+  title: string;
+  backLabel: string;
+  onBack: () => void;
+  right?: ReactNode;
+}) {
+  const tokens = useSchemeTokens();
+  return (
+    <View style={styles.subHeader}>
+      <TouchableRipple
+        onPress={onBack}
+        accessibilityRole="button"
+        accessibilityLabel={backLabel}
+        style={styles.subBack}
+        borderless
+      >
+        <View style={styles.subBackInner}>
+          <Icon source="chevron-left" size={26} color={tokens.ink} />
+          <Text
+            style={[styles.subTitle, { color: tokens.ink }]}
+            numberOfLines={1}
+            accessibilityRole="header"
+          >
+            {title}
+          </Text>
+        </View>
+      </TouchableRipple>
+      {right !== undefined && <View style={styles.subRight}>{right}</View>}
+    </View>
+  );
+}
+
+/** A quiet note at the end of a sub-panel: an icon and a line or two of text. */
+export function SheetNote({ icon, children }: { icon: string; children: string }) {
+  const tokens = useSchemeTokens();
+  return (
+    <View style={[styles.note, { backgroundColor: tokens.surfaceVariant }]}>
+      <Icon source={icon} size={18} color={tokens.inkVariant} />
+      <Text style={[styles.noteText, { color: tokens.inkVariant }]}>{children}</Text>
+    </View>
+  );
+}
 
 /** A drill-in / action row: label (+ hint) with a trailing chevron. */
 export function NavRow({
@@ -431,4 +528,50 @@ const styles = StyleSheet.create({
   },
   segLabel: { fontSize: 13, lineHeight: 17, fontWeight: '600' },
   segLabelOn: { fontWeight: '800' },
+  well: {
+    width: WELL,
+    height: WELL,
+    borderRadius: WELL / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wellBadge: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wellBadgeText: { fontSize: 10.5, lineHeight: 13, fontWeight: '800' },
+  subHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: 16,
+  },
+  subBack: { flexShrink: 1, borderRadius: 12, marginLeft: 4 },
+  subBackInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minHeight: 48,
+    paddingLeft: 4,
+    paddingRight: 8,
+  },
+  subTitle: { flexShrink: 1, fontSize: 17, lineHeight: 22, fontWeight: '800' },
+  subRight: { marginLeft: 8 },
+  note: {
+    flexDirection: 'row',
+    gap: 10,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  noteText: { flex: 1, fontSize: 12.5, lineHeight: 17 },
 });

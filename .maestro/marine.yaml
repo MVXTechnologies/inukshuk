@@ -3,9 +3,9 @@
 #
 # Marine chart mode is parked behind MARINE_ENABLED in
 # src/core/features/flags.ts (owner call, 2026-09: the chart quality and the
-# fetch/render speed do not meet the bar yet). The Marine row in the Overlays
-# menu is present but DISABLED with a "Coming soon" subtitle and an unchecked
-# box, so the toggle this flow taps does nothing.
+# fetch/render speed do not meet the bar yet). The Marine row is not in the
+# Overlays menu while parked (no greyed rows since 2.5.1), so the toggle this
+# flow taps is not there.
 #
 # It is kept, not deleted, because flipping MARINE_ENABLED back to true must
 # restore the feature AND its coverage in one step. Android CI never ran it:

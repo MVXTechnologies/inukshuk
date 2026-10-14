@@ -5,6 +5,9 @@
  * every tap on it.
  */
 import {
+  POINT_CHIP_EDGE_MARGIN,
+  POINT_CHIP_MAX_W,
+  pointChipShiftX,
   bareTapAfterFocus,
   chipSurvivesHit,
   pointChipAfterBareTap,
@@ -46,16 +49,17 @@ describe('routeMapTap', () => {
 });
 
 describe('chipSurvivesHit', () => {
-  it('keeps the chip for Navigate and Convert (screens over the map)', () => {
-    expect(chipSurvivesHit('navigate')).toBe(true);
+  it('keeps the chip for Convert (a screen over the map)', () => {
     expect(chipSurvivesHit('convert')).toBe(true);
     expect(chipSurvivesHit('copy')).toBe(false);
   });
 
-  // The new pin lands on the chip's own coordinate — leaving the chip there
-  // is exactly the stale bubble of the report.
-  it('closes the chip when it adds a waypoint', () => {
+  // The new pin (or, #672, the destination flag) lands on the chip's own
+  // coordinate — leaving the chip there is exactly the stale bubble of the
+  // report.
+  it('closes the chip when it adds a waypoint or starts navigating', () => {
     expect(chipSurvivesHit('waypoint')).toBe(false);
+    expect(chipSurvivesHit('navigate')).toBe(false);
   });
 });
 
@@ -141,5 +145,36 @@ describe('readMapPress', () => {
     expect(readMapPress({ nativeEvent: {} })).toBeNull();
     expect(readMapPress({ nativeEvent: null })).toBeNull();
     expect(readMapPress({})).toBeNull();
+  });
+});
+
+describe('pointChipShiftX (2.5.1 QA: the chip half off screen at the edge)', () => {
+  const W = 412;
+  const half = POINT_CHIP_MAX_W / 2;
+
+  it('does not move a chip that fits', () => {
+    expect(pointChipShiftX(W / 2, W)).toBe(0);
+    expect(pointChipShiftX(half + POINT_CHIP_EDGE_MARGIN, W)).toBe(0);
+  });
+
+  it('slides it in from the left edge, keeping the margin', () => {
+    const shift = pointChipShiftX(60, W);
+    expect(60 + shift - half).toBe(POINT_CHIP_EDGE_MARGIN);
+  });
+
+  it('slides it in from the right edge', () => {
+    const shift = pointChipShiftX(W - 60, W);
+    expect(W - 60 + shift + half).toBe(W - POINT_CHIP_EDGE_MARGIN);
+  });
+
+  it('never slides so far that the tail leaves the bubble', () => {
+    for (const x of [0, 5, W - 5, W]) {
+      expect(Math.abs(pointChipShiftX(x, W))).toBeLessThanOrEqual(half - 18);
+    }
+  });
+
+  it('is 0 when the point or the map size is unknown', () => {
+    expect(pointChipShiftX(Number.NaN, W)).toBe(0);
+    expect(pointChipShiftX(10, 0)).toBe(0);
   });
 });

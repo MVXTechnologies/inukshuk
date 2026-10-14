@@ -1,3 +1,4 @@
+import { liveAnchorLayers } from '@core/map/liveLayerOrder';
 import { NIGHT_MAP } from '@ui/tokens';
 import { NATIVE_MAX_ZOOM, type PackFormat } from '@core/geo/tiles';
 import type {
@@ -430,6 +431,12 @@ export interface OsmStyleOptions extends ExtensionStyleOptions {
   imageryLabels?: {
     tiles: readonly string[];
     glyphs?: string;
+    /**
+     * The roads, trails and names themselves ("Labels on satellite"). Default
+     * true. False draws only the parks' boundaries and names, for "Parks &
+     * protected areas" on its own (#669) — then no summit or province source.
+     */
+    labels?: boolean;
     peaks?: string;
     peakDensity?: PeakDensity;
     /** As on {@link vectorBasemap}: boundary and name only, no fill. */
@@ -764,15 +771,17 @@ export function buildOsmStyle(
     ? (options.imageryLabels ?? null)
     : null;
   const imageryContours = basemap === 'satellite' ? (options.imageryContours ?? null) : null;
+  // Names and trails, or (labels off) the parks alone.
+  const imageryNames = imageryLabels !== null && (imageryLabels.labels ?? true);
   if (imageryLabels || imageryContours) {
     const glyphs = imageryLabels?.glyphs ?? imageryContours?.glyphs;
     if (imageryLabels) {
       style.sources[VECTOR_BASEMAP_SOURCE] = vectorBaseSource(imageryLabels.tiles);
-      if (imageryLabels.peaks)
+      if (imageryNames && imageryLabels.peaks)
         style.sources[VECTOR_PEAKS_SOURCE] = peaksSource(imageryLabels.peaks);
       if (imageryLabels.parks && parksOptions(imageryLabels).parks)
         style.sources[VECTOR_PARKS_SOURCE] = parksSource(imageryLabels.parks);
-      if (imageryLabels.admin1)
+      if (imageryNames && imageryLabels.admin1)
         style.sources[VECTOR_ADMIN1_SOURCE] = admin1Source(imageryLabels.admin1);
     }
     if (imageryContours) {
@@ -782,14 +791,15 @@ export function buildOsmStyle(
     const imagery = buildStoneImagerySlots(imageryStoneScheme(), {
       source: VECTOR_BASEMAP_SOURCE,
       fonts: glyphs ? STONE_FONTS_ATKINSON : STONE_FONTS_NOTO,
-      labels: imageryLabels !== null,
+      labels: imageryNames,
       ...(imageryContours ? { contours: STONE_CONTOURS } : {}),
-      ...(imageryLabels?.peaks
+      ...(imageryNames && imageryLabels?.peaks
         ? { peaks: { source: VECTOR_PEAKS_SOURCE, sourceLayer: 'peaks' } }
         : {}),
       ...(imageryLabels?.peakDensity ? { peakDensity: imageryLabels.peakDensity } : {}),
-      ...parksOptions(imageryLabels ?? {}),
-      ...admin1Options(imageryLabels?.admin1),
+      // No imagery pass at all: no parks either (`protectedAreas` false).
+      ...parksOptions(imageryLabels ?? { protectedAreas: false }),
+      ...admin1Options(imageryNames ? imageryLabels?.admin1 : undefined),
     });
     put('contours', ...imagery.contours);
     put('linework', ...imagery.linework);
@@ -1143,6 +1153,13 @@ export function buildOsmStyle(
     Object.assign(style.sources, block.sources);
     put('trails', ...block.layers);
   }
+
+  // The live layers' anchors (`@core/map/liveLayerOrder`): one invisible
+  // marker per live layer, in their one order, at the very top — so the
+  // followed trail, puck, cone, pointing line, team and pins keep the same
+  // order after every style reload (2.5.1 final QA: a theme switch put the
+  // followed trail over the location dot).
+  put('live', ...liveAnchorLayers());
 
   style.layers = stackLayers(slots);
   return style;

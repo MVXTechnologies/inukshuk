@@ -13,6 +13,12 @@ import { StyleSheet, View } from 'react-native';
 import { List, Text } from 'react-native-paper';
 
 import { Note } from './components';
+import {
+  TEAM_PRIVACY_NOTE,
+  TeamCreateOption,
+  TeamJoinOption,
+  TeamYourTeamsOption,
+} from './options';
 import { openPeers, teamSyncLine } from './syncLine';
 
 export function TeamSettings() {
@@ -20,7 +26,6 @@ export function TeamSettings() {
   const router = useRouter();
   const { installedAt } = useExtensionPrefs('team');
   const view = useTeamStore((s) => s.view);
-  const teams = useTeamStore((s) => s.teams);
   const peers = useTeamStore((s) => s.peers);
   const meshRunning = useTeamStore((s) => s.meshRunning);
   const unread = useTeamStore((s) => s.unread);
@@ -66,34 +71,11 @@ export function TeamSettings() {
               testID="team-open-row"
             />
           )}
-          {teams.length > 1 && (
-            <List.Item
-              title="Your teams"
-              description={`${teams.length} teams on this phone`}
-              left={(p) => <List.Icon {...p} icon="format-list-bulleted" />}
-              right={(p) => <List.Icon {...p} icon="chevron-right" />}
-              onPress={() => router.push('/team/teams')}
-            />
-          )}
-          <List.Item
-            title="Create a team"
-            description="Name it, then invite people"
-            left={(p) => <List.Icon {...p} icon="plus" />}
-            onPress={() => router.push('/team/create')}
-            testID="team-create-row"
-          />
-          <List.Item
-            title="Join a team"
-            description="Scan a QR code or paste an invite"
-            left={(p) => <List.Icon {...p} icon="qrcode-scan" />}
-            onPress={() => router.push('/team/join')}
-            testID="team-join-row"
-          />
+          <TeamYourTeamsOption variant="settings" />
+          <TeamCreateOption variant="settings" />
+          <TeamJoinOption variant="settings" />
           <View style={styles.note}>
-            <Note icon="shield-lock-outline">
-              Your position is shared only while you turn sharing on. A team lives only on its
-              members’ phones, end-to-end encrypted.
-            </Note>
+            <Note icon="shield-lock-outline">{TEAM_PRIVACY_NOTE}</Note>
           </View>
         </>
       )}

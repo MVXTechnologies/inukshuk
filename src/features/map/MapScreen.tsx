@@ -6,7 +6,6 @@ import {
   nearestPinAt,
   projectablePins,
   unprojectablePins,
-  WAYPOINT_PIN_HIT,
   type ProjectedPin,
 } from '@core/geo/pinHitTest';
 import {
@@ -72,6 +71,7 @@ import { useRecorderStore } from '@state/recorderStore';
 import { useMarinePackStore } from '@state/marinePackStore';
 import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
+import { useCoordinateFormatter } from '@state/useCoordinateFormatter';
 import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
 import { createGesturePause } from '@core/support/gesturePause';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -84,17 +84,28 @@ import { useMakeMapSession } from './mapmaker/useMakeMapSession';
 import { printStyleById, type PrintStyleId } from '@core/mapmaker/printSources';
 import { clampZoom } from '@core/mapmaker/cameraFit';
 import { EDITOR_RASTER_TILE_SIZE } from '@core/mapmaker/printSources';
-import { discardDraftPhoto, withDraftPhoto, type WaypointDraft } from './waypointDraft';
+import {
+  discardDraftPhoto,
+  withDraftPhoto,
+  withDraftStyle,
+  type WaypointDraft,
+} from './waypointDraft';
 import { BackgroundLocationRationale } from './components/BackgroundLocationRationale';
 import { CategoryStartSheet } from './components/CategoryStartSheet';
 import { CompassBadge } from './components/CompassBadge';
 import { DestinationChip } from './components/DestinationChip';
+import { FollowChip } from './nav/FollowChip';
+import { FollowGuideLine } from './nav/FollowGuideLine';
+import { FollowedTrailLine } from './nav/FollowedTrailLine';
+import { NavigationCompassRow } from './nav/NavigationCompassRow';
+import { useFollowTrail } from './nav/useFollowTrail';
+import { useNavigationStore } from '@state/navigationStore';
 import { DestinationMarkerPin } from './components/DestinationMarkerPin';
-import { GoToCoordinatesDialog } from './components/GoToCoordinatesDialog';
 import { MapCreditsButton, MapCreditsSheet } from './components/MapCredits';
 import { mapCredits } from '@core/map/mapCredits';
 import { bareTapAfterFocus } from '@core/map/mapTap';
 import { HeadingCone } from './components/HeadingCone';
+import { PointingLine } from './components/PointingLine';
 import { MapSearchPill } from './components/MapSearchPill';
 import { PlaceSearchSheet } from './search/PlaceSearchSheet';
 import { SearchHitMarker } from './search/SearchHitMarker';
@@ -125,6 +136,12 @@ import { ShownTrailLayers } from './longTrail/ShownTrailLayers';
 import { MapControlsRail } from './components/MapControlsRail';
 import { RenderingToasts } from './components/RenderingToasts';
 import { ScaleBar } from './components/ScaleBar';
+import {
+  CenterCoordinatesChip,
+  onChipRowLayout,
+  onTipSlotLayout,
+} from './components/CenterCoordinatesChip';
+import { CenterCursor } from './components/CenterCursor';
 import { metersPerPixel } from '@core/geo/scaleBar';
 import { heatTapRadiusPx } from '@core/heat/heatStyle';
 import { RecordingPanel } from './components/RecordingPanel';
@@ -163,11 +180,23 @@ import { useRecordingPhoto } from '../photos/useRecordingPhoto';
 import { TrailInspectPanel } from './components/TrailInspectPanel';
 import { TipButton } from '@features/support/TipButton';
 import { TipBubble } from '@features/support/TipBubble';
-import { WaypointEditorDialog } from './components/WaypointEditorDialog';
-import { WaypointMarkerPin } from './components/WaypointMarkerPin';
 import { WaypointViewerCard } from './components/WaypointViewerCard';
-import { BOTTOM_LAYER, snackbarWrapperStyle, waypointCardDockStyle } from './bottomLayers';
-import { formatLatLng } from '@core/geo/formatCoords';
+import { MoveWaypointLayers } from './waypoints/MoveWaypointLayers';
+import { MoveWaypointOverlay } from './waypoints/MoveWaypointOverlay';
+import { pinAtPoint, toPinInputs } from './waypoints/pinHit';
+import { useWaypointQuickActions } from './waypoints/useWaypointQuickActions';
+import { WaypointEditorSheet, type WaypointStylePatch } from './waypoints/WaypointEditorSheet';
+import { WaypointScreenReaderList } from './waypoints/WaypointScreenReaderList';
+import { WaypointPinLayers } from './waypoints/WaypointPinLayers';
+import { useWaypointMoveStore } from '@state/waypointMoveStore';
+import { ActionSnackbar } from '../common/ActionSnackbar';
+import {
+  BOTTOM_LAYER,
+  liftedSnackbarStyle,
+  rowLiftAboveColumnBottom,
+  snackbarWrapperStyle,
+  waypointCardDockStyle,
+} from './bottomLayers';
 import { destinationReadout } from '@core/geo/destination';
 import { nextWaypointLabel } from '@core/library/waypoints';
 import * as Clipboard from 'expo-clipboard';
@@ -233,6 +262,8 @@ import { marineChartSource, useMarineChart } from './marine/useMarineChart';
 import { MainMapPhotoChip, MainMapPhotoLayers, useMainMapPhotos } from '../photos/MainMapPhotos';
 import { PHOTO_TAP_FRESH_MS } from '@core/photos/mapStyle';
 import { MapPointChip, MapPointLine, hitMapPointChip } from './components/MapPointChip';
+import { PointChipScreenReaderActions } from './components/PointChipScreenReaderActions';
+import { usePointChip } from './usePointChip';
 import { ForecastCard } from './weather/ForecastCard';
 import { WindParticleLayer } from './weather/wind/WindParticleLayer';
 import { useWeatherCrossfade } from './weather/useWeatherCrossfade';
@@ -246,6 +277,7 @@ import { WeatherModelSheet } from './weather/WeatherModelSheet';
 import { WeatherPointLine } from './weather/WeatherPointLine';
 import { WeatherTimeScrubber } from './weather/WeatherTimeScrubber';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
+import { useMapSnackbars } from './useMapSnackbars';
 import { RecordingCheckPanel } from '@features/recording/RecordingCheckPanel';
 import { useRecordingCheck } from '@features/recording/useRecordingCheck';
 import { useMapDrawing } from './draw/useMapDrawing';
@@ -392,7 +424,8 @@ export function MapScreen() {
   const settingsHydrated = useSettingsStore((s) => s.hydrated);
   const lastKnownPosition = useSettingsStore((s) => s.lastKnownPosition);
 
-  const { permission, location, unavailableKind, unavailableReason } = useLocationTracking();
+  const { permission, location, lastFix, unavailableKind, unavailableReason } =
+    useLocationTracking();
   const headingForCamera = useHeadingCamera();
 
   const maps = useLibraryStore((s) => s.maps);
@@ -721,7 +754,11 @@ export function MapScreen() {
   //
   // This is emphatically NOT route following: no legs, no turns, no ETA, no
   // snapping to a trail. That is issue #95.
-  const [destination, setDestination] = useState<LatLng | null>(null);
+  // In the navigation store since #672/#678: one target at a time, a point or
+  // a followed trail (started from the trail view, a screen above the map).
+  const destination = useNavigationStore((s) => s.destination);
+  const setDestination = useNavigationStore((s) => s.setDestination);
+  const stopFollowing = useNavigationStore((s) => s.stopFollowing);
   // True while the PERSON pans or zooms. Only the mascot BUBBLE waits on it
   // (none pops mid-gesture or for 5 s after, #476); the mug's loop ignores
   // map interaction entirely (owner). Driven by createGesturePause: taps
@@ -737,12 +774,6 @@ export function MapScreen() {
   const [bottomRowY, setBottomRowY] = useState<number | null>(null);
   // The ⓘ credits sheet (2.1.1): what the map is drawing, with its © lines.
   const [creditsOpen, setCreditsOpen] = useState(false);
-  // Coordinate readout/entry dialog (#97), opened from the map-actions sheet.
-  // The centre is captured WHEN IT OPENS (an exact getViewState read) rather
-  // than tracked per settle — nothing else needs a metre-accurate centre, and
-  // the scale bar's own settled state is deliberately coarse.
-  const [goToOpen, setGoToOpen] = useState(false);
-  const [goToCenter, setGoToCenter] = useState<LatLng | null>(null);
   /**
    * #232 — when the chip's action row last TOOK a touch. On iOS MapLibre's
    * tap recognizer fires for a tap the row already claimed as a responder,
@@ -752,9 +783,6 @@ export function MapScreen() {
    * arrives, so the window only ever swallows the tap that caused it.
    */
   const chipTouchAtRef = useRef(0);
-  // #232 — the tapped point the coordinates dialog opens prefilled with; null
-  // for the "+" sheet's secondary entry, which opens on an empty box.
-  const [goToSeed, setGoToSeed] = useState<LatLng | null>(null);
   // Place search (#496): the sheet the pill opens, the map centre read when
   // it opened (the index's bias without a GPS fix), and the result just
   // flown to — highlighted until the next tap on the map.
@@ -812,8 +840,12 @@ export function MapScreen() {
   // downloaded Map pack of the area — packs share tiles by URL).
   const satelliteLabels = useSettingsStore((s) => s.satelliteLabels);
   const satelliteImagery = useSettingsStore((s) => s.satelliteImagery);
+  // The same pass draws "Parks & protected areas" alone with the labels off (#669).
   const imageryLabels =
-    VECTOR_BASEMAP_ENABLED && basemap === 'satellite' && satelliteLabels && editorStyle === null;
+    VECTOR_BASEMAP_ENABLED &&
+    basemap === 'satellite' &&
+    (satelliteLabels || showParks) &&
+    editorStyle === null;
   // Contours on satellite (#492): the Map base's served contour tiles, drawn
   // in the style under the roads, names and PDF maps — exactly where the map
   // draws them — instead of the on-device contours, which mounted ABOVE the
@@ -877,6 +909,7 @@ export function MapScreen() {
         ? {
             imageryLabels: {
               ...vectorBasemapOption(theme.dark, false),
+              labels: satelliteLabels,
               peakDensity,
               protectedAreas: showParks,
             },
@@ -993,6 +1026,7 @@ export function MapScreen() {
     referenceOverlay,
     vectorBasemap,
     imageryLabels,
+    satelliteLabels,
     imageryContours,
     satelliteImagery,
     extensionStyle,
@@ -1068,7 +1102,13 @@ export function MapScreen() {
     }
   }, [viewPitch, terrain3d.viewTag, terrain3d.active]);
 
-  const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
+  // Plain messages and the EDIT / UNDO bar share one slot (useMapSnackbars).
+  const mapSnacks = useMapSnackbars();
+  const { message: snack, show: showSnack, dismiss: dismissSnack } = mapSnacks.plain;
+  /** Positions in the user's coordinate format (#677): the point chip and the copy actions. */
+  const formatCoords = useCoordinateFormatter();
+  // Following a saved trail (#678): its readout, per fix, for the compass.
+  const follow = useFollowTrail(location, showSnack);
 
   // Overlay errors surface through the timed hook too: a raw <Snackbar
   // duration={4000}> never auto-dismisses on Samsung One UI (paper arms its
@@ -1215,30 +1255,10 @@ export function MapScreen() {
     [location, pointAt, units],
   );
 
-  // Open the coordinates dialog with an exact map centre. getViewState is
-  // gated on `mapLoaded`: called before the native view is initialised it
-  // NPEs on the native thread, a process crash no JS catch can intercept.
-  const openGoToCoordinates = useCallback(
-    async (seed: LatLng | null = null) => {
-      let center: LatLng | null = null;
-      if (mapLoaded) {
-        try {
-          const vs = await mapRef.current?.getViewState();
-          if (vs) center = { latitude: vs.center[1], longitude: vs.center[0] };
-        } catch {
-          // Map mid-teardown — open with the readout half empty rather than not
-          // at all; the entry half still works.
-        }
-      }
-      setGoToCenter(center);
-      setGoToSeed(seed);
-      setGoToOpen(true);
-    },
-    [mapLoaded],
-  );
-
-  // Open the place search (#496). Same mapLoaded gate as above for the
-  // centre read; without it the search simply has no fallback bias.
+  // Open the place search (#496), which also takes typed coordinates (DD,
+  // DDM, DMS). getViewState is gated on `mapLoaded`: called before the native
+  // view is initialised it NPEs on the native thread, a process crash no JS
+  // catch can intercept; without it the search simply has no fallback bias.
   const openPlaceSearch = useCallback(async () => {
     let center: LatLng | null = null;
     if (mapLoaded) {
@@ -1273,12 +1293,12 @@ export function MapScreen() {
     (at: LatLng) => {
       setDestination(at);
       flyToPoint(at);
-      showSnack(`Destination set — ${formatLatLng(at.latitude, at.longitude)}`);
+      showSnack(`Destination set — ${formatCoords(at.latitude, at.longitude)}`);
     },
     // flyToPoint is recreated every render (it closes over refs only), so it
     // is deliberately not a dependency — listing it would defeat the memo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [showSnack],
+    [showSnack, formatCoords],
   );
 
   // "Show on map" from Convert: aim at the converted point once the map is up
@@ -1644,6 +1664,15 @@ export function MapScreen() {
   const extensionRecenterRef = useRef<ExtensionHit | null>(null);
   const extensionDockRef = useRef<View>(null);
   const mapSizeRef = useRef<{ width: number; height: number } | null>(null);
+  // The point chip's spoken readout and its edge shift (logic in usePointChip).
+  const pointChip = usePointChip({
+    mapRef,
+    mapSizeRef,
+    mapLoaded,
+    pointAt,
+    pointReadout,
+    formatCoords,
+  });
   const findWp = useCallback(
     (ref: { source: 'live' | 'saved'; id: string } | null) =>
       ref === null
@@ -1661,6 +1690,8 @@ export function MapScreen() {
           label: wpName,
           ...(newWp.photoUri ? { photoUri: newWp.photoUri } : {}),
           ...(newWp.icon ? { icon: newWp.icon } : {}),
+          ...(newWp.color ? { color: newWp.color } : {}),
+          ...(newWp.size ? { size: newWp.size } : {}),
         }
       : findWp(editWp);
   const viewWaypoint = findWp(viewWp);
@@ -1709,11 +1740,13 @@ export function MapScreen() {
       // field was prefilled with), then fold in whatever the form collected.
       const id = addSavedWaypoint(newWp.latitude, newWp.longitude, wpName);
       const note = wpDraft.trim();
-      if (note !== '' || newWp.photoUri || newWp.icon) {
+      if (note !== '' || newWp.photoUri || newWp.icon || newWp.color || newWp.size) {
         updateSavedWaypoint(id, {
           ...(note !== '' ? { note } : {}),
           ...(newWp.photoUri ? { photoUri: newWp.photoUri } : {}),
           ...(newWp.icon ? { icon: newWp.icon } : {}),
+          ...(newWp.color ? { color: newWp.color } : {}),
+          ...(newWp.size ? { size: newWp.size } : {}),
         });
       }
       setNewWp(null);
@@ -1777,6 +1810,15 @@ export function MapScreen() {
     if (editWp?.source === 'saved') updateSavedWaypoint(editWp.id, { icon: icon ?? null });
   };
 
+  /** Colour / size (#675): like the icon, live on a saved pin, held on a draft. */
+  const setWaypointStyle = (patch: WaypointStylePatch) => {
+    if (newWp) {
+      setNewWp(withDraftStyle(newWp, patch));
+      return;
+    }
+    if (editWp?.source === 'saved') updateSavedWaypoint(editWp.id, patch);
+  };
+
   const setWaypointPhoto = (uri: string) => {
     if (newWp) {
       // '' removes: drop the field (#306 — spreading kept it for Done to save)
@@ -1818,23 +1860,22 @@ export function MapScreen() {
     (hit: PointChipHit, at: LatLng) => {
       if (!chipSurvivesHit(hit)) setPointAt(null);
       if (hit === 'navigate') {
-        void openGoToCoordinates(at);
+        // #672: Navigate starts navigating to the point (compass + chip).
+        setDestination(at);
       } else if (hit === 'waypoint') {
         composeWaypointAt(at);
       } else if (hit === 'convert') {
         openConvert(router, prefillFromPoint(at.latitude, at.longitude));
       } else {
-        void Clipboard.setStringAsync(formatLatLng(at.latitude, at.longitude));
+        void Clipboard.setStringAsync(formatCoords(at.latitude, at.longitude));
         showSnack('Coordinates copied');
         setViewWp(null);
         setForecastAt(null);
       }
     },
-    [openGoToCoordinates, composeWaypointAt, showSnack, router],
+    [setDestination, composeWaypointAt, showSnack, router, formatCoords],
   );
 
-  // "+" actions menu → Add waypoint: compose a standalone waypoint at the
-  // current GPS position (created on Done, see composeWaypointAt).
   // Team mode (#589): "show on the map" from a task or a pin notification.
   const teamFocus = useTeamMapFocus((s) => s.target);
   useEffect(() => {
@@ -1851,13 +1892,37 @@ export function MapScreen() {
     if (t) zoomMapTo([t.lng, t.lat], t.zoom);
   }, [teamFocus, mapLoaded, screenFocused, zoomMapTo, setFollowUser, followUser]);
 
-  const onAddWaypoint = useCallback(() => {
-    if (!location) {
-      showSnack('Waiting for a GPS fix before dropping a waypoint');
-      return;
-    }
-    composeWaypointAt(location);
-  }, [location, composeWaypointAt, showSnack]);
+  // #671 one-tap drop with EDIT / UNDO, #676 Move: logic in useWaypointQuickActions.
+  const movingWp = useWaypointMoveStore((s) => s.moving);
+  const wpQuick = useWaypointQuickActions({
+    location,
+    accuracyM: lastFix?.accuracy,
+    units,
+    onEdit: (id) => {
+      const w = useLibraryStore.getState().waypoints.find((x) => x.id === id);
+      if (!w) return;
+      discardDraftPhoto(newWp);
+      setNewWp(null);
+      setViewWp(null);
+      setEditWp({ source: 'saved', id });
+      setWpName(w.label);
+      setWpDraft(w.note ?? '');
+    },
+    onBeforeMove: (at) => {
+      setViewWp(null);
+      setPointAt(null);
+      setFollowUser(false);
+      void getMapZoom()
+        .catch(() => 16)
+        .then((z) => zoomMapTo([at.longitude, at.latitude], Math.max(z, 16)));
+    },
+    getCenter: async () => {
+      const vs = await mapRef.current?.getViewState();
+      return vs ? { latitude: vs.center[1], longitude: vs.center[0] } : null;
+    },
+    snack: mapSnacks.action,
+  });
+  const onAddWaypoint = wpQuick.addAtFix;
 
   // Every waypoint pin currently drawn on the 2D map (live pins only exist
   // while a recording session is up), tagged with its source for tap handling.
@@ -1872,6 +1937,7 @@ export function MapScreen() {
     ],
     [savedWaypoints, waypoints, status, mapVisibilityMode, visibleFolderIds],
   );
+  const pinInputs = useMemo(() => toPinInputs(visiblePins), [visiblePins]);
 
   // Waypoint tap handling. MapLibre's <Marker onPress> doesn't fire on Android,
   // so we hit-test the tap against the waypoint pins ourselves: the Map's onPress
@@ -2009,7 +2075,7 @@ export function MapScreen() {
       if (pointAt !== null) {
         try {
           const p = await map.project([pointAt.longitude, pointAt.latitude]);
-          if (p != null) chipHit = hitMapPointChip(px - p[0], py - p[1]);
+          if (p != null) chipHit = hitMapPointChip(px - p[0], py - p[1], pointChip.shiftX);
         } catch {
           // projection unavailable mid-teardown — not a chip tap
         }
@@ -2073,13 +2139,7 @@ export function MapScreen() {
           const { index, point } = result.value;
           if (point != null) projected[index] = point;
         }
-        best = nearestPinAt(
-          visiblePins,
-          projected,
-          [px, py],
-          WAYPOINT_PIN_HIT.radiusPx,
-          WAYPOINT_PIN_HIT.badgeOffsetPx,
-        );
+        best = nearestPinAt(visiblePins, projected, [px, py], 'tap');
       }
       const route = routeMapTap(chipHit, best);
       if (route.kind === 'chip' && pointAt !== null) {
@@ -2338,6 +2398,7 @@ export function MapScreen() {
       location,
       setFollowUser,
       pointAt,
+      pointChip.shiftX,
       runPointChipHit,
     ],
   );
@@ -2382,6 +2443,8 @@ export function MapScreen() {
   const onMapPress = useCallback(
     (e: MapPressEvent) => {
       gesturePause.tap();
+      // Move mode (#676): the map is being panned under the pin; taps do nothing.
+      if (useWaypointMoveStore.getState().moving !== null) return;
       const press = readMapPress(e); // synchronously, before anything awaits
       // The search highlight (#496) is temporary: any tap on the map clears it.
       setSearchHit(null);
@@ -2577,6 +2640,16 @@ export function MapScreen() {
     !inspectId &&
     heatSelection === null &&
     !drawing.ownsBottom;
+  // Where the bottom chrome column sits: on the drawing panel, a trail sheet
+  // or the recording panel (same precedence as its style), else the edge.
+  const bottomColumnLift =
+    drawing.panelHeight > 0
+      ? drawing.panelHeight
+      : trailSheetUp
+        ? trailSheetHeight
+        : recordingPanelUp
+          ? panelHeight
+          : 0;
 
   const {
     ref: mapAreaRef,
@@ -2642,31 +2715,60 @@ export function MapScreen() {
               const lngLat = e.nativeEvent?.lngLat;
               if (!lngLat) return;
               const at = { longitude: lngLat[0], latitude: lngLat[1] };
-              // Team signal mode: the team's menu for this place (Navigate,
-              // Coordinates and Convert as its secondary row).
-              if (teamSignalRef.current) {
-                setPointAt(null);
-                useTeamMapSelection.getState().select(null);
-                useTeamSheet.getState().open({ kind: 'press', at: [lngLat[0], lngLat[1]] });
+              // Move mode (#676): the map is being panned under the pin.
+              if (useWaypointMoveStore.getState().moving !== null) return;
+              const bareLongPress = () => {
+                // Team signal mode: the team's menu for this place (Navigate,
+                // Coordinates and Convert as its secondary row).
+                if (teamSignalRef.current) {
+                  setPointAt(null);
+                  useTeamMapSelection.getState().select(null);
+                  useTeamSheet.getState().open({ kind: 'press', at: [lngLat[0], lngLat[1]] });
+                  return;
+                }
+                // Weather/marine gesture (unchanged): long-press opens the
+                // forecast card (ECCC forecast + CHS tides) for that point.
+                if ((weatherLayer !== null || marineActive) && !offlineOnly) {
+                  setForecastAt(at);
+                  return;
+                }
+                // Bare map: long-press DROPS THE DESTINATION PIN (#97). This is
+                // the "drop a pin" gesture people already expect, and it costs no
+                // permanent chrome — the only thing it adds to the screen is the
+                // pin and its readout chip, both of which the ✕ clears. A second
+                // long-press moves the pin rather than stacking another.
+                // Owner 2026-10-07: long-press is the coordinates chip (Navigate,
+                // waypoint, Convert); it no longer drops a destination by itself.
+                // Following would recentre on every fix and slide the chip out
+                // from under the finger reaching for Convert (CI 2026-10-08).
+                if (useMapStore.getState().followUser) setFollowUser(false);
+                setPointAt(at);
+              };
+              // #676 — a long-press on a saved pin is Move's shortcut. Projecting
+              // the pins is async, so everything else waits for "no pin here".
+              // Only on the plain map: not while selecting a region, making a
+              // map, browsing the heat carousel, inspecting a trail or editing
+              // a waypoint (each owns the screen; Move would draw over it).
+              const moveAllowed =
+                !selecting &&
+                makeMapState === null &&
+                heatSelection === null &&
+                inspectId === null &&
+                editWaypoint === null &&
+                !searchOpen;
+              const pressPoint = e.nativeEvent?.point;
+              const savedPins = moveAllowed ? visiblePins.filter((w) => w.source === 'saved') : [];
+              const map = mapRef.current;
+              if (!pressPoint || savedPins.length === 0 || !map) {
+                bareLongPress();
                 return;
               }
-              // Weather/marine gesture (unchanged): long-press opens the
-              // forecast card (ECCC forecast + CHS tides) for that point.
-              if ((weatherLayer !== null || marineActive) && !offlineOnly) {
-                setForecastAt(at);
-                return;
-              }
-              // Bare map: long-press DROPS THE DESTINATION PIN (#97). This is
-              // the "drop a pin" gesture people already expect, and it costs no
-              // permanent chrome — the only thing it adds to the screen is the
-              // pin and its readout chip, both of which the ✕ clears. A second
-              // long-press moves the pin rather than stacking another.
-              // Owner 2026-10-07: long-press is the coordinates chip (Navigate,
-              // waypoint, Convert); it no longer drops a destination by itself.
-              // Following would recentre on every fix and slide the chip out
-              // from under the finger reaching for Convert (CI 2026-10-08).
-              if (useMapStore.getState().followUser) setFollowUser(false);
-              setPointAt(at);
+              void pinAtPoint(map, savedPins, pressPoint)
+                .catch(() => null)
+                .then((pin) => {
+                  if (pin) wpQuick.startMove(pin.id);
+                  else bareLongPress();
+                });
             }}
             // NOT onWillStartLoadingMap -> setMapLoaded(false): that fires on
             // every STYLE reload as well as a real (re)mount, and the false
@@ -3054,24 +3156,15 @@ export function MapScreen() {
             )}
 
             {/* Waypoint pins (saved standalone ones always; live ones while a
-              recording session is up). Visual only — tap handling is done at
-              the map level (onMapPress); MapLibre's <Marker onPress> doesn't
-              fire on Android. */}
-            {visiblePins.map((w) => (
-              <Marker
-                key={`${w.source}-${w.id}`}
-                id={`${w.source}-${w.id}`}
-                lngLat={[w.longitude, w.latitude]}
-                anchor="bottom"
-              >
-                <WaypointMarkerPin
-                  icon={w.source === 'saved' ? w.icon : undefined}
-                  hasPhoto={!!w.photoUri}
-                  label={w.label}
-                  selected={viewWp?.id === w.id && viewWp.source === w.source}
-                />
-              </Marker>
-            ))}
+              recording session is up): one symbol layer set, never a view per
+              pin (#675). Visual only — taps are hit-tested in onMapPress. */}
+            <WaypointPinLayers
+              pins={pinInputs}
+              selectedKey={viewWp ? `${viewWp.source}-${viewWp.id}` : null}
+              hiddenKey={movingWp ? `saved-${movingWp.id}` : null}
+              glyphs={style.glyphs}
+            />
+            <MoveWaypointLayers />
 
             {/* Destination pin (#97). Visual only, like the waypoint pins —
               it is cleared from the chip's ✕, never by tapping the map, so a
@@ -3112,7 +3205,8 @@ export function MapScreen() {
                   with a point you can see. Compact, in the chip, gone with
                   it; the row's taps arrive through onMapPress above. */}
                 <MapPointChip
-                  accessibilityLabel="Map point readout"
+                  accessibilityLabel={pointChip.label}
+                  shiftX={pointChip.shiftX}
                   actions={{
                     onNavigate: () => runPointChipHit('navigate', pointAt),
                     onAddWaypoint: () => runPointChipHit('waypoint', pointAt),
@@ -3136,9 +3230,9 @@ export function MapScreen() {
                     ALWAYS — a nav app that hides where you just tapped behind
                     a weather value is answering the wrong question. This is
                     the app's one coordinate readout for a point you can see;
-                    the map CENTRE's readout lives in the coordinates dialog
-                    rather than in a second competing chip. */}
-                  <MapPointLine text={formatLatLng(pointAt.latitude, pointAt.longitude)} />
+                    the map CENTRE's is the bottom-row chip (#677). Both use
+                    the app-wide coordinate format. */}
+                  <MapPointLine text={formatCoords(pointAt.latitude, pointAt.longitude)} />
                   {/* How far and which way from where you stand (#232) — the
                     same two numbers the destination chip shows, straight off
                     the current fix. Silently absent without one. */}
@@ -3157,11 +3251,22 @@ export function MapScreen() {
               dropped: it points along the GPS course (garbage while standing
               still); the cone tracks the smoothed compass instead. */}
             <HeadingCone location={location} />
-            {/* Team mode (#589): teammates' positions, shared waypoints and trails. */}
-            <TeamMapLayers
+            {/* The pointing line (#681): a leaf with its own heading subscription. */}
+            <PointingLine
+              location={location}
+              bounds={settledBounds}
+              zoom={scaleAt?.zoom ?? null}
               glyphs={style.glyphs}
-              topLayerId={style.layers[style.layers.length - 1]?.id}
+              suppressed={selecting || makeMapState !== null || movingWp !== null}
             />
+            {/* Off a followed trail (#678): the dashed way back to it. */}
+            {/* The followed trail itself (#678), bright on both grounds. */}
+            {follow?.path != null && <FollowedTrailLine path={follow.path} />}
+            {location !== null && follow?.readout != null && !follow.readout.onTrail && (
+              <FollowGuideLine from={location} to={follow.readout.nearest} />
+            )}
+            {/* Team mode (#589): teammates' positions, shared waypoints and trails. */}
+            <TeamMapLayers glyphs={style.glyphs} />
             {/* Team mode (#589): teammates' trail photos (the trail-photo
               layers), then comment bubbles, pins and tasks (visual Markers,
               hit-tested in onMapPress). */}
@@ -3198,6 +3303,9 @@ export function MapScreen() {
           />
         )}
 
+        {/* Centre cursor (#677): a static dot over the map's centre. */}
+        <CenterCursor suppressed={selecting || makeMapState !== null || movingWp !== null} />
+
         {/* Region select overlay for offline download */}
         {selecting && (
           <RegionSelectOverlay
@@ -3229,22 +3337,57 @@ export function MapScreen() {
         <View style={[styles.topLeft, { top: insets.top + 8 }]} pointerEvents="box-none">
           <CompassBadge onPress={resetNorth} mapBearing={mapBearing} />
         </View>
+        {/* Screen readers only: the pins (GL symbols, no a11y nodes) as a list,
+          nearest first; a row opens the pin's card as a tap on it does. */}
+        {pointAt !== null && (
+          <PointChipScreenReaderActions
+            label={pointChip.label}
+            top={insets.top + 120}
+            onAction={(hit) => runPointChipHit(hit, pointAt)}
+            onClose={() => setPointAt(null)}
+          />
+        )}
+        <WaypointScreenReaderList
+          pins={visiblePins}
+          here={location}
+          units={units}
+          top={insets.top + 64}
+          screenFocused={isFocused}
+          available={
+            makeMapState === null &&
+            heatSelection === null &&
+            !selecting &&
+            !drawing.active &&
+            movingWp === null &&
+            editWaypoint === null
+          }
+          onOpen={(pin) => {
+            setPointAt(null);
+            setExtensionHit(null);
+            setViewWp({ source: pin.source, id: pin.id });
+          }}
+        />
 
         {/* "Search places" between the compass and the rail (revamp Main.html).
           Opens the place search (#496): towns, peaks, lakes, campgrounds by
           name, or a coordinate. Same gates as the rail, plus the offline-area
           selector, whose box starts right under it. Stands aside while a
           drawing tool owns the top (#502/#503). */}
-        {makeMapState === null && heatSelection === null && !selecting && !drawing.active && (
-          <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
-            {/* A shown long-distance trail takes the pill's place (#467). */}
-            {shownTrail !== null ? (
-              <ShownTrailPill shown={shownTrail} />
-            ) : (
-              !searchOpen && !teamSignal && <MapSearchPill onPress={() => void openPlaceSearch()} />
-            )}
-          </View>
-        )}
+        {makeMapState === null &&
+          heatSelection === null &&
+          !selecting &&
+          !drawing.active &&
+          movingWp === null && (
+            <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
+              {/* A shown long-distance trail takes the pill's place (#467). */}
+              {shownTrail !== null ? (
+                <ShownTrailPill shown={shownTrail} />
+              ) : (
+                !searchOpen &&
+                !teamSignal && <MapSearchPill onPress={() => void openPlaceSearch()} />
+              )}
+            </View>
+          )}
         {searchOpen && !drawing.active && (
           <View style={[styles.searchSheet, { top: insets.top + 8 }]} pointerEvents="box-none">
             <PlaceSearchSheet
@@ -3281,6 +3424,14 @@ export function MapScreen() {
             <DestinationChip readout={destReadout} onClear={() => setDestination(null)} />
           </View>
         )}
+        {follow !== null && !marineActive && (
+          <View
+            style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
+            pointerEvents="box-none"
+          >
+            <FollowChip name={follow.name} onStop={stopFollowing} />
+          </View>
+        )}
 
         {/* Right-side map controls. Unmounted while the map-maker editor is up:
           its desk/drawer covers the rail visually, but a covered rail would
@@ -3291,7 +3442,7 @@ export function MapScreen() {
           would again leave hidden nodes in the a11y tree; it comes back the
           instant the carousel closes (heatSelection back to null). */}
         {/* Also hidden while the team menu runs down the same edge. */}
-        {makeMapState === null && heatSelection === null && !teamMenuOpen && (
+        {makeMapState === null && heatSelection === null && !teamMenuOpen && movingWp === null && (
           <MapControlsRail
             top={insets.top + 8}
             viewToggle={
@@ -3328,6 +3479,7 @@ export function MapScreen() {
                 ? {
                     onRecord: () => setPickingCategory(true),
                     onAddWaypoint,
+                    addWaypointHint: wpQuick.addHint,
                     // A second download would stop the first's loopback server.
                     onDownload:
                       downloadProgress !== null
@@ -3456,25 +3608,55 @@ export function MapScreen() {
               {/* The tip button hides itself while recording, while a destination is
                 followed, and while a trail sheet, heat carousel or the coordinate
                 dialog is up. */}
-              <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="box-none">
-                <TipButton
-                  navigating={destination !== null}
-                  gestureActive={cameraMoving}
-                  focused={isFocused}
-                  bubbleBlocked={
-                    railMenuOpen ||
-                    creditsOpen ||
-                    trailSheetUp ||
-                    pickingCategory ||
-                    recordRequested ||
-                    modelSheetOpen ||
-                    selecting ||
-                    makeMapState !== null
-                  }
-                  blocked={inspectId !== null || heatSelection !== null || goToOpen}
+              {/* #677: both onLayouts tell the coordinates chip how much room it has. */}
+              <View
+                style={[styles.bottomSide, styles.bottomSideEnd]}
+                pointerEvents="box-none"
+                onLayout={onChipRowLayout}
+              >
+                <View pointerEvents="box-none" onLayout={onTipSlotLayout}>
+                  <TipButton
+                    navigating={destination !== null || follow !== null}
+                    gestureActive={cameraMoving}
+                    focused={isFocused}
+                    bubbleBlocked={
+                      railMenuOpen ||
+                      creditsOpen ||
+                      trailSheetUp ||
+                      pickingCategory ||
+                      recordRequested ||
+                      modelSheetOpen ||
+                      selecting ||
+                      makeMapState !== null
+                    }
+                    blocked={inspectId !== null || heatSelection !== null}
+                  />
+                </View>
+                {/* #677: the centre's coordinates and altitude (yours while following). */}
+                <CenterCoordinatesChip
+                  you={followUser ? location : null}
+                  youAltitudeM={followUser ? (lastFix?.altitude ?? null) : null}
+                  onCopied={showSnack}
                 />
               </View>
             </View>
+          )}
+          {/* The navigation compass (#672/#678, owner 2026-10-13): BELOW the
+            ⓘ + scale row, right on the tab bar / recording panel, while
+            navigating to a point or following a trail — bottom up: panel,
+            tape, then the ⓘ + scale + coordinates row. Without a tape it
+            renders nothing and the column is exactly as before. Everything
+            that sits above the row reads its offset from the column's
+            measured height minus the row's measured y
+            (`rowLiftAboveColumnBottom`), so it follows in either order.
+            Hidden with that row (same reason, above). */}
+          {!selecting && makeMapState === null && (
+            <NavigationCompassRow
+              location={location}
+              destination={destReadout}
+              follow={follow}
+              units={units}
+            />
           )}
           {/* Depth legend (marine wave D §D2): the chart's quantized band
             scale, in the same bottom column as the weather dock and above it
@@ -3570,6 +3752,14 @@ export function MapScreen() {
                 .getState()
                 .setDrawRequest({ kind: 'edit-route', trackId: inspectTrack.id })
             }
+            // #678: follow it; the panel closes so the compass row shows.
+            onFollow={() => {
+              useNavigationStore
+                .getState()
+                .follow({ trackId: inspectTrack.id, name: inspectTrack.name });
+              inspect(null);
+              releaseCameraOnDeselect();
+            }}
             onLayout={setInspectPanelHeight}
           />
         )}
@@ -3649,7 +3839,12 @@ export function MapScreen() {
             top={
               insets.top +
               TOP_CHIP_OFFSET +
-              (marineActive || destination !== null || displayCondition === 'night' ? 44 : 0)
+              (marineActive ||
+              destination !== null ||
+              follow !== null ||
+              displayCondition === 'night'
+                ? 44
+                : 0)
             }
             showChip={!recordingPanelUp}
           />
@@ -3663,7 +3858,9 @@ export function MapScreen() {
             sosTop={insets.top + 8}
             onPointActions={(p, what) => {
               const at = { longitude: p[0], latitude: p[1] };
-              if (what === 'navigate') void openGoToCoordinates(at);
+              // Navigate starts navigating (compass + destination chip), as the
+              // long-press chip's Navigate does (#672).
+              if (what === 'navigate') setDestination(at);
               else if (what === 'convert')
                 openConvert(router, prefillFromPoint(at.latitude, at.longitude));
               else setPointAt(at);
@@ -3716,7 +3913,7 @@ export function MapScreen() {
         {bottomColumnH !== null && bottomRowY !== null && (
           <TipBubble
             right={TIP_BUBBLE_RIGHT}
-            bottom={bottomColumnH - bottomRowY + TIP_BUBBLE_GAP}
+            bottom={rowLiftAboveColumnBottom(bottomColumnH, bottomRowY) + TIP_BUBBLE_GAP}
             tailRight={TIP_BUBBLE_TAIL_RIGHT}
           />
         )}
@@ -3740,15 +3937,10 @@ export function MapScreen() {
               extensions: shownExtensions,
             })}
             bottom={
-              // The bottom column's own lift, same precedence as its style.
-              (drawing.panelHeight > 0
-                ? drawing.panelHeight
-                : trailSheetUp
-                  ? trailSheetHeight
-                  : recordingPanelUp
-                    ? panelHeight
-                    : 0) +
-              (bottomColumnH !== null && bottomRowY !== null ? bottomColumnH - bottomRowY : 48) +
+              bottomColumnLift +
+              (bottomColumnH !== null && bottomRowY !== null
+                ? rowLiftAboveColumnBottom(bottomColumnH, bottomRowY)
+                : 48) +
               TIP_BUBBLE_GAP
             }
             onClose={() => setCreditsOpen(false)}
@@ -3795,11 +3987,9 @@ export function MapScreen() {
             <WaypointViewerCard
               waypoint={viewWaypoint}
               floating={recordingPanelUp}
-              onCopyCoords={() => {
-                if (!viewWaypoint) return;
-                void Clipboard.setStringAsync(
-                  formatLatLng(viewWaypoint.latitude, viewWaypoint.longitude),
-                );
+              onCopyCoords={(text) => {
+                // The card's own text, so the clipboard matches what it shows.
+                void Clipboard.setStringAsync(text);
                 showSnack('Coordinates copied');
               }}
               onCopyNote={() => {
@@ -3824,6 +4014,15 @@ export function MapScreen() {
                 setWpDraft(viewWaypoint?.note ?? '');
                 setViewWp(null);
               }}
+              onNavigate={() => {
+                if (!viewWaypoint) return;
+                setDestination({
+                  latitude: viewWaypoint.latitude,
+                  longitude: viewWaypoint.longitude,
+                });
+                setViewWp(null);
+              }}
+              onMove={viewWp?.source === 'saved' ? () => wpQuick.startMove(viewWp.id) : undefined}
               onDelete={deleteViewedWaypoint}
               onClose={() => setViewWp(null)}
             />
@@ -3904,35 +4103,18 @@ export function MapScreen() {
             />
           )}
 
-        {/* Coordinate readout + entry (#97): the map centre in all three
-          notations (tap a line to copy), and a box that accepts decimal
-          degrees, degrees-minutes or degrees-minutes-seconds. "Go" flies the
-          camera; "Set destination" plants the pin — with the box empty that
-          is the map centre, i.e. drop a pin on the crosshair. */}
-        {goToOpen && (
-          <GoToCoordinatesDialog
-            center={goToCenter}
-            initial={goToSeed}
-            onDismiss={() => setGoToOpen(false)}
-            onCopy={(text) => {
-              void Clipboard.setStringAsync(text);
-              showSnack('Coordinates copied');
-            }}
-            onGo={(at) => {
-              setGoToOpen(false);
-              flyToPoint(at);
-              // Drop the readout chip on the target so the jump lands on
-              // something visible rather than an unmarked patch of map.
-              setPointAt(at);
-            }}
-            onSetDestination={(at) => {
-              setGoToOpen(false);
-              aimAt(at);
-            }}
-          />
-        )}
+        <MoveWaypointOverlay
+          units={units}
+          zoom={scaleAt?.zoom ?? null}
+          onCancel={wpQuick.cancelMove}
+          onConfirm={() => void wpQuick.confirmMove()}
+          onLocate={() => {
+            setFollowUser(true);
+            if (location) void zoomToLocateLevel(location.latitude);
+          }}
+        />
 
-        <WaypointEditorDialog
+        <WaypointEditorSheet
           waypoint={editWaypoint}
           name={wpName}
           onChangeName={setWpName}
@@ -3944,6 +4126,8 @@ export function MapScreen() {
           // Live recording pins take no icon (they end up as trail notes), so
           // the picker is simply not part of their editor.
           onSetIcon={editWp?.source === 'live' ? undefined : setWaypointIcon}
+          onSetStyle={editWp?.source === 'live' ? undefined : setWaypointStyle}
+          screenFocused={isFocused}
         />
 
         <Snackbar
@@ -3962,6 +4146,13 @@ export function MapScreen() {
         >
           {overlaySnack ?? ''}
         </Snackbar>
+        {/* #671/#676: EDIT / UNDO snackbars (a plain View, own timer), above
+          the bottom column: for 8 s it must not sit on the coordinates chip
+          or the compass row. */}
+        <ActionSnackbar
+          snack={wpQuick.snack.current}
+          style={liftedSnackbarStyle(bottomColumnLift, bottomColumnH)}
+        />
         <Snackbar
           visible={healthNotice.message !== null}
           onDismiss={healthNotice.dismiss}
@@ -4005,8 +4196,15 @@ const styles = StyleSheet.create({
   bottomRow: { flexDirection: 'row', alignItems: 'flex-end' },
   bottomSide: { flex: 1, alignItems: 'flex-start' },
   // ⓘ then the scale bar, one row, the ⓘ centred on the scale bar's height (owner).
-  bottomSideStart: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  bottomSideEnd: { alignItems: 'flex-end' },
+  // Natural width, so the end side gets the rest (the coordinates chip, #677).
+  bottomSideStart: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 0 },
+  bottomSideEnd: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+    marginLeft: 6,
+  },
   panelDock: { position: 'absolute', left: 0, right: 0, bottom: 0, ...BOTTOM_LAYER.recordingPanel },
   // Legend pill + time scrubber, tight together (the bottom column's own gap
   // is for separating whole blocks like the recording bar).

@@ -15,6 +15,7 @@
  *   trails sit with the trail lines.
  * - Children are arrays, never Fragments (see `mapLayers.tsx`).
  */
+import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import { overlayAnchor } from '@core/map/layerSlots';
 import { STONE_FONTS_ATKINSON, STONE_FONTS_NOTO } from '@core/map/stoneStyle';
 import { MEMBER_COLORS, memberColor } from '@core/teamui/colors';
@@ -60,24 +61,13 @@ function waypointsGeoJson(shares: TeamShares): FeatureCollection {
       type: 'Feature',
       id: w.id,
       geometry: { type: 'Point', coordinates: [w.lon, w.lat] },
-      properties: { waypoint: w.id, label: w.name },
+      // #675: the sharer's pin colour rings the dot (null = the team ink).
+      properties: { waypoint: w.id, label: w.name, color: w.color },
     })),
   };
 }
 
-/** Chained `afterId`s keep the team's layers in order, all above the style. */
-const afterOf = (id: string | undefined): { afterId?: string } =>
-  id === undefined ? {} : { afterId: id };
-
-export function TeamMapLayers({
-  glyphs,
-  topLayerId,
-}: {
-  glyphs: string | undefined;
-  /** The style's top-most layer: the team draws above it (base labels included). */
-  topLayerId: string | undefined;
-}) {
-  const top = topLayerId;
+export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
   const { installedAt, show } = useExtensionPrefs('team');
   const view = useTeamStore((s) => s.view);
   const positions = useTeamStore((s) => s.positions);
@@ -115,7 +105,7 @@ export function TeamMapLayers({
       <Layer
         key="halo"
         id="team-member-halo"
-        {...afterOf(top)}
+        beforeId={liveLayerAnchor('team-member-halo')}
         type="circle"
         filter={['==', ['get', 'band'], 'fresh']}
         paint={{
@@ -128,7 +118,7 @@ export function TeamMapLayers({
       <Layer
         key="dot"
         id={TEAM_MEMBER_LAYER}
-        {...afterOf('team-member-halo')}
+        beforeId={liveLayerAnchor('team-member-dot')}
         type="circle"
         paint={{
           'circle-radius': 9,
@@ -158,7 +148,7 @@ export function TeamMapLayers({
             <Layer
               key="initials"
               id="team-member-initials"
-              {...afterOf(TEAM_MEMBER_LAYER)}
+              beforeId={liveLayerAnchor('team-member-initials')}
               type="symbol"
               layout={{
                 'text-field': ['get', 'initials'],
@@ -172,7 +162,7 @@ export function TeamMapLayers({
             <Layer
               key="label"
               id="team-member-label"
-              {...afterOf('team-member-initials')}
+              beforeId={liveLayerAnchor('team-member-label')}
               type="symbol"
               layout={{
                 'text-field': ['get', 'label'],
@@ -194,7 +184,7 @@ export function TeamMapLayers({
           ]
         : []),
     ],
-    [font, ink, halo, paper, leadRing, onAvatar, top],
+    [font, ink, halo, paper, leadRing, onAvatar],
   );
 
   const waypointLayers = useMemo(
@@ -202,13 +192,13 @@ export function TeamMapLayers({
       <Layer
         key="wpt"
         id={TEAM_WAYPOINT_LAYER}
-        {...afterOf(top)}
+        beforeId={liveLayerAnchor('team-waypoint-dot')}
         type="circle"
         paint={{
           'circle-radius': 6,
           'circle-color': paper,
           'circle-stroke-width': 3,
-          'circle-stroke-color': ink,
+          'circle-stroke-color': ['coalesce', ['get', 'color'], ink],
           'circle-pitch-alignment': 'map',
         }}
       />,
@@ -217,7 +207,7 @@ export function TeamMapLayers({
             <Layer
               key="wpt-label"
               id="team-waypoint-label"
-              {...afterOf(TEAM_WAYPOINT_LAYER)}
+              beforeId={liveLayerAnchor('team-waypoint-label')}
               type="symbol"
               minzoom={12}
               layout={{
@@ -233,7 +223,7 @@ export function TeamMapLayers({
           ]
         : []),
     ],
-    [font, ink, halo, paper, top],
+    [font, ink, halo, paper],
   );
 
   const trackLayers = useMemo(
@@ -267,8 +257,8 @@ export function TeamMapLayers({
           {trackLayers}
         </GeoJSONSource>
       )}
-      {/* Members mount first: each group chains up from the style's top layer, so
-        the later group lands under it (teammates over shared waypoints). */}
+      {/* Each layer has its own anchor in the style (`@core/map/liveLayerOrder`):
+        shared waypoints under teammates, whatever mounts first. */}
       {positions.length > 0 && (
         <GeoJSONSource id="team-members" data={people}>
           {memberLayers}

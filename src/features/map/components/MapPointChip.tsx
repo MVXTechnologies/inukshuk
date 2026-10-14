@@ -1,4 +1,4 @@
-import type { PointChipHit } from '@core/map/mapTap';
+import { POINT_CHIP_MAX_W, type PointChipHit } from '@core/map/mapTap';
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -46,11 +46,19 @@ export function MapPointChip({
   children,
   accessibilityLabel,
   actions,
+  shiftX = 0,
 }: {
   children: ReactNode;
+  /** What the readout says, read as one element ("Point 46.81, -71.21, 120 m NE"). */
   accessibilityLabel: string;
   /** #232 — omit for a read-only chip (no action row is rendered at all). */
   actions?: MapPointChipActions;
+  /**
+   * Slide the bubble sideways (px) to keep it on screen near an edge
+   * (`pointChipShiftX`); the tail and the dot stay on the point. The
+   * map-level hit-test must be given the same shift.
+   */
+  shiftX?: number;
 }) {
   return (
     <View
@@ -58,10 +66,22 @@ export function MapPointChip({
       // box-none so the action row can take a touch while every readout line
       // still lets the tap fall through to the map.
       pointerEvents={actions ? 'box-none' : 'none'}
-      accessibilityLabel={accessibilityLabel}
     >
-      <View style={styles.chip} pointerEvents={actions ? 'box-none' : 'none'}>
-        <View pointerEvents="none">{children}</View>
+      <View
+        style={[styles.chip, shiftX !== 0 && { transform: [{ translateX: shiftX }] }]}
+        pointerEvents={actions ? 'box-none' : 'none'}
+        testID="map-point-chip"
+      >
+        {/* One element for screen readers: the readout lines as a sentence,
+            then the action row's buttons, each its own element. */}
+        <View
+          pointerEvents="none"
+          accessible
+          accessibilityRole="text"
+          accessibilityLabel={accessibilityLabel}
+        >
+          {children}
+        </View>
         {actions && <MapPointChipActionRow {...actions} />}
       </View>
       <View style={styles.tail} />
@@ -132,8 +152,10 @@ export const MAP_POINT_ACTION_LAYOUT = {
  * `null` when the tap is anywhere else (the caller then falls through to its
  * own dismiss/copy hit-test).
  */
-export function hitMapPointChipAction(dx: number, dy: number): MapPointAction | null {
+export function hitMapPointChipAction(dx0: number, dy: number, shiftX = 0): MapPointAction | null {
   const { buttonWidth, buttonHeight, gap, bottomOffset } = MAP_POINT_ACTION_LAYOUT;
+  // The row moves with the bubble (`shiftX`); measure from its centre.
+  const dx = dx0 - shiftX;
   if (dy > -bottomOffset || dy < -(bottomOffset + buttonHeight)) return null;
   // The row is centred on the tapped coordinate.
   const n = MAP_POINT_ACTIONS.length;
@@ -158,11 +180,11 @@ export const MAP_POINT_COPY_HIT = { offsetY: 20, radius: 44 } as const;
  * `null` (not on the chip). The row is checked first — the circle overlaps it
  * and would swallow it.
  */
-export function hitMapPointChip(dx: number, dy: number): PointChipHit | null {
-  const action = hitMapPointChipAction(dx, dy);
+export function hitMapPointChip(dx: number, dy: number, shiftX = 0): PointChipHit | null {
+  const action = hitMapPointChipAction(dx, dy, shiftX);
   if (action !== null) return action;
   const { offsetY, radius } = MAP_POINT_COPY_HIT;
-  return Math.hypot(dx, dy + offsetY) < radius ? 'copy' : null;
+  return Math.hypot(dx - shiftX, dy + offsetY) < radius ? 'copy' : null;
 }
 
 /**
@@ -246,6 +268,7 @@ function ActionButton({
   return (
     <View
       style={[styles.action, accent && styles.actionAccent]}
+      accessible
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       onStartShouldSetResponder={() => {
@@ -268,7 +291,7 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    maxWidth: 240,
+    maxWidth: POINT_CHIP_MAX_W,
     gap: 1,
   },
   chipText: {

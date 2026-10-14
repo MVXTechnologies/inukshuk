@@ -114,6 +114,21 @@ appId: com.inukshuk.app
 - assertVisible: 'Geodetic points'
 - assertVisible: 'Tide stations'
 - takeScreenshot: review-extensions-overlays-light
+# Each row's round accessory opens its sub-panel (#668): the switch first,
+# then its options; 'Back to extensions' returns to the tab.
+- tapOn: 'Options for Geodetic points.*'
+- extendedWaitUntil:
+    visible: 'Show geodetic points.*'
+    timeout: 5000
+- takeScreenshot: review-extensions-geodetic-panel-light
+- tapOn: 'Back to extensions'
+- tapOn: 'Options for Tide stations'
+- extendedWaitUntil:
+    visible: 'Show tide stations.*'
+    timeout: 5000
+- takeScreenshot: review-extensions-tides-panel-light
+- tapOn: 'Back to extensions'
+- assertVisible: 'Get more extensions'
 - tapOn: 'Close overlays'
 # --- Dark theme (the owner's phone runs dark mode).
 - tapOn:
@@ -129,12 +144,12 @@ appId: com.inukshuk.app
     commands:
       - runFlow:
           when:
-            notVisible: 'Theme.*'
+            notVisible: 'Keep screen awake.*'
           commands:
             - tapOn: 'App settings.*'
       - scrollUntilVisible:
           element:
-            text: 'Theme.*'
+            text: 'Dark'
           direction: DOWN
           timeout: 5000
 - tapOn: 'Dark'
@@ -209,12 +224,12 @@ appId: com.inukshuk.app
     commands:
       - runFlow:
           when:
-            notVisible: 'Theme.*'
+            notVisible: 'Keep screen awake.*'
           commands:
             - tapOn: 'App settings.*'
       - scrollUntilVisible:
           element:
-            text: 'Theme.*'
+            text: 'System'
           direction: DOWN
           timeout: 5000
 - tapOn: 'System'

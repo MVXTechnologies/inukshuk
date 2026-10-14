@@ -1,22 +1,24 @@
 import { DEVICE_EXTENSIONS } from '@core/extensions/registry';
 import { useTeamStore } from '@state/teamStore';
 
-import { SwitchRow } from '../../map/components/mapSheet';
+import { SubPanelButton, SwitchRow } from '../../map/components/mapSheet';
 import { setExtensionPrefs, useExtensionPrefs } from '../prefs';
+import type { ExtensionPanelEntryProps } from '../types';
 
 /**
  * Map overlays › Extensions › Team mode: its switch IS team signal mode (taps
  * on the map signal the team; the team button appears). The hint names the
- * open team and its unread count.
+ * open team; the sub-panel accessory (`TeamSubPanel`: the hub, sharing,
+ * create, join) carries the unread count.
  */
-export function TeamPanelEntry() {
+export function TeamPanelEntry({ onOpenPanel }: ExtensionPanelEntryProps) {
   const { show } = useExtensionPrefs('team');
   const name = useTeamStore((s) => s.view?.name ?? null);
   const unread = useTeamStore((s) => s.unread);
   const { label } = DEVICE_EXTENSIONS.team;
   const hint =
     name === null
-      ? 'No team open · Settings › Extensions'
+      ? 'No team yet · create or join one'
       : `${name}${unread > 0 ? ` · ${unread} unread` : ''}${show ? ' · taps signal the team' : ''}`;
   return (
     <SwitchRow
@@ -26,6 +28,15 @@ export function TeamPanelEntry() {
       value={show}
       onToggle={() => setExtensionPrefs('team', { show: !show })}
       accessibilityLabel="Team mode on the map"
+      accessory={
+        <SubPanelButton
+          onPress={onOpenPanel}
+          badge={unread}
+          accessibilityLabel={
+            unread > 0 ? `Options for ${label}, ${unread} unread` : `Options for ${label}`
+          }
+        />
+      }
     />
   );
 }

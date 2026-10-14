@@ -34,14 +34,15 @@ export function routeMapTap<P>(chipHit: PointChipHit | null, pin: P | null): Map
 /**
  * Whether the chip stays up after one of its own actions ran.
  *
- * Navigate keeps it (the coordinates dialog opens over it and "Go" re-drops it
- * on the target anyway), and so does Convert (a screen pushed over the map:
- * coming back finds the point still marked). Copy is the dismiss gesture. Waypoint closes it: the
- * pin that is about to be created takes over that exact spot, and a chip left
- * sitting on its own new pin is the stale bubble this module exists for.
+ * Convert keeps it (a screen pushed over the map: coming back finds the point
+ * still marked). Copy is the dismiss gesture. Waypoint and Navigate close it:
+ * the waypoint pin or the destination flag (#672: Navigate now starts
+ * navigating to the point straight away) takes over that exact spot, and a
+ * chip left sitting on its own new pin is the stale bubble this module exists
+ * for.
  */
 export function chipSurvivesHit(hit: PointChipHit): boolean {
-  return hit === 'navigate' || hit === 'convert';
+  return hit === 'convert';
 }
 
 /**
@@ -107,4 +108,36 @@ export function readMapPress(e: MapPressEvent): MapPress | null {
     point: [point[0], point[1]],
     lngLat: lngLat ? [lngLat[0], lngLat[1]] : null,
   };
+}
+
+/** The point chip's widest (its action row plus padding), px — `MapPointChip`'s maxWidth. */
+export const POINT_CHIP_MAX_W = 240;
+/** Air kept between the chip and the screen edge, px. */
+export const POINT_CHIP_EDGE_MARGIN = 8;
+/** The tail must stay under the chip: never shift the chip past this from its anchor, px. */
+const POINT_CHIP_TAIL_KEEP = 18;
+
+/**
+ * How far to slide the point chip sideways so it stays inside the screen
+ * when the point is near an edge (2.5.1 QA: a long-press near the left edge
+ * opened a chip half off screen). Positive = right. The tail and the dot
+ * stay on the point; only the bubble moves, never so far that the tail
+ * leaves it. `pointX` is the point's screen x, `viewWidth` the map's width.
+ * The map-level hit-test subtracts the same shift (`hitMapPointChip`).
+ */
+export function pointChipShiftX(
+  pointX: number,
+  viewWidth: number,
+  chipWidth = POINT_CHIP_MAX_W,
+  margin = POINT_CHIP_EDGE_MARGIN,
+): number {
+  if (!Number.isFinite(pointX) || !(viewWidth > 0)) return 0;
+  const half = chipWidth / 2;
+  const left = pointX - half;
+  const right = pointX + half;
+  let shift = 0;
+  if (left < margin) shift = margin - left;
+  else if (right > viewWidth - margin) shift = viewWidth - margin - right;
+  const max = half - POINT_CHIP_TAIL_KEEP;
+  return Math.max(-max, Math.min(max, shift));
 }

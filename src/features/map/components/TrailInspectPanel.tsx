@@ -27,6 +27,8 @@ interface Props {
   onView: () => void;
   /** A route drawn on the map (#502): reopen it in the drawing tool. */
   onEditRoute?: () => void;
+  /** Follow this trail (#678): the compass guides along it. */
+  onFollow?: () => void;
   /** Reports the panel's real laid-out height in dp, so the map's
    * select-trail camera fit can pad exactly above it instead of guessing. */
   onLayout?: (height: number) => void;
@@ -37,7 +39,8 @@ interface Props {
  * or drawn: its name, the trail view's first row of stat tiles (#511 C2), and
  * the drawing panel's elevation strip (#515), scrubbable to move the map
  * marker. "View" opens the full trail viewer; a drawn route also offers
- * "Edit route". A quick, map-side peek — editing lives elsewhere.
+ * "Edit route"; "Follow this trail" (#678) starts guiding along it. A quick,
+ * map-side peek — editing lives elsewhere.
  *
  * Same chrome as the drawing panel: a plain themed View (never a Paper
  * Surface, which collapses absolutely-positioned flex columns on iOS).
@@ -50,6 +53,7 @@ export function TrailInspectPanel({
   onScrub,
   onView,
   onEditRoute,
+  onFollow,
   onLayout,
 }: Props) {
   const insets = useSafeAreaInsets();
@@ -102,6 +106,9 @@ export function TrailInspectPanel({
         </View>
         {planned && onEditRoute && (
           <HeaderButton icon="vector-polyline-edit" label="Edit route" onPress={onEditRoute} />
+        )}
+        {onFollow && (
+          <HeaderButton icon="map-marker-path" label="Follow this trail" onPress={onFollow} />
         )}
         <HeaderButton icon="open-in-new" label="View trail" onPress={onView} />
         <HeaderButton icon="close" label="Close trail inspector" onPress={onClose} />

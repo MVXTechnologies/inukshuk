@@ -62,8 +62,8 @@ four stages:
    (#477). "See-through white" (#489, `core/geo/pdfWhiteKey`) is one more
    pass in the same page: after pdf.js paints, near-white, near-neutral
    pixels are keyed to transparency (colour-to-alpha, so text edges get no
-   halo) at a 5-stop strength (Off, 25–100 %) chosen globally on the Overlays
-   menu slider or per map; the
+   halo) at a 5-stop strength (Off, 25–100 %) chosen globally in Map layers ›
+   PDF maps (its sub-panel) or per map; the
    level is part of the raster's cache name. A detail tile a native renderer
    drew is keyed by the same page afterwards (`__pdfKeyImage`), so a keyed
    map keeps its native tiles. If the server cannot
@@ -144,8 +144,21 @@ four stages:
   the screen comes back on) and after Stop.
 - Waypoints dropped during recording become distance-anchored trail notes
   (optionally with photos) on the saved track. Waypoints dropped outside a
-  recording (map "+" speed-dial) are standalone: they keep their coordinate
-  and persist in the library index (`waypoints`).
+  recording (map "+" speed-dial, one tap since #671) are standalone: they keep
+  their coordinate and persist in the library index (`waypoints`), with an
+  optional icon (`@core/library/waypointIconCatalog`, ~350 ids), colour and
+  size (#675; team shares carry them as `ic`/`co`/`sz`; standalone waypoints
+  are not exported to GPX).
+  The main map draws them in one GeoJSON source and SDF symbol layers
+  (`@core/map/waypointPinStyle`, sprites from `scripts/map/build-waypoint-icons.mjs`),
+  never one view per pin; Move (#676) pans the map under a fixed centre pin
+  (`waypointMoveStore`). Symbols have no accessibility nodes, so while a
+  screen reader is on the map offers the pins as a list, nearest first
+  (`WaypointScreenReaderList`); a row opens the pin's card. The map's own
+  live layers (followed trail, puck, heading cone, pointing line, team,
+  pins) draw in ONE order, `@core/map/liveLayerOrder`: each sits under its own
+  invisible anchor at the top of the style, so the order survives every style
+  reload (theme or base-map switch).
 
 ## Activity-file import (Strava / Garmin exports)
 
@@ -218,7 +231,8 @@ one registry, not hand-wired screens (architecture review P1-3):
 - **Platform half**, `src/features/extensions/`, one registry per surface
   so each loads only what it shows: `settingsModules.ts` (the Settings entry
   in the shared `ExtensionSettingsShell`, and the install / remove / offline
-  hooks), `panelEntries.ts` (its row in Map overlays › Extensions) and
+  hooks), `panelEntries.ts` (its row in Map overlays › Extensions and the
+  sub-panel the row's accessory opens, `ExtensionPanelModule`) and
   `mapModules.ts` (style extras, symbol images, tap → card; MapScreen's
   `mapHost` iterates it). `actions.ts` is the one Get / Remove / Offline
   lifecycle; `companions.ts` the companion packs for regions downloaded
@@ -256,7 +270,12 @@ one registry, not hand-wired screens (architecture review P1-3):
    to its details: description, legend, the extension's own rows
    (`children`) and Remove; one entry open at a time, nothing persisted
    (`features/extensions/expansion`). Its overlays row is one line too
-   (`SwitchRow` with the summary as hint, no legend underneath). To link to
+   (`SwitchRow` with the summary as hint, no legend underneath, and a
+   `SubPanelButton` accessory); its overlays **sub-panel** starts with the
+   same switch, then the options you change while looking at the map —
+   reusing its Settings options as shared components drawn in either
+   place (`variant`), so each option has one source. Lifecycle (offline,
+   Remove) stays in Settings. To link to
    its details from elsewhere, push `extensionSettingsHref(key)`
    (`/settings?open=extensions&ext=<key>`), which opens it expanded.
 4. Pick its offline policy (`'installed'` for a few kB a region, `'opt-in'`
@@ -409,6 +428,30 @@ ntripClient.ts` over `data/gnss/ntripSocket.ts` (the module's `openTcp` /
   `teamSession.ts` (one open team), `persistingStore.ts` (write-ahead op log),
   `state/teamStore.ts`, `features/team/*` (a device extension; `TeamHost` runs
   the mesh lifecycle). Decisions and the test plan: docs/design/team-ui.md.
+
+## Navigation: the linear compass and following a trail (#672, #678)
+
+- **One target at a time** (`state/navigationStore`): a point (the destination
+  pin: long-press → Navigate, or Navigate on a waypoint / point card) or a
+  saved trail being followed ("Follow" on the trail view, "Follow this trail"
+  on the map's trail card). Session state, never persisted.
+- **The compass** (`features/map/nav/NavCompass`) is a 44 dp heading tape in
+  its own row of the map's bottom column, just above the ⓘ + scale row, so the
+  recording panel's measured height lifts it like the rest. It subscribes to
+  the heading itself (`subscribeHeading`), drops sub-degree ticks before any
+  state update, and so re-renders only itself; MapScreen never re-renders per
+  heading tick. With no magnetometer the course over ground drives it above
+  0.5 m/s ("COG"); below that it hides. Its geometry, the turn hint and the
+  on-course hysteresis (in at 10°, out past 15°) are pure (`core/nav`).
+- **Following a trail** (`core/nav`, pure): the trail is prepared once (local
+  metres, distance along on the notes' pause-aware axis, a uniform grid of its
+  segments). Each fix updates an incremental tracker that searches only a short
+  window around the last position along the trail, so switchbacks and
+  out-and-backs never jump legs; it falls back to the grid when you leave the
+  trail. Measured on the Québec fixture activities: ~25 segment projections per
+  fix whatever the trail's length. The next target is the next waypoint ahead
+  along the trail, else the next note, else the end, advanced by your furthest
+  progress; off trail latches past 30 m and clears within 20 m.
 
 ## Error reporting ("no silent fails")
 

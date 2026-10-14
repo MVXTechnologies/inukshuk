@@ -64,3 +64,23 @@ export const ANDROID_MIN_BOTTOM = 12;
 export function tabBarBottomInset(reported: number, os: string): number {
   return os === 'android' ? Math.max(reported, ANDROID_MIN_BOTTOM) : reported;
 }
+
+/** What owns the bottom edge right now, for `tabBarHidden`. */
+export interface TabBarOwners {
+  /** A recording is running (its panel owns the Map's bottom edge). */
+  recording: boolean;
+  /** A waypoint is being moved (its Cancel / Confirm bar, #676). */
+  movingWaypoint: boolean;
+  /** A sheet owns the focused screen (the waypoint editor, `screenSheetStore`). */
+  sheetUp: boolean;
+}
+
+/**
+ * Whether the tab bar hides for `routeName`. Recording and Move hide it on the
+ * Map only (the other tabs keep it and show a way back); a sheet hides it on
+ * whichever screen it is up on, since only the focused screen counts one.
+ */
+export function tabBarHidden(routeName: string, owners: TabBarOwners): boolean {
+  if (owners.sheetUp) return true;
+  return routeName === 'index' && (owners.recording || owners.movingWaypoint);
+}

@@ -14,6 +14,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 const mockNavigate = jest.fn();
 jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
   useRouter: () => ({ navigate: mockNavigate, push: jest.fn() }),
 }));
 jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(), shareAsync: jest.fn() }));

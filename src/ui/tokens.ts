@@ -92,6 +92,9 @@ export interface SchemeTokens {
     puck: string;
     puckRing: string;
     puckHalo: string;
+    /** The centre cursor (#677): a small dot in a contrasting ring, readable on any tile. */
+    cursor: string;
+    cursorRing: string;
     /**
      * External GNSS receiver chip on map chrome (#588): the state's icon and
      * dot (graphics, ≥ 3:1 on `chrome`); its words are `chromeInk`.
@@ -100,6 +103,9 @@ export interface SchemeTokens {
     gnssDgps: string;
     gnssWarn: string;
     gnssLost: string;
+    /** The trail being followed (#678): its line and casing, bright on either ground. */
+    followedTrail: string;
+    followedTrailCasing: string;
   };
   status: {
     /** Recording: stone chip with a pulsing red dot. */
@@ -306,13 +312,15 @@ export const lightScheme: SchemeTokens = {
   outlineVariant: palette.outlineVariant,
   divider: '#E3DCCB',
   map: {
-    chrome: 'rgba(45,55,64,0.92)',
+    // Opaque (2.5.1 QA): at 92 % the pins showed through the rail buttons.
+    chrome: palette.stone,
     chromeInk: palette.paper,
     followInk: '#8CC4F0',
     // The board's 70 % leans on a blur(14) backdrop; without blur, 70 % over
     // a white map is 4.1:1 for the paper ink. 78 % clears text contrast alone.
     chromeMini: 'rgba(45,55,64,0.78)',
-    chromeActive: palette.stone,
+    // A shade darker than the (now opaque) chrome, so a toggled button still reads as on.
+    chromeActive: palette.ink,
     chromeDivider: 'rgba(242,236,224,0.22)',
     compassNorth: '#FF6B5E',
     compassSouth: palette.paper,
@@ -322,10 +330,14 @@ export const lightScheme: SchemeTokens = {
     puck: palette.puck,
     puckRing: palette.paper,
     puckHalo: 'rgba(47,127,193,0.18)',
+    cursor: palette.ink,
+    cursorRing: palette.paper,
     gnssFixed: '#7CD69C',
     gnssDgps: '#8CC4F0',
     gnssWarn: '#F2A65A',
     gnssLost: '#FF8A80',
+    followedTrail: palette.route,
+    followedTrailCasing: palette.paper,
   },
   status: {
     recording: palette.stone,
@@ -481,7 +493,8 @@ export const darkScheme: SchemeTokens = {
   divider: '#2F3842',
   map: {
     // After-Map-Dark.html: level2 at 94 %, not stone (stone on #13171B is 1.5:1).
-    chrome: 'rgba(36,43,50,0.94)',
+    // Opaque since 2.5.1 QA (pins showed through the rail at 94 %).
+    chrome: '#242B32',
     chromeInk: '#E9E4D8',
     followInk: '#8CC4F0',
     chromeMini: 'rgba(36,43,50,0.78)',
@@ -495,10 +508,16 @@ export const darkScheme: SchemeTokens = {
     puck: palette.puck,
     puckRing: palette.paper,
     puckHalo: 'rgba(47,127,193,0.22)',
+    // The same stone-in-paper dot as light: the map tiles, not the theme,
+    // are what it sits on (mockup #677 draws one dot for both).
+    cursor: palette.ink,
+    cursorRing: palette.paper,
     gnssFixed: '#7CD69C',
     gnssDgps: '#8CC4F0',
     gnssWarn: '#F2A65A',
     gnssLost: '#FF8A80',
+    followedTrail: '#FF9B5E',
+    followedTrailCasing: '#13171B',
   },
   status: {
     recording: palette.stone,
@@ -673,10 +692,14 @@ export const sunlightScheme: SchemeTokens = {
     puck: '#1565C0',
     puckRing: palette.white,
     puckHalo: 'rgba(21,101,192,0.2)',
+    cursor: palette.black,
+    cursorRing: palette.white,
     gnssFixed: '#1E6B43',
     gnssDgps: '#1F5F91',
     gnssWarn: '#8F4206',
     gnssLost: '#B02222',
+    followedTrail: palette.route,
+    followedTrailCasing: palette.white,
   },
   status: {
     recording: palette.black,
@@ -849,10 +872,14 @@ export const nightScheme: SchemeTokens = {
     puck: NIGHT_INK,
     puckRing: palette.black,
     puckHalo: 'rgba(255,59,48,0.2)',
+    cursor: NIGHT_INK,
+    cursorRing: palette.black,
     gnssFixed: NIGHT_INK,
     gnssDgps: NIGHT_INK,
     gnssWarn: NIGHT_INK,
     gnssLost: NIGHT_INK,
+    followedTrail: NIGHT_INK,
+    followedTrailCasing: palette.black,
   },
   status: {
     recording: '#3A0B08',

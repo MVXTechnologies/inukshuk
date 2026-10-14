@@ -29,23 +29,17 @@ import { MapButton } from './MapButton';
 
 export interface MapActions {
   onRecord: () => void;
-  /** Drop a standalone waypoint at the current GPS position. */
+  /** Drop a standalone waypoint at the current GPS position (#671: in one tap). */
   onAddWaypoint: () => void;
+  /**
+   * The Add waypoint row's sub-line ("Waiting for a GPS fix…", #671). The
+   * row keeps its place and label — Maestro flows key on both.
+   */
+  addWaypointHint?: string;
   /** Omitted while unavailable — region-select or a running download. */
   onDownload?: () => void;
   /** Open the map maker. Omitted in 3D. */
   onMakeMap?: () => void;
-  /**
-   * Open the coordinate readout/entry dialog (#97). This is the entry point
-   * for BOTH halves of that feature — read the map centre out, or type a
-   * coordinate to fly to / aim a destination at — which is why one row buys
-   * the whole thing instead of two.
-   *
-   * Since #232 the PRIMARY way in is the map-tap chip's "Navigate to
-   * coordinates", which opens the same dialog seeded with the tapped point.
-   * This row survives as the way to type a coordinate you have not tapped.
-   */
-  onGoToCoordinates?: () => void;
   /** Open Settings (a stack route since Settings left the tab bar). */
   onOpenSettings?: () => void;
   /**
@@ -75,15 +69,25 @@ export function MapActionsMenu({
     icon: string | null, // null = the inukshuk glyph
     label: string,
     onPress: () => void,
+    sub?: string,
   ) => (
-    <TouchableRipple onPress={onPress} accessibilityLabel={label} style={styles.row} borderless>
+    <TouchableRipple
+      onPress={onPress}
+      accessibilityLabel={label}
+      accessibilityHint={sub}
+      style={styles.row}
+      borderless
+    >
       <View style={styles.rowInner}>
         {icon === null ? (
           <InukshukGlyph size={20} frame="square" tone="mono" color={wc.ink} />
         ) : (
           <Icon source={icon} size={20} color={wc.ink} />
         )}
-        <Text style={styles.rowLabel}>{label}</Text>
+        <View style={styles.rowText}>
+          <Text style={styles.rowLabel}>{label}</Text>
+          {sub !== undefined && <Text style={styles.rowSub}>{sub}</Text>}
+        </View>
       </View>
     </TouchableRipple>
   );
@@ -99,12 +103,10 @@ export function MapActionsMenu({
       {open && (
         <View style={styles.sheet}>
           {row('timer-outline', 'Record track', run(actions.onRecord))}
-          {row(null, 'Add waypoint', run(actions.onAddWaypoint))}
+          {row(null, 'Add waypoint', run(actions.onAddWaypoint), actions.addWaypointHint)}
           {actions.onDownload !== undefined &&
             row('tray-arrow-down', 'Download offline area', run(actions.onDownload))}
           {actions.onMakeMap !== undefined && row('map-plus', 'Make a map', run(actions.onMakeMap))}
-          {actions.onGoToCoordinates !== undefined &&
-            row('crosshairs', 'Navigate to coordinates', run(actions.onGoToCoordinates))}
           {actions.onOpenSettings !== undefined &&
             row('cog-outline', 'Settings', run(actions.onOpenSettings))}
           {actions.onDraw !== undefined && row('draw', 'Draw', run(actions.onDraw))}
@@ -130,5 +132,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 10,
   },
-  rowLabel: { flex: 1, fontSize: 14, lineHeight: 18, color: wc.ink },
+  rowText: { flex: 1 },
+  rowLabel: { fontSize: 14, lineHeight: 18, color: wc.ink },
+  rowSub: { fontSize: 12, lineHeight: 16, color: wc.inkMuted },
 });

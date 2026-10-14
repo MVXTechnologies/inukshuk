@@ -1,6 +1,6 @@
-import { formatLatLng } from '@core/geo/formatCoords';
 import { waypointIconLabel } from '@core/library/waypointIcons';
-import type { WaypointIcon } from '@core/models';
+import { useCoordinateFormatter } from '@state/useCoordinateFormatter';
+import type { StoredWaypointIcon } from '@core/models';
 import { useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Surface, Text, useTheme } from 'react-native-paper';
@@ -16,15 +16,23 @@ export interface ViewableWaypoint {
   note?: string;
   photoUri?: string;
   /** Chosen pin icon (#350); absent = the default pin. */
-  icon?: WaypointIcon;
+  icon?: StoredWaypointIcon;
 }
 
 interface Props {
   waypoint: ViewableWaypoint | null;
-  onCopyCoords: () => void;
+  /** Copy `text`: the coordinates exactly as the card shows them (user's format, #677). */
+  onCopyCoords: (text: string) => void;
   onCopyNote: () => void;
   onSharePhoto: () => void;
   onEdit: () => void;
+  /** Navigate to the waypoint (#672): the compass takes it as the target. */
+  onNavigate?: () => void;
+  /**
+   * Move the pin (#676): pan the map under it. Omitted where a move cannot be
+   * stored — a live recording pin, which becomes a distance-anchored note.
+   */
+  onMove?: () => void;
   /** Delete the waypoint — fired only after a completed hold (or a screen-reader action). */
   onDelete: () => void;
   onClose: () => void;
@@ -53,45 +61,49 @@ export function WaypointViewerCard({
   onCopyNote,
   onSharePhoto,
   onEdit,
+  onNavigate,
+  onMove,
   onDelete,
   onClose,
   floating = false,
 }: Props) {
   const theme = useTheme();
   const [photoOpen, setPhotoOpen] = useState(false);
+  const formatCoords = useCoordinateFormatter();
   if (!waypoint) return null;
+  const coords = formatCoords(waypoint.latitude, waypoint.longitude);
   // The same mark the pin draws, so the card and the map agree at a glance.
   const glyph = mciGlyph(waypoint.icon);
   const note = waypoint.note?.trim() ?? '';
   const muted = theme.colors.onSurfaceVariant;
   return (
     <Surface style={[styles.card, floating && styles.floating]} elevation={4}>
+      {/* The name gets its own line under the actions (2.5.1 QA): beside five
+          buttons it was cut to a dozen characters. Up to two lines here. */}
       <View style={styles.header}>
-        <View
-          style={styles.icon}
-          accessible
-          accessibilityLabel={`${waypointIconLabel(waypoint.icon)} icon`}
-        >
-          {glyph === null ? (
-            <InukshukGlyph size={22} frame="square" tone="mono" color={muted} />
-          ) : (
-            <Icon source={glyph} size={22} color={muted} />
-          )}
-        </View>
-        <Text
-          variant="titleMedium"
-          numberOfLines={1}
-          style={styles.title}
-          accessibilityRole="header"
-        >
-          {waypoint.label}
-        </Text>
+        {onNavigate && (
+          <IconButton
+            icon="navigation-variant-outline"
+            size={20}
+            onPress={onNavigate}
+            accessibilityLabel="Navigate to waypoint"
+          />
+        )}
         <IconButton
           icon="pencil-outline"
           size={20}
           onPress={onEdit}
           accessibilityLabel="Edit waypoint"
         />
+        {onMove && (
+          <IconButton
+            icon="arrow-all"
+            size={20}
+            onPress={onMove}
+            accessibilityLabel="Move waypoint"
+            accessibilityHint="Pan the map under the pin, then confirm"
+          />
+        )}
         <HoldButton
           size={40}
           onConfirm={onDelete}
@@ -106,6 +118,28 @@ export function WaypointViewerCard({
           <Icon source="trash-can-outline" size={20} color={theme.colors.error} />
         </HoldButton>
         <IconButton icon="close" size={20} onPress={onClose} accessibilityLabel="Close waypoint" />
+      </View>
+      <View style={styles.nameRow}>
+        <View
+          style={styles.icon}
+          accessible
+          accessibilityLabel={`${waypointIconLabel(waypoint.icon)} icon`}
+        >
+          {glyph === null ? (
+            <InukshukGlyph size={22} frame="square" tone="mono" color={muted} />
+          ) : (
+            <Icon source={glyph} size={22} color={muted} />
+          )}
+        </View>
+        <Text
+          variant="titleMedium"
+          numberOfLines={2}
+          style={styles.title}
+          accessibilityRole="header"
+          testID="waypoint-card-name"
+        >
+          {waypoint.label}
+        </Text>
       </View>
 
       {note !== '' && (
@@ -145,12 +179,12 @@ export function WaypointViewerCard({
 
       <View style={styles.coordsRow}>
         <Text variant="bodySmall" style={[styles.grow, { color: muted }]} selectable>
-          {formatLatLng(waypoint.latitude, waypoint.longitude)}
+          {coords}
         </Text>
         <IconButton
           icon="content-copy"
           size={16}
-          onPress={onCopyCoords}
+          onPress={() => onCopyCoords(coords)}
           accessibilityLabel="Copy coordinates"
           style={styles.tight}
         />
@@ -230,7 +264,8 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   floating: { borderRadius: 16 },
-  header: { flexDirection: 'row', alignItems: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   icon: { marginRight: 10 },
   title: { flex: 1 },
   delete: { marginHorizontal: 4 },

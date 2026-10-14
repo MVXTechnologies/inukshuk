@@ -1,8 +1,11 @@
+import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import { Layer, useCurrentPosition } from '@maplibre/maplibre-react-native';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 
 /** maplibre-react-native's user-location source (see its UserLocation component). */
 const USER_LOCATION_SOURCE = 'mlrn-user-location';
+/** The puck's ring: map aids drawn from you (the pointing line) slot in just below it. */
+export const PUCK_RING_LAYER_ID = 'inukshuk-puck-ring';
 
 /**
  * The revamp's location puck (board `After-Tokens.html`: "paper ring + cone"):
@@ -35,6 +38,7 @@ export function PuckLayers({
       {typeof accuracyM === 'number' && (
         <Layer
           id="inukshuk-puck-halo"
+          beforeId={liveLayerAnchor('inukshuk-puck-halo')}
           type="circle"
           source={USER_LOCATION_SOURCE}
           paint={{
@@ -56,6 +60,7 @@ export function PuckLayers({
       {weakAccuracyM !== null && (
         <Layer
           id="inukshuk-puck-uncertainty"
+          beforeId={liveLayerAnchor('inukshuk-puck-uncertainty')}
           type="circle"
           source={USER_LOCATION_SOURCE}
           paint={{
@@ -77,7 +82,8 @@ export function PuckLayers({
         />
       )}
       <Layer
-        id="inukshuk-puck-ring"
+        id={PUCK_RING_LAYER_ID}
+        beforeId={liveLayerAnchor('inukshuk-puck-ring')}
         type="circle"
         source={USER_LOCATION_SOURCE}
         paint={{
@@ -88,6 +94,7 @@ export function PuckLayers({
       />
       <Layer
         id="inukshuk-puck-dot"
+        beforeId={liveLayerAnchor('inukshuk-puck-dot')}
         type="circle"
         source={USER_LOCATION_SOURCE}
         paint={{

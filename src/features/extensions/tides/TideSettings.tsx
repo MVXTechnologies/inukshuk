@@ -7,32 +7,19 @@
  *
  * Tidal benchmarks belong to Geodetic points (its Tidal chip), not here.
  */
-import { tideCoverageRows, tideCoverageSummary, type TideCoverage } from '@core/tides/coverage';
-import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { useEffect, useState } from 'react';
-import { Linking, View } from 'react-native';
-import { List, Text, TouchableRipple, useTheme } from 'react-native-paper';
+import { tideCoverageSummary } from '@core/tides/coverage';
+import { useState } from 'react';
+import { List, useTheme } from 'react-native-paper';
 
 import { TideLegend } from '../../map/components/TideLegend';
 import { tideImage } from '../../map/tideImages';
-import { ExtensionSettingsShell, extensionRowStyles as styles } from '../ExtensionSettingsShell';
-import { fetchTideCoverage } from './coverage';
+import { ExtensionSettingsShell } from '../ExtensionSettingsShell';
+import { TideSources, useTideCoverage } from './TideSources';
 
 export function TideSettings() {
-  const tokens = useSchemeTokens();
   const theme = useTheme();
-  const [coverage, setCoverage] = useState<TideCoverage | null>(null);
+  const coverage = useTideCoverage();
   const [sourcesOpen, setSourcesOpen] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    void fetchTideCoverage().then((c) => {
-      if (alive && c) setCoverage(c);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   return (
     <ExtensionSettingsShell
@@ -54,38 +41,7 @@ export function TideSettings() {
         right={(p) => <List.Icon {...p} icon={sourcesOpen ? 'chevron-up' : 'chevron-right'} />}
         accessibilityLabel="Tide coverage & sources"
       />
-      {sourcesOpen && (
-        <View style={styles.sources}>
-          {tideCoverageRows(coverage).map(({ source, stations }) => (
-            <TouchableRipple
-              key={source.key}
-              onPress={() => void Linking.openURL(source.licenceUrl)}
-              accessibilityRole="link"
-              accessibilityLabel={`${source.name}, ${source.licence}`}
-            >
-              <View style={styles.sourceRow}>
-                <View style={styles.flex}>
-                  <Text variant="bodyMedium">
-                    {source.name}
-                    <Text variant="bodySmall" style={{ color: tokens.inkVariant }}>
-                      {` · ${source.network}`}
-                    </Text>
-                  </Text>
-                  <Text variant="bodySmall" style={{ color: tokens.inkMuted }}>
-                    {source.attribution}
-                  </Text>
-                </View>
-                <Text variant="labelMedium" style={{ color: tokens.inkVariant }}>
-                  {stations === null ? 'live' : stations.toLocaleString('en-US')}
-                </Text>
-              </View>
-            </TouchableRipple>
-          ))}
-          <Text variant="bodySmall" style={[styles.note, { color: tokens.inkMuted }]}>
-            Values are shown as each agency publishes them. Not for navigation.
-          </Text>
-        </View>
-      )}
+      {sourcesOpen && <TideSources coverage={coverage} />}
     </ExtensionSettingsShell>
   );
 }

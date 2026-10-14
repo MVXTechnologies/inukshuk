@@ -39,6 +39,18 @@ describe('map corner', () => {
     expect(map).toMatch(/pdfMaps: shownMaps\.map\(\(m\) => m\.name\),/);
   });
 
+  it('puts the compass tape BELOW the ⓘ + scale row (owner 2026-10-13, #672)', () => {
+    // The column lays out top to bottom: the row, then the tape, so bottom
+    // up it is panel → tape → row. Without a tape NavigationCompassRow
+    // renders nothing, so the column is exactly today's.
+    const row = map.indexOf('style={styles.bottomRow}');
+    const tape = map.indexOf('<NavigationCompassRow');
+    expect(row).toBeGreaterThan(0);
+    expect(tape).toBeGreaterThan(row);
+    // What sits above the row measures from the row, in either order.
+    expect(map).toMatch(/rowLiftAboveColumnBottom\(bottomColumnH, bottomRowY\) \+ TIP_BUBBLE_GAP/);
+  });
+
   it('puts the tip button in the bottom-right corner', () => {
     expect(map).toMatch(/styles\.bottomSideEnd\][^]*?<TipButton/);
   });
@@ -112,7 +124,9 @@ describe('coffee mascot bubble', () => {
     expect(map).toMatch(
       /style=\{styles\.bottomRow\}[^>]*onLayout=\{\(e\) => setBottomRowY\(e\.nativeEvent\.layout\.y\)\}/,
     );
-    expect(map).toMatch(/bottom=\{bottomColumnH - bottomRowY \+ TIP_BUBBLE_GAP\}/);
+    expect(map).toMatch(
+      /bottom=\{rowLiftAboveColumnBottom\(bottomColumnH, bottomRowY\) \+ TIP_BUBBLE_GAP\}/,
+    );
     // The row holds the credits ⓘ, the scale bar and the tip button.
     expect(map).toMatch(/styles\.bottomRow\}[^]*?<MapCreditsButton[^]*?<ScaleBar[^]*?<TipButton/);
   });
@@ -157,9 +171,11 @@ describe('leaving a focused trail by tapping the map (2.1.1)', () => {
     expect(block).toContain('selectionCamera.forget();');
     expect(block).toContain('return;');
     expect(block).not.toMatch(/restore|setPointAt|setStop/);
-    // The tap handler never glides the camera back; only the ✕ handlers do.
+    // The tap handler never releases the snapshot; only the two ✕ handlers
+    // and the trail panel's "Follow this trail" (#678, which closes the panel
+    // and leaves the camera where it is) do.
     expect(press).not.toMatch(/releaseCameraOnDeselect\(\)/);
-    expect(map.match(/releaseCameraOnDeselect\(\);/g) ?? []).toHaveLength(2);
+    expect(map.match(/releaseCameraOnDeselect\(\);/g) ?? []).toHaveLength(3);
   });
 });
 

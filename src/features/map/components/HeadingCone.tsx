@@ -1,3 +1,4 @@
+import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import { coneHalfAngleDeg, headingConeFeature } from '@core/geo/headingCone';
 import type { LatLng } from '@core/models';
 import { signedDeltaDeg } from '@core/signal/heading';
@@ -29,9 +30,9 @@ interface HeadingConeProps {
  * Its angular width tracks the sensor's reported calibration: the worse the
  * compass accuracy, the wider (vaguer) the beam.
  *
- * Render inside <Map>. `beforeId` slots the fill beneath the puck's white
- * ring — the native side waits for that layer to exist before inserting, so
- * mount order relative to <UserLocation> doesn't matter. The translucent blue
+ * Render inside <Map>. It is inserted below its own anchor in the style
+ * (`@core/map/liveLayerOrder`): above the puck's halo, under the pointing
+ * line, the pins and the puck's ring and dot — after every style reload. The translucent blue
  * stays subtle on both the light and dark basemaps (same approach Google Maps
  * uses in both themes), and it fades out below z12 where the cone would
  * collapse into the dot anyway.
@@ -77,7 +78,7 @@ export function HeadingCone({ location }: HeadingConeProps) {
       <Layer
         id="heading-cone-fill"
         type="fill"
-        beforeId="mlrn-user-location-puck-white"
+        beforeId={liveLayerAnchor('heading-cone-fill')}
         paint={{
           'fill-color': tokens.map.puck,
           'fill-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0, 13, 0.18],

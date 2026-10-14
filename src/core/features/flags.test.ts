@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MARINE_ENABLED, PARKED_LABEL, SUPPORT_NUDGE_ENABLED, WEATHER_ENABLED } from './flags';
+import { MARINE_ENABLED, SUPPORT_NUDGE_ENABLED, WEATHER_ENABLED } from './flags';
 
 /**
  * The flags themselves have no logic, so what is worth testing is the
@@ -34,9 +34,5 @@ describe('feature flags', () => {
   it('documents why each feature is parked and how to bring it back', () => {
     expect(source).toMatch(/PARKED/);
     expect(source).toMatch(/To un-park/);
-  });
-
-  it('exposes one shared label for the parked rows', () => {
-    expect(PARKED_LABEL).toBe('Coming soon');
   });
 });

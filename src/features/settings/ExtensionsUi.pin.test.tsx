@@ -4,7 +4,9 @@
  * tab) in every install state, light and dark, so a refactor leaves them
  * element-for-element, prop-for-prop identical. Regenerated on purpose when
  * the screens change by design (2026-10-07: one-line rows that expand to
- * their details; one-line overlays rows without the legends). Each snapshot is the
+ * their details; one-line overlays rows without the legends; 2026-10-13,
+ * #668: the overlays rows' sub-panel accessory; 2.5.1 QA: Geodetic points'
+ * Settings badge is its one icon, GEODETIC_ICON). Each snapshot is the
  * SHA-256 of the rendered tree's JSON (the full trees are ~1 MB), with every
  * `style` prop flattened (`[a, false, b]` and `[a, b]` draw the same pixels)
  * and image paths cut to `assets/…` (they are relative to the checkout).
@@ -117,7 +119,7 @@ for (const [name, s] of Object.entries(STATES)) {
         setExtensionsForTest({ ...s, geoOffline: shown, geoShown: shown, tidesShown: shown });
         const view = await render(
           <PaperProvider theme={dark ? MD3DarkTheme : MD3LightTheme}>
-            <ExtensionsPanel onOpenGeodeticFilter={() => undefined} onClose={() => undefined} />
+            <ExtensionsPanel onOpenPanel={() => undefined} onClose={() => undefined} />
           </PaperProvider>,
         );
         expect(treeHash(view.toJSON())).toMatchSnapshot();

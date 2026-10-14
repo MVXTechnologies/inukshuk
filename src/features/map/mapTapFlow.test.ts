@@ -6,7 +6,7 @@
  * The sequence: tap the map → chip; tap its Waypoint button → editor → Done.
  * The new pin is planted on the chip's own coordinate, and the chip stayed
  * up on top of it. MapScreen's onMapPress then asked the pins BEFORE the
- * chip, and the pin's 60 px hit disc covers the whole bubble — so Copy,
+ * chip, and the pin's tap disc covered the whole bubble — so Copy,
  * Navigate and Waypoint all toggled the pin's viewer instead. The same
  * happened to any chip dropped next to an existing pin.
  *
@@ -15,7 +15,7 @@
  * hit-tests and the REAL routing — through a tiny model of the screen state,
  * in screen px (the projection is the identity here).
  */
-import { nearestPinAt, WAYPOINT_PIN_HIT } from '@core/geo/pinHitTest';
+import { nearestPinAt, pinHitArea } from '@core/geo/pinHitTest';
 import { chipSurvivesHit, pointChipAfterBareTap, routeMapTap } from '@core/map/mapTap';
 
 import { MAP_POINT_ACTION_LAYOUT, hitMapPointChip } from './components/MapPointChip';
@@ -44,8 +44,7 @@ class MapModel {
       this.pins,
       this.pins.map((p) => [p.longitude, p.latitude] as const),
       at,
-      WAYPOINT_PIN_HIT.radiusPx,
-      WAYPOINT_PIN_HIT.badgeOffsetPx,
+      'tap',
     );
     const route = routeMapTap(chipHit, pin);
     if (route.kind === 'chip' && chip) {
@@ -86,6 +85,8 @@ const onWaypoint = (c: Px): Px => [c[0], c[1] + ROW_Y];
 const onReadout = (c: Px): Px => [c[0], c[1] - (bottomOffset + buttonHeight + 6)];
 
 const A: Px = [200, 400];
+/** A default (M) pin's tap disc. */
+const PIN = pinHitArea(undefined, 'tap');
 
 describe('the point chip around waypoints', () => {
   it('shows, adds a waypoint, closes — and works again, twice over', () => {
@@ -158,11 +159,8 @@ describe('the point chip around waypoints', () => {
     expect(map.chip).toEqual(B);
     // …whose Navigate button lies INSIDE that disc.
     const button = onNavigate(B);
-    const toBadge = Math.hypot(
-      button[0] - A[0],
-      button[1] - (A[1] - WAYPOINT_PIN_HIT.badgeOffsetPx),
-    );
-    expect(toBadge).toBeLessThan(WAYPOINT_PIN_HIT.radiusPx);
+    const toBadge = Math.hypot(button[0] - A[0], button[1] - (A[1] - PIN.headOffsetPx));
+    expect(toBadge).toBeLessThan(PIN.radiusPx);
     map.tap(button);
     expect(map.navigatingTo).toEqual(B);
     expect(map.viewer).toBeNull();
@@ -172,7 +170,7 @@ describe('the point chip around waypoints', () => {
     const map = new MapModel();
     map.pins.push({ id: 'wp-1', longitude: A[0], latitude: A[1] });
     map.chip = [60, 650];
-    map.tap([A[0], A[1] - WAYPOINT_PIN_HIT.badgeOffsetPx]);
+    map.tap([A[0], A[1] - PIN.headOffsetPx]);
     expect(map.viewer).toBe('wp-1');
     expect(map.chip).toEqual([60, 650]);
   });

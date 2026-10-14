@@ -1,3 +1,4 @@
+import { LIVE_LAYER_ORDER, liveLayerAnchor } from '@core/map/liveLayerOrder';
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
 import {
   ALWAYS_PRESENT_ANCHORS,
@@ -54,8 +55,14 @@ describe('buildOsmStyle', () => {
   it('renders a plain raster base with no relief by default (offline-pack style)', () => {
     const s = buildOsmStyle(TILE, 'map');
     expect(s.sources.dem).toBeUndefined();
-    // The three puck anchors ride along in every style (#332); invisible, sourceless.
-    expect(layerIds(s)).toEqual(['background', 'osm', ...ALWAYS_PRESENT_ANCHORS]);
+    // The puck anchors ride along in every style (#332), and the live
+    // layers' anchors on top (2.5.1); all invisible, sourceless.
+    expect(layerIds(s)).toEqual([
+      'background',
+      'osm',
+      ...ALWAYS_PRESENT_ANCHORS,
+      ...LIVE_LAYER_ORDER.map(liveLayerAnchor),
+    ]);
     expect(s.terrain).toBeUndefined();
   });
 
@@ -944,6 +951,22 @@ describe('vector Stone & Paper basemap (VECTOR_BASEMAP_ENABLED)', () => {
       expect(parkLayers(off)).toEqual([]);
       expect(off.sources['basemap-parks']).toBeUndefined();
       expect(off.layers.some((l) => l.id === 'stone-place-town')).toBe(true);
+    });
+
+    it('over satellite with the labels off: the parks alone, no names or summits (#669)', () => {
+      const peaks = 'https://peaks.example/{z}/{x}/{y}.mvt';
+      const admin1 = 'https://pages.example/data/admin1-labels-v1.json';
+      const s = buildOsmStyle(TILE, 'satellite', false, {
+        imageryLabels: { tiles: vectorBasemap.tiles, parks, peaks, admin1, labels: false },
+      });
+      expect(parkLayers(s).map((l) => l.id)).toEqual(PARK_LAYERS);
+      expect(s.layers.filter((l) => l.id.startsWith('stone-')).map((l) => l.id)).toEqual(
+        PARK_LAYERS,
+      );
+      expect(s.sources['basemap-parks']).toMatchObject({ type: 'vector' });
+      expect(s.sources['basemap-peaks']).toBeUndefined();
+      expect(s.sources['basemap-admin1']).toBeUndefined();
+      expect(validateStyleMin(s)).toEqual([]);
     });
   });
 

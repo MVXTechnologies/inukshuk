@@ -56,6 +56,26 @@ export function centerTileForRegion(b: BoundingBox): { x: number; y: number; z: 
 }
 
 /**
+ * A wide banner of `columns` tiles (a power of two) for the same framing as
+ * {@link centerTileForRegion}: its one tile split into `columns` × `columns`
+ * tiles `log2(columns)` zooms deeper, of which the row through the middle is
+ * kept. Same width on the ground, `columns` times the pixels — so a banner
+ * several hundred dp wide is drawn at about one tile pixel per screen pixel
+ * instead of one 256 px tile stretched across it (2.5.1 QA: the Satellite
+ * preview was blurry).
+ */
+export function bannerTilesForRegion(
+  b: BoundingBox,
+  columns: number,
+): { x: number; y: number; z: number }[] {
+  const c = 2 ** Math.max(0, Math.round(Math.log2(Math.max(1, columns))));
+  const { x, y, z } = centerTileForRegion(b);
+  const dz = Math.log2(c);
+  const row = y * c + Math.floor(c / 2);
+  return Array.from({ length: c }, (_, i) => ({ x: x * c + i, y: row, z: z + dz }));
+}
+
+/**
  * The base maps: our map (vector Stone & Paper, or the OSM raster) and
  * satellite imagery. Esri's "Relief" topo raster was retired as a base map
  * (#484) — see {@link PackBasemap} for the packs it may have left on disk.

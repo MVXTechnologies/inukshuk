@@ -11,6 +11,7 @@
  * (`queryRenderedFeatures` on these layers): a mark's action, or a cluster
  * (zoom in to where it splits; at the cluster limit, a list of its marks).
  */
+import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import { photoScaleAt } from '@core/photos/mapStyle';
 import { teamMapMarks, type BubbleMark, type PinMark, type TaskMark } from '@core/teamui/mapMarks';
 import { useExtensionPrefs } from '@features/extensions/prefs';
@@ -217,6 +218,7 @@ export function useTeamMapMarks(glyphs: string | undefined, zoom: number | null)
       <Layer
         key="cluster"
         id="team-mark-cluster"
+        beforeId={liveLayerAnchor('team-mark-cluster')}
         type="circle"
         filter={isCluster as never}
         paint={{
@@ -234,6 +236,7 @@ export function useTeamMapMarks(glyphs: string | undefined, zoom: number | null)
       <Layer
         key="pin"
         id="team-mark-pin"
+        beforeId={liveLayerAnchor('team-mark-pin')}
         type="circle"
         filter={ofKind('pin') as never}
         paint={{
@@ -246,6 +249,7 @@ export function useTeamMapMarks(glyphs: string | undefined, zoom: number | null)
       <Layer
         key="pin-badge"
         id="team-mark-pin-badge"
+        beforeId={liveLayerAnchor('team-mark-pin-badge')}
         type="circle"
         filter={ofKind('pin') as never}
         paint={{
@@ -259,6 +263,7 @@ export function useTeamMapMarks(glyphs: string | undefined, zoom: number | null)
       <Layer
         key="bubble"
         id="team-mark-bubble"
+        beforeId={liveLayerAnchor('team-mark-bubble')}
         type="circle"
         filter={ofKind('bubble') as never}
         paint={{
@@ -275,6 +280,7 @@ export function useTeamMapMarks(glyphs: string | undefined, zoom: number | null)
         <Layer
           key="cluster-count"
           id="team-mark-cluster-count"
+          beforeId={liveLayerAnchor('team-mark-cluster-count')}
           type="symbol"
           filter={isCluster as never}
           layout={{
@@ -296,6 +302,7 @@ export function useTeamMapMarks(glyphs: string | undefined, zoom: number | null)
         <Layer
           key="pin-initials"
           id="team-mark-pin-initials"
+          beforeId={liveLayerAnchor('team-mark-pin-initials')}
           type="symbol"
           filter={ofKind('pin') as never}
           layout={{
@@ -310,6 +317,7 @@ export function useTeamMapMarks(glyphs: string | undefined, zoom: number | null)
         <Layer
           key="pin-count"
           id="team-mark-pin-count"
+          beforeId={liveLayerAnchor('team-mark-pin-count')}
           type="symbol"
           filter={ofKind('pin') as never}
           layout={{
@@ -325,6 +333,7 @@ export function useTeamMapMarks(glyphs: string | undefined, zoom: number | null)
         <Layer
           key="bubble-count"
           id="team-mark-bubble-count"
+          beforeId={liveLayerAnchor('team-mark-bubble-count')}
           type="symbol"
           filter={ofKind('bubble') as never}
           layout={{
@@ -340,6 +349,7 @@ export function useTeamMapMarks(glyphs: string | undefined, zoom: number | null)
         <Layer
           key="task"
           id="team-mark-task"
+          beforeId={liveLayerAnchor('team-mark-task')}
           type="symbol"
           minzoom={TASK_LABEL_MIN_ZOOM}
           filter={ofKind('task') as never}

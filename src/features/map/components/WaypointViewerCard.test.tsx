@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { Animated } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useSettingsStore } from '@state/settingsStore';
 import { HOLD_MS } from './HoldButton';
 import { WaypointViewerCard, type ViewableWaypoint } from './WaypointViewerCard';
 
@@ -18,8 +19,9 @@ const WITH_NOTE: ViewableWaypoint = {
   photoUri: 'file:///photos/wp3.jpg',
 };
 
-async function setup(waypoint: ViewableWaypoint | null = WITH_NOTE) {
+async function setup(waypoint: ViewableWaypoint | null = WITH_NOTE, navigable = true) {
   const handlers = {
+    onNavigate: navigable ? jest.fn() : undefined,
     onCopyCoords: jest.fn(),
     onCopyNote: jest.fn(),
     onSharePhoto: jest.fn(),
@@ -78,6 +80,19 @@ describe('WaypointViewerCard (#505)', () => {
     expect(screen.getByTestId('waypoint-note').props.numberOfLines).toBeUndefined();
   });
 
+  it('gives a long name its own line (two lines), not a sliver beside the actions', async () => {
+    const label = 'Stationnement du belvédère de la Citadelle nord';
+    await setup({ ...WITH_NOTE, label });
+    const name = screen.getByTestId('waypoint-card-name');
+    expect(name.props.children).toBe(label);
+    expect(name.props.numberOfLines).toBe(2);
+    // Not in the actions' row: that row holds only the buttons.
+    const actionsRow = screen.getByLabelText('Edit waypoint').parent?.parent;
+    expect(actionsRow).toBeTruthy();
+    expect(screen.getByLabelText('Navigate to waypoint')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Close waypoint')).toBeOnTheScreen();
+  });
+
   it('says how to add a note when there is none', async () => {
     await setup({ label: 'Waypoint 1', latitude: 46, longitude: -71 });
     expect(screen.getByText(/No note or photo yet/)).toBeTruthy();
@@ -105,6 +120,19 @@ describe('WaypointViewerCard (#505)', () => {
     await fireEvent.press(screen.getByLabelText('Copy coordinates'));
     expect(h.onCopyNote).toHaveBeenCalledTimes(1);
     expect(h.onCopyCoords).toHaveBeenCalledTimes(1);
+    expect(h.onCopyCoords).toHaveBeenCalledWith('46.81390, -71.20800');
+  });
+
+  it('shows and copies the coordinates in the app-wide format (#677)', async () => {
+    useSettingsStore.setState({ coordinateFormat: 'mgrs' });
+    try {
+      const h = await setup();
+      expect(screen.getByText('19T CM 31556 86850')).toBeTruthy();
+      await fireEvent.press(screen.getByLabelText('Copy coordinates'));
+      expect(h.onCopyCoords).toHaveBeenCalledWith('19T CM 31556 86850');
+    } finally {
+      useSettingsStore.setState({ coordinateFormat: 'dd' });
+    }
   });
 
   it('a short press on Delete does nothing', async () => {
@@ -136,5 +164,45 @@ describe('WaypointViewerCard (#505)', () => {
     );
     await fireEvent(del, 'accessibilityAction', { nativeEvent: { actionName: 'delete' } });
     expect(h.onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('navigates to the waypoint (#672)', async () => {
+    const { onNavigate } = await setup();
+    await fireEvent.press(screen.getByLabelText('Navigate to waypoint'));
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+  });
+
+  it('has no Navigate button without a handler', async () => {
+    await setup(WITH_NOTE, false);
+    expect(screen.queryByLabelText('Navigate to waypoint')).toBeNull();
+  });
+});
+
+describe('WaypointViewerCard Move (#676)', () => {
+  it('offers Move in the header when the pin can be moved', async () => {
+    const onMove = jest.fn();
+    await render(
+      <SafeAreaProvider initialMetrics={METRICS}>
+        <PaperProvider>
+          <WaypointViewerCard
+            waypoint={WITH_NOTE}
+            onCopyCoords={jest.fn()}
+            onCopyNote={jest.fn()}
+            onSharePhoto={jest.fn()}
+            onEdit={jest.fn()}
+            onMove={onMove}
+            onDelete={jest.fn()}
+            onClose={jest.fn()}
+          />
+        </PaperProvider>
+      </SafeAreaProvider>,
+    );
+    await fireEvent.press(screen.getByLabelText('Move waypoint'));
+    expect(onMove).toHaveBeenCalledTimes(1);
+  });
+
+  it('has no Move for a pin that cannot be moved (a live recording pin)', async () => {
+    await setup();
+    expect(screen.queryByLabelText('Move waypoint')).toBeNull();
   });
 });

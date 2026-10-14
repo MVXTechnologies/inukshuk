@@ -1,8 +1,7 @@
 import { palette, target } from '@ui/tokens';
 import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { Children, Fragment, type ReactNode } from 'react';
-import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { Icon } from 'react-native-paper';
 
 /**
@@ -12,8 +11,6 @@ import { Icon } from 'react-native-paper';
  *
  * `selected` is the pressed state of a toggle (the following target button):
  * solid chrome with the river-blue follow ink, announced as selected.
- * `grouped` drops the button's own fill and shadow so it can sit inside a
- * {@link MapButtonGroup} pill.
  */
 export function MapButton({
   icon,
@@ -21,7 +18,6 @@ export function MapButton({
   onPress,
   selected,
   shape = 'round',
-  grouped = false,
   style,
 }: {
   icon: string;
@@ -29,7 +25,6 @@ export function MapButton({
   onPress: () => void;
   selected?: boolean;
   shape?: 'round' | 'square';
-  grouped?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const tokens = useSchemeTokens();
@@ -45,7 +40,9 @@ export function MapButton({
       style={({ pressed }) => [
         styles.button,
         shape === 'round' ? styles.round : styles.square,
-        !grouped && [styles.shadow, { backgroundColor: fill }, outline],
+        styles.shadow,
+        { backgroundColor: fill },
+        outline,
         pressed && styles.pressed,
         style,
       ]}
@@ -56,29 +53,6 @@ export function MapButton({
         color={selected ? tokens.map.followInk : tokens.map.chromeInk}
       />
     </Pressable>
-  );
-}
-
-/** Buttons joined in one stone pill with hairlines between them (Base map · Overlays). */
-export function MapButtonGroup({ children }: { children: ReactNode }) {
-  const tokens = useSchemeTokens();
-  const outline = useChromeOutline();
-  const items = Children.toArray(children);
-  return (
-    // Outer view carries the shadow, inner one clips the corners: on iOS a
-    // view that clips its own bounds loses its shadow.
-    <View style={[styles.group, styles.shadow, { backgroundColor: tokens.map.chrome }, outline]}>
-      <View style={styles.groupClip}>
-        {items.map((child, i) => (
-          <Fragment key={i}>
-            {i > 0 && (
-              <View style={[styles.divider, { backgroundColor: tokens.map.chromeDivider }]} />
-            )}
-            {child}
-          </Fragment>
-        ))}
-      </View>
-    </View>
   );
 }
 
@@ -99,7 +73,4 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
   },
-  group: { width: target.min, borderRadius: 16 },
-  groupClip: { borderRadius: 16, overflow: 'hidden' },
-  divider: { height: 1, marginHorizontal: 10 },
 });

@@ -1,8 +1,17 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { FONT_FAMILY } from '@ui/fonts';
-import { buildTabBarOptions, TAB_PILL, tabBarBottomInset, tabLabelStyle } from '@ui/tabBarStyle';
+import {
+  buildTabBarOptions,
+  TAB_PILL,
+  tabBarBottomInset,
+  tabBarHidden,
+  tabLabelStyle,
+} from '@ui/tabBarStyle';
+import { TabBarButton } from '@ui/TabBarButton';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRecorderStore } from '@state/recorderStore';
+import { useScreenSheetStore } from '@state/screenSheetStore';
+import { useWaypointMoveStore } from '@state/waypointMoveStore';
 import { palette } from '@ui/tokens';
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Platform, Pressable, StyleSheet, Text, View, type ColorValue } from 'react-native';
@@ -40,6 +49,11 @@ export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const bottomInset = tabBarBottomInset(insets.bottom, Platform.OS);
   const recording = useRecorderStore((s) => s.status !== 'idle');
+  // Moving a waypoint (#676) owns the bottom edge too: its Cancel/Confirm bar.
+  const movingWaypoint = useWaypointMoveStore((s) => s.moving !== null);
+  // So does a sheet that owns the focused screen (the waypoint editor): tab
+  // screens stay mounted, so switching tabs would strand it open, out of sight.
+  const sheetUp = useScreenSheetStore((s) => s.open > 0);
 
   const icon = (name: IconName) => {
     // Hidden from accessibility: the glyph is an icon-font character, and
@@ -92,11 +106,13 @@ export default function TabsLayout() {
           // through the (transparent) screen roots — unreadable in dark mode.
           sceneStyle: { backgroundColor: theme.colors.background },
           tabBarLabel: label,
+          // No long-press on tabs: a quick tap whose release reaches JS late
+          // (UI-thread stall) must still switch tabs (TabBarButton).
+          tabBarButton: TabBarButton,
           ...tabBar,
-          tabBarStyle:
-            recording && route.name === 'index'
-              ? { ...tabBar.tabBarStyle, display: 'none' }
-              : tabBar.tabBarStyle,
+          tabBarStyle: tabBarHidden(route.name, { recording, movingWaypoint, sheetUp })
+            ? { ...tabBar.tabBarStyle, display: 'none' }
+            : tabBar.tabBarStyle,
         })}
       >
         <Tabs.Screen

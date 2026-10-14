@@ -192,15 +192,6 @@ export function ExtensionSettingsShell({
   );
 }
 
-/** The rows' shared layout, for the extensions' own rows (coverage & sources…). */
-export const extensionRowStyles = StyleSheet.create({
-  pad: { paddingHorizontal: 16, paddingVertical: 8 },
-  flex: { flex: 1 },
-  note: { marginTop: 8 },
-  sources: { paddingHorizontal: 16, paddingBottom: 8, gap: 2 },
-  sourceRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 8 },
-});
-
 /** Badge 36 + gap 12 past the row's 16 padding: where the name starts. */
 const TEXT_INSET = 16 + 36 + 12;
 

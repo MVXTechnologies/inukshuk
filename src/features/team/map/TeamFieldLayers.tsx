@@ -1,4 +1,5 @@
 /** SOS and rally on the live map: MapView children (the map module only). */
+import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useTeamStore } from '@state/teamStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -67,18 +68,21 @@ export function useTeamFieldLayers(glyphs: string | undefined): ReactElement[] {
       <GeoJSONSource key="team-rally" id="team-rally" data={rallyData}>
         <Layer
           id="team-rally-area"
+          beforeId={liveLayerAnchor('team-rally-area')}
           type="fill"
           filter={['==', ['get', 'k'], 'area'] as never}
           paint={{ 'fill-color': t.team.bubbleNew, 'fill-opacity': 0.16 }}
         />
         <Layer
           id="team-rally-edge"
+          beforeId={liveLayerAnchor('team-rally-edge')}
           type="line"
           filter={['==', ['get', 'k'], 'area'] as never}
           paint={{ 'line-color': t.team.bubbleNew, 'line-width': 2, 'line-dasharray': [2, 1] }}
         />
         <Layer
           id="team-rally-dot"
+          beforeId={liveLayerAnchor('team-rally-dot')}
           type="circle"
           filter={['==', ['get', 'k'], 'flag'] as never}
           paint={{
@@ -91,6 +95,7 @@ export function useTeamFieldLayers(glyphs: string | undefined): ReactElement[] {
         {font ? (
           <Layer
             id="team-rally-label"
+            beforeId={liveLayerAnchor('team-rally-label')}
             type="symbol"
             filter={['==', ['get', 'k'], 'flag'] as never}
             layout={{
@@ -108,7 +113,12 @@ export function useTeamFieldLayers(glyphs: string | undefined): ReactElement[] {
             }}
           />
         ) : (
-          <Layer id="team-rally-label" type="circle" paint={{ 'circle-radius': 0 }} />
+          <Layer
+            id="team-rally-label"
+            beforeId={liveLayerAnchor('team-rally-label')}
+            type="circle"
+            paint={{ 'circle-radius': 0 }}
+          />
         )}
       </GeoJSONSource>,
     );
@@ -118,11 +128,13 @@ export function useTeamFieldLayers(glyphs: string | undefined): ReactElement[] {
       <GeoJSONSource key="team-sos" id="team-sos" data={sosData}>
         <Layer
           id="team-sos-halo"
+          beforeId={liveLayerAnchor('team-sos-halo')}
           type="circle"
           paint={{ 'circle-radius': 30, 'circle-color': t.team.sos, 'circle-opacity': 0.25 }}
         />
         <Layer
           id="team-sos-dot"
+          beforeId={liveLayerAnchor('team-sos-dot')}
           type="circle"
           paint={{
             'circle-radius': 18,
@@ -134,6 +146,7 @@ export function useTeamFieldLayers(glyphs: string | undefined): ReactElement[] {
         {font ? (
           <Layer
             id="team-sos-label"
+            beforeId={liveLayerAnchor('team-sos-label')}
             type="symbol"
             layout={{
               'text-field': 'SOS',
@@ -145,7 +158,12 @@ export function useTeamFieldLayers(glyphs: string | undefined): ReactElement[] {
             paint={{ 'text-color': t.team.sosInk }}
           />
         ) : (
-          <Layer id="team-sos-label" type="circle" paint={{ 'circle-radius': 0 }} />
+          <Layer
+            id="team-sos-label"
+            beforeId={liveLayerAnchor('team-sos-label')}
+            type="circle"
+            paint={{ 'circle-radius': 0 }}
+          />
         )}
       </GeoJSONSource>,
     );
@@ -203,6 +221,7 @@ export function useTeamTrailLayers(glyphs: string | undefined): ReactElement[] {
     <GeoJSONSource key="team-trl" id="team-trl" data={data}>
       <Layer
         id="team-trl-casing"
+        beforeId={liveLayerAnchor('team-trl-casing')}
         type="line"
         filter={['==', ['get', 'kind'], 'line'] as never}
         layout={{ 'line-join': 'round', 'line-cap': 'round' }}
@@ -210,6 +229,7 @@ export function useTeamTrailLayers(glyphs: string | undefined): ReactElement[] {
       />
       <Layer
         id={TEAM_TRAIL_LINE}
+        beforeId={liveLayerAnchor('team-trl-line')}
         type="line"
         filter={['==', ['get', 'kind'], 'line'] as never}
         layout={{ 'line-join': 'round', 'line-cap': 'round' }}
@@ -217,6 +237,7 @@ export function useTeamTrailLayers(glyphs: string | undefined): ReactElement[] {
       />
       <Layer
         id="team-trl-vertex"
+        beforeId={liveLayerAnchor('team-trl-vertex')}
         type="circle"
         filter={['==', ['get', 'kind'], 'vertex'] as never}
         paint={{
@@ -239,6 +260,7 @@ export function useTeamTrailLayers(glyphs: string | undefined): ReactElement[] {
       {font ? (
         <Layer
           id="team-trl-who"
+          beforeId={liveLayerAnchor('team-trl-who')}
           type="symbol"
           filter={['==', ['get', 'kind'], 'who'] as never}
           layout={{
@@ -256,7 +278,12 @@ export function useTeamTrailLayers(glyphs: string | undefined): ReactElement[] {
           }}
         />
       ) : (
-        <Layer id="team-trl-who" type="circle" paint={{ 'circle-radius': 0 }} />
+        <Layer
+          id="team-trl-who"
+          beforeId={liveLayerAnchor('team-trl-who')}
+          type="circle"
+          paint={{ 'circle-radius': 0 }}
+        />
       )}
     </GeoJSONSource>,
   ];

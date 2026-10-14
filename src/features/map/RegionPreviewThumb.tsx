@@ -24,7 +24,7 @@
 
 import { basemapTileUrl } from './mapStyle';
 import { isValidTileBytes } from '@core/geo/tileImage';
-import { centerTileForRegion } from '@core/geo/tiles';
+import { bannerTilesForRegion } from '@core/geo/tiles';
 import type { Basemap } from '@core/geo/tiles';
 import type { BoundingBox } from '@core/models';
 import * as storage from '@data/storage';
@@ -43,6 +43,12 @@ interface Props {
   height?: number;
   /** Corner radius; default 8. */
   radius?: number;
+  /**
+   * A wide banner: draw `columns` tiles side by side, one zoom per halving
+   * deeper (`bannerTilesForRegion`), so the banner is sharp rather than one
+   * tile stretched. Default 1 (the single framing tile).
+   */
+  columns?: number;
 }
 
 // Same self-identification as the 3D DEM/basemap fetches (see dem.ts) — the
@@ -62,17 +68,21 @@ interface PreviewTile {
 const STREET_PREVIEW_TEMPLATE =
   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
 
-function previewTile(bbox: BoundingBox, basemap: Basemap, tileUrl: string): PreviewTile | null {
+function previewTiles(
+  bbox: BoundingBox,
+  basemap: Basemap,
+  tileUrl: string,
+  columns: number,
+): PreviewTile[] {
   const template = basemap === 'map' ? STREET_PREVIEW_TEMPLATE : basemapTileUrl(basemap, tileUrl);
-  if (!template) return null;
-  const { x, y, z } = centerTileForRegion(bbox);
-  return {
+  if (!template) return [];
+  return bannerTilesForRegion(bbox, columns).map(({ x, y, z }) => ({
     url: template.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y)),
     cacheName:
       basemap === 'map'
         ? `preview-mapstreet-${z}-${x}-${y}.png`
         : `preview-${basemap}-${z}-${x}-${y}.png`,
-  };
+  }));
 }
 
 export function RegionPreviewThumb({
@@ -83,58 +93,79 @@ export function RegionPreviewThumb({
   width,
   height,
   radius = 8,
+  columns = 1,
 }: Props): ReactElement {
   const theme = useTheme();
-  const tile = useMemo(
-    () => (bbox && tileUrl ? previewTile(bbox, basemap, tileUrl) : null),
-    [bbox, basemap, tileUrl],
+  const tiles = useMemo(
+    () => (bbox && tileUrl ? previewTiles(bbox, basemap, tileUrl, columns) : []),
+    [bbox, basemap, tileUrl, columns],
   );
 
-  // The local (cache-file) uri of the last successfully fetched tile, tagged
-  // with the remote url it came from so a stale image is never shown for a
-  // different tile. `bbox` changes on every drag frame but the framing tile's
-  // z/x/y is discrete, so the effect keys on the url strings (not the `tile`
-  // object identity) and refetches only when the target tile really changes —
-  // and even then it's usually a disk-cache hit.
-  const [loaded, setLoaded] = useState<{ url: string; localUri: string } | null>(null);
-  const url = tile?.url ?? null;
-  const cacheName = tile?.cacheName ?? null;
+  // The local (cache-file) uris of the last successfully fetched tiles, keyed
+  // by the remote url they came from so a stale image is never shown for a
+  // different tile. `bbox` changes on every drag frame but the framing tiles'
+  // z/x/y are discrete, so the effect keys on the url strings (not the
+  // `tiles` array identity) and refetches only when the target tiles really
+  // change — and even then it's usually a disk-cache hit.
+  const [loaded, setLoaded] = useState<Readonly<Record<string, string>>>({});
+  const key = tiles.map((t) => `${t.url}|${t.cacheName}`).join('\n');
   useEffect(() => {
-    if (url === null || cacheName === null) return;
+    if (key === '') return;
     let cancelled = false;
-    (async () => {
-      try {
-        const localUri = await storage.downloadToCacheUri(
-          url,
-          cacheName,
-          UA_HEADERS,
-          isValidTileBytes,
-        );
-        if (!cancelled) setLoaded({ url, localUri });
-      } catch {
-        // Fetch failed (offline-only cache miss, network error, server block):
-        // keep whatever was shown before; the placeholder covers the rest.
-      }
-    })();
+    for (const line of key.split('\n')) {
+      const [url = '', cacheName = ''] = line.split('|');
+      void (async () => {
+        try {
+          const localUri = await storage.downloadToCacheUri(
+            url,
+            cacheName,
+            UA_HEADERS,
+            isValidTileBytes,
+          );
+          if (!cancelled) setLoaded((prev) => ({ ...prev, [url]: localUri }));
+        } catch {
+          // Fetch failed (offline-only cache miss, network error, server
+          // block): the placeholder stays.
+        }
+      })();
+    }
     return () => {
       cancelled = true;
     };
-  }, [url, cacheName]);
+  }, [key]);
 
-  const imageUri = url !== null && loaded !== null && loaded.url === url ? loaded.localUri : null;
-
-  const box = { width: width ?? size, height: height ?? size, borderRadius: radius };
+  // All or nothing: a banner with holes reads as broken.
+  const uris = tiles.map((t) => loaded[t.url]);
+  const ready = tiles.length > 0 && uris.every((u) => u !== undefined);
+  const w = width ?? size;
+  const box = { width: w, height: height ?? size, borderRadius: radius };
+  const cell = w / Math.max(1, tiles.length);
+  const drop = () => setLoaded({});
   return (
     <View style={[styles.frame, box, { borderColor: theme.colors.outlineVariant }]}>
-      {imageUri !== null ? (
+      {ready && tiles.length === 1 ? (
         <Image
-          source={{ uri: imageUri }}
+          source={{ uri: uris[0] }}
           style={[box, styles.image]}
           resizeMode="cover"
+          testID="preview-tile"
           // Undecodable cached file (e.g. a truncated write) — drop back to the
           // placeholder rather than showing a broken image.
-          onError={() => setLoaded(null)}
+          onError={drop}
         />
+      ) : ready ? (
+        // Square tiles side by side, the banner's middle band showing.
+        <View style={[box, styles.banner]} testID="preview-banner">
+          {uris.map((uri, i) => (
+            <Image
+              key={tiles[i]?.url ?? i}
+              source={{ uri }}
+              style={{ width: cell, height: cell }}
+              testID="preview-tile"
+              onError={drop}
+            />
+          ))}
+        </View>
       ) : (
         <View style={[box, styles.placeholder, { backgroundColor: theme.colors.surfaceVariant }]}>
           <Icon source="map-outline" size={size * 0.4} color={theme.colors.onSurfaceVariant} />
@@ -157,4 +188,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  banner: { flexDirection: 'row', alignItems: 'center', overflow: 'hidden' },
 });

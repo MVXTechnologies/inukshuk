@@ -8,10 +8,9 @@
  *
  * ## Contract for a parked feature
  *
- * 1. **The entry point stays visible but disabled.** The Weather and Marine
- *    rows in the map's Overlays menu remain in the list, greyed, with a
- *    "Coming soon" subtitle. A feature that vanishes reads as a bug or a lost
- *    purchase; a feature that is visibly deliberate reads as a roadmap.
+ * 1. **No row for it.** The Weather and Marine rows leave the map's Overlays
+ *    menu while parked (2.5.1 QA, the owner's rule: no greyed-out rows; it
+ *    used to keep them greyed with a "Coming soon" subtitle).
  * 2. **Every other surface is hidden**, so nothing points at a dead feature:
  *    the drapes, legends, scrubber, model sheet, forecast/tide card, point
  *    readout lines, wind-particle overlay and its Settings switch, the
@@ -104,12 +103,6 @@ export const SUPPORT_NUDGE_ENABLED: boolean = false;
  * holes then stay until the user pans away and back, as before.
  */
 export const CONTOUR_RECOVERY_ENABLED: boolean = true;
-
-/**
- * Subtitle + a11y suffix shown on a parked row in the Overlays menu. One
- * constant so the menu copy and the e2e matchers can never drift apart.
- */
-export const PARKED_LABEL = 'Coming soon';
 
 /**
  * The Convert tool (chart-datum PLAN phases C–F; shipped in 2.3.0). Gates the

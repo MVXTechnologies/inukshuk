@@ -11,7 +11,8 @@ import { parseWhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import { sanitizeTrackOrigin } from '@core/import/origin';
 import { toDocumentRelativePath } from '@core/storage/documentPaths';
 import type { CustomCategory } from './categories';
-import { isWaypointIcon } from './waypointIcons';
+import { isStorableWaypointIconId } from './waypointIcons';
+import { normalizeWaypointStyle } from './waypointStyle';
 import { normalizeArea } from './areas';
 import { sanitizeRoutePlan } from '@core/draw/serialize';
 
@@ -173,15 +174,23 @@ function normalizePhoto<T extends { photoUri?: unknown }>(raw: T) {
 }
 
 /**
- * Normalize one persisted waypoint's optional nested fields (#350): a junk or
- * unknown `icon` is DROPPED rather than carried, so the pin falls back to the
- * default instead of asking the renderer for a glyph that does not exist. That
- * also covers the downgrade case — an index written by a build whose catalogue
- * has icons this one lacks loads fine, it just draws default pins.
+ * Normalize one persisted waypoint's optional nested fields (#350): a junk
+ * `icon` is dropped, but an id this build does not know is KEPT — that is the
+ * rollback case, an index written by a newer build whose catalogue has icons
+ * this one lacks. The pin draws as the default here (every icon lookup returns
+ * null for an unknown id), and the id survives the next save, so going back
+ * to the newer build gives the pin its icon back. The #675 `color` and `size`
+ * fields are optional too: no schema bump, no migration.
  */
 function normalizeWaypoint(raw: Waypoint): Waypoint {
-  const { icon, ...rest } = normalizePhoto(raw);
-  return { ...rest, ...(isWaypointIcon(icon) ? { icon } : {}) };
+  const { icon, color, size, ...rest } = normalizePhoto(raw);
+  // #675 — colour and size get the same treatment: optional, validated, and a
+  // junk value is dropped (the pin draws at the default) rather than rejected.
+  return {
+    ...rest,
+    ...(isStorableWaypointIconId(icon) ? { icon } : {}),
+    ...normalizeWaypointStyle({ color, size }),
+  };
 }
 
 function normalizeNotes(raw: unknown): TrackNote[] {

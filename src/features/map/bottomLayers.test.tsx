@@ -6,6 +6,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   BOTTOM_LAYER,
   FLOATING_CARD_GAP,
+  liftedSnackbarStyle,
+  rowLiftAboveColumnBottom,
   snackbarWrapperStyle,
   waypointCardDockStyle,
 } from './bottomLayers';
@@ -51,6 +53,16 @@ describe('waypoint card vs recording panel stacking (#505)', () => {
     expect(BOTTOM_LAYER.snackbar.zIndex).toBeGreaterThan(BOTTOM_LAYER.waypointCard.zIndex);
     expect(snackbarWrapperStyle(true, 240)).toMatchObject({ bottom: 240 });
     expect(snackbarWrapperStyle(false, 240).bottom).toBeUndefined();
+  });
+
+  it('lifts the EDIT / UNDO bar above the whole bottom column (chip, scale row, compass)', () => {
+    // Column at the edge, 120 dp tall: the bar starts where the column ends.
+    expect(liftedSnackbarStyle(0, 120)).toEqual({ ...BOTTOM_LAYER.snackbar, bottom: 120 });
+    // Column riding on the 240 dp recording panel.
+    expect(liftedSnackbarStyle(240, 120)).toMatchObject({ bottom: 360 });
+    // Not measured yet: it at least clears what the column sits on.
+    expect(liftedSnackbarStyle(240, null)).toMatchObject({ bottom: 240 });
+    expect(liftedSnackbarStyle(0, 120).zIndex).toBe(BOTTOM_LAYER.snackbar.zIndex);
   });
 
   it('docks flush with the bottom edge when not recording', () => {
@@ -113,5 +125,46 @@ describe('waypoint card vs recording panel stacking (#505)', () => {
     expect(panel.elevation).toBeUndefined();
     expect(card.elevation).toBeUndefined();
     expect(screen.getByLabelText('Delete waypoint')).toBeTruthy();
+  });
+});
+
+/**
+ * The bottom column's two orders (owner 2026-10-13, #672). Measured numbers
+ * as the column reports them: paddingBottom 10, gap 12, the ⓘ + scale row
+ * 40 tall, the compass tape 44 (NAV_COMPASS_H).
+ */
+describe('what sits above the ⓘ + scale row, in either column order', () => {
+  const PAD = 10;
+  const GAP = 12;
+  const ROW = 40;
+  const TAPE = 44;
+
+  it('no tape: the row is the bottom of the column', () => {
+    const columnH = ROW + PAD;
+    const rowY = 0;
+    expect(rowLiftAboveColumnBottom(columnH, rowY)).toBe(ROW + PAD);
+  });
+
+  it('tape showing: the tape is under the row, and everything above the row rises by it', () => {
+    const columnH = ROW + GAP + TAPE + PAD;
+    const rowY = 0;
+    expect(rowLiftAboveColumnBottom(columnH, rowY)).toBe(ROW + GAP + TAPE + PAD);
+  });
+
+  it('with other blocks above the row (toasts, photo chip), only what is below counts', () => {
+    const above = 30 + GAP;
+    expect(rowLiftAboveColumnBottom(above + ROW + PAD, above)).toBe(ROW + PAD);
+    expect(rowLiftAboveColumnBottom(above + ROW + GAP + TAPE + PAD, above)).toBe(
+      ROW + GAP + TAPE + PAD,
+    );
+  });
+
+  it('never goes negative on a stale layout', () => {
+    expect(rowLiftAboveColumnBottom(20, 40)).toBe(0);
+  });
+
+  it('the 8 s EDIT / UNDO bar clears the whole column in both orders', () => {
+    expect(liftedSnackbarStyle(0, ROW + PAD).bottom).toBe(ROW + PAD);
+    expect(liftedSnackbarStyle(0, ROW + GAP + TAPE + PAD).bottom).toBe(ROW + GAP + TAPE + PAD);
   });
 });

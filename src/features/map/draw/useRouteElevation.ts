@@ -4,6 +4,7 @@ import {
   type RouteElevation,
   type RouteElevationPlan,
 } from '@core/draw/elevation';
+import { LruCache } from '@core/geo/pointElevation';
 import type { LngLat } from '@core/models';
 import { tileKeyId, type DemTile } from '@core/trails/climb';
 import { fetchDemTile } from '@features/map/dem';
@@ -38,7 +39,7 @@ export interface RouteElevationResult {
 }
 
 const TILE_CACHE_MAX = 64;
-const tileCache = new Map<string, DemTile>();
+const tileCache = new LruCache<string, DemTile>(TILE_CACHE_MAX);
 const PARALLEL = 4;
 
 const yieldToUi = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
@@ -46,12 +47,9 @@ const yieldToUi = (): Promise<void> => new Promise((resolve) => setTimeout(resol
 async function loadTiles(plan: RouteElevationPlan, alive: () => boolean) {
   const tiles = new Map<string, DemTile>();
   const queue = plan.tiles.filter((t) => {
-    const hit = tileCache.get(tileKeyId(t));
+    const hit = tileCache.get(tileKeyId(t)); // a hit refreshes its recency
     if (hit === undefined) return true;
     tiles.set(tileKeyId(t), hit);
-    // Refresh its recency.
-    tileCache.delete(tileKeyId(t));
-    tileCache.set(tileKeyId(t), hit);
     return false;
   });
   const worker = async () => {
@@ -60,11 +58,6 @@ async function loadTiles(plan: RouteElevationPlan, alive: () => boolean) {
         const tile: DemTile = { size: 256, data: await fetchDemTile(key.z, key.x, key.y) };
         tiles.set(tileKeyId(key), tile);
         tileCache.set(tileKeyId(key), tile);
-        while (tileCache.size > TILE_CACHE_MAX) {
-          const oldest = tileCache.keys().next().value;
-          if (oldest === undefined) break;
-          tileCache.delete(oldest);
-        }
       } catch {
         // A missing tile leaves its samples undefined; the rest still count.
       }

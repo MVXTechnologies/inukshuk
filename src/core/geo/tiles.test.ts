@@ -1,4 +1,6 @@
 import {
+  bannerTilesForRegion,
+  centerTileForRegion,
   tileCountForRegion,
   overviewZoomFor,
   estimateBytes,
@@ -241,5 +243,29 @@ describe('needsRedownload', () => {
     expect(needsRedownload({ basemap: 'map', format: 'raster' }, 'raster')).toBe(false);
     expect(needsRedownload({ basemap: 'satellite', format: 'raster' }, 'vector')).toBe(false);
     expect(needsRedownload({ basemap: 'relief', format: 'raster' }, 'vector')).toBe(false);
+  });
+});
+
+describe('bannerTilesForRegion (2.5.1 QA: a sharp Satellite preview)', () => {
+  const box: BoundingBox = { minLng: -71.3, minLat: 46.76, maxLng: -71.15, maxLat: 46.85 };
+
+  it('is the framing tile itself for one column', () => {
+    expect(bannerTilesForRegion(box, 1)).toEqual([centerTileForRegion(box)]);
+  });
+
+  it('splits the framing tile into a row of four, two zooms deeper', () => {
+    const { x, y, z } = centerTileForRegion(box);
+    const row = bannerTilesForRegion(box, 4);
+    expect(row).toHaveLength(4);
+    expect(row.map((t) => t.z)).toEqual([z + 2, z + 2, z + 2, z + 2]);
+    // Same ground width: exactly the framing tile's four children across…
+    expect(row.map((t) => t.x)).toEqual([x * 4, x * 4 + 1, x * 4 + 2, x * 4 + 3]);
+    // …along the row through its middle.
+    expect(new Set(row.map((t) => t.y))).toEqual(new Set([y * 4 + 2]));
+  });
+
+  it('rounds a non power of two to one', () => {
+    expect(bannerTilesForRegion(box, 3)).toHaveLength(4);
+    expect(bannerTilesForRegion(box, 0)).toHaveLength(1);
   });
 });

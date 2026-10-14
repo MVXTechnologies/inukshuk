@@ -55,3 +55,28 @@ export function snackbarWrapperStyle(recordingPanelUp: boolean, panelHeight: num
     ...(recordingPanelUp ? { bottom: panelHeight } : {}),
   };
 }
+
+/**
+ * A long-lived snackbar (the 8 s EDIT / UNDO bar, #671/#676) sits ABOVE the
+ * map's bottom column — the coordinates chip, the scale row and the
+ * navigation compass — rather than on it: over them for 8 s it blocked the
+ * very controls the user reaches for next. `columnBottom` is where the column
+ * sits (above the recording panel, a trail sheet or the drawing panel) and
+ * `columnHeight` its measured height (null before its first layout: the bar
+ * then just clears whatever the column sits on).
+ */
+export function liftedSnackbarStyle(columnBottom: number, columnHeight: number | null): ViewStyle {
+  return { ...BOTTOM_LAYER.snackbar, bottom: columnBottom + (columnHeight ?? 0) };
+}
+
+/**
+ * How far above the bottom column's bottom edge the ⓘ + scale row's TOP is,
+ * from the two measured layouts: the column's height and the row's y inside
+ * it. The tip bubble and the credits sheet sit this high (plus a gap), so
+ * they clear the row whatever is under it — nothing (the row at the bottom),
+ * or the navigation compass tape, which goes BELOW the row while it shows
+ * (owner, 2026-10-13, #672).
+ */
+export function rowLiftAboveColumnBottom(columnHeight: number, rowY: number): number {
+  return Math.max(0, columnHeight - rowY);
+}
