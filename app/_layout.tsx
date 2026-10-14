@@ -39,6 +39,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { installTileHostAlias } from '@data/tileHostAlias';
 import { clearPhotoInbox } from '@data/photos/inbox';
 import { PhotoResizeHost } from '@features/photos/PhotoResizeHost';
+import { KeyboardOrphanGuard } from '@ui/KeyboardOrphanGuard';
 import { AddPhotosAfterSavePrompt } from '@features/photos/AddPhotosAfterSavePrompt';
 
 // Before any map mounts: MapLibre's requests for the frozen tile-template host
@@ -191,6 +192,8 @@ export default function RootLayout() {
                   <PdfRecoverySnackbar />
                   <PdfPrerenderWorker />
                   <PhotoResizeHost />
+                  {/* A keyboard no field holds (focus fell to a hidden WebView) goes away. */}
+                  <KeyboardOrphanGuard />
                   <MapReparseWorker />
                   {/* Before StravaPushPrompt, on purpose: both subscribe to the
                     recorder's lastSavedTrackId, and the Strava prompt consumes
