@@ -13,6 +13,8 @@ const GLYPHS: Readonly<Record<string, string>> = {
   landscape: 'image-filter-hdr',
   gps_fixed: 'crosshairs',
   flag: 'flag-variant',
+  notes: 'note-text-outline',
+  sports_score: 'flag-checkered',
   route: 'routes',
   place: 'map-marker',
   explore: 'compass-outline',

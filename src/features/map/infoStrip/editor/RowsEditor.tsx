@@ -1,4 +1,3 @@
-import { spokenValue } from '@core/infoStrip/compute';
 import {
   canAddRow,
   dropSlot,
@@ -9,6 +8,7 @@ import {
   type Slot,
 } from '@core/infoStrip/edit';
 import { fitRow } from '@core/infoStrip/layout';
+import { spokenField } from '@core/infoStrip/subject';
 import type { ComputeContext, DepsSnapshot, FieldRef } from '@core/infoStrip/types';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
@@ -17,7 +17,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Icon, Text } from 'react-native-paper';
 
 import { StripField } from '../StripField';
-import { previewValue } from './preview';
+import { previewCaptions, previewValue } from './preview';
 
 /** How long a field is held before it lifts to be dragged, ms (a tap opens its settings). */
 export const DRAG_HOLD_MS = 300;
@@ -59,6 +59,7 @@ const ROW_ACTIONS = [
  */
 export function RowsEditor({ rows, data, ctx, onChange, onOpenField, onAdd }: RowsEditorProps) {
   const t = useSchemeTokens();
+  const captions = previewCaptions(rows, data, ctx);
   // The measured views and their window rects: read only in gesture
   // callbacks, never in render (one mutable bag for the editor's lifetime).
   const [views] = useState(() => ({
@@ -194,7 +195,7 @@ export function RowsEditor({ rows, data, ctx, onChange, onOpenField, onAdd }: Ro
                       accessibilityRole="button"
                       accessibilityLabel={
                         pv.live
-                          ? spokenValue(pv.descriptor.label, pv.value)
+                          ? spokenField(pv.descriptor, pv.value)
                           : `${pv.descriptor.label}, no value now`
                       }
                       accessibilityHint="Opens its settings. Hold to drag it."
@@ -208,6 +209,7 @@ export function RowsEditor({ rows, data, ctx, onChange, onOpenField, onAdd }: Ro
                         shrink={pv.descriptor.spaces > 1}
                         muted={!pv.live}
                         fit
+                        caption={captions[r]?.[i] ?? false}
                       />
                     </Pressable>
                     <Pressable

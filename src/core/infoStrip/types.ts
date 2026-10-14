@@ -90,12 +90,32 @@ export type Target =
   | { kind: 'waypoint'; waypointId: string }
   | { kind: 'coordinate'; point: LatLng; label?: string };
 
+/** A saved waypoint's look on the map (#675): its icon and colour, both optional. */
+export interface WaypointPin {
+  icon?: string;
+  color?: string;
+}
+
+/**
+ * The glyph a target draws when it has no pin of its own: the destination
+ * flag, a trail note, the trail's end, a typed coordinate's mark, a waypoint
+ * (its pin when known), the followed trail.
+ */
+export type TargetGlyph = 'flag' | 'notes' | 'sports_score' | 'my_location' | 'place' | 'route';
+
 /** A target resolved against the live data. */
 export interface ResolvedTarget {
+  /**
+   * Who it is, stable across ticks: two fields to the same target share it
+   * (the strip names a target once, `subject.ts`).
+   */
+  key: string;
   name: string;
   point: LatLng;
-  /** The glyph the name field draws: a flag, the trail, a waypoint pin, a mark. */
-  glyph: 'flag' | 'route' | 'place' | 'my_location';
+  /** The glyph its fields draw for it: the destination flag, a note, the trail's end, a mark. */
+  glyph: TargetGlyph;
+  /** A saved waypoint: drawn as its own map pin (icon and colour) rather than the glyph. */
+  pin?: WaypointPin;
   /**
    * The distance along the followed trail (what is left plus the way back to
    * it), when the target is the trail's own; null otherwise.
@@ -210,6 +230,10 @@ export interface StripFix extends LatLng {
 
 /** The followed trail's live readout (`@core/nav` FollowReadout, cut to what fields read). */
 export interface FollowSnapshot {
+  /** The followed trail's name (the follow chip's), for the off-trail field. */
+  trailName?: string;
+  /** The next target's pin when it is a saved waypoint. */
+  targetPin?: WaypointPin;
   /** What the next target is: a saved waypoint, a trail note or the trail's end (#696 opens it). */
   targetKind: 'waypoint' | 'note' | 'end';
   /** The waypoint's or note's id, or "end". */
@@ -288,11 +312,11 @@ export interface DepsSnapshot {
    * on (Navigate from a waypoint's card), so a tap on its name opens that
    * waypoint's card, not a bare point's chip (#696).
    */
-  navTarget: { name: string; point: LatLng; waypointId?: string } | null;
+  navTarget: { name: string; point: LatLng; waypointId?: string; pin?: WaypointPin } | null;
   /** The followed trail's readout, or null when not following. */
   follow: FollowSnapshot | null;
   /** Saved waypoints the strip's targets name, by id. */
-  waypoints: Readonly<Record<string, { name: string; point: LatLng }>>;
+  waypoints: Readonly<Record<string, { name: string; point: LatLng; pin?: WaypointPin }>>;
   /** The recorder's numbers while recording, else null. */
   recording: HeroData | null;
   /** The app-wide coordinate format (Settings › Display › Coordinates). */
@@ -310,8 +334,32 @@ export interface DepsSnapshot {
 
 // ------------------------------------------------------------------ values
 
+/**
+ * What a reading is TO (owner, 2.6.0: "a distance should say to what"): the
+ * target a distance, bearing, ETE or ETA measures to, the trail an off-trail
+ * distance is from. Its cell names it, or at least shows its icon
+ * (`subject.ts`).
+ */
+export interface StripSubject {
+  /** Its identity ({@link ResolvedTarget.key}): a strip names one subject once. */
+  key: string;
+  name: string;
+  /** Its glyph (a Material Symbols name) when it has no pin. */
+  glyph: string;
+  /** A saved waypoint: its map pin, in its colour. */
+  pin?: WaypointPin;
+}
+
 /** What one field draws: glyph or tag, value, unit, tone (mockup `sfield`). */
 export interface StripValue {
+  /** What the reading is to: named, or shown by its icon, before the value. */
+  subject?: StripSubject;
+  /**
+   * The value IS the subject's name (the target-name field): the subject's
+   * icon stands in for the glyph, and the strip's other fields to it need not
+   * name it again.
+   */
+  namesSubject?: boolean;
   /** A Material Symbols name. */
   glyph?: string;
   /** A short text tag before the value ("ETE", "δ", "SOG"). */
@@ -334,6 +382,11 @@ export interface FieldDescriptor<P extends Params = Params> {
   id: string;
   /** The picker's name ("Distance to target"). */
   label: string;
+  /**
+   * Spoken before a subject's name ("Distance to" → "Distance to Camp lac:
+   * 1.2 km"); fields without one speak their label.
+   */
+  spokenTo?: string;
   /** The picker's hint ("Straight line, or along the trail when following"). */
   summary: string;
   /** Extra search words ("range", "far"). */

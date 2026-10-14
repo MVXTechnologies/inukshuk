@@ -1,5 +1,6 @@
 import { IMPERIAL, METRIC, NAUTICAL } from '@core/format';
 
+import { SAMPLE_SUBJECT } from './fields/navigation';
 import { placeholderValue, PLACEHOLDER_TEXT, sampleValue } from './preview';
 import { fieldDescriptor, FIELDS } from './registry';
 import type { FieldDescriptor } from './types';
@@ -36,7 +37,11 @@ describe('sampleValue (the presets: clock samples in the phone 12/24 h form)', (
       const t = new Date(ms);
       return `${t.getHours()}h${t.getMinutes()}`;
     };
-    expect(sampleValue(d('eta'), METRIC, clock)).toEqual({ tag: 'ETA', value: '14h32' });
+    expect(sampleValue(d('eta'), METRIC, clock)).toEqual({
+      tag: 'ETA',
+      value: '14h32',
+      subject: SAMPLE_SUBJECT,
+    });
     expect(sampleValue(d('sunset'), METRIC, clock).value).toBe('18h12');
     expect(sampleValue(d('tides:nextHigh'), METRIC, clock).value).toBe('14h52');
   });
@@ -55,7 +60,11 @@ describe('sampleValue in the user units (#702: a miniature never reads km/h to a
   });
 
   it('imperial and nautical go through the units formatter', () => {
-    expect(sampleValue(d('targetDistance'), IMPERIAL)).toEqual({ value: '0.76', unit: 'mi' });
+    expect(sampleValue(d('targetDistance'), IMPERIAL)).toEqual({
+      value: '0.76',
+      unit: 'mi',
+      subject: SAMPLE_SUBJECT,
+    });
     expect(sampleValue(d('speed'), IMPERIAL)).toEqual({
       glyph: 'speed',
       value: '2.2',

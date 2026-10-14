@@ -1,14 +1,15 @@
-import { spokenValue, type PlacedValue } from '@core/infoStrip/compute';
+import type { PlacedValue } from '@core/infoStrip/compute';
 import {
   ROW_DIVIDER_DP,
   ROW_H_DP,
   STRIP_MERGED_EXTRA_DP,
   STRIP_PAD_DP,
 } from '@core/infoStrip/layout';
+import { captionPlan, spokenField } from '@core/infoStrip/subject';
 import type { Dock } from '@core/infoStrip/types';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { memo, Fragment } from 'react';
+import { memo, Fragment, useMemo } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -73,6 +74,8 @@ export const InfoStripView = memo(function InfoStripView({
 }: InfoStripViewProps) {
   const t = useSchemeTokens();
   const top = dock === 'top';
+  // Each target named once in the strip (`@core/infoStrip/subject`).
+  const captions = useMemo(() => captionPlan(rows.map((row) => row.map((p) => p.value))), [rows]);
   const onAction = (e: AccessibilityActionEvent) => {
     if (e.nativeEvent.actionName === 'longpress') onEdit();
   };
@@ -123,6 +126,7 @@ export const InfoStripView = memo(function InfoStripView({
                   value={p.value}
                   shrink={p.descriptor.spaces > 1}
                   fit
+                  caption={captions[r]?.[i] ?? false}
                   textTestID={
                     isCoords
                       ? 'map-coords-text'
@@ -132,7 +136,7 @@ export const InfoStripView = memo(function InfoStripView({
                   }
                 />
               );
-              const spoken = spokenValue(p.descriptor.label, p.value);
+              const spoken = spokenField(p.descriptor, p.value);
               return (
                 <Fragment key={`${p.row}:${p.index}`}>
                   {i > 0 && <View style={[styles.fieldDivider, { backgroundColor: t.divider }]} />}
