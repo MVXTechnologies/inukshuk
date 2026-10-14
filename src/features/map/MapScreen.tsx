@@ -91,6 +91,9 @@ import { CategoryStartSheet } from './components/CategoryStartSheet';
 import { CompassBadge } from './components/CompassBadge';
 import { DestinationChip } from './components/DestinationChip';
 import { FollowChip } from './nav/FollowChip';
+import { OnMapTrailChip, useOnMapTrailChip } from './nav/OnMapTrailChip';
+import { withOnMapTrail } from '@core/library/onMapTrail';
+import { useOnMapTrailStore } from '@state/onMapTrailStore';
 import { FollowGuideLine } from './nav/FollowGuideLine';
 import { FollowedTrailLine } from './nav/FollowedTrailLine';
 import { NavigationCompassRow } from './nav/NavigationCompassRow';
@@ -462,9 +465,16 @@ export function MapScreen() {
     () => pdfOverlayMaps(showPdfOverlay, mapVisibilityMode, visibleFolderIds, maps),
     [showPdfOverlay, mapVisibilityMode, visibleFolderIds, maps],
   );
+  // A trail shown with the trail view's "On map" is drawn alone, over that set (#710).
+  const onMapTrackId = useOnMapTrailStore((s) => s.trackId);
   const shownTrackIds = useMemo(
-    () => visibleTrackIds(mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds),
-    [mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds],
+    () =>
+      withOnMapTrail(
+        visibleTrackIds(mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds),
+        onMapTrackId,
+        (id) => tracks.some((t) => t.id === id),
+      ),
+    [mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds, onMapTrackId],
   );
   // `enabled` is passed as well as the (already empty) target list so a page
   // mid-render when the switch flips off is abandoned, not drawn late.
@@ -1126,6 +1136,10 @@ export function MapScreen() {
   const formatCoords = useCoordinateFormatter();
   // Following a saved trail (#678): its readout, per fix, for the compass.
   const follow = useFollowTrail(location, showSnack);
+  // Its chip (#710), in the top-centre lane under whatever chip holds it.
+  const onMapChip = useOnMapTrailChip();
+  const topLaneTaken =
+    marineActive || destination !== null || follow !== null || displayCondition === 'night';
 
   // Overlay errors surface through the timed hook too: a raw <Snackbar
   // duration={4000}> never auto-dismisses on Samsung One UI (paper arms its
@@ -3560,6 +3574,20 @@ export function MapScreen() {
             <FollowChip name={follow.name} onStop={stopFollowing} />
           </View>
         )}
+        {/* A trail shown with "On map" (#710): its name and ✕, one row down
+          when the lane is taken. Below the top bar, so team mode's bar
+          (#707) never covers it. */}
+        {onMapChip !== null && makeMapState === null && (
+          <View
+            style={[
+              styles.topCenterChip,
+              { top: insets.top + TOP_CHIP_OFFSET + (topLaneTaken ? 44 : 0) },
+            ]}
+            pointerEvents="box-none"
+          >
+            <OnMapTrailChip trail={onMapChip} />
+          </View>
+        )}
 
         {/* Right-side map controls. Unmounted while the map-maker editor is up:
           its desk/drawer covers the rail visually, but a covered rail would
@@ -3959,14 +3987,7 @@ export function MapScreen() {
         {makeMapState === null && (
           <ReceiverMapOverlay
             top={
-              insets.top +
-              TOP_CHIP_OFFSET +
-              (marineActive ||
-              destination !== null ||
-              follow !== null ||
-              displayCondition === 'night'
-                ? 44
-                : 0)
+              insets.top + TOP_CHIP_OFFSET + (topLaneTaken ? 44 : 0) + (onMapChip !== null ? 44 : 0)
             }
             showChip={!recordingPanelUp}
           />

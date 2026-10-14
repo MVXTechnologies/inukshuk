@@ -4,6 +4,7 @@ import { walk } from '@core/geo/track/__fixtures__/walk';
 import type { TrackSummary } from '@core/models';
 import { useLibraryStore } from '@state/libraryStore';
 import { useNavigationStore } from '@state/navigationStore';
+import { useOnMapTrailStore } from '@state/onMapTrailStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
@@ -110,6 +111,7 @@ async function mount(trackId = 't1'): Promise<Awaited<ReturnType<typeof render>>
 beforeEach(() => {
   clearOutingAnalysisCache();
   mockNavigate.mockReset();
+  useOnMapTrailStore.setState({ trackId: null });
   useSettingsStore.setState({ hydrated: true, units: 'metric', trailViewTab: 'overview' });
 });
 
@@ -301,12 +303,26 @@ it('opens a note from the photo strip in the waypoint card', async () => {
   expect(screen.getByTestId('waypoint-note').props.children).toBe('Spring');
 });
 
-it('shows the trail on the main map from the bar', async () => {
+it('shows the trail on the main map from the bar, as a look with a chip (#710)', async () => {
   seed(true);
+  useLibraryStore.setState({ activeTrackIds: ['other'] });
   await mount();
   await act(async () => fireEvent.press(screen.getByText('On map')));
-  expect(useLibraryStore.getState().activeTrackIds).toEqual(['t1']);
+  expect(useOnMapTrailStore.getState().trackId).toBe('t1');
+  // The Library's shown set is kept, so the chip's ✕ can give it back.
+  expect(useLibraryStore.getState().activeTrackIds).toEqual(['other']);
   expect(mockNavigate).toHaveBeenCalledWith('/');
+});
+
+it('following the trail shown "On map" keeps it a look, not a Library change (#710)', async () => {
+  seed(true);
+  useLibraryStore.setState({ activeTrackIds: ['other'] });
+  useOnMapTrailStore.setState({ trackId: 't1' });
+  await mount();
+  await act(async () => fireEvent.press(screen.getByText('Follow')));
+  expect(useLibraryStore.getState().activeTrackIds).toEqual(['other']);
+  expect(useOnMapTrailStore.getState().trackId).toBe('t1');
+  expect(useNavigationStore.getState().following?.trackId).toBe('t1');
 });
 
 it('follows the trail from the bar (#678): drawn on the map, compass guiding', async () => {
