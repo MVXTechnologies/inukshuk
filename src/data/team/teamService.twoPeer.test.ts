@@ -261,6 +261,34 @@ describe('team mode over the loopback mesh', () => {
     await active(a).stopMesh();
   });
 
+  it('an SOS and a rally point get one receipt each, and the raiser counts them (#708)', async () => {
+    const hub = new LoopbackMeshHub();
+    const a = await founded(hub);
+    const { b } = await joined(hub, a, 'Julie');
+    await until(() => names(active(a)).includes('Julie:member'), 'A sees Julie');
+    // Both phones advertise receipts once they hold a key (the profile check).
+    await until(
+      () => active(a).receipts({ kind: 'sos', owner: active(b).me, id: 'x' }).capable === 1,
+      'A sees Julie’s rc',
+    );
+    expect(active(b).raiseSos(-71.2, 46.8)).toBeNull();
+    const sos = active(b).soses()[0]!;
+    const ref = { kind: 'sos' as const, owner: sos.owner, id: sos.id };
+    expect(active(b).receipts(ref)).toEqual({ received: 0, capable: 1, others: 1 });
+    await until(() => active(b).receipts(ref).received === 1, 'Julie sees A’s receipt');
+    expect(a.alerts.filter((x) => x.kind === 'sos')).toHaveLength(1);
+    // Nothing more is owed: another sync writes nothing.
+    expect(active(a).sendOwedReceipts()).toBe(0);
+    expect(active(a).setRally(-71.21, 46.81)).toBeNull();
+    const rly = active(a).rally()!;
+    const rref = { kind: 'rly' as const, owner: rly.owner, id: rly.id };
+    await until(() => active(a).receipts(rref).received === 1, 'A sees Julie’s rally receipt');
+    expect(b.alerts.filter((x) => x.kind === 'rally')).toMatchObject([
+      { level: 'alert', entity: `rly:${rly.owner}:${rly.id}` },
+    ]);
+    for (const p of [a, b]) await active(p).stopMesh();
+  }, 20_000);
+
   it('runs the whole join on the real noble crypto', async () => {
     const hub = new LoopbackMeshHub();
     const a = await founded(hub, nobleCrypto);

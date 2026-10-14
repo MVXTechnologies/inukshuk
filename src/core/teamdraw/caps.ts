@@ -23,6 +23,18 @@ import { CAP_EXPIRES, CAP_VERSION, PEN_CAP, PEN_PROTOCOL } from './record';
  */
 export { PEN_CAP };
 
+/**
+ * The receipts capability (#708, 2.6.1): this phone writes a receipt (`rcp`)
+ * for every teammate's SOS and rally point it syncs. Its value is the receipt
+ * protocol version. The raiser counts "N of M received" over the members that
+ * advertise it, so 2.6.0 and older phones (which never send one) are not
+ * counted as missing. Rides the same record as `pen` (older folds accept any
+ * extra non-negative integer field, `validCapFields`).
+ */
+export const RECEIPT_CAP = 'rc';
+/** The receipt protocol this version speaks (the value of `rc`). */
+export const RECEIPT_PROTOCOL = 1;
+
 /** How long a capability claim holds without being renewed. */
 export const CAP_TTL_MS = 7 * 24 * 3600_000;
 /** A claim older than this is renewed on the next team open. */
@@ -55,12 +67,21 @@ export function capExpiry(
   const rec = data.entities.get(capKey(member));
   if (rec === undefined || !isLive(rec.state)) return undefined;
   const flag = visible(rec.state, cap);
-  const v = visible(rec.state, CAP_VERSION);
   const x = visible(rec.state, CAP_EXPIRES);
-  if (flag?.value !== 1 || v?.value !== PEN_PROTOCOL) return undefined;
   // Only a number gets past the fold's `validCapFields`; anything else is no claim.
   if (x === undefined || typeof x.value !== 'number') return undefined;
-  return Math.min(x.value, x.wall + CAP_TTL_MS);
+  if (cap === PEN_CAP) {
+    const v = visible(rec.state, CAP_VERSION);
+    if (flag?.value !== 1 || v?.value !== PEN_PROTOCOL) return undefined;
+    return Math.min(x.value, x.wall + CAP_TTL_MS);
+  }
+  if (cap === RECEIPT_CAP) {
+    if (flag?.value !== RECEIPT_PROTOCOL) return undefined;
+    // Also bounded by the flag's own stamp: a phone rolled back to 2.6.0 keeps
+    // renewing `pen`, `v` and `x`, never `rc`, so its old `rc` lapses in a week.
+    return Math.min(x.value, x.wall + CAP_TTL_MS, flag.wall + CAP_TTL_MS);
+  }
+  return undefined;
 }
 
 /** Whether `member` advertises `cap` at `now` (a live, current, unexpired claim). */
@@ -107,15 +128,23 @@ export function capBody(
   return {
     k: 'cap',
     id: me,
-    f: { [PEN_CAP]: 1, [CAP_VERSION]: PEN_PROTOCOL, [CAP_EXPIRES]: now + CAP_TTL_MS },
+    f: {
+      [PEN_CAP]: 1,
+      [CAP_VERSION]: PEN_PROTOCOL,
+      [RECEIPT_CAP]: RECEIPT_PROTOCOL,
+      [CAP_EXPIRES]: now + CAP_TTL_MS,
+    },
   };
 }
 
 /**
- * Whether this device has to (re-)advertise: no current claim, or one older
- * than {@link CAP_RENEW_MS} (renewing on every open would grow the log for nothing).
+ * Whether this device has to (re-)advertise: no current claim of either
+ * capability (a 2.6.0 claim has no `rc`: renewed at once on the first 2.6.1
+ * open), or one older than {@link CAP_RENEW_MS} (renewing on every open would
+ * grow the log for nothing).
  */
 export function needsCap(data: TeamData, me: string, now: number): boolean {
-  const until = capExpiry(data, me);
-  return until === undefined || until - now < CAP_TTL_MS - CAP_RENEW_MS;
+  const stale = (until: number | undefined) =>
+    until === undefined || until - now < CAP_TTL_MS - CAP_RENEW_MS;
+  return stale(capExpiry(data, me)) || stale(capExpiry(data, me, RECEIPT_CAP));
 }

@@ -37,11 +37,17 @@ export interface TeamAlert {
   key: string;
   author: string;
   level: 'badge' | 'alert';
-  kind: 'message' | 'comment' | 'task' | 'sos';
+  kind: 'message' | 'comment' | 'task' | 'sos' | 'rally';
   text: string;
   priority: 0 | 1 | 2;
   /** The route tapping it opens. */
   url: string;
+  /**
+   * The SOS or rally point it is about (`sos:<owner>:<id>`, `rly:<owner>:<id>`,
+   * #708): one phone alarm per entity, whatever resyncs bring, cleared when
+   * the entity is resolved or ended (`@core/teamui/alertLedger`).
+   */
+  entity?: string;
 }
 
 /** What alert routing needs to know about shared trails and photos (from the data view). */
@@ -63,6 +69,8 @@ export interface AlertContext {
   ):
     | { text: string; resolved: boolean; created: Stamp | undefined; reopened: Stamp | undefined }
     | undefined;
+  /** A rally point as merged by the fold (live only). */
+  rally?(owner: string, id: string): { text: string; created: Stamp | undefined } | undefined;
   task(
     owner: string,
     id: string,
@@ -94,6 +102,12 @@ export function alertContext(state: TeamState, data: TeamData): AlertContext {
         // The stamp of the newest `res: false` (a reopen), if that is the current value.
         reopened: f['res'] === false ? rec.state.fields['res']?.stamp : undefined,
       };
+    },
+    rally: (owner, id) => {
+      const rec = data.entities.get(`rly:${owner}:${id}`);
+      if (rec === undefined || !isLive(rec.state)) return undefined;
+      const tx = visibleFields(rec.state)['tx'];
+      return { text: typeof tx === 'string' ? tx : '', created: rec.state.created };
     },
   };
 }
@@ -132,6 +146,7 @@ export function alertFor(
     return commentAlert(state, op, body, me, ctx);
   if (op.env.t === 'e.set' && body['k'] === 'task') return taskAlert(state, op, body, me, ctx);
   if (op.env.t === 'e.set' && body['k'] === 'sos') return sosAlert(state, op, body, me, ctx);
+  if (op.env.t === 'e.set' && body['k'] === 'rly') return rallyAlert(state, op, body, me, ctx);
   return null;
 }
 
@@ -310,7 +325,8 @@ function sosAlert(
       kind: 'sos',
       text: 'Your SOS was resolved',
       priority: 0,
-      url: SOS_URL(owner, id),
+      url: sosUrl(owner, id),
+      entity: `sos:${owner}:${id}`,
     };
   }
   const sos = ctx.sos?.(owner, id);
@@ -328,8 +344,44 @@ function sosAlert(
     kind: 'sos',
     text: raise ? `SOS${sos.text ? ` · ${cap(sos.text)}` : ' · needs help'}` : 'SOS resolved',
     priority: raise ? 2 : 0,
-    url: SOS_URL(owner, id),
+    url: sosUrl(owner, id),
+    entity: `sos:${owner}:${id}`,
   };
 }
 
-const SOS_URL = (owner: string, id: string) => `/team/sos/${owner}/${id}`;
+/**
+ * A teammate's new rally point ("Rally here", #708) alerts every other active
+ * member: its creating write only (moving or re-texting it is silent), never
+ * my own. Its own channel on the phone ("Team rally").
+ */
+function rallyAlert(
+  state: TeamState,
+  op: SignedOp,
+  body: Record<string, Json>,
+  me: string,
+  ctx: AlertContext,
+): TeamAlert | null {
+  const id = body['id'];
+  if (typeof id !== 'string' || body['o'] !== undefined) return null;
+  const self = state.members.get(me);
+  const owner = op.env.au;
+  if (owner === me || self?.status !== 'active') return null;
+  const rly = ctx.rally?.(owner, id);
+  if (rly === undefined || rly.created === undefined) return null;
+  if (compareStamp(rly.created, op.stamp) !== 0) return null;
+  return {
+    key: `rly:${op.id}`,
+    author: owner,
+    level: 'alert',
+    kind: 'rally',
+    text: rly.text ? `Gather · ${cap(rly.text)}` : 'Gather at their position',
+    priority: 1,
+    url: rallyUrl(owner, id),
+    entity: `rly:${owner}:${id}`,
+  };
+}
+
+/** Where an SOS notification opens: the map, centred on it. */
+export const sosUrl = (owner: string, id: string) => `/team/sos/${owner}/${id}`;
+/** Where a rally notification opens: the map, centred on it, Navigate ready. */
+export const rallyUrl = (owner: string, id: string) => `/team/rally/${owner}/${id}`;
