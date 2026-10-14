@@ -92,6 +92,9 @@ function stopWatching(): void {
 /**
  * Subscribe to the shared filtered heading stream. The listener fires at sensor
  * rate (already filtered); apply your own emit-gating if you feed React state.
+ * Anything that MOVES with the heading (a rotation, a beam, a scrolling scale)
+ * should use `subscribeHeadingMotion` (./headingMotion) instead: drawn per
+ * sensor sample, a turn is a staircase of 6–25° steps.
  * Returns an unsubscribe function; the OS watch stops when the last subscriber
  * leaves.
  */

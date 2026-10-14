@@ -11,20 +11,20 @@ import {
   type PointingLineSettings,
 } from '@core/map/pointingLineSettings';
 import type { LatLng } from '@core/models';
-import {
-  choosePointingBearing,
-  createCourseTracker,
-  createHeadingGate,
-  POINTING_LINE_HEADING_DEADBAND_DEG,
-  POINTING_LINE_HEADING_INTERVAL_MS,
-  type CourseSample,
-} from '@core/nav';
+import { choosePointingBearing, createCourseTracker, type CourseSample } from '@core/nav';
 import { teamLabelFont } from '@features/team/map/TeamMapLayers';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { subscribeHeading } from '../useCompass';
+import { subscribeHeadingMotion } from '../headingMotion';
+
+/**
+ * A heading frame that moves the line less than this is skipped, °: at 500 m
+ * that is under a metre at the far end, while a frame of a slow 3°/s turn
+ * moves it 0.05° — so it only drops the follower's last creep onto its target.
+ */
+const POINTING_LINE_MIN_DELTA_DEG = 0.1;
 
 /** With no magnetometer, re-read the course this often so a stop hides the line, ms. */
 const COG_REFRESH_MS = 3000;
@@ -59,12 +59,12 @@ export interface PointingLineProps {
  * `@core/geo/pointingLine`; direction rules: `@core/nav/pointingSource`.
  *
  * Cost: off (the default) it renders nothing and subscribes to nothing. On,
- * it owns the heading subscription, so a heading tick re-renders this leaf
- * only, never MapScreen — gated to 10 Hz with a 0.75° dead-band (a held turn is
- * flushed on a timer, so the last position of a turn is never lost). Each
- * accepted tick rebuilds the feature collection: O(ticks) trig, one end
- * point plus one destination per tick (capped), then one native source
- * update. The edge clip and the tick sizes use the bounds and zoom of the
+ * it owns the heading subscription, so a heading frame re-renders this leaf
+ * only, never MapScreen. It turns at display rate while you turn (the
+ * shared follower, `subscribeHeadingMotion`; 2.6.0 stepped it at ≤ 10 Hz,
+ * its far end jumping tens of metres) and costs nothing at rest. Each frame
+ * rebuilds the feature collection: O(ticks) trig, one end point plus one
+ * destination per tick (capped), then one native source update. The edge clip and the tick sizes use the bounds and zoom of the
  * idle camera — never per frame.
  */
 export const PointingLine = memo(function PointingLine({
@@ -92,31 +92,15 @@ function LivePointingLine({
   const { mapInk, mapHalo } = tokens.team;
   const font = teamLabelFont(glyphs);
 
-  // The compass, only while the line follows it: 10 Hz, ≥ 0.75° turns.
+  // The compass, only while the line follows it: at display rate while you
+  // turn (the shared follower, see ../headingMotion), nothing at rest.
   const wantsCompass = cfg.direction === 'heading';
   const [compassDeg, setCompassDeg] = useState<number | null>(null);
   useEffect(() => {
     if (!wantsCompass) return;
-    const gate = createHeadingGate(
-      POINTING_LINE_HEADING_INTERVAL_MS,
-      POINTING_LINE_HEADING_DEADBAND_DEG,
-    );
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const unsubscribe = subscribeHeading(({ headingDeg }) => {
-      const r = gate.push(headingDeg, Date.now());
-      if (r.kind === 'emit') setCompassDeg(r.headingDeg);
-      else if (r.kind === 'wait' && timer === null) {
-        timer = setTimeout(() => {
-          timer = null;
-          const held = gate.flush(Date.now());
-          if (held !== null) setCompassDeg(held);
-        }, r.inMs);
-      }
+    return subscribeHeadingMotion(({ headingDeg }) => setCompassDeg(headingDeg), {
+      minDeltaDeg: POINTING_LINE_MIN_DELTA_DEG,
     });
-    return () => {
-      unsubscribe();
-      if (timer !== null) clearTimeout(timer);
-    };
   }, [wantsCompass]);
 
   // Course over ground: for Course, and for Heading with no magnetometer.

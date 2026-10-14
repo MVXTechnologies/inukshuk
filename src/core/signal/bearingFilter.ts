@@ -32,7 +32,8 @@
  *    (lightly smoothed) turn rate plus `catchUpDegPerSec`. A gap that built
  *    up while the gate was shut (a very slow turn) is closed as a glide at
  *    ~20°/s, never as one snap; a real fast turn is not slowed (its rate is
- *    the allowance).
+ *    the allowance). It only caps a step, never forces one, so the output
+ *    stops where the turn stops.
  * 5. **Settling**: for the first `settleMs` after (re)start the gate is open,
  *    so the output glides from the first noisy sample to the estimate instead
  *    of resting on it.
@@ -191,10 +192,12 @@ export function createBearingFilter(options: BearingFilterOptions = {}): Bearing
             );
       // Never further than the estimate itself moved, plus a gentle catch-up:
       // a gap that built up behind the shut gate closes as a glide, not a snap.
+      // The limit only caps a step, never forces one: a floor of
+      // (rate − catchUp)·dt would carry the output past a turn that stopped.
       const dt = Math.min(MAX_DT_S, Math.max(MIN_DT_S, (timestampMs - lastAt) / 1000));
       rate += alphaForCutoff(o.rateCutoffHz, dt) * ((estimate - lastEstimate) / dt - rate);
-      const lo = (rate - o.catchUpDegPerSec) * dt;
-      const hi = (rate + o.catchUpDegPerSec) * dt;
+      const lo = Math.min(0, (rate - o.catchUpDegPerSec) * dt);
+      const hi = Math.max(0, (rate + o.catchUpDegPerSec) * dt);
       lastAt = timestampMs;
       lastEstimate = estimate;
       out += Math.max(lo, Math.min(hi, w * gap));

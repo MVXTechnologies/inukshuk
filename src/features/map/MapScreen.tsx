@@ -47,7 +47,6 @@ import { GESTURE_SETTLE_MS } from '@core/weather/windPerf';
 import type { WindBbox } from '@core/weather/windCoverage';
 import type { WindViewState } from '@core/weather/windProjection';
 import {
-  Camera,
   type CameraRef,
   GeoJSONSource,
   ImageSource,
@@ -106,6 +105,7 @@ import { mapCredits } from '@core/map/mapCredits';
 import { bareTapAfterFocus } from '@core/map/mapTap';
 import { centreCursorPoint } from '@core/map/centreCursor';
 import { topChipLayout } from '@core/map/topChips';
+import { HeadingCamera } from './components/HeadingCamera';
 import { HeadingCone } from './components/HeadingCone';
 import { PointingLine } from './components/PointingLine';
 import { MapSearchPill } from './components/MapSearchPill';
@@ -224,12 +224,12 @@ import { toLineFeature, toLngLatBounds, type TrailLineFeature } from './geojson'
 import { useAutoPauseOnLocationLoss } from './hooks/useAutoPauseOnLocationLoss';
 import { useCameraControls } from './hooks/useCameraControls';
 import { useContourRecovery } from './hooks/useContourRecovery';
-import { useHeadingCamera } from './hooks/useHeadingCamera';
 import { useMapBearing } from './hooks/useMapBearing';
 import { useOfflineDownload } from './hooks/useOfflineDownload';
 import { useRecordingSession } from './hooks/useRecordingSession';
 import { useTrailInspection } from './hooks/useTrailInspection';
 import { useSelectionCamera } from './hooks/useSelectionCamera';
+import { useSettleThrottle } from './hooks/useSettleThrottle';
 import {
   CONTOUR_LAYERS,
   FOCUSED_TRAIL_LAYERS,
@@ -439,7 +439,7 @@ export function MapScreen() {
 
   const { permission, location, lastFix, unavailableKind, unavailableReason } =
     useLocationTracking();
-  const headingForCamera = useHeadingCamera();
+  const rotateMapWithHeading = useSettingsStore((s) => s.rotateMapWithHeading);
 
   const maps = useLibraryStore((s) => s.maps);
   const tracks = useLibraryStore((s) => s.tracks);
@@ -2808,6 +2808,45 @@ export function MapScreen() {
     onMapChip: onMapChip !== null,
   });
   const topChipOffset = topChips.lane;
+  // The settled camera (see the notes inline). Programmatic settles that
+  // the compass streams in heading-up are thinned (useSettleThrottle); the
+  // gesture-pause controller still sees every one (see onRegionDidChange).
+  const onRegionSettled = (e: { nativeEvent: ViewStateChangeEvent }) => {
+    // A settled camera is proof the native map is up: in some sessions
+    // (seen on iOS in the mountains, 2026-09-28) onDidFinishLoadingMap
+    // never fires, which left every mapLoaded-gated feature dead — the
+    // offline/map-maker selectors stuck on "Calculating…", no slope or
+    // contour overlays. React bails out when it is already true.
+    setMapLoaded(true);
+    setRegionVersion((v) => v + 1);
+    // The selected drawing point's grip follows the camera (#502/#503).
+    drawingRef.current.onCameraSettled();
+    // The map-maker frame's scale and bbox come straight off the
+    // settled camera (#349) — it is the only source of truth for both.
+    if (makeMapOpen) readEditorCamera();
+    // Settled bounds for the marine chart's re-anchor check (the
+    // wind layer keeps its own copy behind the windEnabled gate).
+    setSettledBounds(windBoundsOf(e.nativeEvent));
+    updateScaleAt(e.nativeEvent.zoom, e.nativeEvent.center[1]);
+    // Settled bearing → the badge's red north needle, and the
+    // snap-back detent for a rotation too small to have been meant.
+    onSettleBearing(e.nativeEvent.bearing);
+    // Settled pitch → the tilted-map relief pass (#480), and the 3D/2D button.
+    tilt.onSettledPitch(e.nativeEvent.pitch);
+    setViewPitch(Math.round(e.nativeEvent.pitch));
+    // Settled view → look for contour tiles that failed to load.
+    onContourSettled(e.nativeEvent);
+    // Settled centre → mapStore (wave B): resolves the effective
+    // forecast model and the radar rows' "Canada only" hint. Same
+    // render batch as the version bump above — no extra re-render.
+    setMapCenter({
+      latitude: e.nativeEvent.center[1],
+      longitude: e.nativeEvent.center[0],
+    });
+    void refreshBounds();
+    if (windEnabled) onWindRegionDidChange(e);
+  };
+  const onRegionSettledThrottled = useSettleThrottle(onRegionSettled);
   return (
     <MapAreaBottomContext.Provider value={mapAreaBottom}>
       <View
@@ -2988,39 +3027,7 @@ export function MapScreen() {
             onRegionIsChanging={windEnabled ? onWindRegionIsChanging : undefined}
             onRegionDidChange={(e) => {
               gesturePause.didChange();
-              // A settled camera is proof the native map is up: in some sessions
-              // (seen on iOS in the mountains, 2026-09-28) onDidFinishLoadingMap
-              // never fires, which left every mapLoaded-gated feature dead — the
-              // offline/map-maker selectors stuck on "Calculating…", no slope or
-              // contour overlays. React bails out when it is already true.
-              setMapLoaded(true);
-              setRegionVersion((v) => v + 1);
-              // The selected drawing point's grip follows the camera (#502/#503).
-              drawingRef.current.onCameraSettled();
-              // The map-maker frame's scale and bbox come straight off the
-              // settled camera (#349) — it is the only source of truth for both.
-              if (makeMapOpen) readEditorCamera();
-              // Settled bounds for the marine chart's re-anchor check (the
-              // wind layer keeps its own copy behind the windEnabled gate).
-              setSettledBounds(windBoundsOf(e.nativeEvent));
-              updateScaleAt(e.nativeEvent.zoom, e.nativeEvent.center[1]);
-              // Settled bearing → the badge's red north needle, and the
-              // snap-back detent for a rotation too small to have been meant.
-              onSettleBearing(e.nativeEvent.bearing);
-              // Settled pitch → the tilted-map relief pass (#480), and the 3D/2D button.
-              tilt.onSettledPitch(e.nativeEvent.pitch);
-              setViewPitch(Math.round(e.nativeEvent.pitch));
-              // Settled view → look for contour tiles that failed to load.
-              onContourSettled(e.nativeEvent);
-              // Settled centre → mapStore (wave B): resolves the effective
-              // forecast model and the radar rows' "Canada only" hint. Same
-              // render batch as the version bump above — no extra re-render.
-              setMapCenter({
-                latitude: e.nativeEvent.center[1],
-                longitude: e.nativeEvent.center[0],
-              });
-              void refreshBounds();
-              if (windEnabled) onWindRegionDidChange(e);
+              onRegionSettledThrottled(e);
             }}
             onLayout={(e) => {
               const { width, height } = e.nativeEvent.layout;
@@ -3040,7 +3047,7 @@ export function MapScreen() {
             {/* The shared sprites, registered once and first: never moved or
               unmounted while the map lives (2.5.2 QA, see MapImages). */}
             <MapImages />
-            <Camera
+            <HeadingCamera
               ref={cameraRef}
               // A cold launch mounts <Map>/<Camera> fresh;
               // without a centre here MapLibre defaults to [0,0] (null island,
@@ -3053,24 +3060,12 @@ export function MapScreen() {
                 zoom: 14,
                 ...(initialCenter ? { center: initialCenter } : {}),
               }}
-              // "Rotate map with heading" setting: the map bearing always comes
-              // from OUR filtered heading (see useHeadingCamera → useCompass),
-              // whether or not we are following the user, eased over a short
-              // linear transition so successive updates glide instead of ticking.
-              // MapLibre normalizes bearing transitions to the shortest arc, so
-              // 359°→1° turns 2°, not 358°. undefined when the setting is off.
-              //
-              // We deliberately do NOT use trackUserLocation="heading": that maps
-              // to MapLibre's native CameraMode.TRACKING_COMPASS, which drives the
-              // bearing from the platform's *raw* compass — the unfiltered signal
-              // this whole module exists to tame, so the map would shake even
-              // while the needle sat still. "default" (CameraMode.TRACKING) keeps
-              // the centre-on-user behaviour and leaves the bearing to us.
+              // "Rotate map with heading" setting: the bearing follows OUR
+              // filtered heading at display rate, owned by HeadingCamera so a
+              // heading frame never re-renders this screen (see
+              // useHeadingCamera for why every frame and no native ease).
               // Drawing mode (#683) turns the map with two fingers: no heading.
-              bearing={teamDrawing ? undefined : headingForCamera}
-              {...(headingForCamera !== undefined
-                ? { duration: 150, easing: 'linear' as const }
-                : {})}
+              followHeading={rotateMapWithHeading && !teamDrawing}
               trackUserLocation={followUser && !externalActive ? 'default' : undefined}
               onTrackUserLocationChange={(e) => {
                 // Handing follow to the receiver turns native tracking off: not a user pan.
@@ -3514,7 +3509,11 @@ export function MapScreen() {
 
         {/* Top-left compass (decision 1): snug to the safe area. */}
         <View style={[styles.topLeft, { top: insets.top + 8 }]} pointerEvents="box-none">
-          <CompassBadge onPress={resetNorth} mapBearing={mapBearing} />
+          <CompassBadge
+            onPress={resetNorth}
+            mapBearing={mapBearing}
+            followHeading={rotateMapWithHeading && !teamDrawing}
+          />
         </View>
         {/* Screen readers only: the pins (GL symbols, no a11y nodes) as a list,
           nearest first; a row opens the pin's card as a tap on it does. */}

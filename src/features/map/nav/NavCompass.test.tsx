@@ -2,28 +2,38 @@
  * The linear navigation compass (#672/#678): the heading tape, the flag and
  * its edge arrow, the turn hint with its on-course hysteresis, the trail bar
  * and status while following, the no-magnetometer fallback, both themes, and
- * — measured — that heading ticks re-render the tape only.
+ * — measured — that heading frames move the scale every frame while
+ * rendering the tape only, and rarely.
  */
 import { darkTheme, lightTheme } from '@ui/theme';
 import { darkScheme, lightScheme } from '@ui/tokens';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { Profiler, useState, type ReactNode } from 'react';
-import { StyleSheet } from 'react-native';
+import { Profiler, useState } from 'react';
+import { Animated, StyleSheet } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { NavCompass, type NavCompassProps } from './NavCompass';
 
-type Listener = (s: { headingDeg: number; accuracy: number | null }) => void;
+type Frame = {
+  headingDeg: number;
+  continuousDeg: number;
+  accuracy: number | null;
+  moving: boolean;
+};
+type Listener = (f: Frame) => void;
 const mockListeners = new Set<Listener>();
-jest.mock('../useCompass', () => ({
-  subscribeHeading: (l: Listener) => {
+jest.mock('../headingMotion', () => ({
+  subscribeHeadingMotion: (l: Listener) => {
     mockListeners.add(l);
     return () => mockListeners.delete(l);
   },
 }));
 
-async function heading(deg: number) {
+/** One display frame of the heading; a resting one unless `moving`. */
+async function heading(deg: number, moving = false) {
   await act(async () => {
-    for (const l of mockListeners) l({ headingDeg: deg, accuracy: 3 });
+    for (const l of mockListeners) {
+      l({ headingDeg: ((deg % 360) + 360) % 360, continuousDeg: deg, accuracy: 3, moving });
+    }
   });
 }
 
@@ -232,34 +242,77 @@ describe('NavCompass without a magnetometer', () => {
 });
 
 describe('NavCompass render cost (measured)', () => {
-  it('re-renders only itself on a heading tick, and not at all for sub-degree steps', async () => {
+  function Parent({ onCommit }: { onCommit: () => void }) {
+    const [props] = useState(POINT);
+    return (
+      <Profiler id="tape" onRender={onCommit}>
+        <NavCompass {...props} />
+      </Profiler>
+    );
+  }
+
+  it('re-renders only itself, and not at all for sub-degree steps', async () => {
     let parentRenders = 0;
     let tapeCommits = 0;
-    function Parent({ children }: { children: ReactNode }) {
+    function Counted() {
       parentRenders++;
-      const [props] = useState(POINT);
-      return (
-        <Profiler id="tape" onRender={() => tapeCommits++}>
-          <NavCompass {...props} />
-          {children}
-        </Profiler>
-      );
+      return <Parent onCommit={() => tapeCommits++} />;
     }
     await render(
       <PaperProvider theme={lightTheme}>
-        <Parent>{null}</Parent>
+        <Counted />
       </PaperProvider>,
     );
     await heading(100);
     await layout();
     const parentBefore = parentRenders;
     const commitsBefore = tapeCommits;
-    // Ten ticks of 0.3°: below the 1° step, no work at all.
-    for (let i = 1; i <= 10; i++) await heading(100 + i * 0.09);
+    // Ten frames of 0.09°: below the 1° step, no render at all.
+    for (let i = 1; i <= 10; i++) await heading(100 + i * 0.09, true);
     expect(tapeCommits).toBe(commitsBefore);
-    // Ten real 2° steps: ten tape commits, zero parent renders.
+    // Ten resting 2° steps: ten tape commits, zero parent renders.
     for (let i = 1; i <= 10; i++) await heading(100 + i * 2);
     expect(tapeCommits - commitsBefore).toBe(10);
     expect(parentRenders).toBe(parentBefore);
+  });
+
+  it('scrolls the scale every frame of a turn, but renders the text at most every 100 ms', async () => {
+    let tapeCommits = 0;
+    await render(
+      <PaperProvider theme={lightTheme}>
+        <Parent onCommit={() => tapeCommits++} />
+      </PaperProvider>,
+    );
+    await heading(100);
+    await layout();
+    // The strip's offset is a native animated value: watch what is written to it.
+    const offsets: number[] = [];
+    const setValue = jest.spyOn(Animated.Value.prototype, 'setValue').mockImplementation(function (
+      this: Animated.Value,
+      v: number,
+    ) {
+      offsets.push(v);
+    });
+    const commitsBefore = tapeCommits;
+    // A brisk 90°/s turn for 1 s at 60 Hz: 1.5° a frame.
+    for (let i = 1; i <= 60; i++) {
+      await act(async () => {
+        jest.advanceTimersByTime(1000 / 60);
+      });
+      await heading(100 + i * 1.5, true);
+    }
+    setValue.mockRestore();
+    expect(offsets).toHaveLength(60);
+    // Every frame moved the strip, by the same amount (1.5° in px), to the left.
+    const steps = offsets.slice(1).map((x, i) => x - (offsets[i] ?? NaN));
+    const pxPerDeg = (358 - 92 - 96) / 2 / 60;
+    for (const step of steps) expect(step).toBeCloseTo(-1.5 * pxPerDeg, 6);
+    // …while the readable parts rendered ≤ 10 times in that second (plus one).
+    const commits = tapeCommits - commitsBefore;
+    expect(commits).toBeGreaterThanOrEqual(9);
+    expect(commits).toBeLessThanOrEqual(11);
+    // The resting frame always renders the final heading.
+    await heading(190.2);
+    expect(screen.getByText('Left 148°')).toBeTruthy();
   });
 });

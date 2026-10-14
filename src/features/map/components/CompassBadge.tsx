@@ -6,6 +6,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, useAnimatedValue } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { subscribeHeadingMotion } from '../headingMotion';
 
 interface CompassBadgeProps {
   /** Called when the badge is tapped (used to reset the map to north). */
@@ -15,6 +16,13 @@ interface CompassBadgeProps {
    * camera settle path. `null`/omitted means north-up.
    */
   mapBearing?: number | null;
+  /**
+   * The map turns with the compass ("Rotate map with compass"): the needle
+   * then follows the display-rate heading frame by frame — the same frames
+   * the camera turns on — instead of easing to each settled bearing, which
+   * arrive only a few times a second while the map turns.
+   */
+  followHeading?: boolean;
 }
 
 /**
@@ -42,7 +50,7 @@ const NEEDLE_BOX = 26;
  * north counter-clockwise of the screen's up), eased toward an **unwrapped**
  * continuous angle so a bearing crossing 0° never spins the long way round.
  */
-export function CompassBadge({ onPress, mapBearing }: CompassBadgeProps) {
+export function CompassBadge({ onPress, mapBearing, followHeading = false }: CompassBadgeProps) {
   const tokens = useSchemeTokens();
   const outline = useChromeOutline();
 
@@ -52,6 +60,19 @@ export function CompassBadge({ onPress, mapBearing }: CompassBadgeProps) {
   const northAnim = useAnimatedValue(0);
 
   useEffect(() => {
+    if (!followHeading) return;
+    return subscribeHeadingMotion(({ headingDeg }) => {
+      // The camera's bearing IS the heading: keep the needle on the same
+      // continuous scale the settle path eases on, so handing back is seamless.
+      const prev = northContinuousRef.current;
+      const next = prev === null ? headingDeg : unwrapDeg(prev, headingDeg);
+      northContinuousRef.current = next;
+      northAnim.setValue(next);
+    });
+  }, [followHeading, northAnim]);
+
+  useEffect(() => {
+    if (followHeading) return;
     const prev = northContinuousRef.current;
     if (prev === null) {
       northContinuousRef.current = bearing;
@@ -66,7 +87,7 @@ export function CompassBadge({ onPress, mapBearing }: CompassBadgeProps) {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [bearing, northAnim]);
+  }, [bearing, followHeading, northAnim]);
 
   const northRotate = northAnim.interpolate({
     inputRange: [0, 360],

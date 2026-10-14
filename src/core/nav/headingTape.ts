@@ -13,42 +13,92 @@ import { normalizeDeg, signedDeltaDeg } from '@core/signal/heading';
 /** Degrees visible either side of the centre index. */
 export const TAPE_HALF_SPAN_DEG = 60;
 
-export interface TapeTick {
-  /** The tick's bearing, [0, 360). */
+const CARDINALS: Record<number, string> = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' };
+
+// ---------------------------------------------------------------------------
+// The scrolling strip (display-rate tape, features/map/nav/NavCompass).
+//
+// The tape scrolls under its centre index at display rate without a React
+// render per frame: the scale is drawn ONCE as a strip in absolute degrees,
+// from −margin to 360 + margin, and only the strip's x offset changes per
+// frame. The margins repeat the scale either side of north, so wrapping the
+// offset at 0/360 is invisible: at 359.9° and at 0.1° the strip shows the
+// same picture, shifted by exactly one turn.
+// ---------------------------------------------------------------------------
+
+/**
+ * Degrees of scale drawn beyond 0 and 360: the visible half span plus room
+ * for the heading to move between two React renders of what rides on the
+ * strip (labels, flag) — 15° covers 150°/s at 10 Hz.
+ */
+export const TAPE_STRIP_MARGIN_DEG = TAPE_HALF_SPAN_DEG + 15;
+
+/** One tick of the strip, at an absolute strip position. */
+export interface StripTick {
+  /** Position on the strip, degrees in [−margin, 360 + margin]. */
+  at: number;
+  /** Its bearing, [0, 360). */
   deg: number;
-  /** Offset from the centre index as a fraction of the half span, [-1, 1]. */
-  offset: number;
-  /** Every 30°: a long tick with a label. */
   major: boolean;
-  /** Every 10° that isn't major: a medium tick. */
   medium: boolean;
-  /** "N" / "E" / "S" / "W" on the cardinals, the degrees on the other majors. */
   label: string | null;
 }
 
-const CARDINALS: Record<number, string> = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' };
-
-/** The ticks visible for `headingDeg`, every `stepDeg`, left to right. */
-export function tapeTicks(
-  headingDeg: number,
-  halfSpanDeg = TAPE_HALF_SPAN_DEG,
-  stepDeg = 5,
-): TapeTick[] {
-  const h = normalizeDeg(headingDeg);
-  const ticks: TapeTick[] = [];
-  const start = Math.ceil((h - halfSpanDeg) / stepDeg) * stepDeg;
-  for (let a = start; a <= h + halfSpanDeg + 1e-9; a += stepDeg) {
-    const deg = normalizeDeg(Math.round(a));
+/** Every tick of the strip, left to right. */
+export function tapeStripTicks(marginDeg = TAPE_STRIP_MARGIN_DEG, stepDeg = 5): StripTick[] {
+  const ticks: StripTick[] = [];
+  const start = Math.ceil(-marginDeg / stepDeg) * stepDeg;
+  for (let at = start; at <= 360 + marginDeg + 1e-9; at += stepDeg) {
+    const deg = normalizeDeg(Math.round(at));
     const major = deg % 30 === 0;
     ticks.push({
+      at,
       deg,
-      offset: (a - h) / halfSpanDeg,
       major,
       medium: !major && deg % 10 === 0,
       label: major ? (CARDINALS[deg] ?? String(deg)) : null,
     });
   }
   return ticks;
+}
+
+/**
+ * Where a bearing is drawn on the strip: every copy within it (a bearing near
+ * north sits both near 0 and near 360), the copy nearest `headingDeg` first.
+ */
+export function tapeStripPositions(
+  headingDeg: number,
+  bearingDeg: number,
+  marginDeg = TAPE_STRIP_MARGIN_DEG,
+): number[] {
+  const nearest = normalizeDeg(headingDeg) + signedDeltaDeg(headingDeg, bearingDeg);
+  const out = [nearest];
+  for (const other of [nearest - 360, nearest + 360]) {
+    if (other >= -marginDeg - 1e-9 && other <= 360 + marginDeg + 1e-9) out.push(other);
+  }
+  return out;
+}
+
+/** The strip's x (px) of strip position `at` (degrees). */
+export function tapeStripX(
+  at: number,
+  pxPerDeg: number,
+  marginDeg = TAPE_STRIP_MARGIN_DEG,
+): number {
+  return (at + marginDeg) * pxPerDeg;
+}
+
+/**
+ * The strip's translation (px) that puts `headingDeg` (any range: the
+ * display heading is continuous) under the centre index at `centerPx`.
+ */
+export function tapeStripTranslatePx(
+  headingDeg: number,
+  centerPx: number,
+  pxPerDeg: number,
+  marginDeg = TAPE_STRIP_MARGIN_DEG,
+): number {
+  return centerPx - tapeStripX(normalizeDeg(headingDeg), pxPerDeg, marginDeg);
 }
 
 /** Where a bearing sits on the tape. */

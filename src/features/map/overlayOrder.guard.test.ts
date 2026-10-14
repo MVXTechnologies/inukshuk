@@ -248,6 +248,8 @@ describe('2.5.2 MapImages: the strip registers no map sprites of its own', () =>
     expect(map.match(/<MapImages \/>/g)).toHaveLength(1);
     expect(map).not.toMatch(/<Images\b/);
     // First inside <Map>: only a comment before it, the camera right after.
-    expect(map).toMatch(/<Map\b[^]*?\n {10}>\s*(\{\/\*[^]*?\*\/\}\s*)?<MapImages \/>\s*<Camera\b/);
+    expect(map).toMatch(
+      /<Map\b[^]*?\n {10}>\s*(\{\/\*[^]*?\*\/\}\s*)?<MapImages \/>\s*<HeadingCamera\b/,
+    );
   });
 });

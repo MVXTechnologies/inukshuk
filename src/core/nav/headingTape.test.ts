@@ -6,33 +6,67 @@ import {
   tapeLabelClear,
   tapeLabelHalfWidth,
   tapeMarker,
-  tapeTicks,
+  tapeStripPositions,
+  tapeStripTicks,
+  tapeStripTranslatePx,
+  tapeStripX,
+  TAPE_HALF_SPAN_DEG,
+  TAPE_STRIP_MARGIN_DEG,
   turnHint,
 } from './headingTape';
 
-describe('tapeTicks', () => {
-  it('spans ±60° every 5° with labels on the 30° majors', () => {
-    const ticks = tapeTicks(0);
-    expect(ticks).toHaveLength(25);
-    expect(ticks[0]).toMatchObject({ deg: 300, offset: -1, major: true, label: '300' });
-    expect(ticks[12]).toMatchObject({ deg: 0, offset: 0, major: true, label: 'N' });
-    expect(ticks[24]).toMatchObject({ deg: 60, offset: 1, label: '60' });
-    expect(ticks.find((t) => t.deg === 10)).toMatchObject({ medium: true, label: null });
-    expect(ticks.find((t) => t.deg === 15)).toMatchObject({ medium: false, major: false });
+describe('the tape strip', () => {
+  const PX = 1.5; // px per degree
+
+  it('draws the whole scale once, every 5°, from −margin to 360 + margin, majors labelled', () => {
+    const ticks = tapeStripTicks();
+    expect(TAPE_STRIP_MARGIN_DEG).toBeGreaterThan(TAPE_HALF_SPAN_DEG);
+    expect(ticks[0]).toMatchObject({ at: -75, deg: 285, major: false, label: null });
+    expect(ticks.at(-1)).toMatchObject({ at: 435, deg: 75 });
+    expect(ticks).toHaveLength((360 + 2 * 75) / 5 + 1);
+    expect(ticks.find((t) => t.at === 0)).toMatchObject({ deg: 0, major: true, label: 'N' });
+    expect(ticks.find((t) => t.at === 360)).toMatchObject({ deg: 0, label: 'N' });
+    expect(ticks.find((t) => t.at === -30)).toMatchObject({ deg: 330, label: '330' });
+    expect(ticks.find((t) => t.at === 10)).toMatchObject({ medium: true, label: null });
+    expect(ticks.find((t) => t.at === 15)).toMatchObject({ medium: false, major: false });
+    const cardinals = [0, 90, 180, 270].map((a) => ticks.find((t) => t.at === a)?.label);
+    expect(cardinals).toEqual(['N', 'E', 'S', 'W']);
   });
 
-  it('scrolls with the heading and wraps 0/360', () => {
-    const ticks = tapeTicks(352);
-    expect(ticks[0]!.deg).toBe(295);
-    expect(ticks.map((t) => t.label).filter(Boolean)).toEqual(['300', '330', 'N', '30']);
-    for (const t of ticks) expect(Math.abs(t.offset)).toBeLessThanOrEqual(1);
-    // 0° sits 8° right of the index.
-    expect(ticks.find((t) => t.deg === 0)!.offset).toBeCloseTo(8 / 60, 6);
+  it('puts the heading under the centre index, at any heading and on any turn count', () => {
+    const cx = 85;
+    for (const h of [0, 42, 359.5, 361, -1, 720.25]) {
+      const tx = tapeStripTranslatePx(h, cx, PX);
+      // The strip position of the heading, moved by tx, lands on the centre.
+      const at = ((h % 360) + 360) % 360;
+      expect(tapeStripX(at, PX) + tx).toBeCloseTo(cx, 9);
+    }
   });
 
-  it('labels every cardinal', () => {
-    const labels = [0, 90, 180, 270].map((h) => tapeTicks(h).find((t) => t.offset === 0)!.label);
-    expect(labels).toEqual(['N', 'E', 'S', 'W']);
+  it('wraps invisibly: just either side of north the strip shows the same scale', () => {
+    const cx = 85;
+    // The screen x of each labelled tick, for heading h.
+    const view = (h: number) =>
+      tapeStripTicks()
+        .map((t) => ({ label: t.label, x: tapeStripX(t.at, PX) + tapeStripTranslatePx(h, cx, PX) }))
+        .filter((t) => t.label !== null && t.x >= 0 && t.x <= 2 * cx)
+        .map((t) => `${t.label}@${t.x.toFixed(3)}`);
+    // 359.9° and 360.1° (= 0.1°): the scale moves 0.2° (0.3 px), never a turn.
+    const before = view(359.9);
+    const after = view(360.1);
+    expect(before.map((v) => v.split('@')[0])).toEqual(after.map((v) => v.split('@')[0]));
+    for (const [i, v] of before.entries()) {
+      const x0 = Number(v.split('@')[1]);
+      const x1 = Number(after[i]?.split('@')[1]);
+      expect(x1 - x0).toBeCloseTo(-0.2 * PX, 6);
+    }
+  });
+
+  it('places a bearing at every copy on the strip, the one nearest the heading first', () => {
+    expect(tapeStripPositions(350, 10)).toEqual([370, 10]);
+    expect(tapeStripPositions(10, 350)).toEqual([-10, 350]);
+    expect(tapeStripPositions(180, 90)).toEqual([90]);
+    expect(tapeStripPositions(359, 359)).toEqual([359, -1]);
   });
 });
 

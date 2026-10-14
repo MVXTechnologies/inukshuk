@@ -37,19 +37,14 @@ export function choosePointingBearing(
   return null;
 }
 
-/** The pointing line's heading rate: 4 Hz at most. */
+/**
+ * A heading READOUT's rate (the info strip's bearing fields): 4 Hz at most…
+ * Text is read, not watched: the map's moving heading (cone, line, camera,
+ * tape) runs at display rate instead (features/map/headingMotion).
+ */
 export const POINTING_HEADING_INTERVAL_MS = 250;
 /** …and only for a turn of at least 1°. */
 export const POINTING_HEADING_DEADBAND_DEG = 1;
-
-/**
- * The pointing line on the MAP moves at up to 10 Hz, for turns of ≥ 0.75°
- * (#704): the shared heading is smooth now, and at 4 Hz a 500 m line's far
- * end stepped ~30 m at a time on a walking turn. Per accepted tick: one
- * feature collection (O(ticks), capped) and one native source update.
- */
-export const POINTING_LINE_HEADING_INTERVAL_MS = 100;
-export const POINTING_LINE_HEADING_DEADBAND_DEG = 0.75;
 
 export type HeadingGateResult =
   | { kind: 'emit'; headingDeg: number }
