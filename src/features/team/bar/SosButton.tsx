@@ -42,6 +42,8 @@ export function SosButton({
   const [held, setHeld] = useState<number | null>(null);
   const [now, setNow] = useState(0);
   const [hint, setHint] = useState<string | null>(null);
+  // When the current hold began: the timer and the release read this ref.
+  const heldRef = useRef<number | null>(null);
   const frame = useRef<ReturnType<typeof setInterval> | null>(null);
   const ticks = useRef(0);
 
@@ -49,7 +51,13 @@ export function SosButton({
     if (frame.current !== null) clearInterval(frame.current);
     frame.current = null;
   };
-  useEffect(() => stopFrames, []);
+  useEffect(
+    () => () => {
+      heldRef.current = null;
+      stopFrames();
+    },
+    [],
+  );
   useEffect(() => {
     if (hint === null) return;
     const id = setTimeout(() => setHint(null), HINT_MS);
@@ -70,6 +78,7 @@ export function SosButton({
     const start = Date.now();
     const from = here;
     ticks.current = 0;
+    heldRef.current = start;
     setHeld(start);
     setNow(start);
     stopFrames();
@@ -81,18 +90,29 @@ export function SosButton({
         ticks.current = tick;
         Vibration.vibrate(30);
       }
+      // A release already ended this hold (the ref, never the state: a quick
+      // tap can release before React re-renders, QA 2.6.1).
+      if (heldRef.current !== start) {
+        stopFrames();
+        return;
+      }
       if (holdProgress(start, at) >= 1) {
         stopFrames();
+        heldRef.current = null;
         setHeld(null);
         void fire(from);
       }
     }, FRAME_MS);
   };
   const up = () => {
-    if (held === null) return;
+    // The ref, not `held`: press-in and press-out can both land before the
+    // re-render, and a stale `held` (null) let the timer run on to an SOS (#708).
+    const start = heldRef.current;
+    if (start === null) return;
+    heldRef.current = null;
     stopFrames();
     setHeld(null);
-    if (holdProgress(held, Date.now()) < 1) setHint('Hold to send SOS');
+    if (holdProgress(start, Date.now()) < 1) setHint('Hold to send SOS');
   };
 
   const fraction = mineActive || pendingSos ? 1 : held === null ? 0 : holdProgress(held, now);

@@ -549,6 +549,37 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
     },
   );
 
+  it('a quick tap whose press-in and press-out land in one tick only hints (QA 2.6.1)', async () => {
+    // Both handlers run before React re-renders (a real quick tap on a busy
+    // JS thread): the release must still see the hold that just began.
+    await render(
+      wrap(
+        <>
+          <SosButton bottom={72} here={HERE} />
+          <UndoSnack style={{}} />
+        </>,
+      ),
+    );
+    const b = screen.getByTestId('team-sos-button');
+    await act(async () => {
+      // Inside one outer act, React renders only once both handlers ran.
+      const pressIn = fireEvent(b, 'pressIn');
+      const pressOut = fireEvent(b, 'pressOut');
+      await Promise.all([pressIn, pressOut]);
+    });
+    expect(screen.getByTestId('team-sos-hint')).toBeTruthy();
+    await act(async () => {
+      jest.advanceTimersByTime(10_000);
+    });
+    expect(usePendingAlert.getState().pending).toBeNull();
+    expect(screen.queryByTestId('team-undo-snack')).toBeNull();
+    expect(app.active!.soses()).toHaveLength(0);
+    // A real hold right after still arms the Undo.
+    await press(2100);
+    expect(usePendingAlert.getState().pending?.kind).toBe('sos');
+    expect(screen.getByTestId('team-undo-snack')).toBeTruthy();
+  });
+
   it('Undo during the countdown sends nothing, ever', async () => {
     await render(
       wrap(
