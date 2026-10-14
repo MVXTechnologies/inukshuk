@@ -16,6 +16,10 @@ import { Icon, IconButton, Text, useTheme } from 'react-native-paper';
 import { COLOUR_NAMES } from './drawShared';
 
 /** "10 s", "5 min", "4 h", "Never". */
+const WIDTH_NAMES = { 1: 'Thin', 2: 'Medium', 3: 'Thick' } as const;
+const HEAD_SIZE_LETTERS = { 1: 'S', 2: 'M', 3: 'L' } as const;
+const HEAD_SIZE_NAMES = { 1: 'Small', 2: 'Medium', 3: 'Large' } as const;
+
 export function fadeLabel(ms: number | null): string {
   if (ms === null) return 'Never';
   if (ms < 60_000) return `${ms / 1000} s`;
@@ -70,6 +74,9 @@ function Seg<T>({
                   fontWeight: on ? '800' : '700',
                 }}
                 numberOfLines={1}
+                // "5 min" and "30 min" ran together in the 7-way fade row (2.5.2 QA).
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
               >
                 {it.node}
               </Text>
@@ -83,12 +90,26 @@ function Seg<T>({
   );
 }
 
-function Section({ children, right }: { children: string; right?: string }) {
+function Section({
+  children,
+  right,
+  rightDot,
+}: {
+  children: string;
+  right?: string;
+  /** A dot in this colour before `right` ("● your colour"). */
+  rightDot?: string;
+}) {
   const t = useSchemeTokens();
   return (
     <View style={styles.sec}>
       <Text style={[styles.secText, { color: t.inkMuted }]}>{children.toUpperCase()}</Text>
-      {right ? <Text style={[styles.secRight, { color: t.inkMuted }]}>{right}</Text> : null}
+      {right ? (
+        <Text style={[styles.secRight, { color: t.inkMuted }]} testID="team-draw-own-colour">
+          {rightDot !== undefined ? <Text style={{ color: rightDot }}>{'● '}</Text> : null}
+          {right}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -151,127 +172,136 @@ export function DrawStylePopover({
     );
   };
   return (
-    <View
-      style={[
-        styles.pop,
-        {
-          bottom,
-          backgroundColor: t.surface,
-          borderColor: t.outlineVariant,
-          shadowColor: palette.shadow,
-        },
-      ]}
-      testID="team-draw-style"
-    >
-      <View style={styles.head}>
-        <Text variant="titleSmall" style={{ color: t.ink, fontWeight: '800' }}>
-          Style
-        </Text>
-        <IconButton
-          icon="close"
-          size={20}
-          onPress={onClose}
-          accessibilityLabel="Close the style"
-          testID="team-draw-style-close"
-        />
-      </View>
-      <Section right={`yours: ${COLOUR_NAMES[own] ?? ''}`}>Colour</Section>
-      <View style={styles.swatches} accessibilityRole="radiogroup" accessibilityLabel="Colour">
-        {MEMBER_COLORS.map((c, i) => {
-          const on = prefs.colour === i;
-          return (
-            <Pressable
-              key={c}
-              onPress={() => set({ colour: i })}
-              hitSlop={4}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: on }}
-              accessibilityLabel={COLOUR_NAMES[i]}
-              testID={`team-draw-colour-${i}`}
-              style={[styles.swatchRing, { borderColor: on ? t.ink : 'transparent' }]}
-            >
-              <View style={[styles.swatch, { backgroundColor: c }]}>
-                {on && <Icon source="check" size={20} color={palette.white} />}
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
-      <Section>Pencil</Section>
-      <View style={styles.two}>
+    <View style={[styles.dock, { bottom }]} pointerEvents="box-none">
+      <View
+        style={[
+          styles.pop,
+          {
+            backgroundColor: t.surface,
+            borderColor: t.outlineVariant,
+            shadowColor: palette.shadow,
+          },
+        ]}
+        testID="team-draw-style"
+      >
+        <View style={styles.head}>
+          <Text variant="titleSmall" style={{ color: t.ink, fontWeight: '800' }}>
+            Style
+          </Text>
+          <IconButton
+            icon="close"
+            size={20}
+            onPress={onClose}
+            accessibilityLabel="Close the style"
+            testID="team-draw-style-close"
+          />
+        </View>
+        <Section right="your colour" rightDot={MEMBER_COLORS[own]}>
+          Colour
+        </Section>
+        <View style={styles.swatches} accessibilityRole="radiogroup" accessibilityLabel="Colour">
+          {MEMBER_COLORS.map((c, i) => {
+            const on = prefs.colour === i;
+            return (
+              <Pressable
+                key={c}
+                onPress={() => set({ colour: i })}
+                hitSlop={4}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: on }}
+                accessibilityLabel={i === own ? `${COLOUR_NAMES[i]}, your colour` : COLOUR_NAMES[i]}
+                testID={`team-draw-colour-${i}`}
+                style={[styles.swatchRing, { borderColor: on ? t.ink : 'transparent' }]}
+              >
+                <View style={[styles.swatch, { backgroundColor: c }]}>
+                  {on && <Icon source="check" size={20} color={palette.white} />}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Section>Line</Section>
+        <View style={styles.two}>
+          <Seg
+            label="Width"
+            testID="team-draw-width"
+            value={prefs.width}
+            onPick={(width) => set({ width })}
+            items={([1, 2, 3] as const).map((w) => ({
+              v: w,
+              node: widthIcon(w),
+              a11y: WIDTH_NAMES[w],
+            }))}
+          />
+          <Seg
+            label="Line"
+            testID="team-draw-dash"
+            value={prefs.dashed}
+            onPick={(dashed) => set({ dashed })}
+            items={[
+              { v: false, node: 'Solid', a11y: 'Solid' },
+              { v: true, node: 'Dashed', a11y: 'Dashed' },
+            ]}
+          />
+        </View>
+        <Section>Arrow head</Section>
+        <View style={styles.two}>
+          <Seg
+            label="Arrow head"
+            testID="team-draw-head"
+            value={prefs.head}
+            onPick={(head) => set({ head })}
+            items={(['fill', 'open', 'both'] as const).map((h) => ({
+              v: h,
+              node: headIcon(h),
+              a11y: { fill: 'Filled', open: 'Open', both: 'Both ends' }[h],
+            }))}
+          />
+          <Seg
+            label="Head size"
+            testID="team-draw-headsize"
+            value={prefs.headSize}
+            onPick={(headSize) => set({ headSize })}
+            items={([1, 2, 3] as const).map((s) => ({
+              v: s,
+              node: HEAD_SIZE_LETTERS[s],
+              a11y: HEAD_SIZE_NAMES[s],
+            }))}
+          />
+        </View>
+        <Section>Fades after</Section>
         <Seg
-          label="Width"
-          testID="team-draw-width"
-          value={prefs.width}
-          onPick={(width) => set({ width })}
-          items={([1, 2, 3] as const).map((w) => ({
-            v: w,
-            node: widthIcon(w),
-            a11y: ['Thin', 'Medium', 'Thick'][w - 1]!,
-          }))}
+          label="Fades after"
+          testID="team-draw-fade"
+          tight
+          value={prefs.fadeMs}
+          onPick={(fadeMs) => set({ fadeMs })}
+          items={FADE_CHOICES_MS.map((ms) => ({ v: ms, node: fadeLabel(ms), a11y: fadeLabel(ms) }))}
         />
-        <Seg
-          label="Line"
-          testID="team-draw-dash"
-          value={prefs.dashed}
-          onPick={(dashed) => set({ dashed })}
-          items={[
-            { v: false, node: 'Solid', a11y: 'Solid' },
-            { v: true, node: 'Dashed', a11y: 'Dashed' },
-          ]}
-        />
-      </View>
-      <Section>Arrow head</Section>
-      <View style={styles.two}>
-        <Seg
-          label="Arrow head"
-          testID="team-draw-head"
-          value={prefs.head}
-          onPick={(head) => set({ head })}
-          items={(['fill', 'open', 'both'] as const).map((h) => ({
-            v: h,
-            node: headIcon(h),
-            a11y: { fill: 'Filled', open: 'Open', both: 'Both ends' }[h],
-          }))}
-        />
-        <Seg
-          label="Head size"
-          testID="team-draw-headsize"
-          value={prefs.headSize}
-          onPick={(headSize) => set({ headSize })}
-          items={([1, 2, 3] as const).map((s) => ({
-            v: s,
-            node: ['S', 'M', 'L'][s - 1]!,
-            a11y: ['Small', 'Medium', 'Large'][s - 1]!,
-          }))}
-        />
-      </View>
-      <Section>Fades after</Section>
-      <Seg
-        label="Fades after"
-        testID="team-draw-fade"
-        tight
-        value={prefs.fadeMs}
-        onPick={(fadeMs) => set({ fadeMs })}
-        items={FADE_CHOICES_MS.map((ms) => ({ v: ms, node: fadeLabel(ms), a11y: fadeLabel(ms) }))}
-      />
-      <View style={styles.foot}>
-        <Icon source="history" size={15} color={t.inkMuted} />
-        <Text variant="bodySmall" style={{ color: t.inkMuted }}>
-          Applies to your next shapes. Kept on this phone.
-        </Text>
+        <View style={styles.foot}>
+          <Icon source="history" size={15} color={t.inkMuted} />
+          <Text variant="bodySmall" style={{ color: t.inkMuted }}>
+            Applies to your next shapes. Kept on this phone.
+          </Text>
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  pop: {
+  // Centred, the same margin either side, at most 360 dp wide.
+  dock: {
     position: 'absolute',
-    left: 12,
-    right: 12,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    zIndex: 10,
+  },
+  pop: {
+    width: '100%',
     maxWidth: 360,
-    alignSelf: 'center',
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 20,
     paddingHorizontal: 14,
@@ -306,6 +336,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 2,
   },
-  segTight: { paddingHorizontal: 0 },
+  segTight: { paddingHorizontal: 3 },
   foot: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
 });

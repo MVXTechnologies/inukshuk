@@ -18,6 +18,14 @@ import { isAllowed, robotsFromStatus, type RobotsPolicy } from './robots';
  *
  * Transient failures (network error, 5xx, 429) are retried a bounded number
  * of times with backoff, honouring `Retry-After`; anything else is an answer.
+ *
+ * Redirects are never left to the fetch (2.5.2 review): it would follow them
+ * to any host, past that host's robots.txt and its throttle. The client asks
+ * with `redirect: 'manual'` and follows a `Location` itself (http(s) only, at
+ * most {@link MAX_REDIRECTS} hops), each hop a request of its own: checked
+ * against its host's robots.txt, throttled for its host, counted. The answer
+ * says which URL it finally came from, so a caller can refuse a hop off its
+ * publisher's site. `redirect: 'manual'` returns the 3xx itself.
  */
 
 export interface HttpResponse {
@@ -29,7 +37,8 @@ export interface HttpResponse {
 export interface HttpRequestInit {
   method: 'GET' | 'HEAD';
   headers: Record<string, string>;
-  redirect: 'follow' | 'manual';
+  /** Always manual: the client follows redirects itself. */
+  redirect: 'manual';
 }
 
 export type FetchLike = (url: string, init: HttpRequestInit) => Promise<HttpResponse>;
@@ -58,7 +67,8 @@ export interface PoliteClientOptions {
 }
 
 export type PoliteResult =
-  | { kind: 'response'; response: HttpResponse }
+  /** `url`: where the answer came from, after any redirect the client followed. */
+  | { kind: 'response'; response: HttpResponse; url: string }
   | { kind: 'disallowed' }
   | { kind: 'failed'; reason: string };
 
@@ -67,7 +77,15 @@ export interface PoliteRequest {
   redirect?: 'follow' | 'manual';
   validators?: Validators;
   headers?: Record<string, string>;
+  /**
+   * Where a followed redirect may go: a `Location` this refuses is not
+   * requested at all, and the 3xx is the answer (its `url` the last one asked).
+   */
+  stayOn?: (url: string) => boolean;
 }
+
+/** Redirects followed per request (RFC 9309 asks at least five for robots.txt). */
+export const MAX_REDIRECTS = 5;
 
 /** A `Retry-After` longer than this is not waited for: the request fails instead. */
 const MAX_RETRY_AFTER_MS = 60_000;
@@ -112,20 +130,75 @@ export class PoliteClient {
   }
 
   async request(url: string, request: PoliteRequest = {}): Promise<PoliteResult> {
-    const target = new URL(url);
-    const policy = await this.robotsFor(target);
-    if (!isAllowed(policy, `${target.pathname}${target.search}`)) {
-      this.options.log?.(`robots.txt disallows ${url}; not fetched`);
-      return { kind: 'disallowed' };
+    return this.follow(url, request, true);
+  }
+
+  /**
+   * One request and the redirects it leads to, each hop a request of its own
+   * (robots.txt when `obeyRobots`, the hop's own host throttle). Validators
+   * belong to the first URL only.
+   */
+  private async follow(
+    url: string,
+    request: PoliteRequest,
+    obeyRobots: boolean,
+  ): Promise<PoliteResult> {
+    let current = url;
+    let req = request;
+    for (let hop = 0; ; hop++) {
+      let target: URL;
+      try {
+        target = new URL(current);
+      } catch {
+        return this.fail(`unusable URL ${current}`);
+      }
+      if (target.protocol !== 'https:' && target.protocol !== 'http:') {
+        return this.fail(`refused a ${target.protocol} URL (${current})`);
+      }
+      let policy: RobotsPolicy | null = null;
+      if (obeyRobots) {
+        policy = await this.robotsFor(target);
+        if (!isAllowed(policy, `${target.pathname}${target.search}`)) {
+          this.options.log?.(`robots.txt disallows ${current}; not fetched`);
+          return { kind: 'disallowed' };
+        }
+      }
+      const result = await this.send(current, req, policy);
+      if (result.kind !== 'response' || req.redirect === 'manual') return result;
+      const { status, headers } = result.response;
+      const location = status >= 300 && status < 400 ? headers.get('location') : null;
+      if (location === null || status === 304) return result;
+      if (hop >= MAX_REDIRECTS)
+        return this.fail(`more than ${MAX_REDIRECTS} redirects from ${url}`);
+      let next: string;
+      try {
+        next = new URL(location, current).toString();
+      } catch {
+        return this.fail(`unusable redirect from ${result.url} (${location})`);
+      }
+      if (req.stayOn !== undefined && !req.stayOn(next)) {
+        this.options.log?.(`${current} redirects to ${next}; not followed`);
+        return result;
+      }
+      current = next;
+      req = {
+        ...(req.method !== undefined ? { method: req.method } : {}),
+        ...(req.headers !== undefined ? { headers: req.headers } : {}),
+        ...(req.stayOn !== undefined ? { stayOn: req.stayOn } : {}),
+      };
     }
-    return this.send(url, request, policy);
+  }
+
+  private fail(reason: string): PoliteResult {
+    this.options.log?.(reason);
+    return { kind: 'failed', reason };
   }
 
   private robotsFor(target: URL): Promise<RobotsPolicy> {
     let pending = this.robots.get(target.origin);
     if (pending === undefined) {
       pending = (async () => {
-        const result = await this.send(`${target.origin}/robots.txt`, {}, null);
+        const result = await this.follow(`${target.origin}/robots.txt`, {}, false);
         if (result.kind !== 'response') {
           this.options.log?.(`${target.origin}/robots.txt unreachable: assuming disallow-all`);
           return robotsFromStatus(null, '', this.options.productToken);
@@ -159,7 +232,7 @@ export class PoliteClient {
     const backoff = this.options.backoffMs ?? [2000, 8000];
     const init: HttpRequestInit = {
       method: request.method ?? 'GET',
-      redirect: request.redirect ?? 'follow',
+      redirect: 'manual',
       headers: {
         ...(request.headers ?? {}),
         ...conditionalHeaders(request.validators),
@@ -172,7 +245,9 @@ export class PoliteClient {
       let pause: number | null = null;
       try {
         const response = await this.options.fetch(url, init);
-        if (response.status < 500 && response.status !== 429) return { kind: 'response', response };
+        if (response.status < 500 && response.status !== 429) {
+          return { kind: 'response', response, url };
+        }
         reason = `HTTP ${response.status}`;
         pause = retryAfterMs(response);
       } catch (err) {

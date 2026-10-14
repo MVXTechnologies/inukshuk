@@ -125,7 +125,7 @@ export class TeamReplica {
    * live stroke per session, so it reads this, never a refold. Dropped with
    * the entity view and whenever a data op folds in.
    */
-  private capCache: Map<string, ReadonlySet<string>> | undefined;
+  private capCache: Map<string, { holders: ReadonlySet<string>; validUntil: number }> | undefined;
   /** Positions view; dropped on a new position, a refold or the first expiry. */
   private positionCache:
     { state: TeamState; validUntil: number; view: TeamData['positions'] } | undefined;
@@ -186,18 +186,19 @@ export class TeamReplica {
   }
 
   /**
-   * Whether `member` advertises capability `cap` (#683: gates `pen` in the
-   * sync session). Cached; never folds (a deferred fold waits for the tick).
+   * Whether `member` advertises capability `cap` at `now` (#683: gates `pen`
+   * in the sync session). Cached until the data changes or the first claim
+   * expires; never folds (a deferred fold waits for the tick).
    */
-  canReceive(member: string, cap: string): boolean {
-    let holders = this.capCache?.get(cap);
-    if (holders === undefined) {
-      holders = capHolders(this.entities(), cap);
+  canReceive(member: string, cap: string, now: number = this.now): boolean {
+    let cached = this.capCache?.get(cap);
+    if (cached === undefined || now >= cached.validUntil) {
+      cached = capHolders(this.entities(), now, cap);
       this.capCache ??= new Map();
-      this.capCache.set(cap, holders);
+      this.capCache.set(cap, cached);
       this.capScans++;
     }
-    return holders.has(member);
+    return cached.holders.has(member);
   }
 
   /** When a held ephemeral op goes by this device's clock (`OpLog.ephemeralDeadline`). */

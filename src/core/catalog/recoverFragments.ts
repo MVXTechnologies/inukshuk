@@ -64,12 +64,20 @@ export function recoverFragmentsFromPublished(
     errors.push(`index carries ${index.items.length} inline items (not a generator output)`);
   }
 
-  // Sources verbatim from the raw index (the parser would drop unknown fields).
+  // Sources verbatim from the raw index (the parser would drop unknown fields),
+  // each one the parser accepted: its validated fields over the raw record.
   const rawSources = (Array.isArray(rawIndex.sources) ? rawIndex.sources : []).filter(isRecord);
-  const sourceIds = new Set(index.sources.map((s) => s.id));
+  const parsedById = new Map(index.sources.map((s) => [s.id, s]));
+  const sourceIds = new Set(parsedById.keys());
   const fragments = new Map<string, RecoveredFragment>();
   for (const source of rawSources) {
-    fragments.set(String(source.id), { sources: [source as unknown as CatalogSource], items: [] });
+    const parsed = typeof source.id === 'string' ? parsedById.get(source.id) : undefined;
+    if (parsed === undefined) {
+      errors.push(`source ${JSON.stringify(source.id)} does not parse as a catalog source`);
+      continue;
+    }
+    const verbatim: CatalogSource = { ...source, ...parsed };
+    fragments.set(parsed.id, { sources: [verbatim], items: [] });
   }
 
   const listed = new Set(index.shards.map((s) => s.id));

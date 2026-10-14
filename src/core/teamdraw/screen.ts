@@ -1,6 +1,6 @@
 import { formatDistance, type Units } from '@core/format';
 
-import { bearingDeg, haversineM, lengthM, unwrapLng, type Pt } from './geo';
+import { bearingDeg, haversineM, lengthM, metresPerDp, unwrapLng, type Pt } from './geo';
 import type { PenStyle, Stroke } from './pen';
 import type { ShapeKind } from './record';
 
@@ -134,7 +134,11 @@ export function gestureLengthDp(tool: ShapeKind, pts: readonly ScreenPt[]): numb
   if (first === undefined || last === undefined) return 0;
   if (tool !== 'free') return dist(first, last);
   let total = 0;
-  for (let i = 1; i < pts.length; i++) total += dist(pts[i - 1]!, pts[i]!);
+  let prev = first;
+  for (const p of pts) {
+    total += dist(prev, p);
+    prev = p;
+  }
   return total;
 }
 
@@ -153,9 +157,10 @@ export function buildStroke(
   style: PenStyle,
   minDp = MIN_STROKE_DP,
 ): Stroke | null {
-  if (pts.length < 2 || gestureLengthDp(tool, pts) < minDp) return null;
-  const first = pts[0]!;
-  const last = pts[pts.length - 1]!;
+  const first = pts[0];
+  const last = pts[pts.length - 1];
+  if (first === undefined || last === undefined || pts.length < 2) return null;
+  if (gestureLengthDp(tool, pts) < minDp) return null;
   const at = (s: ScreenPt) => unproject(s, view);
   const base = { id, sh: tool, style };
   switch (tool) {
@@ -167,11 +172,10 @@ export function buildStroke(
       const c = at(first);
       return { ...base, pts: [c], r: haversineM(c, at(last)) };
     }
-    case 'rect':
-      return {
-        ...base,
-        pts: [first, [last[0], first[1]], last, [first[0], last[1]]].map((s) => at(s as ScreenPt)),
-      };
+    case 'rect': {
+      const corners: ScreenPt[] = [first, [last[0], first[1]], last, [first[0], last[1]]];
+      return { ...base, pts: corners.map(at) };
+    }
   }
 }
 
@@ -198,7 +202,7 @@ const POINTS16 = [
 
 /** 16-point compass name of a bearing ("334°" → "NNW"). */
 export function cardinal16(deg: number): string {
-  return POINTS16[Math.round(norm360(deg) / 22.5) % 16]!;
+  return POINTS16[Math.round(norm360(deg) / 22.5) % 16] ?? 'N';
 }
 
 export const TOOL_NAMES: Readonly<Record<ShapeKind, string>> = {
@@ -214,20 +218,98 @@ export const TOOL_NAMES: Readonly<Record<ShapeKind, string>> = {
  */
 export function chipText(s: Stroke, units: Units): string {
   const d = (m: number) => formatDistance(m, units);
-  const p = s.pts;
+  const [a, b, c] = s.pts;
   switch (s.sh) {
     case 'free':
-      return `Pencil · ${d(lengthM(p))}`;
+      return `Pencil · ${d(lengthM(s.pts))}`;
     case 'arrow': {
-      const brg = bearingDeg(p[0]!, p[1]!);
-      return `${d(haversineM(p[0]!, p[1]!))} · ${Math.round(brg) % 360}° ${cardinal16(brg)}`;
+      if (a === undefined || b === undefined) return `Arrow · ${d(0)}`;
+      const brg = bearingDeg(a, b);
+      return `${d(haversineM(a, b))} · ${Math.round(brg) % 360}° ${cardinal16(brg)}`;
     }
     case 'circle':
       return `Circle · ${d(s.r ?? 0)} radius`;
-    case 'rect':
-      return `Rectangle · ${d(haversineM(p[0]!, p[1]!))} × ${d(haversineM(p[1]!, p[2]!))}`;
+    case 'rect': {
+      if (a === undefined || b === undefined || c === undefined) return `Rectangle · ${d(0)}`;
+      return `Rectangle · ${d(haversineM(a, b))} × ${d(haversineM(b, c))}`;
+    }
   }
 }
+
+// ── One gesture, move by move ────────────────────────────────────────────────
+
+/**
+ * One gesture's stroke, built as the finger moves (2.5.2 review). The gesture
+ * only ever appends points, so each touch-move unprojects just the new ones
+ * and adds their length: the readout chip costs O(new points) per move, never
+ * O(all points) (O(n²) over a long pencil stroke). The whole stroke (a copy)
+ * is built only when it is wanted: when the pen throttle lets one go, and at
+ * pen-up. A different viewport (the camera re-read) starts the fold over once.
+ */
+export class StrokeBuilder {
+  private view: Viewport | null = null;
+  private seen = 0;
+  private geo: Pt[] = [];
+  private dp = 0;
+  private metres = 0;
+  /** Points unprojected so far (for the tests: each one once per viewport). */
+  unprojected = 0;
+
+  constructor(
+    readonly tool: ShapeKind,
+    readonly id: string,
+  ) {}
+
+  private sync(pts: readonly ScreenPt[], view: Viewport): void {
+    if (view !== this.view || pts.length < this.seen) {
+      this.view = view;
+      this.seen = 0;
+      this.geo = [];
+      this.dp = 0;
+      this.metres = 0;
+    }
+    for (let i = this.seen; i < pts.length; i++) {
+      const s = pts[i];
+      /* istanbul ignore if -- unreachable: i < pts.length */
+      if (s === undefined) break;
+      const g = unproject(s, view);
+      this.unprojected++;
+      const prevS = i > 0 ? pts[i - 1] : undefined;
+      const prevG = this.geo[this.geo.length - 1];
+      if (prevS !== undefined) this.dp += dist(prevS, s);
+      if (prevG !== undefined) this.metres += haversineM(prevG, g);
+      this.geo.push(g);
+    }
+    this.seen = pts.length;
+  }
+
+  /** The live readout for the gesture so far, or null under 1 dp. */
+  chip(pts: readonly ScreenPt[], view: Viewport, units: Units): string | null {
+    if (this.tool !== 'free') {
+      const s = buildStroke(this.tool, pts, view, this.id, NO_STYLE, 1);
+      return s === null ? null : chipText(s, units);
+    }
+    this.sync(pts, view);
+    if (pts.length < 2 || this.dp < 1) return null;
+    return `Pencil · ${formatDistance(this.metres, units)}`;
+  }
+
+  /** The stroke so far (as `buildStroke`), or null under `minDp`. */
+  stroke(
+    pts: readonly ScreenPt[],
+    view: Viewport,
+    style: PenStyle,
+    minDp = MIN_STROKE_DP,
+  ): Stroke | null {
+    if (this.tool !== 'free') return buildStroke(this.tool, pts, view, this.id, style, minDp);
+    this.sync(pts, view);
+    if (pts.length < 2 || this.dp < minDp) return null;
+    return { id: this.id, sh: 'free', style, pts: this.geo.slice() };
+  }
+}
+
+/** The readout ignores the style. */
+const NO_STYLE: PenStyle = { c: 0, w: 1, d: false };
 
 // ── Framing ──────────────────────────────────────────────────────────────────
 
@@ -266,4 +348,45 @@ export function frameCamera(
   );
   const zoom = clamp(Math.log2(fit), 3, 17);
   return { center: fromWorld([(x0 + x1) / 2, (y0 + y1) / 2], 0), zoom, bearing: 0 };
+}
+
+// ── Where a shape's menu goes ────────────────────────────────────────────────
+
+/** A shape's vertical extent on screen, dp (a circle with its radius). Null without points. */
+export function screenSpan(
+  s: { sh: ShapeKind; pts: readonly Pt[]; r?: number },
+  v: Viewport,
+): { top: number; bottom: number } | null {
+  let top = Infinity;
+  let bottom = -Infinity;
+  for (const p of s.pts) {
+    const [, y] = project(p, v);
+    top = Math.min(top, y);
+    bottom = Math.max(bottom, y);
+  }
+  if (top === Infinity) return null;
+  const first = s.pts[0];
+  if (s.sh === 'circle' && first !== undefined) {
+    const r = (s.r ?? 0) / metresPerDp(v.zoom, first[1]);
+    top -= r;
+    bottom += r;
+  }
+  return { top, bottom };
+}
+
+/**
+ * Whether a shape's menu sits at the top of the screen or the bottom (over
+ * the tool bar), whichever covers less of the shape (2.5.2 QA: the menu sat
+ * on its shape). `topBand` and `bottomBand` are the [from, to] dp each place
+ * would cover. The top on a tie, and when the shape is unknown.
+ */
+export function menuSide(
+  span: { top: number; bottom: number } | null,
+  topBand: readonly [number, number],
+  bottomBand: readonly [number, number],
+): 'top' | 'bottom' {
+  if (span === null) return 'top';
+  const overlap = ([from, to]: readonly [number, number]) =>
+    Math.max(0, Math.min(to, span.bottom) - Math.max(from, span.top));
+  return overlap(bottomBand) < overlap(topBand) ? 'bottom' : 'top';
 }

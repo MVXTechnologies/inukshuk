@@ -12,6 +12,9 @@ import {
   pinchCamera,
   project,
   startPinch,
+  menuSide,
+  screenSpan,
+  StrokeBuilder,
   toWorld,
   unproject,
   type ScreenPt,
@@ -203,5 +206,95 @@ describe('framing', () => {
     expect(frameCamera([{ pts: [QC, [QC[0] + 1, QC[1]]] }], 10, 10)!.zoom).toBeGreaterThanOrEqual(
       3,
     );
+  });
+});
+
+describe('StrokeBuilder (one gesture, move by move)', () => {
+  const style = penStyle(defaultPrefs(0));
+  const scribble = (n: number): ScreenPt[] =>
+    Array.from({ length: n }, (_, i) => [100 + i * 3, 300 + ((i * 7) % 11)] as ScreenPt);
+
+  it('gives what buildStroke and chipText give, for every tool and length', () => {
+    for (const tool of ['free', 'arrow', 'circle', 'rect'] as const) {
+      const pts = scribble(40);
+      const b = new StrokeBuilder(tool, 's1');
+      for (let n = 1; n <= pts.length; n++) {
+        const so = pts.slice(0, n);
+        const want = buildStroke(tool, so, VIEW, 's1', style);
+        const got = b.stroke(so, VIEW, style);
+        if (want === null) expect(got).toBeNull();
+        else {
+          expect(got).not.toBeNull();
+          expect(got!.pts.length).toBe(want.pts.length);
+          got!.pts.forEach((p, k) => {
+            expect(p[0]).toBeCloseTo(want.pts[k]![0], 9);
+            expect(p[1]).toBeCloseTo(want.pts[k]![1], 9);
+          });
+          expect(got!.r ?? 0).toBeCloseTo(want.r ?? 0, 6);
+        }
+        const one = buildStroke(tool, so, VIEW, 's1', style, 1);
+        expect(b.chip(so, VIEW, 'metric')).toBe(one === null ? null : chipText(one, 'metric'));
+      }
+    }
+  });
+
+  it('a pencil stroke of n moves unprojects n points, not n²/2 (and once more per new camera)', () => {
+    const pts = scribble(600);
+    const b = new StrokeBuilder('free', 's2');
+    for (let n = 1; n <= pts.length; n++) b.chip(pts.slice(0, n), VIEW, 'metric');
+    expect(b.unprojected).toBe(600);
+    // Built whole (the throttle let one go): nothing unprojected again.
+    expect(b.stroke(pts, VIEW, style)!.pts).toHaveLength(600);
+    expect(b.unprojected).toBe(600);
+    // The camera was re-read (a new viewport object): one full pass, then incremental again.
+    const moved = { ...VIEW, zoom: 16 };
+    b.chip(pts, moved, 'metric');
+    expect(b.unprojected).toBe(1200);
+    b.chip([...pts, [2000, 300]], moved, 'metric');
+    expect(b.unprojected).toBe(1201);
+  });
+
+  it('a stroke copy is the caller’s: later moves never change it', () => {
+    const pts = scribble(30);
+    const b = new StrokeBuilder('free', 's3');
+    const first = b.stroke(pts.slice(0, 20), VIEW, style)!;
+    b.stroke(pts, VIEW, style);
+    expect(first.pts).toHaveLength(20);
+  });
+});
+
+describe('readouts for strokes missing points', () => {
+  const style = penStyle(defaultPrefs(0));
+  it('say zero rather than throw; a bearing that is not a number reads N', () => {
+    expect(chipText({ id: 'a', sh: 'arrow', pts: [QC], style }, 'metric')).toBe('Arrow · 0 m');
+    expect(chipText({ id: 'r', sh: 'rect', pts: [QC], style }, 'metric')).toBe('Rectangle · 0 m');
+    expect(cardinal16(Number.NaN)).toBe('N');
+  });
+});
+
+describe('where a shape’s menu goes (2.5.2 QA: it covered the shape)', () => {
+  const TOP: [number, number] = [70, 370];
+  const BOTTOM: [number, number] = [430, 730];
+  const at = (y: number): Pt => unproject([200, y], VIEW);
+
+  it('a shape under the top band sends the menu to the bottom, and back', () => {
+    const high = screenSpan({ sh: 'rect', pts: [at(150), at(150), at(250), at(250)] }, VIEW);
+    expect(high?.top).toBeCloseTo(150, 6);
+    expect(high?.bottom).toBeCloseTo(250, 6);
+    expect(menuSide(high, TOP, BOTTOM)).toBe('bottom');
+    const low = screenSpan({ sh: 'free', pts: [at(600), at(700)] }, VIEW);
+    expect(menuSide(low, TOP, BOTTOM)).toBe('top');
+  });
+
+  it('a circle counts its radius; no points, or a tie, keep the top', () => {
+    const circle = screenSpan({ sh: 'circle', pts: [at(400)], r: 100 }, VIEW);
+    expect(circle!.bottom - circle!.top).toBeGreaterThan(0);
+    expect(screenSpan({ sh: 'circle', pts: [at(400)] }, VIEW)).toEqual({
+      top: expect.closeTo(400, 6),
+      bottom: expect.closeTo(400, 6),
+    });
+    expect(screenSpan({ sh: 'free', pts: [] }, VIEW)).toBeNull();
+    expect(menuSide(null, TOP, BOTTOM)).toBe('top');
+    expect(menuSide({ top: 380, bottom: 420 }, TOP, BOTTOM)).toBe('top');
   });
 });

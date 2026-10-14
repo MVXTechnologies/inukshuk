@@ -131,3 +131,23 @@ export function nextChangeAt(shapes: readonly Life[], now: number): number | nul
 export function tickDelayMs(next: number | null, now: number): number | null {
   return next === null ? null : Math.max(MIN_TICK_MS, next - now);
 }
+
+/**
+ * How many shapes are on the map at `now` (an expired one is not, though the
+ * snapshot it came in may still hold it), and when that number next drops
+ * (the first expiry still ahead; null when none will). Manage team ›
+ * Drawings said "5 on the map" over an empty map (2.5.2 QA).
+ */
+export function onMapCount(
+  shapes: readonly { expires: number | null }[],
+  now: number,
+): { count: number; changesAt: number | null } {
+  let count = 0;
+  let changesAt: number | null = null;
+  for (const s of shapes) {
+    if (s.expires !== null && s.expires <= now) continue;
+    count++;
+    if (s.expires !== null && (changesAt === null || s.expires < changesAt)) changesAt = s.expires;
+  }
+  return { count, changesAt };
+}

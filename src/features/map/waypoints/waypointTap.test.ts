@@ -140,6 +140,17 @@ describe('waypointAtPoint', () => {
     expect(half(queries[1]!)).toBeGreaterThan(half(queries[0]!));
   });
 
+  it('recording: a saved pin folded into a cluster with live pins never starts a Move', async () => {
+    // Only `a` is saved (the long-press candidates); the recording's live pin
+    // folded it into a disc, so MapLibre drew no pin there.
+    const { map, queries } = fakeMap({ clusters: [{ id: 3, at: [102, 302], count: 2 }] });
+    expect(await pinAtPoint(map, [a], headOf(100, 300), null, 2)).toBeNull();
+    expect(queries).toHaveLength(1);
+    // Drawn on its own, it does.
+    const drawn = fakeMap({ pins: ['saved-a'] });
+    expect(await pinAtPoint(drawn.map, [a], headOf(100, 300), null, 2)).toBe(a);
+  });
+
   it('a long-press on a cluster never starts a Move', async () => {
     const { map } = fakeMap({ clusters: [{ id: 9, at: [105, 290], count: 2 }] });
     expect(await pinAtPoint(map, [b, c], [105, 290])).toBeNull();
@@ -189,6 +200,48 @@ describe('a cluster tap', () => {
     await openWaypointCluster(cluster, Promise.resolve(16.4), zoomTo);
     expect(zoomTo).not.toHaveBeenCalled();
     expect(useWaypointClusterSheet.getState().keys).toEqual(['saved-a', 'saved-b']);
+  });
+
+  it('Kit’s card open, then a tap on the disc: the list holds the disc’s pins (resolved before the card closes)', async () => {
+    // Closing Kit's card returns Kit to the clustered source: MapLibre
+    // re-clusters and cluster 4 is no longer the disc that was tapped.
+    let reclustered = false;
+    const order: string[] = [];
+    waypointClusterSource.current = {
+      getClusterExpansionZoom: async (id: number) => {
+        order.push('expansion');
+        return reclustered || id !== 4 ? Promise.reject(new Error('no cluster')) : 19;
+      },
+      getClusterLeaves: async (id: number) => {
+        order.push('leaves');
+        if (reclustered || id !== 4) return [];
+        return ['saved-tarp', 'saved-stove'].map((k) => ({ properties: { key: k } }) as never);
+      },
+    } as never;
+    const clearKit = jest.fn(() => {
+      order.push('clear');
+      reclustered = true;
+    });
+    const zoomTo = jest.fn();
+    await openWaypointCluster(cluster, Promise.resolve(18), zoomTo, clearKit);
+    expect(order).toEqual(['expansion', 'leaves', 'clear']);
+    expect(clearKit).toHaveBeenCalledTimes(1);
+    expect(useWaypointClusterSheet.getState().keys).toEqual(['saved-tarp', 'saved-stove']);
+    expect(zoomTo).not.toHaveBeenCalled();
+    // A disc that splits: still resolved first, then the card closes and the camera glides.
+    useWaypointClusterSheet.getState().close();
+    reclustered = false;
+    order.length = 0;
+    waypointClusterSource.current = {
+      getClusterExpansionZoom: async () => {
+        order.push('expansion');
+        return reclustered ? Promise.reject(new Error('no cluster')) : 15;
+      },
+      getClusterLeaves: async () => [],
+    } as never;
+    await openWaypointCluster(cluster, Promise.resolve(12), zoomTo, clearKit);
+    expect(order).toEqual(['expansion', 'clear']);
+    expect(zoomTo).toHaveBeenCalledWith([-71.2, 46.8], 15.05);
   });
 
   it('without a source (unmounted mid-tap), opens nothing', async () => {

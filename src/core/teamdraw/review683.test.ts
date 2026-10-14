@@ -268,7 +268,7 @@ describe('P2-4/5: live strokes', () => {
 describe('P2-6/7: the replica on a stroke', () => {
   it('canReceive is a cached set lookup: no fold, one scan per data change', () => {
     const { w, bob, eve, rb, sync } = crew();
-    rb.write(T0 + MIN, 'e.set', capBody(bob.id));
+    rb.write(T0 + MIN, 'e.set', capBody(bob.id, T0));
     sync(T0 + 2 * MIN);
     const r = w.root;
     const flush = jest.spyOn(r, 'flush');
@@ -284,7 +284,7 @@ describe('P2-6/7: the replica on a stroke', () => {
     expect(r.fullFolds).toBe(folds);
     expect(r.capScans - scans).toBeLessThanOrEqual(1);
     // Eve advertises: the next call sees it, after one more scan.
-    const capOp = w.replicas.get(eve.id)!.write(T0 + 3 * MIN, 'e.set', capBody(eve.id))!;
+    const capOp = w.replicas.get(eve.id)!.write(T0 + 3 * MIN, 'e.set', capBody(eve.id, T0))!;
     r.ingest([capOp.env], T0 + 3 * MIN);
     const before = r.capScans;
     expect(r.canReceive(eve.id, 'pen')).toBe(true);

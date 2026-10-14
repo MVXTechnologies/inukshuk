@@ -658,7 +658,7 @@ export function TeamFab({ bottom }: { bottom: number }) {
             'Draw on map',
             () => {
               close();
-              enterDrawing();
+              void enterDrawing();
             },
             'team-fab-draw',
           ],

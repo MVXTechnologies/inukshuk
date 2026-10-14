@@ -179,7 +179,11 @@ describe('drawFeatures', () => {
 
   it('anchors: start, tail, top of circle', () => {
     expect(anchorOf({ sh: 'free', pts: [east(5), QC] })).toEqual(east(5));
-    expect(haversineM(QC, anchorOf({ sh: 'circle', pts: [QC], r: 10 }))).toBeCloseTo(10, 3);
+    const top = anchorOf({ sh: 'circle', pts: [QC], r: 10 });
+    expect(top).not.toBeNull();
+    if (top !== null) expect(haversineM(QC, top)).toBeCloseTo(10, 3);
+    // No points (never from the view): no anchor, no badge, no throw.
+    expect(anchorOf({ sh: 'free', pts: [] })).toBeNull();
   });
 });
 
@@ -219,5 +223,42 @@ describe('frameKey (rebuild only on change)', () => {
     for (let i = 0; i < 20; i++) drawFeatures(shapes, [], T + 100, 16);
     // A generous ceiling only (measure, don't assert): ~20 rebuilds well under a second.
     expect(Date.now() - t0).toBeLessThan(1000);
+  });
+});
+
+describe('shapes missing what the view always gives them (no throw, nothing drawn amiss)', () => {
+  it('no points, an arrow with one point, a circle without radius, an arrow without head size', () => {
+    const fc = drawFeatures(
+      [
+        shape({ key: 'me:e', id: 'e', pts: [] }),
+        shape({ key: 'me:a1', id: 'a1', sh: 'arrow', pts: [QC] }),
+        shape({ key: 'me:c', id: 'c', sh: 'circle', pts: [QC] }),
+        shape({ key: 'me:a2', id: 'a2', sh: 'arrow', pts: [QC, east(500)], ht: 'fill' }),
+      ],
+      [
+        {
+          id: 'l0',
+          author: 'sam',
+          sh: 'free',
+          g: '',
+          c: 4,
+          w: 1,
+          d: false,
+          pts: [],
+          at: T,
+          until: T + 30_000,
+        },
+      ],
+      T,
+      16,
+      { initials },
+    );
+    // The circle without a radius is a ring of one point; the arrow's head defaults to size 2.
+    const heads = fc.features.filter((f) => f.properties.k === 'head');
+    expect(heads.map((f) => f.properties.s)).toEqual([2]);
+    // No badge for the shape without points, no tip for the empty live stroke.
+    expect(fc.features.filter((f) => f.properties.drw === 'me:e')).toEqual([]);
+    expect(fc.features.filter((f) => f.properties.k === 'tip')).toEqual([]);
+    expect(anchorOf({ sh: 'circle', pts: [QC] })).toEqual(destination(QC, 0, 0));
   });
 });

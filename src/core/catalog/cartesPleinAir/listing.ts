@@ -77,6 +77,36 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/**
+ * What the site writes when it does not know the author ("Inconnu"): no one
+ * to credit, so, by the publisher's terms, no listing (2.5.2 QA). Compared
+ * without case or accents.
+ */
+const PLACEHOLDER_AUTHORS = new Set([
+  'inconnu',
+  'inconnue',
+  'unknown',
+  'anonyme',
+  'anonymous',
+  'n/a',
+  'na',
+  'aucun',
+  'none',
+  '-',
+  '?',
+]);
+
+/** The author to credit, or null when there is none (missing, blank or a placeholder). */
+export function creditableAuthor(value: unknown): string | null {
+  const author = text(value);
+  if (author === null) return null;
+  const key = author
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  return PLACEHOLDER_AUTHORS.has(key) ? null : author;
+}
+
 function text(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' && !value.startsWith('$')
     ? value.trim()
@@ -177,7 +207,7 @@ function parseRow(raw: unknown): ParsedRow | string {
   if (title === null) return `map ${slug}: no name`;
   // Terms of use: every map is credited to its author. A map whose author the
   // site does not give cannot be credited, so it is not listed at all.
-  const author = text(m.author);
+  const author = creditableAuthor(m.author);
   if (author === null) return `map ${slug}: no author to credit`;
   const year =
     typeof m.authoredYear === 'number' &&

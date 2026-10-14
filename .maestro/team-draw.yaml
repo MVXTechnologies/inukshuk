@@ -1,7 +1,7 @@
 # Team drawing e2e (#683), one phone, on the loopback mesh build (see team.yaml).
 #
-# Create a team → the team menu's "Draw on map" → drawing mode (hint, tool
-# bar, top bar) → Style: fade Never → Arrow → one-finger drag draws it →
+# Create a team → the team menu's "Draw on map" → drawing mode (tool bar,
+# top bar) → Style: fade Never → Arrow → one-finger drag draws it →
 # Done → tap the arrow: its card → leave the team.
 #
 # First of the team shard, on the shard's fresh emulator; it does not clear
@@ -133,9 +133,10 @@ appId: com.inukshuk.app
     visible:
       id: 'team-draw-toolbar'
     timeout: 5000
-# Drawing mode owns the screen: its hint the first time, no team button, no search.
-- assertVisible:
-    id: 'team-draw-hint'
+# Drawing mode owns the screen: no team button, no search. (Its hint shows on
+# this install's first three entries only, counted across launches, so a flow
+# retried on the same install may be past them: not asserted here; the
+# component and store tests cover it.)
 - assertNotVisible:
     id: 'team-fab'
 - assertNotVisible: 'Search places'

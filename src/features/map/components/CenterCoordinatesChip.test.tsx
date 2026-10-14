@@ -185,6 +185,23 @@ describe('CenterCoordinatesChip (#677)', () => {
     expect(screen.queryByTestId('map-center-coords')).toBeNull();
   });
 
+  it('never shows 0, 0 nor its sea-floor depth before a real camera exists (2.5.2 QA)', async () => {
+    useMapStore.setState({ mapCenter: { latitude: 0, longitude: 0 } });
+    const before = mockDem.calls;
+    await renderChip();
+    await settleLoads();
+    expect(screen.queryByTestId('map-center-coords')).toBeNull();
+    expect(screen.queryByText(/0\.00000/)).toBeNull();
+    expect(mockDem.calls).toBe(before);
+    // Nor a "you" at null island.
+    await renderChip({ you: { latitude: 0, longitude: 0 } });
+    expect(screen.queryByTestId('map-center-coords')).toBeNull();
+    // The first real settle: there it is.
+    await renderChip();
+    await act(async () => useMapStore.setState({ mapCenter: QC }));
+    expect(chip()).toBeOnTheScreen();
+  });
+
   it('ignores map-store traffic that is not its centre (no re-render)', async () => {
     await renderChip();
     await settleLoads();

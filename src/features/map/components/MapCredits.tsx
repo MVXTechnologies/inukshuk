@@ -2,7 +2,7 @@ import { FIX_THE_MAP_URL, type MapCreditLine } from '@core/map/mapCredits';
 import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
 
 import { MapSheet, SectionTitle, SheetHeader } from './mapSheet';
@@ -49,17 +49,20 @@ export function MapCreditsButton({ onPress }: { onPress: () => void }) {
 export function MapCreditsSheet({
   lines,
   bottom,
+  layer,
   onClose,
 }: {
   lines: readonly MapCreditLine[];
   /** Distance from the map's bottom edge to the sheet's. */
   bottom: number;
+  /** Its stacking layer, when it opens over a mode that owns the screen (team drawing). */
+  layer?: ViewStyle;
   onClose: () => void;
 }) {
   const t = useSchemeTokens();
   const router = useRouter();
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none" testID="map-credits">
+    <View style={[StyleSheet.absoluteFill, layer]} pointerEvents="box-none" testID="map-credits">
       <Pressable
         style={StyleSheet.absoluteFill}
         onPress={onClose}

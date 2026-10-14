@@ -59,6 +59,9 @@ const scaleNow = () => pinScaleFactor(useSettingsStore.getState().pinScale);
  * What a tap (or long-press) at `point` hits among the waypoint marks.
  * `keyOf` names a pin the way the layers do (`saved-<id>`, `live-<id>`);
  * `selectedKey` is the pin drawn on its own, on top (never clustered).
+ * `drawnCount` is how many pins the clustered source holds in all, when the
+ * candidates are only some of them (a long-press asks about saved pins only,
+ * but one saved pin can still fold into a cluster with a recording's live pins).
  */
 export async function waypointAtPoint<T extends PinCandidate>(
   map: WaypointTapMap,
@@ -67,6 +70,7 @@ export async function waypointAtPoint<T extends PinCandidate>(
   selectedKey: string | null,
   point: readonly [number, number],
   gesture: PinHitGesture,
+  drawnCount: number = pins.length,
 ): Promise<WaypointTapRoute<T>> {
   if (pins.length === 0) return { kind: 'none' };
   const scale = scaleNow();
@@ -74,7 +78,7 @@ export async function waypointAtPoint<T extends PinCandidate>(
   let candidates: readonly T[] = pins;
   const clusters: ClusterHit[] = [];
   // A lone pin cannot be clustered: no query needed.
-  if (pins.length > 1) {
+  if (Math.max(pins.length, drawnCount) > 1) {
     const reach = waypointQueryReachPx(scale);
     try {
       const found = await map.queryRenderedFeatures(
@@ -154,27 +158,51 @@ export async function clusterPinKeys(cluster: ClusterHit, limit = 200): Promise<
 /** The cluster list sheet (#685): the pins of a cluster that cannot split further. */
 export const useWaypointClusterSheet = create<{
   keys: string[] | null;
+  /**
+   * A pin opened from the list, and the list's other pins: hidden from the
+   * map while that pin's card is up, so the pin stands alone where its
+   * cluster was instead of floating over it with its name across the disc
+   * (2.5.2 QA). Dropped once another pin, or none, is selected.
+   */
+  opened: { key: string; others: string[] } | null;
   open: (keys: string[]) => void;
   close: () => void;
+  /** A row of the list opened `key`. */
+  openedFrom: (key: string) => void;
+  clearOpened: () => void;
 }>((set) => ({
   keys: null,
-  open: (keys) => set({ keys: keys.length > 0 ? keys : null }),
+  opened: null,
+  open: (keys) => set({ keys: keys.length > 0 ? keys : null, opened: null }),
   close: () => set((s) => (s.keys === null ? s : { keys: null })),
+  openedFrom: (key) =>
+    set((s) => ({ opened: { key, others: (s.keys ?? []).filter((k) => k !== key) } })),
+  clearOpened: () => set((s) => (s.opened === null ? s : { opened: null })),
 }));
 
 /**
  * A cluster tap, end to end: glide the camera to where it splits, or list
  * its pins in the sheet. `zoomTo` is MapScreen's camera move.
+ *
+ * `clearSelection` (closing the open pin card) runs only once the cluster is
+ * resolved: the selected pin is drawn on its own, so deselecting it puts it
+ * back into the clustered source, which re-clusters and renumbers every
+ * cluster; asked afterwards, `cluster.id` names another cluster or none
+ * (an empty or wrong list, 2.5.2 review).
  */
 export async function openWaypointCluster(
   cluster: ClusterHit,
   currentZoom: Promise<number | null>,
   zoomTo: (center: [number, number], zoom: number) => void,
+  clearSelection: () => void = () => undefined,
 ): Promise<void> {
   const action = await clusterTapDecision(cluster, currentZoom);
   if (action.kind === 'zoom') {
+    clearSelection();
     zoomTo(cluster.lngLat, action.zoom);
     return;
   }
-  useWaypointClusterSheet.getState().open(await clusterPinKeys(cluster));
+  const keys = await clusterPinKeys(cluster);
+  clearSelection();
+  useWaypointClusterSheet.getState().open(keys);
 }

@@ -45,7 +45,9 @@ export function PinSizeSetting() {
     <>
       <List.Item
         title="Pin size"
-        description={`${pinScaleLabel(scale)} · every waypoint pin on the map, on top of its own size`}
+        // Short: at 150 % a two-line subtitle pushed the controls down (2.5.2 QA).
+        description={`${pinScaleLabel(scale)} · scales every pin on the map`}
+        descriptionNumberOfLines={1}
       />
       <View style={styles.segment}>
         <SegmentedButtons

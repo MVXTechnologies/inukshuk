@@ -125,7 +125,8 @@ export function CatalogDetailScreen({ id }: { id: string }) {
         ? 'Approximate area (the region)'
         : 'Coverage';
 
-  const rows: { label: string; value: string; url?: string }[] = [
+  // `a11y`: the link's spoken label, when "Open " + the value does not read right.
+  const rows: { label: string; value: string; url?: string; a11y?: string }[] = [
     ...(item.author !== undefined ? [{ label: 'Author', value: item.author }] : []),
     ...(item.year !== undefined ? [{ label: 'Year', value: String(item.year) }] : []),
     { label: 'Format', value: formatLabel(item) },
@@ -133,7 +134,14 @@ export function CatalogDetailScreen({ id }: { id: string }) {
     ...(item.updatedAt !== undefined ? [{ label: 'Updated', value: item.updatedAt }] : []),
     ...(source !== undefined ? [{ label: 'Licence', value: source.licence }] : []),
     ...(item.pageUrl !== undefined
-      ? [{ label: 'Map page', value: `On ${hostOf(item.pageUrl)}`, url: item.pageUrl }]
+      ? [
+          {
+            label: 'Map page',
+            value: `On ${hostOf(item.pageUrl)}`,
+            url: item.pageUrl,
+            a11y: `Open on ${hostOf(item.pageUrl)}`,
+          },
+        ]
       : []),
     ...(source?.homepage !== undefined
       ? [{ label: 'Source', value: hostOf(source.homepage), url: source.homepage }]
@@ -231,7 +239,7 @@ export function CatalogDetailScreen({ id }: { id: string }) {
                 <Pressable
                   onPress={() => void openExternalLink(row.url ?? '')}
                   accessibilityRole="link"
-                  accessibilityLabel={`Open ${row.value}`}
+                  accessibilityLabel={row.a11y ?? `Open ${row.value}`}
                   hitSlop={target.compactHitSlop}
                   style={styles.rowLink}
                 >

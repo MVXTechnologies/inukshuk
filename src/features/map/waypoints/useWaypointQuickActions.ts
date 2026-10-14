@@ -13,6 +13,7 @@ import { useWaypointMoveStore } from '@state/waypointMoveStore';
 import { useCallback, useEffect, useRef } from 'react';
 
 import type { ActionSnackbarState } from '../../common/useActionSnackbar';
+import { useWaypointClusterSheet } from './waypointTap';
 
 interface Options {
   /** The GPS fix, or null before the first one. */
@@ -112,6 +113,8 @@ export function useWaypointQuickActions({
     const w = useLibraryStore.getState().waypoints.find((x) => x.id === id);
     if (!w) return;
     const from = { latitude: w.latitude, longitude: w.longitude };
+    // The cluster list does not survive into Move (it would sit over the target).
+    useWaypointClusterSheet.getState().close();
     opts.current.onBeforeMove(from);
     useWaypointMoveStore.getState().start({
       id: w.id,

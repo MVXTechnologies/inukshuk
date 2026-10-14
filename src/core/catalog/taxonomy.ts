@@ -17,6 +17,9 @@ export const CATALOG_KINDS = [
   'topo',
   'park',
   'trail',
+  // Canoe and kayak route maps (#680, Cartes Plein-air): v3 only, so no app
+  // that does not know the kind ever reads one (2.5.2 QA: they read "Trails").
+  'river',
   'hunting-fishing',
   'nautical',
   'aerial',
@@ -46,6 +49,7 @@ export const CATALOG_KIND_LABELS: Record<CatalogKind, string> = {
   topo: 'Topographic',
   park: 'Parks',
   trail: 'Trails',
+  river: 'River routes',
   'hunting-fishing': 'Hunting & fishing',
   nautical: 'Nautical',
   aerial: 'Aerial',

@@ -90,6 +90,7 @@ export function TeamMapOverlay({
   sosTop,
   onNavigate,
   onPointActions,
+  screenFocused = true,
 }: {
   /** My position, for distance and bearing. */
   here: { latitude: number; longitude: number } | null;
@@ -102,6 +103,8 @@ export function TeamMapOverlay({
   onNavigate: (latitude: number, longitude: number) => void;
   /** Long-press menu's secondary row: Navigate here / Coordinates / Convert. */
   onPointActions: (at: [number, number], what: 'navigate' | 'coordinates' | 'convert') => void;
+  /** Whether the map screen is focused (`useIsFocused()`): cards answer Back only then. */
+  screenFocused?: boolean;
 }) {
   const t = useSchemeTokens();
   const router = useRouter();
@@ -184,7 +187,7 @@ export function TeamMapOverlay({
       )}
       {!drawing && draft === null && !card && cardSlotFree && hit === null && shapeCard && (
         <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
-          <TeamShapeCard here={here} onNavigate={onNavigate} />
+          <TeamShapeCard here={here} onNavigate={onNavigate} screenFocused={screenFocused} />
         </View>
       )}
       {signal && !drawing && <DrawAlertSnack style={{ bottom: fabBottom, right: 76 }} />}

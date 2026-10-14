@@ -12,6 +12,7 @@ import { nodeCrypto } from '@core/team/testing/nodeCrypto';
 import { DEFAULT_INVITE } from '@core/teamui/invites';
 import { lifetimeMs } from '@core/teamui/lifetime';
 import { DRAW_LAYERS } from '@core/teamdraw/mapStyle';
+import * as penModule from '@core/teamdraw/pen';
 import { penBody, toleranceM, type Stroke } from '@core/teamdraw/pen';
 import { defaultPrefs, penStyle } from '@core/teamdraw/style';
 import { NEAR, QC } from '@core/teamdraw/testUtils';
@@ -24,16 +25,18 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useTeamDrawStore } from '@state/teamDrawStore';
 import { useTeamStore, wireTeamStore } from '@state/teamStore';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
-import { Alert, BackHandler } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { Alert, BackHandler, StyleSheet, View } from 'react-native';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
 
 import { TeamFab } from '../map/TeamCards';
 import { useTeamMapFocus } from '../map/teamMapFocus';
 import { DrawAlertSnack } from './DrawAlertSnack';
 import { TeamShapeCard } from './ShapeCard';
+import { ShapeMenu } from './ShapeMenu';
 import { drawLayerStats, TeamDrawLayers } from './TeamDrawLayers';
 import { TeamDrawingsRow } from './TeamDrawingsRow';
+import { BOTTOM_LAYER } from '../../map/bottomLayers';
 import { TeamDrawMode } from './TeamDrawMode';
 
 type Props = Record<string, unknown> & { children?: ReactNode };
@@ -69,6 +72,18 @@ jest.mock('@data/team/teamNotifications', () => ({
   onTeamNotificationTap: () => () => undefined,
 }));
 jest.mock('@lib/errorReporting', () => ({ addBreadcrumb: jest.fn(), reportError: jest.fn() }));
+/** Renders of the drawing components (each reads the scheme tokens once per render). */
+const mockTokenReads = { n: 0 };
+jest.mock('@ui/useSchemeTokens', () => {
+  const actual = jest.requireActual<typeof import('@ui/useSchemeTokens')>('@ui/useSchemeTokens');
+  return {
+    ...actual,
+    useSchemeTokens: () => {
+      mockTokenReads.n++;
+      return actual.useSchemeTokens();
+    },
+  };
+});
 jest.mock('react-native-safe-area-context', () => ({
   ...jest.requireActual('react-native-safe-area-context'),
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -119,7 +134,14 @@ function mapDouble(hit: string | null = null) {
   return { mapRef, cameraRef, jumps };
 }
 
-const touch = (id: number, x: number, y: number) => ({ identifier: id, pageX: x, pageY: y });
+/** A touch at (x, y) in the overlay's dp; `statusBar` is how far the window's origin sits above it. */
+const touch = (id: number, x: number, y: number, statusBar = 0) => ({
+  identifier: id,
+  locationX: x,
+  locationY: y,
+  pageX: x,
+  pageY: y + statusBar,
+});
 const ev = (...touches: ReturnType<typeof touch>[]) => ({ nativeEvent: { touches } });
 
 let app: TeamService;
@@ -186,17 +208,28 @@ describe('the team menu', () => {
 });
 
 describe('drawing mode', () => {
-  async function open(dark = false, hit: string | null = null) {
+  async function open(
+    dark = false,
+    hit: string | null = null,
+    extra: Partial<Parameters<typeof TeamDrawMode>[0]> = {},
+  ) {
     const m = mapDouble(hit);
     useTeamDrawStore.getState().enter();
     const r = await render(
       wrap(
-        <TeamDrawMode mapRef={m.mapRef as never} cameraRef={m.cameraRef as never} focused />,
+        <TeamDrawMode
+          mapRef={m.mapRef as never}
+          cameraRef={m.cameraRef as never}
+          focused
+          {...extra}
+        />,
         dark,
       ),
     );
     const canvas = screen.getByTestId('team-draw-canvas');
-    await fireEvent(canvas, 'layout', { nativeEvent: { layout: { width: 400, height: 800 } } });
+    await fireEvent(screen.getByTestId('team-draw-mode'), 'layout', {
+      nativeEvent: { layout: { width: 400, height: 800 } },
+    });
     await act(async () => undefined);
     return { ...m, r, canvas };
   }
@@ -273,6 +306,14 @@ describe('drawing mode', () => {
     // 10 s · 30 s · 1 min · 5 min · 30 min · 4 h · Never: 30 s is on.
     expect(screen.getByTestId('team-draw-fade-1').props.accessibilityState.selected).toBe(true);
     expect(screen.queryByTestId('team-draw-colour-8')).toBeNull();
+    // Plain words (2.5.2 QA): "Line", not "Pencil"; "your colour", never its internal name.
+    expect(screen.getByText('LINE')).toBeTruthy();
+    expect(screen.queryByText('PENCIL')).toBeNull();
+    expect(screen.getByTestId('team-draw-own-colour')).toHaveTextContent('● your colour');
+    // Centred: a full-width dock that centres a card of at most 360 dp.
+    const card = StyleSheet.flatten(screen.getByTestId('team-draw-style').props.style);
+    expect(card).toMatchObject({ width: '100%', maxWidth: 360 });
+    expect(card.left).toBeUndefined();
     await fireEvent.press(screen.getByTestId('team-draw-fade-6'));
     await fireEvent.press(screen.getByTestId('team-draw-colour-3'));
     await fireEvent.press(screen.getByTestId('team-draw-dash-1'));
@@ -324,6 +365,175 @@ describe('drawing mode', () => {
     expect(app.active!.draw.shapes()).toEqual([]);
   });
 
+  it('while recording: above the panel and its snackbars, the bar on the panel, the canvas above it', async () => {
+    const PANEL = 240;
+    const onCredits = jest.fn();
+    for (const dark of [false, true]) {
+      const { r } = await open(dark, null, { bottomInset: PANEL, onCredits });
+      const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style);
+      // The root stacks over the recording panel (zIndex 6) and the snackbars (8).
+      expect(flat('team-draw-mode').zIndex).toBe(BOTTOM_LAYER.drawMode.zIndex);
+      expect(BOTTOM_LAYER.drawMode.zIndex).toBeGreaterThan(BOTTOM_LAYER.recordingPanel.zIndex);
+      expect(BOTTOM_LAYER.drawMode.zIndex).toBeGreaterThan(BOTTOM_LAYER.snackbar.zIndex);
+      // The tool bar sits on the panel; the canvas stops at it (Stop and Pause stay reachable).
+      expect(flat('team-draw-toolbar').bottom).toBe(PANEL + 12);
+      expect(flat('team-draw-canvas').bottom).toBe(PANEL);
+      // The map credits stay on the map, above the bar.
+      await fireEvent.press(screen.getByTestId('map-credits-button'));
+      expect(onCredits).toHaveBeenCalledWith(true);
+      await r.unmount();
+      useTeamDrawStore.getState().exit();
+    }
+    // Not recording: the bar on the safe area, the canvas full height.
+    await open();
+    const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style);
+    expect(flat('team-draw-toolbar').bottom).toBe(12);
+    expect(flat('team-draw-canvas').bottom).toBe(0);
+  });
+
+  it('the glove lock: no touch reaches drawing mode, and a stroke in progress is dropped', async () => {
+    const m = mapDouble();
+    useTeamDrawStore.getState().enter();
+    const ui = (locked: boolean) =>
+      wrap(
+        <TeamDrawMode
+          mapRef={m.mapRef as never}
+          cameraRef={m.cameraRef as never}
+          focused
+          locked={locked}
+        />,
+      );
+    const r = await render(ui(false));
+    const canvas = screen.getByTestId('team-draw-canvas');
+    await fireEvent(screen.getByTestId('team-draw-mode'), 'layout', {
+      nativeEvent: { layout: { width: 400, height: 800 } },
+    });
+    await act(async () => undefined);
+    expect(screen.getByTestId('team-draw-mode').props.pointerEvents).toBe('box-none');
+    await fireEvent(canvas, 'responderGrant', ev(touch(1, 100, 400)));
+    await fireEvent(canvas, 'responderMove', ev(touch(1, 200, 400)));
+    expect(screen.getByTestId('team-draw-local')).toBeTruthy();
+    await r.rerender(ui(true));
+    const root = screen.getByTestId('team-draw-mode', { includeHiddenElements: true });
+    expect(root.props.pointerEvents).toBe('none');
+    expect(screen.queryByTestId('team-draw-local', { includeHiddenElements: true })).toBeNull();
+    await fireEvent(canvas, 'responderRelease', ev());
+    expect(app.active!.draw.shapes()).toEqual([]);
+  });
+
+  it('a stroke lands under the finger whatever the status bar (edge-to-edge Android, 2.5.2 QA)', async () => {
+    useTeamDrawStore.getState().setTool('arrow');
+    const { canvas } = await open();
+    const arrowAt = async (statusBar: number) => {
+      await fireEvent(canvas, 'responderGrant', ev(touch(1, 200, 400, statusBar)));
+      await act(async () => undefined);
+      await fireEvent(canvas, 'responderMove', ev(touch(1, 200, 300, statusBar)));
+      await fireEvent(canvas, 'responderRelease', ev());
+    };
+    await arrowAt(0);
+    await arrowAt(52);
+    const [a, b] = app.active!.draw.shapes();
+    // The tail is the map point under (200, 400) in the map's dp: the centre's
+    // longitude, 400 dp from the top of an 800 dp map, so the centre itself.
+    expect(b!.pts).toEqual(a!.pts);
+    expect(a!.pts[0]![0]).toBeCloseTo(QC[0], 9);
+    expect(a!.pts[0]![1]).toBeCloseTo(QC[1], 9);
+  });
+
+  it('projects against the whole map while recording (the canvas stops at the panel)', async () => {
+    useTeamDrawStore.getState().setTool('arrow');
+    const { canvas } = await open(false, null, { bottomInset: 240 });
+    await fireEvent(canvas, 'responderGrant', ev(touch(1, 200, 400)));
+    await act(async () => undefined);
+    await fireEvent(canvas, 'responderMove', ev(touch(1, 200, 300)));
+    await fireEvent(canvas, 'responderRelease', ev());
+    const [s] = app.active!.draw.shapes();
+    expect(s!.pts[0]![1]).toBeCloseTo(QC[1], 9);
+  });
+
+  it('every stroke starts from a fresh camera read', async () => {
+    useTeamDrawStore.getState().setTool('arrow');
+    const { canvas, mapRef } = await open();
+    const draw = async () => {
+      await fireEvent(canvas, 'responderGrant', ev(touch(1, 200, 500)));
+      await act(async () => undefined);
+      await fireEvent(canvas, 'responderMove', ev(touch(1, 200, 300)));
+      await fireEvent(canvas, 'responderRelease', ev());
+    };
+    const reads = mapRef.current.getViewState.mock.calls.length;
+    await draw();
+    expect(mapRef.current.getViewState.mock.calls.length).toBe(reads + 1);
+    // The camera moved meanwhile (not by drawing mode): the next stroke lands where it shows.
+    mapRef.current.getViewState.mockImplementation(async () => ({
+      center: NEAR,
+      zoom: 15,
+      bearing: 0,
+      pitch: 0,
+      bounds: [0, 0, 0, 0],
+    }));
+    await draw();
+    expect(mapRef.current.getViewState.mock.calls.length).toBe(reads + 2);
+    const [a, b] = app.active!.draw.shapes();
+    expect(b!.pts[0]![0] - a!.pts[0]![0]).toBeCloseTo(NEAR[0] - QC[0], 6);
+    expect(b!.pts[0]![1] - a!.pts[0]![1]).toBeCloseTo(NEAR[1] - QC[1], 6);
+  });
+
+  it('a long pencil stroke builds the pen body only when the throttle lets one go', async () => {
+    const { canvas } = await open();
+    const built = jest.spyOn(penModule, 'penBody');
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+    await fireEvent(canvas, 'responderGrant', ev(touch(1, 20, 400)));
+    for (let i = 1; i <= 120; i++) {
+      await fireEvent(canvas, 'responderMove', ev(touch(1, 20 + i * 3, 400 + (i % 5))));
+    }
+    // 120 moves inside one throttle interval: the first real stroke went, the rest wait.
+    expect(built).toHaveBeenCalledTimes(1);
+    now.mockReturnValue(1_800_000_000_000 + 300);
+    await act(async () => {
+      await new Promise((res) => setTimeout(res, 300));
+    });
+    // The interval passed: one more body, the latest stroke (all 121 points so far).
+    expect(built).toHaveBeenCalledTimes(2);
+    expect(built.mock.calls[1]![0].pts.length).toBe(121);
+    now.mockRestore();
+    await fireEvent(canvas, 'responderRelease', ev());
+    built.mockRestore();
+  });
+
+  it('GPS fixes and heading ticks on the map screen re-render neither drawing mode nor its layer', async () => {
+    const m = mapDouble();
+    useTeamDrawStore.getState().enter();
+    let tick: (() => void) | undefined;
+    const setCredits = jest.fn();
+    function MapLike() {
+      // What changes per GPS fix / heading tick on MapScreen.
+      const [fix, setFix] = useState(0);
+      tick = () => setFix((n) => n + 1);
+      return (
+        <>
+          <TeamDrawMode
+            mapRef={m.mapRef as never}
+            cameraRef={m.cameraRef as never}
+            focused
+            bottomInset={0}
+            locked={false}
+            onCredits={setCredits}
+          />
+          <TeamDrawLayers glyphs="https://x/fonts/{fontstack}/{range}.pbf" zoom={15} />
+          <View testID={`fix-${fix}`} />
+        </>
+      );
+    }
+    await render(wrap(<MapLike />));
+    await act(async () => undefined);
+    expect(screen.getByTestId('team-draw-toolbar')).toBeTruthy();
+    const before = mockTokenReads.n;
+    expect(before).toBeGreaterThan(0);
+    for (let i = 0; i < 50; i++) await act(async () => tick!());
+    // 50 map-screen renders: not one of drawing mode, its ⓘ or its layer.
+    expect(mockTokenReads.n - before).toBe(0);
+  });
+
   it('Clear mine, with a 5 s UNDO', async () => {
     const d = app.active!.draw;
     expect(d.finish(arrow('c1'), 1, 60_000)).toBeNull();
@@ -354,6 +564,10 @@ describe('drawing mode', () => {
       expect(screen.getByTestId('team-draw-menu-left').props.children).toMatch(
         /^Fades in [45] min/,
       );
+      // The arrow reaches up under the top bar: its menu sits on the tool bar instead.
+      expect(
+        StyleSheet.flatten(screen.getByTestId('team-draw-menu-dock').props.style),
+      ).toMatchObject({ bottom: 12 + 66 + 8 });
       await fireEvent.changeText(screen.getByTestId('team-draw-note'), 'Beaver dam — cross here');
       expect(screen.getByTestId('team-draw-note-count').props.children).toBe('23 / 40');
       await fireEvent.changeText(screen.getByTestId('team-draw-note'), 'x'.repeat(60));
@@ -369,6 +583,23 @@ describe('drawing mode', () => {
     await act(() => useTeamDrawStore.getState().openMenu(key));
     await fireEvent.press(screen.getByTestId('team-draw-menu-delete'));
     expect(d.shapes()).toEqual([]);
+  });
+});
+
+describe('a shape’s menu', () => {
+  it('counts its time left down while open (2.5.2 QA)', async () => {
+    const d = app.active!.draw;
+    expect(d.finish(arrow('t1'), 1, 5 * 60_000)).toBeNull();
+    await act(() => useTeamStore.getState().refresh());
+    const shape = d.shapes()[0]!;
+    await render(wrap(<ShapeMenu shape={shape} place={{ top: 70 }} onClose={jest.fn()} />));
+    const first = screen.getByTestId('team-draw-menu-left').props.children as string;
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 1_150));
+    });
+    const later = screen.getByTestId('team-draw-menu-left').props.children as string;
+    expect(later).not.toBe(first);
+    expect(later).toMatch(/^Fades in 4 min 5\d s$/);
   });
 });
 
@@ -408,6 +639,30 @@ describe('a shape’s card (outside drawing mode)', () => {
     expect(d.shapes()).toEqual([]);
   });
 
+  it('answers Android Back only while the map screen is focused', async () => {
+    const d = app.active!.draw;
+    expect(d.finish(arrow('b1'), 1, 30 * 60_000)).toBeNull();
+    await act(() => useTeamStore.getState().refresh());
+    const key = d.shapes()[0]!.key;
+    const handlers: (() => boolean)[] = [];
+    jest.spyOn(BackHandler, 'addEventListener').mockImplementation((_e, h) => {
+      handlers.push(h as () => boolean);
+      return { remove: () => handlers.splice(handlers.indexOf(h as () => boolean), 1) };
+    });
+    useTeamDrawStore.getState().openCard(key);
+    const ui = (screenFocused: boolean) =>
+      wrap(<TeamShapeCard here={null} onNavigate={jest.fn()} screenFocused={screenFocused} />);
+    const r = await render(ui(false));
+    // Another tab is showing: Back is that tab's, the card stays (hidden with its screen).
+    expect(handlers).toHaveLength(0);
+    await r.rerender(ui(true));
+    expect(handlers).toHaveLength(1);
+    await act(async () => {
+      handlers[0]!();
+    });
+    expect(useTeamDrawStore.getState().card).toBeNull();
+  });
+
   it('closes itself when its shape is gone', async () => {
     useTeamDrawStore.getState().openCard('nobody:x');
     await render(wrap(<TeamShapeCard here={null} onNavigate={jest.fn()} />));
@@ -435,6 +690,21 @@ describe('Manage team › Drawings', () => {
     expect(alert).toHaveBeenCalled();
     expect(d.shapes()).toEqual([]);
     expect(screen.getByText('None on the map')).toBeTruthy();
+  });
+
+  it('counts only what is still on the map: an expired drawing drops out on its own (2.5.2 QA)', async () => {
+    const d = app.active!.draw;
+    d.finish(arrow('k1'), 1, null);
+    d.finish(arrow('s1'), 1, 400);
+    await act(() => useTeamStore.getState().refresh());
+    await render(wrap(<TeamDrawingsRow />));
+    expect(screen.getByText('2 on the map')).toBeTruthy();
+    // No data op arrives: the store's snapshot still holds the expired one.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 600));
+    });
+    expect(useTeamStore.getState().drawings).toHaveLength(2);
+    expect(screen.getByText('1 on the map')).toBeTruthy();
   });
 
   it('is not there for members', async () => {

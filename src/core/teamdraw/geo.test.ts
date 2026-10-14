@@ -86,3 +86,9 @@ describe('drawing geometry', () => {
     expect(metresPerDp(16, 60)).toBeCloseTo(78271.51696 / 2 / 65536, 6);
   });
 });
+
+describe('circleRing with no sides', () => {
+  it('is empty (no closing point to copy)', () => {
+    expect(circleRing([0, 0], 10, 0)).toEqual([]);
+  });
+});

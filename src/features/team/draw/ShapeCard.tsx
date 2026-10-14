@@ -26,9 +26,12 @@ import { useTeamMapFocus } from '../map/teamMapFocus';
 export function TeamShapeCard({
   here,
   onNavigate,
+  screenFocused = true,
 }: {
   here: { latitude: number; longitude: number } | null;
   onNavigate: (latitude: number, longitude: number) => void;
+  /** The map screen is focused: Back closes the card only then (2.5.1 review rule). */
+  screenFocused?: boolean;
 }) {
   const key = useTeamDrawStore((s) => s.card);
   const shape = useTeamStore((s) =>
@@ -39,17 +42,19 @@ export function TeamShapeCard({
     if (key !== null && shape === undefined) useTeamDrawStore.getState().openCard(null);
   }, [key, shape]);
   if (shape === undefined) return null;
-  return <Card shape={shape} here={here} onNavigate={onNavigate} />;
+  return <Card shape={shape} here={here} onNavigate={onNavigate} focused={screenFocused} />;
 }
 
 function Card({
   shape,
   here,
   onNavigate,
+  focused,
 }: {
   shape: DrawShape;
   here: { latitude: number; longitude: number } | null;
   onNavigate: (latitude: number, longitude: number) => void;
+  focused: boolean;
 }) {
   const t = useSchemeTokens();
   const router = useRouter();
@@ -64,13 +69,16 @@ function Card({
     return () => clearInterval(timer);
   }, []);
   const close = () => useTeamDrawStore.getState().openCard(null);
+  // Tab screens stay mounted: on another tab, Back must navigate there, not
+  // close a card nobody can see.
   useEffect(() => {
+    if (!focused) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       useTeamDrawStore.getState().openCard(null);
       return true;
     });
     return () => sub.remove();
-  }, []);
+  }, [focused]);
 
   const author = view?.members.find((m) => m.id === shape.owner);
   const mine = shape.owner === view?.me;
@@ -132,21 +140,25 @@ function Card({
         )}
       </View>
       <View style={styles.rounds}>
-        <Round
-          icon="navigation-variant-outline"
-          label="Navigate"
-          testID="team-shape-navigate"
-          onPress={() => {
-            close();
-            onNavigate(target[1], target[0]);
-          }}
-        />
-        <Round
-          icon="crosshairs-gps"
-          label="Centre"
-          testID="team-shape-centre"
-          onPress={() => useTeamMapFocus.getState().focus(target[0], target[1], 16)}
-        />
+        {target !== null && (
+          <>
+            <Round
+              icon="navigation-variant-outline"
+              label="Navigate"
+              testID="team-shape-navigate"
+              onPress={() => {
+                close();
+                onNavigate(target[1], target[0]);
+              }}
+            />
+            <Round
+              icon="crosshairs-gps"
+              label="Centre"
+              testID="team-shape-centre"
+              onPress={() => useTeamMapFocus.getState().focus(target[0], target[1], 16)}
+            />
+          </>
+        )}
         {!mine && (
           <Round
             icon="message-text-outline"

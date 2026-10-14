@@ -68,14 +68,19 @@ export function destination(p: Pt, deg: number, distM: number): Pt {
 export function circleRing(centre: Pt, radiusM: number, sides = 64): Pt[] {
   const ring: Pt[] = [];
   for (let i = 0; i < sides; i++) ring.push(destination(centre, (360 * i) / sides, radiusM));
-  ring.push(ring[0]!);
+  const first = ring[0];
+  if (first !== undefined) ring.push(first);
   return ring;
 }
 
 /** Length of a polyline in metres. */
 export function lengthM(pts: readonly Pt[]): number {
   let total = 0;
-  for (let i = 1; i < pts.length; i++) total += haversineM(pts[i - 1]!, pts[i]!);
+  let prev: Pt | undefined;
+  for (const p of pts) {
+    if (prev !== undefined) total += haversineM(prev, p);
+    prev = p;
+  }
   return total;
 }
 
@@ -84,8 +89,10 @@ export function lengthM(pts: readonly Pt[]): number {
  * stroke never recurses). Keeps the first and last points; returns a new array.
  */
 export function simplify(pts: readonly Pt[], toleranceM: number): Pt[] {
-  if (pts.length <= 2 || !(toleranceM > 0)) return pts.map((p) => [p[0], p[1]]);
-  const ref = pts[0]!;
+  const ref = pts[0];
+  if (ref === undefined || pts.length <= 2 || !(toleranceM > 0)) {
+    return pts.map((p) => [p[0], p[1]]);
+  }
   const kx = EARTH_R * DEG * Math.cos(ref[1] * DEG);
   const ky = EARTH_R * DEG;
   const xy = pts.map(([lng, lat]) => [unwrapLng(lng, ref[0]) * kx, lat * ky] as const);
@@ -94,17 +101,24 @@ export function simplify(pts: readonly Pt[], toleranceM: number): Pt[] {
   keep[pts.length - 1] = 1;
   const stack: [number, number][] = [[0, pts.length - 1]];
   const tol2 = toleranceM * toleranceM;
-  while (stack.length > 0) {
-    const [i, j] = stack.pop()!;
-    const [ax, ay] = xy[i]!;
-    const [bx, by] = xy[j]!;
+  for (let span = stack.pop(); span !== undefined; span = stack.pop()) {
+    const [i, j] = span;
+    const a = xy[i];
+    const b = xy[j];
+    /* istanbul ignore if -- unreachable: i and j index xy */
+    if (a === undefined || b === undefined) continue;
+    const [ax, ay] = a;
+    const [bx, by] = b;
     const dx = bx - ax;
     const dy = by - ay;
     const len2 = dx * dx + dy * dy;
     let worst = -1;
     let at = -1;
     for (let k = i + 1; k < j; k++) {
-      const [px, py] = xy[k]!;
+      const p = xy[k];
+      /* istanbul ignore if -- unreachable: i < k < j index xy */
+      if (p === undefined) continue;
+      const [px, py] = p;
       let t = len2 === 0 ? 0 : ((px - ax) * dx + (py - ay) * dy) / len2;
       t = Math.max(0, Math.min(1, t));
       const ex = ax + t * dx - px;

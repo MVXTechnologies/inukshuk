@@ -26,6 +26,7 @@ import type { CatalogKind, LinkOutCollection, LinkOutPlace } from './taxonomy';
 export const POPULAR_KIND_WEIGHT: Record<CatalogKind, number> = {
   park: 0.6,
   trail: 0.7,
+  river: 0.7,
   topo: 1,
   'hunting-fishing': 1,
   nautical: 1.1,

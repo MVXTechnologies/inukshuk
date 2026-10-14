@@ -1,4 +1,4 @@
-import { waypointSize } from '@core/library/waypointStyle';
+import { isWaypointSize, waypointSize } from '@core/library/waypointStyle';
 import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import { pinScaleFactor } from '@core/map/pinScale';
 import {
@@ -34,7 +34,6 @@ import {
   pinPhotoLayoutScaled,
   type PinInput,
 } from '@core/map/waypointPinStyle';
-import type { WaypointSize } from '@core/models';
 import { PHOTO_BADGE_IMAGES } from '@features/photos/photoBadgeImages';
 import { teamLabelFont } from '@features/team/map/TeamMapLayers';
 import {
@@ -46,10 +45,10 @@ import {
 } from '@maplibre/maplibre-react-native';
 import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import type { NativeSyntheticEvent } from 'react-native';
 
-import { waypointClusterSource } from './waypointTap';
+import { useWaypointClusterSheet, waypointClusterSource } from './waypointTap';
 import { WAYPOINT_PIN_IMAGES } from './waypointPinImages';
 
 /** Layer ids (stable: e2e and the tap code may name them). */
@@ -111,10 +110,20 @@ export const WaypointPinLayers = memo(function WaypointPinLayers({
   glyphs,
 }: Props) {
   const k = pinScaleFactor(useSettingsStore((s) => s.pinScale));
-  const clustered = useMemo(
-    () => clusterPinCollection(pins, selectedKey, hiddenKey),
-    [pins, selectedKey, hiddenKey],
-  );
+  // A pin opened from a cluster's list: the list's other pins step aside
+  // while its card is up (`useWaypointClusterSheet.opened`).
+  const opened = useWaypointClusterSheet((s) => s.opened);
+  const muted = opened !== null && opened.key === selectedKey ? opened.others : null;
+  useEffect(() => {
+    if (opened !== null && opened.key !== selectedKey) {
+      useWaypointClusterSheet.getState().clearOpened();
+    }
+  }, [opened, selectedKey]);
+  const clustered = useMemo(() => {
+    const hidden = muted === null ? null : new Set(muted);
+    const shown = hidden === null ? pins : pins.filter((p) => !hidden.has(p.key));
+    return clusterPinCollection(shown, selectedKey, hiddenKey);
+  }, [pins, selectedKey, hiddenKey, muted]);
   // The sizes on the map decide the radius. Over every pin, the selected and
   // moving ones included, so selecting a pin never re-creates the source. A
   // string, so the radius memo below holds while the same sizes are present.
@@ -129,7 +138,7 @@ export const WaypointPinLayers = memo(function WaypointPinLayers({
   );
   // The largest sizes present decide the radius (see pinClusterRadius).
   const radius = useMemo(
-    () => pinClusterRadius(sizes === '' ? [] : (sizes.split('|') as WaypointSize[]), k),
+    () => pinClusterRadius(sizes.split('|').filter(isWaypointSize), k),
     [sizes, k],
   );
 

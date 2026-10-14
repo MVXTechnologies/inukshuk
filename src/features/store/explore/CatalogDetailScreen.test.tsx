@@ -158,7 +158,7 @@ describe('a Cartes Plein-air map (#680)', () => {
       const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
       await fireEvent.press(free);
       expect(open).toHaveBeenCalledWith('https://cartespleinair.org/cartes/aigle-desert-x-2022');
-      await fireEvent.press(view.getByLabelText('Open On cartespleinair.org'));
+      await fireEvent.press(view.getByLabelText('Open on cartespleinair.org'));
       expect(open).toHaveBeenLastCalledWith(
         'https://cartespleinair.org/cartes/aigle-desert-x-2022',
       );

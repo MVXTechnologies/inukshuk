@@ -58,7 +58,7 @@ describe('Settings › Display › Pin size (#686)', () => {
       }
       expect(checked(100)).toBe(true);
       expect(checked(150)).toBe(false);
-      expect(screen.getByText(/^100 % · every waypoint pin/)).toBeOnTheScreen();
+      expect(screen.getByText(/^100 % · scales every pin on the map$/)).toBeOnTheScreen();
       // The preview well is the theme's own variant surface.
       const well = StyleSheet.flatten(screen.getByTestId('pin-size-preview').props.style) as {
         backgroundColor?: string;
@@ -79,11 +79,14 @@ describe('Settings › Display › Pin size (#686)', () => {
     const after = previewDiameters();
     expect(after[3]).toBe(Math.round(WAYPOINT_PIN_DIAMETER.XL * 1.5 * 0.7));
     after.forEach((d, i) => expect(d).toBeGreaterThan(before[i]!));
+    // One short line at 150 % too (2.5.2 QA: the subtitle wrapped and pushed the controls).
+    const line = screen.getByText('150 % · scales every pin on the map');
+    expect(line.props.numberOfLines).toBe(1);
   });
 
   it('shows a junk stored value as 100 %', async () => {
     useSettingsStore.setState({ pinScale: 110 as never });
     await renderSetting();
-    expect(screen.getByText(/^100 % · every waypoint pin/)).toBeOnTheScreen();
+    expect(screen.getByText(/^100 % · scales every pin on the map$/)).toBeOnTheScreen();
   });
 });

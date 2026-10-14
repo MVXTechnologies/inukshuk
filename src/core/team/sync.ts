@@ -91,10 +91,10 @@ export interface SyncStore {
   /** Fold anything the store deferred (called from {@link SyncSession.tick}). */
   flush?(now: number): void;
   /**
-   * Whether `member` advertises capability `cap` (a logged `cap` record,
-   * #683). Absent: no peer has any, and gated ops are never sent.
+   * Whether `member` advertises capability `cap` at `now` (a logged, unexpired
+   * `cap` record, #683). Absent: no peer has any, and gated ops are never sent.
    */
-  canReceive?(member: string, cap: string): boolean;
+  canReceive?(member: string, cap: string, now: number): boolean;
 }
 
 /**
@@ -131,7 +131,18 @@ export interface SessionOptions {
    * as a Nostr relay. Even then a stroke goes only to a capable peer.
    */
   carryLiveStrokes?: boolean;
+  /**
+   * Members this phone stops sending live strokes to (#683), shared by every
+   * session of one team for as long as it is open. A session adds its peer
+   * when it ends from the far side (a ban included) while strokes were in
+   * flight: a phone rolled back to 2.5.1 keeps a claim it can no longer
+   * honour until that claim expires, and strikes on every stroke meanwhile.
+   */
+  liveStrokeMute?: Set<string>;
 }
+
+/** A session that ends this soon after a live stroke went out mutes its peer (`liveStrokeMute`). */
+export const PEN_IN_FLIGHT_MS = 10_000;
 
 /** A handshake that takes longer is dropped (re-review #4: no time to stall and grind). */
 export const HANDSHAKE_TIMEOUT_MS = 30_000;
@@ -215,6 +226,10 @@ export class SyncSession {
   private wantRounds = 0;
   /** Whether we still need to confirm the peer's membership (we joined before knowing the team). */
   private peerUnverified = false;
+  /** The latest time this session was told (capability claims expire against it). */
+  private clock = 0;
+  /** When a live stroke last went to the peer. */
+  private lastPenAt: number | undefined;
 
   private constructor(
     private readonly c: TeamCrypto,
@@ -223,6 +238,7 @@ export class SyncSession {
     private readonly options: SessionOptions,
   ) {
     this.guard = new PeerGuard(options.limits ?? LAN_LIMITS);
+    this.clock = options.now ?? 0;
     this.phase = side === 'initiator' ? 'await-hi2' : 'await-hi1';
   }
 
@@ -269,6 +285,7 @@ export class SyncSession {
   receive(frame: Uint8Array, now: number): Step {
     const step = empty();
     if (this.phase === 'closed') return step;
+    this.clock = Math.max(this.clock, now);
     this.startedAt ??= now;
     if (this.handshakeExpired(now)) {
       this.fail(step, 'timeout');
@@ -294,8 +311,9 @@ export class SyncSession {
   }
 
   /** Gossip ops we just accepted or wrote to this peer (unsolicited push). */
-  push(ops: readonly SignedOp[]): Step {
+  push(ops: readonly SignedOp[], now?: number): Step {
     const step = empty();
+    if (now !== undefined) this.clock = Math.max(this.clock, now);
     if (this.phase !== 'open') return step;
     const fresh = ops.filter(
       (op) => op.env.sq === 0 || (this.peerVv?.[op.env.au] ?? 0) < op.env.sq,
@@ -314,6 +332,7 @@ export class SyncSession {
   /** Periodic re-sync: resend our vector so the peer can pull anything it missed. */
   tick(now?: number): Step {
     const step = empty();
+    if (now !== undefined) this.clock = Math.max(this.clock, now);
     if (now !== undefined && this.handshakeExpired(now)) {
       this.fail(step, 'timeout');
       return step;
@@ -328,6 +347,8 @@ export class SyncSession {
     if (this.phase === 'closed') return step;
     if (this.phase === 'open') this.sendSealed({ t: 'bye', why }, step);
     else step.send.push(clear({ t: 'bye', why }));
+    // Our own decision (backgrounded, a duplicate link): no reason to mute the peer.
+    this.lastPenAt = undefined;
     this.finish(step, why);
     return step;
   }
@@ -755,18 +776,20 @@ export class SyncSession {
 
   /**
    * A gated op goes only over a transport allowed to carry it
-   * ({@link SessionOptions.carryLiveStrokes}, off by default) and only to a
-   * capable peer.
+   * ({@link SessionOptions.carryLiveStrokes}, off by default), only to a peer
+   * with a current claim, and never to one muted for this team.
    */
   private mayCarry(op: SignedOp): boolean {
     const cap = own(GATED_TYPES, op.env.t);
     if (cap === undefined) return true;
     if (this.options.carryLiveStrokes !== true || this.peer === undefined) return false;
-    return this.store.canReceive?.(this.peer, cap) === true;
+    if (this.options.liveStrokeMute?.has(this.peer) === true) return false;
+    return this.store.canReceive?.(this.peer, cap, this.clock) === true;
   }
 
   private sendOps(all: readonly SignedOp[], solicited: boolean, step: Step): void {
     const ops = all.filter((op) => this.mayCarry(op));
+    if (ops.some((op) => own(GATED_TYPES, op.env.t) !== undefined)) this.lastPenAt = this.clock;
     const budget = this.guard.limits.maxFrameBytes - FRAME_OVERHEAD;
     let batch: Json[] = [];
     let size = 0;
@@ -801,6 +824,10 @@ export class SyncSession {
   }
 
   private finish(step: Step, why: string): void {
+    const pen = this.lastPenAt;
+    if (pen !== undefined && this.peer !== undefined && this.clock - pen <= PEN_IN_FLIGHT_MS) {
+      this.options.liveStrokeMute?.add(this.peer);
+    }
     this.phase = 'closed';
     this.sendKey = undefined;
     this.recvKey = undefined;

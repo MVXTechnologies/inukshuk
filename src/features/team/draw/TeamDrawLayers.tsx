@@ -22,7 +22,7 @@ import { useTeamDrawStore } from '@state/teamDrawStore';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { drawMapColors } from '@ui/teamDrawTokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { useTheme } from 'react-native-paper';
 
 import { DRAW_IMAGES } from './drawImages';
@@ -39,7 +39,11 @@ function drawNow(): number {
   return teamService()?.active?.draw.clock() ?? Date.now();
 }
 
-export function TeamDrawLayers({
+/**
+ * Memoised (2.5.2 review): a MapView child, and MapScreen re-renders on every
+ * GPS fix and heading tick; its props (the glyphs URL, the settled zoom) do not.
+ */
+export const TeamDrawLayers = memo(function TeamDrawLayers({
   glyphs,
   zoom,
 }: {
@@ -132,4 +136,4 @@ export function TeamDrawLayers({
       {layers}
     </GeoJSONSource>,
   ];
-}
+});

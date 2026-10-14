@@ -85,6 +85,9 @@ describe('the cluster list sheet (#685)', () => {
     });
     expect(onOpen).toHaveBeenCalledWith(PINS[1]);
     expect(useWaypointClusterSheet.getState().keys).toBeNull();
+    // The list's other pins step aside on the map while this one's card is up.
+    expect(useWaypointClusterSheet.getState().opened?.key).toBe('saved-b');
+    expect(useWaypointClusterSheet.getState().opened?.others).not.toContain('saved-b');
     expect(screen.queryByTestId('waypoint-cluster-sheet')).toBeNull();
   });
 

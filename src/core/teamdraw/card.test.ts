@@ -12,6 +12,8 @@ describe('a shape’s card', () => {
   it('navigates to an arrow’s head, a circle’s or rectangle’s centre, a line’s end', () => {
     expect(navTarget({ sh: 'arrow', pts: [QC, NEAR] })).toEqual(NEAR);
     expect(navTarget({ sh: 'circle', pts: [QC] })).toEqual(QC);
+    expect(navTarget({ sh: 'rect', pts: [QC] })).toBeNull();
+    expect(navTarget({ sh: 'free', pts: [] })).toBeNull();
     expect(navTarget({ sh: 'free', pts: [QC, NEAR] })).toEqual(NEAR);
     const rect: Pt[] = [
       [0, 0],
@@ -60,5 +62,13 @@ describe('a shape’s card', () => {
       'head 1.01 km NE of you',
     );
     expect(whereText({ sh: 'circle', pts: [QC] }, QC, 'metric')).toBe('centre here');
+  });
+});
+
+describe('navTarget without the points it needs', () => {
+  it('is null', () => {
+    expect(navTarget({ sh: 'arrow', pts: [QC] })).toBeNull();
+    expect(navTarget({ sh: 'circle', pts: [] })).toBeNull();
+    expect(navTarget({ sh: 'rect', pts: [] })).toBeNull();
   });
 });

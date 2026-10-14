@@ -16,7 +16,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière aux Araignées",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -43,7 +43,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Chaudière Section Breakyville",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -70,7 +70,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Saint-Jean (Saguenay)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -97,7 +97,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Haute rivière Betsiamites",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -124,7 +124,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Wessonneau Nord - section du lac Pousse-Mousse",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -151,7 +151,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Réserve faunique de Plaisance - carte 1988",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -178,7 +178,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Circuit de la rivière du Loup",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -205,7 +205,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Boisvert amont - analyse préliminaire",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -232,7 +232,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Coaticook",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -259,7 +259,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière de Maurès",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -286,7 +286,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Circuit Buteux-Jamay",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -313,7 +313,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Doncaster",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -340,7 +340,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière de la Petite Nation",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -367,7 +367,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Jean-Venne",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -394,7 +394,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Natashquan",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -421,7 +421,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Carte tourisrique de la rivière Rouge",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -448,7 +448,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Boucle Maison-de-Pierre - Rouge - Lac Gorion",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -475,7 +475,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Serpent",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -502,7 +502,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Nastapoka",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -529,7 +529,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière des Abénaquis (Saint-Damien-de-Buckland)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -556,7 +556,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Bazin - édition 2026-C",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -583,7 +583,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mistassibi Nord-Ouest",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -610,7 +610,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Ouareau - Aval du Lac",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -637,7 +637,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Bic",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -664,7 +664,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière des Hurons",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -687,38 +687,11 @@
       "updatedAt": "2026-05-25"
     },
     {
-      "id": "cpa-139c6443-50ea-4856-8317-f9f7f5a98034",
-      "sourceId": "cartes-plein-air",
-      "title": "Rivière Shipshaw",
-      "category": "river",
-      "kind": "trail",
-      "activities": [
-        "paddling"
-      ],
-      "format": "pdf",
-      "packaging": "none",
-      "url": "https://assets.cartespleinair.org/maps/riviere-shipshaw-inconnu-2016-0a91f55a31df.pdf",
-      "pageUrl": "https://cartespleinair.org/cartes/riviere-shipshaw-inconnu-2016",
-      "author": "Inconnu",
-      "year": 2016,
-      "version": "78a05316dcfcd0d2ddced47d3acef6e3",
-      "region": "CA-QC",
-      "bbox": [
-        -71.3168,
-        48.4383,
-        -70.9038,
-        49.3568
-      ],
-      "bboxPrecision": "river",
-      "sizeBytes": 13922,
-      "updatedAt": "2026-05-25"
-    },
-    {
       "id": "cpa-145335d1-1079-4a03-b68a-df5b368771b5",
       "sourceId": "cartes-plein-air",
       "title": "Rivière Octave",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -745,7 +718,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Circuit de Canot-camping 2014",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -772,7 +745,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Petite rivière Péribonka",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -799,7 +772,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Guide des rivières sportives d'Abitibi-Témiscamingue",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -826,7 +799,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Noire Nord-Ouest",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -853,7 +826,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Haute rivière Chaudière",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -880,7 +853,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Chicoutimi - du km 65 au km 43",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -907,7 +880,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Diable: carte de canot-kayak-pêche",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -934,7 +907,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Delay",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -961,7 +934,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Attic",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -988,7 +961,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Rimouski",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1015,7 +988,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Rupert - du lac Mesgouez à la baie de Rupert",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1042,7 +1015,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mouchalagane - accès en canot",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1069,7 +1042,7 @@
       "sourceId": "cartes-plein-air",
       "title": "RIvière Olomane",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1096,7 +1069,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Noire (Portneuf)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1123,7 +1096,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Réservoir Kiamika",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1150,7 +1123,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Dalesville",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1177,7 +1150,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Matawin - section du km 42",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1204,7 +1177,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Bélinge",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1231,7 +1204,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mitchinamécus",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1258,7 +1231,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Malbaie - 22 Milles",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1285,7 +1258,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Moisie (via Lac Ashuanipi)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1312,7 +1285,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Moyenne rivière Métabetchouane",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1339,7 +1312,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Moyenne rivière du Loup - Saint-Alexis-des-Monts",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1366,7 +1339,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Sainte-Anne (Gaspésie)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1393,7 +1366,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière aux Pommes",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1420,7 +1393,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Batiscan - du lac Édouard à Notre-Dame-des-Anges",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1447,7 +1420,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mistassini - en aval de la chute Blanche",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1474,7 +1447,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mauvaise",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1501,7 +1474,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Sud-Ouest - informations",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1528,7 +1501,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Matawin -  en aval du réservoir Taureau",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1555,7 +1528,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Victoria",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1582,7 +1555,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Sainte-Marguerite Nord-Est",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1609,7 +1582,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Joseph",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1636,7 +1609,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Rouge - l'Annonciation-Labelle",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1663,7 +1636,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Manouane",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1690,7 +1663,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Clinton",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1717,7 +1690,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Bonniebrook",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1744,7 +1717,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Désert",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1771,7 +1744,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Pin, Saint-Philémon",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1798,7 +1771,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Yamaska - carte préliminiaire",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1825,7 +1798,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière à la Baleine - Présentation",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1852,7 +1825,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Ashuapmushuan",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1879,7 +1852,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière L'Épinay - carte préliminaire",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1906,7 +1879,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Joir",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1933,7 +1906,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mitchinamécus - Aval du Barrage Mitchinamécus",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1960,7 +1933,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Petawawa River",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -1987,7 +1960,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière de l'Orignal",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2014,7 +1987,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Ashuapmushuan - protocole de sécurité",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2041,7 +2014,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Madeleine",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2068,7 +2041,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Normandin",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2095,7 +2068,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Arnold",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2122,7 +2095,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Circuit du lac Devenyns",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2149,7 +2122,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Moyen Nord du Québec - Rivières et accès",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2176,7 +2149,7 @@
       "sourceId": "cartes-plein-air",
       "title": "du barrage Bourque au Petit lac des Baies",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2203,7 +2176,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Parc National de la Mauricie - canot-camping",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2230,7 +2203,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière aux Outardes via le ruisseau Mitchell",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2257,7 +2230,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Camie - carte préliminaire",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2284,7 +2257,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Témiscamie",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2311,7 +2284,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Flamand Ouest",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2338,7 +2311,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière des Fleurs (affluent Etchemin)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2365,7 +2338,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières de Pas et George",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2392,7 +2365,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Sakami",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2419,7 +2392,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Diable",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2446,7 +2419,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Rouge - Huberdeau",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2473,7 +2446,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Réserve Faunique de Mastigouche - avec texte",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2500,7 +2473,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Sainte-Anne-Portneuf",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2527,7 +2500,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Accès en train: La Tuque - Senneterre",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2554,7 +2527,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Route Opitciwan - Lac Dubois",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2581,7 +2554,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Rouge - 21 Milles",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2608,7 +2581,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Moisie (via Lac Ashuanipi)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2635,7 +2608,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Swampy Bay",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2662,7 +2635,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Parc national de Frontenac",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2689,7 +2662,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Koksoak",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2716,7 +2689,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Circuit des Pionniers version 1989",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2743,7 +2716,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières Bulstrode et Gobeil",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2770,7 +2743,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Aigle-Désert",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2797,7 +2770,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Nord - de Val-David à Val-Morin",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2820,38 +2793,11 @@
       "updatedAt": "2026-05-25"
     },
     {
-      "id": "cpa-44c73654-6fc4-4026-bfac-7446aeb71be9",
-      "sourceId": "cartes-plein-air",
-      "title": "Rivière du Pin Rouge",
-      "category": "river",
-      "kind": "trail",
-      "activities": [
-        "paddling"
-      ],
-      "format": "pdf",
-      "packaging": "none",
-      "url": "https://assets.cartespleinair.org/maps/riviere-du-pin-rouge-inconnu-2004-4eeb86ac986d.pdf",
-      "pageUrl": "https://cartespleinair.org/cartes/riviere-du-pin-rouge-inconnu-2004",
-      "author": "Inconnu",
-      "year": 2004,
-      "version": "17526db9716d5d008ddd973dde7f73b8",
-      "region": "CA-QC",
-      "bbox": [
-        -74.8926,
-        47.2333,
-        -74.8449,
-        47.356
-      ],
-      "bboxPrecision": "river",
-      "sizeBytes": 757000,
-      "updatedAt": "2026-05-25"
-    },
-    {
       "id": "cpa-44f80260-22c7-45d0-a6c1-1108fdab80f4",
       "sourceId": "cartes-plein-air",
       "title": "Rivière Yamachiche - Saint-Étienne des Grès",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2878,7 +2824,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Beaurivage - Section Moyenne: du km 67,5 au km 56",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2905,7 +2851,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Beaurivage - Section Haute: du km 77 au km 67,5",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2932,7 +2878,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Natashquan Est",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2959,7 +2905,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mistassini - circuit des Mistassins",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -2986,7 +2932,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Moisie (via Haute et Basse Pékans)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3013,7 +2959,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Désert - accès via rivière Tomasine",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3040,7 +2986,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Kiamika",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3067,7 +3013,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Liaison Noire - Coulonge",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3094,7 +3040,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Moisie (via Haute et Basse Pékans)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3121,7 +3067,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Wabano Ouest",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3148,7 +3094,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Sault aux Cochons",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3175,7 +3121,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Gens de Terre",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3202,7 +3148,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Ouasiemsca",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3229,7 +3175,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Circuit de Canot-camping 2006",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3256,7 +3202,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Dumoine",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3283,7 +3229,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière La Belle Rivière",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3310,7 +3256,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Calway (Saint-Joseph-de-Beauce)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3337,7 +3283,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Parcours de canoé-camping Les Pionniers version 1994",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3364,7 +3310,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Noire (Outaouais) - km 83 à 25",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3391,7 +3337,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Petawawa",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3418,7 +3364,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Rouge - Chien Blanc",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3445,7 +3391,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mitis",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3472,7 +3418,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Vachon River Safety Protocol",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3499,7 +3445,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Middle George River from Michikamats Lake",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3526,7 +3472,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Ruban",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3553,7 +3499,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Normandin - du lac Normandin au lac Nicabau - préliminaire",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3580,7 +3526,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Coucou",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3607,7 +3553,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Ruisseau du Capri",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3634,7 +3580,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière aux Abénaquis",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3661,7 +3607,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Matawin Supérieure",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3688,7 +3634,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Circuit du lac des Zouaves - carte préliminaire",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3715,7 +3661,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Chef",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3742,7 +3688,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Ruisseau Francoeur - Kingsey Falls",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3769,7 +3715,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Saguenay - kayak de mer",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3796,7 +3742,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Palmer Est - Saint-Pierre-de-Broughton",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3823,7 +3769,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Saint-Francois - en aval de Drummondville",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3850,7 +3796,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Assemetquagan",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3877,7 +3823,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Duhamel - carte préliminaire",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3904,7 +3850,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Chateauguay",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3931,7 +3877,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Alex (Saint-Ludger-de-Milot)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3958,7 +3904,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Milieu",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -3985,7 +3931,7 @@
       "sourceId": "cartes-plein-air",
       "title": "George River System - Overview",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4012,7 +3958,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mékinac",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4039,7 +3985,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Rupert - du lac Mistassini à la route du Nord",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4066,7 +4012,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Berger",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4093,7 +4039,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Haute rivière du Loup",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4120,7 +4066,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Parc National de la Mauricie - canot-camping",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4147,7 +4093,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Sainte-Anne Nord-Est",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4174,7 +4120,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Ulverton",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4201,7 +4147,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Manouane - carte préliminaire",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4228,7 +4174,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mistassini - en aval de Girardville",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4255,7 +4201,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Palmer",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4282,7 +4228,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Manawan - Circuit Morialice",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4309,7 +4255,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Coulonge",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4336,7 +4282,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Réserve Faunique de Mastigouche - carte couleur 1990",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4363,7 +4309,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Bras-du-Nord",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4390,7 +4336,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Matawin - rapide des Cinq",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4417,7 +4363,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Missisquoi Nord",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4444,7 +4390,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Madeleine (Section Haute)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4471,7 +4417,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière à la Baleine - Lacs de Tête",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4498,7 +4444,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Saint-Adolphe (à l’Île)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4525,7 +4471,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Achigan",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4552,7 +4498,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Lac Cinconsine et rivière Tom",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4579,7 +4525,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Ruisseau Bullard",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4606,7 +4552,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Ruisseaux à l'Eau Chaude et Rover",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4633,7 +4579,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière aux Rats",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4660,7 +4606,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Cascapédia",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4687,7 +4633,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Circuit des Pionniers version ancienne (198X)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4714,7 +4660,7 @@
       "sourceId": "cartes-plein-air",
       "title": "De Pas and George Rivers",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4741,7 +4687,7 @@
       "sourceId": "cartes-plein-air",
       "title": "RIvière Ashuapmushuan - section aval",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4768,7 +4714,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Lorette",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4795,7 +4741,7 @@
       "sourceId": "cartes-plein-air",
       "title": "La Bonniebrook",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4822,7 +4768,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Haute Montmorency (Section B)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4849,7 +4795,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Noire - aval du lac Noir",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4876,7 +4822,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière York",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4903,7 +4849,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière aux Mélèzes",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4930,7 +4876,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Bonaventure",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4957,7 +4903,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Pitchpine (accès Bazin) - informations préliminaires",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -4984,7 +4930,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Villiers",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5011,7 +4957,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Bonaventure Ouest",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5038,7 +4984,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Ouiatchouaniche",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5065,7 +5011,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières Henri et du Chêne",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5092,7 +5038,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Noire - section Sainte-Émélie-de-l'Énergie",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5119,7 +5065,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Ouasiemsca",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5146,7 +5092,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Chicoutimi",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5173,7 +5119,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Nestaocano",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5200,7 +5146,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Lenoir - accès aux 21 Milles de la Rouge",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5227,7 +5173,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Haute rivière Saint-Maurice - topographique",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5254,7 +5200,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Sourd",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5281,7 +5227,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Réservoir Baskatong - carte préliminaire",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5308,7 +5254,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Tetepisca",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5335,7 +5281,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Wessonneau du Milieu",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5362,7 +5308,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières Boulé et Diable",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5389,7 +5335,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Croche",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5416,7 +5362,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Wabano",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5443,7 +5389,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Bostonnais",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5470,7 +5416,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Gervais",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5497,7 +5443,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Jeannotte",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5524,7 +5470,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Témiscamie Est",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5551,7 +5497,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Kinojévis",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5578,7 +5524,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière aux Écorces",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5605,7 +5551,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière de la Fourche, Armagh",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5632,7 +5578,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Saint-Maurice - de La Tuque à Grandes-Piles",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5659,7 +5605,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Ruisseau Line",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5686,7 +5632,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Gué",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5713,7 +5659,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Pouliot",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5740,7 +5686,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière à la Baleine - Trajet vers Kuujjuaq",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5767,7 +5713,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières Kedgwick et Restigouche - édition 2026-B",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5794,7 +5740,7 @@
       "sourceId": "cartes-plein-air",
       "title": "La Lusignan",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5821,7 +5767,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Palmer",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5848,7 +5794,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Rouge - Ascension - carte préliminaire",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5875,7 +5821,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière des Anglais",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5902,7 +5848,7 @@
       "sourceId": "cartes-plein-air",
       "title": "De Kipawa au lac Dumoine",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5929,7 +5875,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Tomifobia",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5956,7 +5902,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Ford River Guide Map",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -5983,7 +5929,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Nord - section Sainte-Agathe",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6010,7 +5956,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Saint-Maurice - Aval du barrage La Gabelle",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6037,7 +5983,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Corneille - informations préliminaires",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6064,7 +6010,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Daniel",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6091,7 +6037,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Tamarac (accès Haute rivière Gatineau)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6118,7 +6064,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Chochocouane",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6145,7 +6091,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Noire - amont - cartes topos",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6172,7 +6118,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mégiscane",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6199,7 +6145,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mascouche",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6226,7 +6172,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Réservoir Manicouagan",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6253,7 +6199,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mistassini - circuit de canotage",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6280,7 +6226,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Manawan - circuit Némiscachingue",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6307,7 +6253,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Parc régional de la rivière des Mille-Îles",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6334,7 +6280,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mistigougèche",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6361,7 +6307,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Filkars",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6388,7 +6334,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière à la Baleine - Accès au lac Tudor",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6415,7 +6361,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Rouge - Canyon",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6442,7 +6388,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Maskinongé - en aval du lac Maskinongé (préliminaire)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6469,7 +6415,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Morigeau",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6496,7 +6442,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Noire (Charlevoix)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6523,7 +6469,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Flamand",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6550,7 +6496,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière à la Baleine - en amont de la Wheeler",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6577,7 +6523,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Gentilly",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6604,7 +6550,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Saint-Jean 1983",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6631,7 +6577,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Ruisseau à l'Eau Morte",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6658,7 +6604,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Gatineau - section Festival",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6685,7 +6631,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Petite Cascapédia Est",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6712,7 +6658,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Sainte-Anne Nord-Est section A",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6739,7 +6685,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Nastapoka Accès Canot",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6766,7 +6712,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Tomasine",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6793,7 +6739,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Bras d'Henri",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6820,7 +6766,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Linière (du Loup)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6847,7 +6793,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Circuit des Mistassins",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6874,7 +6820,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Jacques-Cartier - Camp3 et Vallée",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6901,7 +6847,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mascouche",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6928,7 +6874,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Natastan",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6955,7 +6901,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Missisquoi Nord",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -6982,7 +6928,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Picanoc",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7009,7 +6955,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Gouffre (St-Urbain)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7036,7 +6982,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Rouge - Sept Soeurs",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7063,7 +7009,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Gazeau - carte préliminaire",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7090,7 +7036,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Petite rivière de la Trinité",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7117,7 +7063,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Boyer",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7144,7 +7090,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Nestaocano",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7171,7 +7117,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Neigette",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7198,7 +7144,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Sauvage",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7225,7 +7171,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Poste",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7252,7 +7198,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mistassini - en amont de la chute Blanche",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7279,7 +7225,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière la Chevrotière",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7306,7 +7252,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Broadback",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7333,7 +7279,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Haute rivière Gatineau - édition 2026-D",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7360,7 +7306,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières Delay, Du Gué, Aux Mélèzes, Koksoak",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7387,7 +7333,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Décharge du lac Albanel - La Passe du Diable",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7414,7 +7360,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Du Sud (Section le Long-Sault)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7441,7 +7387,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Assomption - Sept Seuils et Rentiers",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7468,7 +7414,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières de l'Aigle et Désert",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7495,7 +7441,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Trois Saumons",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7522,7 +7468,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Vachon River Map",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7549,7 +7495,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Kipawa - circuit des Aventuriers",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7576,7 +7522,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Saint-Augustin (Pakuashipi)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7603,7 +7549,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière à Pierre",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7630,7 +7576,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Lièvre - aval de la Mitchinamécus",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7657,7 +7603,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Godbout Est",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7684,7 +7630,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mistassibi",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7711,7 +7657,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Ouareau - Section Chertsey",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7738,7 +7684,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Ruisseau Bonniebrook",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7765,7 +7711,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière de l'Ouest",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7792,7 +7738,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Jeannotte",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7819,7 +7765,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières du Chef et Ashuapmushuan",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7846,7 +7792,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rapport d'expédition - rivières Delay, Du Gué, Aux Mélèzes",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7873,7 +7819,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Moisie (via Lac de Mille)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7900,7 +7846,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Du Sud (Section Haute du 83 km au 46 km)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7927,7 +7873,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Upper George River",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7954,7 +7900,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière aux Éclairs",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -7981,7 +7927,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mouchalagane",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8008,7 +7954,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Trajet de la rivière Assomption",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8035,7 +7981,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Le Renne",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8062,7 +8008,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Cuvillier",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8089,7 +8035,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Wapus (accès Gens de Terre) - informations préliminaires",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8116,7 +8062,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Lièvre - Haute",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8143,7 +8089,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Cinq",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8170,7 +8116,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Bélinge - Informations préliminaires",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8197,7 +8143,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Ruisseau Charest  (St-Prosper, Portneuf)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8224,7 +8170,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Simon",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8251,7 +8197,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Bécancour (section Daveluyville)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8278,7 +8224,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Bras Saint-Nicolas Nord-Est",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8305,7 +8251,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Kekek",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8332,7 +8278,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Ouareau - Capucines",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8359,7 +8305,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Pontax - en amont de la route de la Baie James",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8386,7 +8332,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mazana",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8413,7 +8359,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières des Pins et Nicolet",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8440,7 +8386,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières De Pas et George - Texte francais",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8467,7 +8413,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Coaticook",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8494,7 +8440,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Ignace",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8521,7 +8467,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Noire - de Sainte-Émélie au lac Noir",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8548,7 +8494,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Lac du Poisson Blanc - secteur Sud (Bowman)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8575,7 +8521,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières Bras Saint-Nicolas et Bras d'Apic - section B",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8602,7 +8548,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Assomption - section Saint-Côme",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8629,7 +8575,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Portneuf",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8656,7 +8602,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Manawan - Circuit Rouillé",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8683,7 +8629,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière aux Ormes (accès à la rivière du Chêne)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8710,7 +8656,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières Métascouac et Métabetchouane",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8737,7 +8683,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Manouane - carte préliminaire",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8764,7 +8710,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Godbout",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8791,7 +8737,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Capitachouane",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8818,7 +8764,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Circuit Lapeyrère",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8845,7 +8791,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mazana",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8872,7 +8818,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Osgood, Kinnears Mills",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8899,7 +8845,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Chenal Bostonnais",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8926,7 +8872,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Prévost-Gilbert",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8953,7 +8899,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Causapscal - du pont des Sept Milles à l’embouchure (Matapédia)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -8980,7 +8926,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Magpie",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9007,7 +8953,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière des Perdrix",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9034,7 +8980,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Chibougamau",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9061,7 +9007,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Samaqua",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9088,7 +9034,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières Wessonneau et Wessonneau Nord",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9115,7 +9061,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Loup (Basse)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9142,7 +9088,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière à la Baleine - en aval de la Wheeler",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9169,7 +9115,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Maskinongé - du lac Brochet au lac Maskinongé - carte préliminaire",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9196,7 +9142,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Monts Otish via la rivière Eastmain",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9223,7 +9169,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière du Moulin",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9250,7 +9196,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Métabétchouane - Trou de la Fée",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9277,7 +9223,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière des Prairies",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9304,7 +9250,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Turgeon",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9331,7 +9277,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Basse rivière Malbaie",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9358,7 +9304,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Petite Rivière Bostonnais (Wayagamac)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9385,7 +9331,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières Matonipi et aux Outardes",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9412,7 +9358,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière au Saumon (Lac Brompton)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9439,7 +9385,7 @@
       "sourceId": "cartes-plein-air",
       "title": "RIvière Bonaventure",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9466,7 +9412,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Corneille - deniers kilomètres",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9493,7 +9439,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Koroc River Safety Protocol",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9520,7 +9466,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Koroc River Map",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9547,7 +9493,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Harricana",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9574,7 +9520,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Moisie (via Carheil et Basse Pékans)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9601,7 +9547,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Étamamiou",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9628,7 +9574,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Malbaie",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9655,7 +9601,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Régate à Contre-Courant de Boucherville (aviron)",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9682,7 +9628,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Noire - Roxton Falls",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9709,7 +9655,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières Mégiscane (05) et Suzie - analyse préliminaire",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9736,7 +9682,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières MacDonald et aux Rochers",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9763,7 +9709,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Saint-Jean",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9790,7 +9736,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Beaurivage - Basse",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9817,7 +9763,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Crossing Ungava: Kogaluc and Payne Rivers",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9844,7 +9790,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivières Mastigouche et Mastigouche Nord – Saint-Charles-de-Mandeville",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9871,7 +9817,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Rivière Mistassibi Nord-Est",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9898,7 +9844,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Charpentier and Leaf Rivers",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],
@@ -9925,7 +9871,7 @@
       "sourceId": "cartes-plein-air",
       "title": "Parcours canotable de la rivière Beaurivage",
       "category": "river",
-      "kind": "trail",
+      "kind": "river",
       "activities": [
         "paddling"
       ],

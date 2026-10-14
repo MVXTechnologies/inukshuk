@@ -74,9 +74,10 @@ export function isoRegion(regions: readonly string[]): string | undefined {
 }
 
 export function unionBbox(boxes: readonly CatalogBbox[]): CatalogBbox | null {
-  if (boxes.length === 0) return null;
-  let [w, s, e, n] = boxes[0] as CatalogBbox;
-  for (const [bw, bs, be, bn] of boxes) {
+  const [first, ...rest] = boxes;
+  if (first === undefined) return null;
+  let [w, s, e, n] = first;
+  for (const [bw, bs, be, bn] of rest) {
     w = Math.min(w, bw);
     s = Math.min(s, bs);
     e = Math.max(e, be);
@@ -119,6 +120,7 @@ type Generic = (typeof GENERICS)[number] | 'none';
 
 /** Parenthesised generics the site uses as hints: "Bryson (ruisseau)". */
 const HINT_GENERICS: ReadonlySet<string> = new Set(GENERICS);
+const isHintGeneric = (word: string): word is Generic => HINT_GENERICS.has(word);
 
 /** Linking particles between a generic and the specific name. */
 const PARTICLES = ['de la', 'de l', 'des', 'du', 'de', 'd', 'aux', 'au', 'a la', 'a l', 'a'];
@@ -178,7 +180,7 @@ export function siteRiverName(
 ): { query: string; generic: Generic; specific: string } | null {
   const hints = [...name.matchAll(/\(([^)]*)\)/g)]
     .map((m) => normalizeName(m[1] ?? ''))
-    .filter((word) => HINT_GENERICS.has(word)) as Generic[];
+    .filter(isHintGeneric);
   const hint = hints[0];
   const bare = name
     .replace(/\([^)]*\)/g, ' ')
@@ -223,32 +225,41 @@ export interface GeonameCandidate {
   bbox?: CatalogBbox;
 }
 
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** `{ code }` → its code (CGNDB's status and concise type), else undefined. */
+function codeOf(v: unknown): unknown {
+  return typeof v === 'object' && v !== null && 'code' in v ? v.code : undefined;
+}
+
+const finiteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** A `[west, south, east, north]` of finite numbers, west < east and south < north. */
+function asBbox(b: unknown): CatalogBbox | undefined {
+  if (!Array.isArray(b) || b.length !== 4) return undefined;
+  const [w, s, e, n]: unknown[] = b;
+  if (!finiteNumber(w) || !finiteNumber(s) || !finiteNumber(e) || !finiteNumber(n)) {
+    return undefined;
+  }
+  return w < e && s < n ? [w, s, e, n] : undefined;
+}
+
 /** Parse a CGNDB `geonames.json` answer. Never throws; malformed rows are skipped. */
 export function parseGeonames(raw: unknown): GeonameCandidate[] {
-  const items =
-    typeof raw === 'object' && raw !== null && Array.isArray((raw as { items?: unknown }).items)
-      ? (raw as { items: unknown[] }).items
-      : [];
+  const list = isObject(raw) ? raw['items'] : undefined;
+  const items: unknown[] = Array.isArray(list) ? list : [];
   const out: GeonameCandidate[] = [];
-  for (const item of items) {
-    if (typeof item !== 'object' || item === null) continue;
-    const r = item as Record<string, unknown>;
-    const feature = r.feature as Record<string, unknown> | undefined;
+  for (const r of items) {
+    if (!isObject(r)) continue;
+    const feature = isObject(r.feature) ? r.feature : undefined;
     const featureId =
       typeof feature?.id === 'string' ? feature.id : typeof r.id === 'string' ? r.id : null;
     if (featureId === null || typeof r.name !== 'string') continue;
     if (typeof r.latitude !== 'number' || typeof r.longitude !== 'number') continue;
-    const status = (r.status as Record<string, unknown> | undefined)?.code;
-    const concise = (r.concise as Record<string, unknown> | undefined)?.code;
-    const b = r.bbox;
-    const bbox =
-      Array.isArray(b) &&
-      b.length === 4 &&
-      b.every((n) => typeof n === 'number' && Number.isFinite(n)) &&
-      (b[0] as number) < (b[2] as number) &&
-      (b[1] as number) < (b[3] as number)
-        ? (b as CatalogBbox)
-        : undefined;
+    const status = codeOf(r.status);
+    const concise = codeOf(r.concise);
+    const bbox = asBbox(r.bbox);
     out.push({
       featureId,
       name: r.name,
@@ -351,8 +362,8 @@ export function matchGeoname(
     if (rivers.length > 0) pool = rivers;
   }
   if (pool.length > 1) pool = pool.filter((c) => c.status === 'official');
-  if (pool.length !== 1) return null;
-  const hit = pool[0] as GeonameCandidate;
+  const [hit] = pool;
+  if (hit === undefined || pool.length !== 1) return null;
   const bbox: CatalogBbox = hit.bbox ?? [
     hit.longitude - POINT_HALF_SPAN_DEG,
     hit.latitude - POINT_HALF_SPAN_DEG,
@@ -392,9 +403,10 @@ export function mapLocation(
   regions: readonly string[],
 ): RiverLocation | null {
   const located = rivers.filter((r): r is RiverLocation => r !== null && r.precision === 'river');
-  if (located.length > 0) {
+  const bbox = unionBbox(located.map((r) => r.bbox));
+  if (bbox !== null) {
     return {
-      bbox: unionBbox(located.map((r) => r.bbox)) as CatalogBbox,
+      bbox,
       precision: 'river',
       evidence: located.map((r) => r.evidence).join('; '),
     };

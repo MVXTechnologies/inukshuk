@@ -1,6 +1,12 @@
 import { bottomCardSlotFree } from './bottomCardSlot';
 
-const idle = { railMenuOpen: false, inspecting: false, editingWaypoint: false, drawing: false };
+const idle = {
+  railMenuOpen: false,
+  inspecting: false,
+  editingWaypoint: false,
+  drawing: false,
+  teamDrawing: false,
+};
 
 describe('bottomCardSlotFree', () => {
   it('is free on a bare map', () => {
@@ -11,7 +17,10 @@ describe('bottomCardSlotFree', () => {
     expect(bottomCardSlotFree({ ...idle, railMenuOpen: true })).toBe(false);
   });
 
-  it.each(['inspecting', 'editingWaypoint', 'drawing'] as const)('and while %s', (k) => {
-    expect(bottomCardSlotFree({ ...idle, [k]: true })).toBe(false);
-  });
+  it.each(['inspecting', 'editingWaypoint', 'drawing', 'teamDrawing'] as const)(
+    'and while %s',
+    (k) => {
+      expect(bottomCardSlotFree({ ...idle, [k]: true })).toBe(false);
+    },
+  );
 });

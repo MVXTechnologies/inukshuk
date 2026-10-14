@@ -32,7 +32,7 @@ describe('cpaItem', () => {
       sourceId: 'cartes-plein-air',
       title: 'Aigle-Désert',
       category: 'river',
-      kind: 'trail',
+      kind: 'river',
       activities: ['paddling'],
       format: 'pdf',
       packaging: 'none',

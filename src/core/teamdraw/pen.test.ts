@@ -115,6 +115,9 @@ describe('PenThrottle', () => {
     expect(th.due(600)).toBeNull(); // nothing waits
     expect(th.offer(null, 700)).toBeNull(); // past the cap: no growth
     expect(th.sent).toBe(2);
+    // The caller builds a body only when one may go.
+    expect(th.readyAt()).toBe(250 + PEN_INTERVAL_MS);
+    expect(new PenThrottle().readyAt()).toBe(-Infinity);
   });
 
   it('≤ 4 per second however fast the finger moves, and resets at pen-up', () => {

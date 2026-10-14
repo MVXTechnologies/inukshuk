@@ -40,7 +40,16 @@ export type GestureAction =
 
 type State =
   | { kind: 'idle' }
-  | { kind: 'drawing'; id: Touch['id']; pts: ScreenPt[]; at: number; moved: boolean }
+  | {
+      kind: 'drawing';
+      id: Touch['id'];
+      pts: ScreenPt[];
+      /** The first and the latest point of `pts` (never empty). */
+      first: ScreenPt;
+      last: ScreenPt;
+      at: number;
+      moved: boolean;
+    }
   | { kind: 'pinch'; ids: [Touch['id'], Touch['id']] }
   | { kind: 'spent' };
 
@@ -63,9 +72,9 @@ export class DrawGesture {
   /** Fingers down or moved: `touches` is every finger on the overlay now. */
   touches(touches: readonly Touch[], now: number): GestureAction[] {
     const s = this.state;
-    if (touches.length === 0) return this.lift(now);
-    if (touches.length >= 2) {
-      const [a, b] = touches as [Touch, Touch];
+    const [a, b] = touches;
+    if (a === undefined) return this.lift(now);
+    if (b !== undefined) {
       if (s.kind === 'pinch') {
         const ta = touches.find((t) => t.id === s.ids[0]);
         const tb = touches.find((t) => t.id === s.ids[1]);
@@ -79,10 +88,19 @@ export class DrawGesture {
       out.push({ type: 'pinch-start', a: pt(a), b: pt(b) });
       return out;
     }
-    const t = touches[0]!;
+    const t = a;
     if (s.kind === 'idle') {
-      this.state = { kind: 'drawing', id: t.id, pts: [pt(t)], at: now, moved: false };
-      return [{ type: 'begin', at: pt(t) }];
+      const p = pt(t);
+      this.state = {
+        kind: 'drawing',
+        id: t.id,
+        pts: [p],
+        first: p,
+        last: p,
+        at: now,
+        moved: false,
+      };
+      return [{ type: 'begin', at: p }];
     }
     if (s.kind === 'pinch') {
       // One of two fingers lifted: the map stops; nothing draws until all are up.
@@ -91,10 +109,10 @@ export class DrawGesture {
     }
     if (s.kind !== 'drawing' || t.id !== s.id) return [];
     const p = pt(t);
-    const first = s.pts[0]!;
-    if (!s.moved && far(first, p, SLOP_DP)) s.moved = true;
-    if (!far(s.pts[s.pts.length - 1]!, p, STEP_DP)) return [];
+    if (!s.moved && far(s.first, p, SLOP_DP)) s.moved = true;
+    if (!far(s.last, p, STEP_DP)) return [];
     s.pts.push(p);
+    s.last = p;
     return [{ type: 'update', pts: s.pts }];
   }
 
@@ -103,7 +121,7 @@ export class DrawGesture {
     const s = this.state;
     if (s.kind !== 'drawing' || s.moved || now < s.at + LONG_PRESS_MS) return [];
     this.state = { kind: 'spent' };
-    return [{ type: 'cancel' }, { type: 'long-press', at: s.pts[0]! }];
+    return [{ type: 'cancel' }, { type: 'long-press', at: s.first }];
   }
 
   /** Every finger is up. */
@@ -112,8 +130,7 @@ export class DrawGesture {
     this.state = { kind: 'idle' };
     if (s.kind === 'pinch') return [{ type: 'pinch-end' }];
     if (s.kind !== 'drawing') return [];
-    if (!s.moved && now - s.at <= TAP_MS)
-      return [{ type: 'cancel' }, { type: 'tap', at: s.pts[0]! }];
+    if (!s.moved && now - s.at <= TAP_MS) return [{ type: 'cancel' }, { type: 'tap', at: s.first }];
     return [{ type: 'end', pts: s.pts }];
   }
 

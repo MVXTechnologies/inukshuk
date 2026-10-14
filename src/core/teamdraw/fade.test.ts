@@ -1,4 +1,5 @@
 import {
+  onMapCount,
   FADE_FLOOR,
   fadeStart,
   fadeState,
@@ -157,5 +158,15 @@ describe('nextChangeAt', () => {
     const b = life(10 * S, 4 * MIN);
     expect(nextChangeAt([a, b], 4 * MIN)).toBe(fadeStart(b)! + 1);
     expect(nextChangeAt([b, a], 4 * MIN)).toBe(fadeStart(b)! + 1);
+  });
+});
+
+describe('onMapCount (Manage team › Drawings)', () => {
+  it('counts what is on the map now, and says when that changes', () => {
+    const shapes = [{ expires: null }, { expires: 1_000 }, { expires: 3_000 }, { expires: 500 }];
+    expect(onMapCount(shapes, 600)).toEqual({ count: 3, changesAt: 1_000 });
+    expect(onMapCount(shapes, 1_000)).toEqual({ count: 2, changesAt: 3_000 });
+    expect(onMapCount(shapes, 5_000)).toEqual({ count: 1, changesAt: null });
+    expect(onMapCount([], 0)).toEqual({ count: 0, changesAt: null });
   });
 });

@@ -122,6 +122,7 @@ export async function crawlCartesPleinAir(input: CrawlInput): Promise<CrawlOutpu
   // 1. The listing.
   const listing = await client.request(LISTING_URL, {
     method: 'GET',
+    stayOn: isPublisherUrl,
     ...(input.listingCache !== undefined ? { validators: input.listingCache.validators } : {}),
   });
   if (listing.kind !== 'response') {
@@ -187,10 +188,21 @@ export async function crawlCartesPleinAir(input: CrawlInput): Promise<CrawlOutpu
     const file = await client.request(url, {
       method: 'HEAD',
       headers: { 'Accept-Encoding': 'identity' },
+      stayOn: isPublisherUrl,
     });
     if (file.kind === 'disallowed')
       return { ok: false, transient: false, reason: 'robots.txt (file)' };
     if (file.kind === 'failed') return { ok: false, transient: true, reason: file.reason };
+    // The file host may redirect again (a CDN): never off the publisher's site
+    // (`stayOn` stopped there and answered with the redirect itself).
+    const onward = file.response.headers.get('location');
+    if (file.response.status >= 300 && file.response.status < 400 && onward !== null) {
+      return {
+        ok: false,
+        transient: false,
+        reason: `file redirects off the publisher's site (${new URL(onward, file.url).toString()})`,
+      };
+    }
     const type = file.response.headers.get('content-type') ?? '';
     if (file.response.status !== 200 || !/pdf|octet-stream/i.test(type)) {
       return {

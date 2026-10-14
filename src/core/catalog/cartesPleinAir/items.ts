@@ -72,7 +72,7 @@ export function cpaItem(map: CpaMap, asset: CpaAsset, location: RiverLocation | 
     sourceId: CPA_SOURCE_ID,
     title: map.title,
     category: 'river',
-    kind: 'trail',
+    kind: 'river',
     activities: ['paddling'],
     format: 'pdf',
     packaging: 'none',

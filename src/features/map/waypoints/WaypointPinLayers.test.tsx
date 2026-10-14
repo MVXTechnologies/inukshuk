@@ -10,7 +10,7 @@ import { darkTheme, lightTheme } from '@ui/theme';
 import { schemeTokens } from '@ui/tokens';
 
 import { WAYPOINT_PIN_LAYERS, WAYPOINT_PIN_SOURCE, WaypointPinLayers } from './WaypointPinLayers';
-import { waypointClusterSource } from './waypointTap';
+import { useWaypointClusterSheet, waypointClusterSource } from './waypointTap';
 
 jest.mock('@data/storage', () => ({
   writeJson: jest.fn(),
@@ -146,6 +146,21 @@ describe('WaypointPinLayers (#675, #685)', () => {
         WAYPOINT_PIN_LAYERS.selectedLabel,
       ]),
     );
+  });
+
+  it('a pin opened from a cluster’s list stands alone: the list’s other pins step aside, then come back', async () => {
+    const keysOf = () =>
+      (last(WAYPOINT_PIN_SOURCE)?.data as { features: { properties: { key: string } }[] }).features
+        .map((f) => f.properties.key)
+        .sort();
+    useWaypointClusterSheet.getState().open(['saved-1', 'saved-2', 'saved-3']);
+    useWaypointClusterSheet.getState().openedFrom('saved-2');
+    const r = await render(<Tree p={pins(5)} selectedKey="saved-2" />);
+    expect(keysOf()).toEqual(['saved-0', 'saved-4']);
+    // Another pin selected (or none): the store forgets, everyone is back.
+    await r.rerender(<Tree p={pins(5)} selectedKey={null} />);
+    expect(useWaypointClusterSheet.getState().opened).toBeNull();
+    expect(keysOf()).toEqual(['saved-0', 'saved-1', 'saved-2', 'saved-3', 'saved-4']);
   });
 
   it('hands the clustered source to the tap code', async () => {

@@ -5,6 +5,7 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import { useActionSnackbar } from '../../common/useActionSnackbar';
 import { useWaypointQuickActions } from './useWaypointQuickActions';
+import { useWaypointClusterSheet } from './waypointTap';
 
 jest.mock('@data/storage', () => ({
   ...jest
@@ -98,7 +99,10 @@ describe('Move (#676)', () => {
   it('starts on a saved waypoint, bringing it under the centre first', async () => {
     const id = await withWaypoint();
     const { result, options } = await setup();
+    // A cluster list left open (the pin was picked from it) closes as Move starts.
+    useWaypointClusterSheet.getState().open(['saved-x', 'saved-y']);
     await act(async () => result.current.startMove(id));
+    expect(useWaypointClusterSheet.getState().keys).toBeNull();
     expect(options.onBeforeMove).toHaveBeenCalledWith(FIX);
     expect(useWaypointMoveStore.getState().moving).toEqual({
       id,

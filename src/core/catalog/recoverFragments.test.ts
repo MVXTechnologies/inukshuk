@@ -90,6 +90,23 @@ describe('recoverFragmentsFromPublished', () => {
     expect(fragments.get('alpha')?.items.map((i) => i.id)).toEqual(['a-1', 'a-2', 'a-3']);
   });
 
+  it('keeps a source verbatim (a field the app parser does not know, key order) once it parses', () => {
+    const { index, shards } = publish(ITEMS);
+    const withNotes = {
+      ...index,
+      sources: [{ ...SOURCES[0], internalNote: 'renewed 2026' }, SOURCES[1]],
+    };
+    const alpha = recoverFragmentsFromPublished(withNotes, shards).fragments.get('alpha');
+    expect(alpha?.sources).toEqual([{ ...SOURCES[0], internalNote: 'renewed 2026' }]);
+    expect(Object.keys(alpha?.sources[0] ?? {})).toEqual([
+      'id',
+      'name',
+      'licence',
+      'attribution',
+      'internalNote',
+    ]);
+  });
+
   it('keeps every row verbatim, key order included, minus the recomputed terrain', () => {
     const { index, shards } = publish(ITEMS);
     const alpha = recoverFragmentsFromPublished(index, shards).fragments.get('alpha');

@@ -2,8 +2,8 @@
  * Team drawing on one open team (#683): the session's side of the pure core
  * in `@core/teamdraw`. The finished shape is a logged `e.set` of kind `drw`,
  * the stroke in progress an ephemeral `pen` (the sync session sends it only
- * to peers whose member advertises `cap.pen`), and this phone advertises
- * `cap.pen` once per team.
+ * to peers whose member advertises a current `cap.pen`), and this phone
+ * renews its own `cap.pen` claim on each team open.
  *
  * Live strokes never go through the team's general change signal: they come
  * four times a second, and the screens that listen to it (the map among
@@ -82,12 +82,11 @@ export class SessionDrawing {
     const key = this.h.dataVersion();
     const now = this.clock();
     const c = this.shapesCache;
-    if (c === null || c.key !== key || now >= c.until) {
-      const shapes = teamShapes(this.h.replica.data(now), now);
-      const until = shapes.reduce((m, sh) => Math.min(m, sh.expires ?? Infinity), Infinity);
-      this.shapesCache = { key, until, shapes };
-    }
-    return this.shapesCache!.shapes;
+    if (c !== null && c.key === key && now < c.until) return c.shapes;
+    const shapes = teamShapes(this.h.replica.data(now), now);
+    const until = shapes.reduce((m, sh) => Math.min(m, sh.expires ?? Infinity), Infinity);
+    this.shapesCache = { key, until, shapes };
+    return shapes;
   }
 
   /** Teammates' strokes in progress (never mine: I see my own under my finger). */
@@ -195,13 +194,18 @@ export class SessionDrawing {
     return n;
   }
 
-  /** Advertise `cap.pen` once (a team joined or opened); true when written. */
+  /**
+   * Advertise `cap.pen` (a team joined or opened): written when there is no
+   * current claim or it is over a day old, so a claim lapses within a week of
+   * the phone's last 2.5.2+ open (a rollback); true when written.
+   */
   advertise(): boolean {
     const me = this.h.me;
     const r = this.h.replica;
     if (this.h.guardWrite() !== null || r.state.sendKeyId === undefined) return false;
-    if (!needsCap(r.data(this.h.now()), me)) return false;
-    const op = this.h.run(() => r.write(this.h.now(), 'e.set', capBody(me)));
+    const now = this.h.now();
+    if (!needsCap(r.data(now), me, now)) return false;
+    const op = this.h.run(() => r.write(now, 'e.set', capBody(me, now)));
     return op !== undefined;
   }
 

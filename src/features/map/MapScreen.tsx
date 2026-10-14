@@ -145,7 +145,11 @@ import { ReceiverFollow } from '@features/gnss/ReceiverFollow';
 import { ReceiverMapOverlay } from '@features/gnss/ReceiverMapOverlay';
 import { TeamMapLayers } from '@features/team/map/TeamMapLayers';
 import { TeamDrawLayers } from '@features/team/draw/TeamDrawLayers';
-import { TeamDrawMode, useTeamDrawActive } from '@features/team/draw/TeamDrawMode';
+import {
+  drawCreditsSheetBottom,
+  TeamDrawMode,
+  useTeamDrawActive,
+} from '@features/team/draw/TeamDrawMode';
 import { hitTestTeamDraw } from '@features/team/draw/hitTestDraw';
 import { useTeamDrawStore } from '@state/teamDrawStore';
 import {
@@ -198,6 +202,7 @@ import { useWaypointMoveStore } from '@state/waypointMoveStore';
 import { ActionSnackbar } from '../common/ActionSnackbar';
 import {
   BOTTOM_LAYER,
+  teamFabBottom,
   liftedSnackbarStyle,
   rowLiftAboveColumnBottom,
   snackbarWrapperStyle,
@@ -1741,6 +1746,7 @@ export function MapScreen() {
     inspecting: inspectTrack !== null,
     editingWaypoint: editWaypoint !== null,
     drawing: drawing.active,
+    teamDrawing,
   });
 
   const saveWaypoint = () => {
@@ -2157,14 +2163,15 @@ export function MapScreen() {
         return;
       }
       if (wpHit?.kind === 'cluster') {
-        // #685: glide to where the cluster splits, or list its pins.
+        // #685: glide to where the cluster splits, or list its pins. The open
+        // card closes only once the cluster is resolved (its ids churn then).
         drawingRef.current.closeAreaCard();
-        setViewWp(null);
         setExtensionHit(null);
         void openWaypointCluster(
           wpHit.cluster,
           getMapZoom().catch(() => null),
           zoomMapTo,
+          () => setViewWp(null),
         );
         return;
       }
@@ -2244,11 +2251,19 @@ export function MapScreen() {
       // Team mode (#589): a teammate's dot or a shared waypoint, above the
       // map extensions (they are what the user is looking for on a team map).
       const teamHit = await hitTestTeam(map, px, py);
-      // A team drawing (#683): its card; a teammate on it wins the tap.
+      // A team drawing (#683): its card; a teammate on it wins the tap. Either
+      // takes the bottom slot, so the other cards there close (one card at a time).
+      const closeOtherCards = () => {
+        drawingRef.current.closeAreaCard();
+        setPointAt(null);
+        setViewWp(null);
+        setForecastAt(null);
+        setExtensionHit(null);
+      };
       if (teamHit === null) {
         const drawKey = await hitTestTeamDraw(map, px, py);
         if (drawKey !== null) {
-          setPointAt(null);
+          closeOtherCards();
           useTeamMapSelection.getState().select(null);
           useTeamDrawStore.getState().openCard(drawKey);
           return;
@@ -2256,11 +2271,7 @@ export function MapScreen() {
       }
       useTeamDrawStore.getState().openCard(null);
       if (teamHit !== null) {
-        drawingRef.current.closeAreaCard();
-        setPointAt(null);
-        setViewWp(null);
-        setForecastAt(null);
-        setExtensionHit(null);
+        closeOtherCards();
         useTeamMapSelection.getState().select(teamHit);
         return;
       }
@@ -2803,6 +2814,7 @@ export function MapScreen() {
                 savedPins,
                 pressPoint,
                 viewWp ? `${viewWp.source}-${viewWp.id}` : null,
+                visiblePins.length,
               )
                 .catch(() => null)
                 .then((pin) => {
@@ -3401,6 +3413,7 @@ export function MapScreen() {
             heatSelection === null &&
             !selecting &&
             !drawing.active &&
+            !teamDrawing &&
             movingWp === null &&
             editWaypoint === null
           }
@@ -3898,7 +3911,7 @@ export function MapScreen() {
           a tapped teammate's or shared waypoint's card. */}
         {makeMapState === null && (
           <TeamMapOverlay
-            fabBottom={(recordingPanelUp ? panelHeight : 0) + 72}
+            fabBottom={teamFabBottom(bottomColumnLift, bottomColumnH)}
             sosTop={insets.top + 8}
             onPointActions={(p, what) => {
               const at = { longitude: p[0], latitude: p[1] };
@@ -3913,10 +3926,18 @@ export function MapScreen() {
             cardSlotFree={cardSlotFree && viewWaypoint === null && extensionHit === null}
             cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight)}
             onNavigate={(latitude, longitude) => setDestination({ latitude, longitude })}
+            screenFocused={isFocused}
           />
         )}
         {/* Team drawing mode (#683): its canvas, top bar and tool bar. */}
-        <TeamDrawMode mapRef={mapRef} cameraRef={cameraRef} focused={isFocused} />
+        <TeamDrawMode
+          mapRef={mapRef}
+          cameraRef={cameraRef}
+          focused={isFocused}
+          bottomInset={recordingPanelUp ? panelHeight : 0}
+          locked={gloveLocked}
+          onCredits={setCreditsOpen}
+        />
         <TeamPickOverlay
           top={insets.top + 8}
           cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight)}
@@ -3983,12 +4004,15 @@ export function MapScreen() {
               extensions: shownExtensions,
             })}
             bottom={
-              bottomColumnLift +
-              (bottomColumnH !== null && bottomRowY !== null
-                ? rowLiftAboveColumnBottom(bottomColumnH, bottomRowY)
-                : 48) +
-              TIP_BUBBLE_GAP
+              teamDrawing
+                ? drawCreditsSheetBottom(insets.bottom, recordingPanelUp ? panelHeight : 0)
+                : bottomColumnLift +
+                  (bottomColumnH !== null && bottomRowY !== null
+                    ? rowLiftAboveColumnBottom(bottomColumnH, bottomRowY)
+                    : 48) +
+                  TIP_BUBBLE_GAP
             }
+            {...(teamDrawing ? { layer: BOTTOM_LAYER.overDrawMode } : {})}
             onClose={() => setCreditsOpen(false)}
           />
         )}
@@ -4024,7 +4048,7 @@ export function MapScreen() {
           panel, the save/edit sheets, and a tapped area's card. */}
         {drawing.chrome}
 
-        {cardSlotFree && viewWaypoint !== null && (
+        {cardSlotFree && movingWp === null && viewWaypoint !== null && (
           <View
             style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
             pointerEvents="box-none"
@@ -4076,7 +4100,7 @@ export function MapScreen() {
         )}
 
         {/* A cluster's pins at the camera's cap (#685): pick one to open its card. */}
-        {cardSlotFree && (
+        {cardSlotFree && movingWp === null && (
           <View
             style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
             pointerEvents="box-none"

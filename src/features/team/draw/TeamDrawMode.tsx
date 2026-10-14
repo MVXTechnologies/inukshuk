@@ -19,23 +19,27 @@
 import type { Units } from '@core/format';
 import { DrawGesture, type GestureAction, type Touch } from '@core/teamdraw/gesture';
 import { penBody, PenThrottle, toleranceM, type PenBody } from '@core/teamdraw/pen';
+import { penStyle } from '@core/teamdraw/style';
 import type { ShapeKind } from '@core/teamdraw/record';
 import {
-  buildStroke,
-  chipText,
+  menuSide,
   MIN_STROKE_DP,
   pinchCamera,
+  screenSpan,
   startPinch,
+  StrokeBuilder,
   type Pinch,
   type ScreenPt,
   type Viewport,
 } from '@core/teamdraw/screen';
-import { penStyle } from '@core/teamdraw/style';
 import { memberColor } from '@core/teamui/colors';
 import { useActionSnackbar } from '@features/common/useActionSnackbar';
 import { ActionSnackbar } from '@features/common/ActionSnackbar';
 import { useScreenSheet } from '@features/common/useScreenSheet';
+import { BOTTOM_LAYER } from '@features/map/bottomLayers';
+import { MapCreditsButton } from '@features/map/components/MapCredits';
 import type { CameraRef, MapRef } from '@maplibre/maplibre-react-native';
+import { useWaypointClusterSheet } from '@features/map/waypoints/waypointTap';
 import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useTeamDrawStore } from '@state/teamDrawStore';
@@ -43,7 +47,7 @@ import { teamService, useTeamStore } from '@state/teamStore';
 import { drawChrome } from '@ui/teamDrawTokens';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -88,21 +92,44 @@ export function exitDrawing(): void {
   useTeamDrawStore.getState().exit();
 }
 
-/** Enter drawing mode from the team menu (members only). */
-export function enterDrawing(): void {
-  void useTeamDrawStore.getState().hydrate();
+/**
+ * Enter drawing mode from the team menu (members only). Once the remembered
+ * style and hint count are read: entering first would count this entry from
+ * zero (the hint every launch) and write the defaults over the saved style.
+ */
+export async function enterDrawing(): Promise<void> {
+  // The waypoint cluster list does not survive into drawing mode.
+  useWaypointClusterSheet.getState().close();
+  const store = useTeamDrawStore.getState();
+  if (!store.hydrated) await store.hydrate();
   useTeamDrawStore.getState().enter();
 }
 
-export function TeamDrawMode(props: {
+interface DrawModeProps {
   mapRef: RefObject<MapRef | null>;
   cameraRef: RefObject<CameraRef | null>;
   focused: boolean;
-}) {
+  /**
+   * Height of what docks at the bottom edge under drawing mode (the recording
+   * panel while it is up), or 0. The canvas stops above it, so it stays usable,
+   * and the tool bar sits on it.
+   */
+  bottomInset?: number;
+  /** The recording's glove lock (revamp §3): drawing mode takes no touch at all. */
+  locked?: boolean;
+  /** Opens the map's credits sheet (the ⓘ stays on the map: a licence requirement). */
+  onCredits?: (open: true) => void;
+}
+
+/**
+ * Memoised (2.5.2 review): MapScreen re-renders on every GPS fix and heading
+ * tick, and none of that changes this (its props are refs, flags and a setter).
+ */
+export const TeamDrawMode = memo(function TeamDrawMode(props: DrawModeProps) {
   const active = useTeamDrawStore((s) => s.active);
   if (!active) return null;
   return <DrawModeBody {...props} />;
-}
+});
 
 /** The SVG of my stroke in progress, in screen dp. */
 function LocalStroke({
@@ -170,11 +197,10 @@ function DrawModeBody({
   mapRef,
   cameraRef,
   focused,
-}: {
-  mapRef: RefObject<MapRef | null>;
-  cameraRef: RefObject<CameraRef | null>;
-  focused: boolean;
-}) {
+  bottomInset = 0,
+  locked = false,
+  onCredits,
+}: DrawModeProps) {
   const t = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const tool = useTeamDrawStore((s) => s.tool);
@@ -196,16 +222,16 @@ function DrawModeBody({
   const gesture = useRef(new DrawGesture());
   const view = useRef<Viewport | null>(null);
   const size = useRef({ width: 0, height: 0 });
-  const origin = useRef({ x: 0, y: 0 });
-  const canvas = useRef<View>(null);
   const pinch = useRef<Pinch | null>(null);
-  const stroke = useRef<{ id: string } | null>(null);
+  const stroke = useRef<StrokeBuilder | null>(null);
+  /** The gesture's points so far (the pen timer builds from the latest). */
+  const latest = useRef<readonly ScreenPt[]>([]);
   const throttle = useRef(new PenThrottle());
   const dueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const live = useRef({ tool, prefs, units, styleOpen });
+  const live = useRef({ tool, prefs, units, styleOpen, locked });
   useEffect(() => {
-    live.current = { tool, prefs, units, styleOpen };
+    live.current = { tool, prefs, units, styleOpen, locked };
   });
 
   const done = useCallback(() => {
@@ -262,62 +288,95 @@ function DrawModeBody({
   const send = (body: PenBody) => {
     session()?.draw.sendPen(body);
   };
+  /**
+   * The stroke so far to the team, built only now that the throttle lets one
+   * go (never per touch-move). Teammates see it once it is a real stroke: an
+   * accidental touch never leaves.
+   */
+  const sendLatest = () => {
+    const vp = view.current;
+    const b = stroke.current;
+    if (!vp || !b) return;
+    const real = b.stroke(latest.current, vp, penStyle(live.current.prefs), MIN_STROKE_DP);
+    if (!real) return;
+    const body = throttle.current.offer(
+      penBody(real, toleranceM(vp.zoom, vp.center[1])),
+      clockNow(),
+    );
+    if (body) send(body);
+  };
+  /** A move came too soon after the last send: send the latest when the throttle allows. */
   const armDue = () => {
-    if (dueTimer.current) clearTimeout(dueTimer.current);
-    dueTimer.current = null;
-    const at = throttle.current.nextAt();
-    if (at === null) return;
+    if (dueTimer.current) return;
     dueTimer.current = setTimeout(
       () => {
         dueTimer.current = null;
-        const body = throttle.current.due(Date.now());
-        if (body) send(body);
-        armDue();
+        sendLatest();
       },
-      Math.max(0, at - clockNow()),
+      Math.max(0, throttle.current.readyAt() - clockNow()),
     );
   };
   const endStroke = () => {
     if (dueTimer.current) clearTimeout(dueTimer.current);
     dueTimer.current = null;
     throttle.current.reset();
+    latest.current = [];
     setPts([]);
     setChip(null);
   };
   const canTouch = (key: string) => isAdmin || key.startsWith(`${me ?? '?'}:`);
 
-  const run = (actions: readonly GestureAction[]) => {
+  const [menuPlace, setMenuPlace] = useState<{ top: number } | { bottom: number }>({
+    top: insets.top + 70,
+  });
+  /** Where a shape's menu goes: under the top bar or on the tool bar, whichever hides less of it. */
+  const placeMenu = (key: string) => {
+    const menuTop = insets.top + 70;
+    const menuBottom = drawBarBottom(insets.bottom, bottomInset) + BAR_H + 8;
+    const shape = useTeamStore.getState().drawings.find((x) => x.key === key);
     const vp = view.current;
-    const { tool: tl, prefs: p, units: u } = live.current;
-    const strokeOf = (list: readonly ScreenPt[], minDp: number) =>
-      vp && stroke.current
-        ? buildStroke(tl, list, vp, stroke.current.id, penStyle(p), minDp)
-        : null;
+    const side =
+      shape === undefined || vp === null
+        ? 'top'
+        : menuSide(
+            screenSpan(shape, vp),
+            [menuTop, menuTop + MENU_H],
+            [vp.height - menuBottom - MENU_H, vp.height - menuBottom],
+          );
+    setMenuPlace(side === 'top' ? { top: menuTop } : { bottom: menuBottom });
+  };
+
+  const run = (actions: readonly GestureAction[]) => {
     for (const a of actions) {
+      // Read per action: a 'begin' re-reads the camera, a pinch moves it.
+      const vp = view.current;
       switch (a.type) {
         case 'begin':
           setStyleOpen(false);
-          stroke.current = { id: session()?.newId() ?? String(Date.now()) };
+          stroke.current = new StrokeBuilder(
+            live.current.tool,
+            session()?.newId() ?? String(Date.now()),
+          );
           throttle.current.reset();
+          latest.current = [a.at];
           setPts([a.at]);
-          if (vp === null) void syncView();
+          // The camera may have moved since the last stroke (the recording's
+          // camera, a navigation glide): every stroke starts from a fresh read.
+          void syncView();
           break;
         case 'update': {
+          latest.current = a.pts;
           setPts([...a.pts]);
-          const s = strokeOf(a.pts, 1);
-          setChip(s ? chipText(s, u) : null);
-          // Teammates see it once it is a real stroke (an accidental touch never leaves).
-          const real = strokeOf(a.pts, MIN_STROKE_DP);
-          if (real && vp && stroke.current) {
-            const body = penBody(real, toleranceM(vp.zoom, vp.center[1]));
-            const now = throttle.current.offer(body, Date.now());
-            if (now) send(now);
-            armDue();
-          }
+          const b = stroke.current;
+          setChip(vp && b ? b.chip(a.pts, vp, live.current.units) : null);
+          if (clockNow() >= throttle.current.readyAt()) sendLatest();
+          else armDue();
           break;
         }
         case 'end': {
-          const s = strokeOf(a.pts, MIN_STROKE_DP);
+          const b = stroke.current;
+          const s =
+            vp && b ? b.stroke(a.pts, vp, penStyle(live.current.prefs), MIN_STROKE_DP) : null;
           if (s && vp) {
             const err = session()?.draw.finish(
               s,
@@ -353,7 +412,10 @@ function DrawModeBody({
               return;
             }
             if (kind === 'tap') store.select(store.selected === key ? null : key);
-            else store.openMenu(key);
+            else {
+              placeMenu(key);
+              store.openMenu(key);
+            }
           });
           break;
         }
@@ -375,12 +437,26 @@ function DrawModeBody({
     }
   };
 
+  const runRef = useRef(run);
+  useEffect(() => {
+    runRef.current = run;
+  });
+  // The glove lock engaged mid-stroke: the stroke is cancelled, not finished.
+  useEffect(() => {
+    if (!locked) return;
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+    pressTimer.current = null;
+    runRef.current(gesture.current.reset());
+  }, [locked]);
+
+  /**
+   * Touches in the canvas's own dp, which are the map's: the canvas is pinned
+   * to the map's top-left and its children take no touch. Never `pageY` minus
+   * `measureInWindow()`: on edge-to-edge Android the two disagree by the status
+   * bar, and every stroke landed ~52 dp under the finger (2.5.2 QA).
+   */
   const touchesOf = (e: GestureResponderEvent): Touch[] =>
-    e.nativeEvent.touches.map((x) => ({
-      id: x.identifier,
-      x: x.pageX - origin.current.x,
-      y: x.pageY - origin.current.y,
-    }));
+    e.nativeEvent.touches.map((x) => ({ id: x.identifier, x: x.locationX, y: x.locationY }));
   const onTouches = (e: GestureResponderEvent) => {
     run(gesture.current.touches(touchesOf(e), Date.now()));
     if (pressTimer.current) clearTimeout(pressTimer.current);
@@ -393,13 +469,11 @@ function DrawModeBody({
       );
     }
   };
+  /** The MAP's size (the root fills it): the projection's centre is the map's, not the canvas's. */
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     size.current = { width, height };
     if (view.current) view.current = { ...view.current, width, height };
-    canvas.current?.measureInWindow((x, y) => {
-      origin.current = { x, y };
-    });
   };
 
   const clearMine = () => {
@@ -433,14 +507,21 @@ function DrawModeBody({
   const color = memberColor(prefs.colour);
   const lineW = LINE_DP[prefs.width];
   const menuShape = menuKey === null ? undefined : shapes.find((s) => s.key === menuKey);
-  const barBottom = insets.bottom + 12;
+  const barBottom = drawBarBottom(insets.bottom, bottomInset);
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none" testID="team-draw-mode">
+    <View
+      style={[StyleSheet.absoluteFill, BOTTOM_LAYER.drawMode]}
+      // Glove lock: every touch falls through to the lock's shield (and the
+      // panel's hold-to-unlock), as for the rest of the map's chrome.
+      pointerEvents={locked ? 'none' : 'box-none'}
+      importantForAccessibility={locked ? 'no-hide-descendants' : 'auto'}
+      accessibilityElementsHidden={locked}
+      onLayout={onLayout}
+      testID="team-draw-mode"
+    >
       <View
-        ref={canvas}
-        style={StyleSheet.absoluteFill}
-        onLayout={onLayout}
+        style={[styles.canvas, { bottom: bottomInset }]}
         onStartShouldSetResponder={() => true}
         onMoveShouldSetResponder={() => true}
         onResponderTerminationRequest={() => false}
@@ -521,9 +602,20 @@ function DrawModeBody({
       {menuShape && (
         <ShapeMenu
           shape={menuShape}
-          top={insets.top + 70}
+          place={menuPlace}
           onClose={() => useTeamDrawStore.getState().openMenu(null)}
         />
+      )}
+
+      {/* The map's credits stay on the map in drawing mode (OpenStreetMap's
+        attribution guideline), just above the tool bar. */}
+      {onCredits !== undefined && (
+        <View
+          style={[styles.credits, { bottom: barBottom + BAR_H + CREDITS_GAP }]}
+          pointerEvents="box-none"
+        >
+          <MapCreditsButton onPress={() => onCredits(true)} />
+        </View>
       )}
 
       <View style={[styles.bar, { bottom: barBottom }]} testID="team-draw-toolbar">
@@ -591,8 +683,27 @@ function DrawModeBody({
   );
 }
 
+const BAR_H = 66;
+/** The shape menu's height, about (its note field and buttons). */
+const MENU_H = 260;
+const CREDITS_GAP = 10;
+/** The ⓘ button's height (MapCredits). */
+const CREDITS_H = 32;
+
+/** The tool bar's bottom: on the recording panel when it is up (the panel holds the safe area). */
+export function drawBarBottom(safeBottom: number, bottomInset: number): number {
+  return (bottomInset > 0 ? bottomInset : safeBottom) + 12;
+}
+
+/** Where the credits sheet docks in drawing mode: just above the ⓘ over the tool bar. */
+export function drawCreditsSheetBottom(safeBottom: number, bottomInset: number): number {
+  return drawBarBottom(safeBottom, bottomInset) + BAR_H + CREDITS_GAP + CREDITS_H + 8;
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  canvas: { position: 'absolute', top: 0, left: 0, right: 0 },
+  credits: { position: 'absolute', left: 16, zIndex: 9 },
   top: {
     position: 'absolute',
     left: 16,
@@ -653,7 +764,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 12,
     right: 12,
-    height: 66,
+    height: BAR_H,
     borderRadius: 24,
     backgroundColor: drawChrome.bar,
     flexDirection: 'row',

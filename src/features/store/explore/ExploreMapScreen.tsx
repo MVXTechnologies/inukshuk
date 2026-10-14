@@ -44,7 +44,8 @@ import { installStatusFor } from '@core/catalog/installStatus';
 import { formatDistanceAway } from '@core/catalog/nearbySections';
 import { bboxCenter } from '@core/catalog/nearest';
 import { placeActivities } from '@core/catalog/collections';
-import type { CatalogItem } from '@core/catalog/schema';
+import { itemCredit, sourceFreeLine } from '@core/catalog/credit';
+import type { CatalogItem, CatalogSource } from '@core/catalog/schema';
 import { CATALOG_ACTIVITY_LABELS, CATALOG_KIND_LABELS } from '@core/catalog/taxonomy';
 import { STONE_FONTS_ATKINSON, STONE_FONTS_NOTO } from '@core/map/stoneStyle';
 import { formatByteSize } from '@core/storage/diskBudget';
@@ -81,6 +82,7 @@ import { ActivityIndicator, Icon, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ExploreFilterBar } from './ExploreFilterBar';
+import { useCreditLanguage } from '../useCreditLanguage';
 import { MapPreview } from './ExploreParts';
 import { exploreItemHref, exploreListHref } from './exploreRoutes';
 import { itemFacets } from './facetsAdapter';
@@ -139,16 +141,31 @@ function placeMeta({ place, collection }: PlacePoint): string {
   return [place.type, collection.publisher, activities].filter((p) => p !== '').join(' · ');
 }
 
-function itemMeta(item: CatalogItem, sourceName: string | undefined): string {
+/**
+ * "Charles Leduc · 2023 · Canoe · Cartes Plein-air · 2 MB · Free": a credited
+ * map (#680) names its author first, as on every other card (`@core/catalog/credit`).
+ */
+function itemMeta(item: CatalogItem, source: CatalogSource | undefined): string {
   const kind = itemFacets(item).kind;
   return [
+    itemCredit(item),
     kind !== null ? CATALOG_KIND_LABELS[kind] : undefined,
-    sourceName,
+    source?.name,
     item.sizeBytes !== undefined ? formatByteSize(item.sizeBytes) : undefined,
     'Free',
   ]
     .filter((p): p is string => p !== undefined && p !== '')
     .join(' · ');
+}
+
+/** The "Available free at …" line a source's terms require (#680); nothing otherwise. */
+function FreeLine({ line, color }: { line: string | undefined; color: string }) {
+  if (line === undefined) return null;
+  return (
+    <Text numberOfLines={1} style={[styles.rowMeta, { color }]} testID="explore-map-free-line">
+      {line}
+    </Text>
+  );
 }
 
 export function ExploreMapScreen({
@@ -313,9 +330,10 @@ export function ExploreMapScreen({
   }, [items, collections, selectedRef]);
   const selectedItem = selected?.kind === 'map' ? selected.item : undefined;
   const sourcesById = useMemo(
-    () => new globalThis.Map((index?.sources ?? []).map((s) => [s.id, s.name])),
+    () => new globalThis.Map((index?.sources ?? []).map((s) => [s.id, s])),
     [index],
   );
+  const creditLang = useCreditLanguage();
 
   const pending =
     bounds !== null && index !== null
@@ -669,6 +687,10 @@ export function ExploreMapScreen({
                   <Text numberOfLines={2} style={[styles.rowMeta, { color: t.inkMuted }]}>
                     {itemMeta(selected.item, sourcesById.get(selected.item.sourceId))}
                   </Text>
+                  <FreeLine
+                    line={sourceFreeLine(sourcesById.get(selected.item.sourceId), creditLang)}
+                    color={t.inkMuted}
+                  />
                   {selectedDistance !== null && (
                     <Text style={[styles.distance, { color: t.explore.accent }]}>
                       {formatDistanceAway(selectedDistance, units)}
@@ -792,6 +814,12 @@ export function ExploreMapScreen({
                         ? itemMeta(point.item, sourcesById.get(point.item.sourceId))
                         : placeMeta(point)}
                     </Text>
+                    {point.kind === 'map' && (
+                      <FreeLine
+                        line={sourceFreeLine(sourcesById.get(point.item.sourceId), creditLang)}
+                        color={t.inkMuted}
+                      />
+                    )}
                   </View>
                   {point.kind === 'place' && (
                     <Icon source="open-in-new" size={18} color={t.inkMuted} />

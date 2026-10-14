@@ -16,11 +16,17 @@
 import type { SignedOp } from '@core/team/envelope';
 import type { TeamReplica } from '@core/team/replica';
 import { LAN_LIMITS, RELAY_LIMITS } from '@core/team/ratelimit';
-import { SyncSession, type SessionEvent, type Step, type SyncStore } from '@core/team/sync';
+import {
+  PEN_IN_FLIGHT_MS,
+  SyncSession,
+  type SessionEvent,
+  type Step,
+  type SyncStore,
+} from '@core/team/sync';
 import { addMember, c, device, joinReplica, MIN, T0 } from '@core/team/testing/fixtures';
 import { alertContext, alertFor } from '@core/teamui/alerts';
 
-import { capBody } from './caps';
+import { CAP_TTL_MS, capBody } from './caps';
 import { destination } from './geo';
 import { penBody, toleranceM, type Stroke } from './pen';
 import { teamShapes } from './view';
@@ -114,7 +120,7 @@ function busyTeam() {
   let now = T0 + MIN;
   const step = () => (now += 1000);
   // Bob's chain mixes drawings, caps, messages and a task.
-  rb.write(step(), 'e.set', capBody(bob.id));
+  rb.write(step(), 'e.set', capBody(bob.id, T0));
   rb.write(step(), 'msg', { id: 'm1', th: 'team', tx: 'Leaving the lot', mn: [eve.id] });
   drawOn(rb, step(), 'a1', null);
   rb.write(step(), 'e.set', {
@@ -127,13 +133,13 @@ function busyTeam() {
   rb.write(step(), 'e.del', { k: 'drw', id: 'a1' });
   rb.write(step(), 'msg', { id: 'm2', th: 'team', tx: 'Ridge is clear' }, { pr: 1 });
   re.write(step(), 'e.set', { k: 'sos', id: 's1', f: { la: 46.81, lo: -71.21, tx: 'Ankle' } });
-  re.write(step(), 'e.set', capBody(eve.id));
+  re.write(step(), 'e.set', capBody(eve.id, T0));
   drawOn(re, step(), 'e1', 5 * MIN);
   rg.write(step(), 'msg', { id: 'g1', th: 'team', tx: 'Guest here' });
   rb.position(step(), { la: 46.8, lo: -71.2, at: now });
   re.position(step(), { la: 46.81, lo: -71.21, at: now });
   // Dan only ever draws (so "without the drawings" is his chain removed whole).
-  rd.write(step(), 'e.set', capBody(dan.id));
+  rd.write(step(), 'e.set', capBody(dan.id, T0));
   for (let i = 0; i < 5; i++) drawOn(rd, step(), `d${i}`, i % 2 === 0 ? 30_000 : null);
   rd.write(step(), 'e.del', { k: 'drw', id: 'd0' });
   syncAll(step());
@@ -221,7 +227,7 @@ describe('backward compatibility (#683)', () => {
     sync(now + 1);
     const del = w.root.write(now + 2, 'e.del', { k: 'drw', id: 'a1', o: bob.id })!;
     const after = w.root.write(now + 3, 'msg', { id: 'm1', th: 'team', tx: 'Removed it' })!;
-    const cap = rg.write(now + 4, 'e.set', capBody(gus.id))!;
+    const cap = rg.write(now + 4, 'e.set', capBody(gus.id, T0))!;
     const gAfter = rg.write(now + 5, 'msg', { id: 'g1', th: 'team', tx: 'Guest still here' })!;
     w.root.ingest(envs(rg, now + 6), now + 6);
     const oldEve = new old.TeamReplica(c, w.teamId, re.keys);
@@ -230,6 +236,8 @@ describe('backward compatibility (#683)', () => {
     const skipped = new Map(data.skipped.map((s) => [s.id, s.why]));
     expect(skipped.get(del.id)).toBe('invalid');
     expect(skipped.get(cap.id)).toBe('invalid');
+    // The claim carries the version and the expiry; the old fold skips it whole all the same.
+    expect(rg.decode(cap)).toMatchObject({ k: 'cap', f: { pen: 1, v: 1, x: expect.any(Number) } });
     // What follows each in its author's chain still applies.
     expect(data.entities.get(`msg:${w.owner.id}:m1`)).toBeDefined();
     expect(data.entities.get(`msg:${gus.id}:g1`)).toBeDefined();
@@ -331,7 +339,7 @@ describe('pen is capability-gated (#683)', () => {
   it('(3) a session with a non-capable peer never emits pen (frames counted), relays included', () => {
     const { w, eve, rb, re, sync } = crew();
     // Eve advertises; Bob (an older phone, or one that has not yet) does not.
-    re.write(T0 + MIN, 'e.set', capBody(eve.id));
+    re.write(T0 + MIN, 'e.set', capBody(eve.id, T0));
     sync(T0 + 2 * MIN);
     const now = T0 + 3 * MIN;
     const toBob = counting(rb);
@@ -366,7 +374,7 @@ describe('pen is capability-gated (#683)', () => {
 
   it('never over a transport not cleared for it (the default), nor from a store that cannot tell', () => {
     const { w, eve, re, sync } = crew();
-    re.write(T0 + MIN, 'e.set', capBody(eve.id));
+    re.write(T0 + MIN, 'e.set', capBody(eve.id, T0));
     sync(T0 + 2 * MIN);
     const now = T0 + 3 * MIN;
     // A Nostr relay: the session is not told it may carry strokes.
@@ -420,9 +428,107 @@ describe('pen is capability-gated (#683)', () => {
     expect(ungated.b.bannedUntil).toBeDefined();
   });
 
+  it('a claim that expires (its phone rolled back to 2.5.1): no pen goes to that peer', () => {
+    const { w, bob, rb, sync } = crew();
+    rb.write(T0 + MIN, 'e.set', capBody(bob.id, T0 + MIN));
+    sync(T0 + 2 * MIN);
+    const lapse = T0 + MIN + CAP_TTL_MS;
+    // Bob's phone is now 2.5.1: same keys, the old code, and its old claim still logged.
+    const oldBob = new old.TeamReplica(c, w.teamId, rb.keys);
+    oldBob.ingest(envs(rb, T0 + 2 * MIN), T0 + 2 * MIN);
+    const before = connect(w.root, oldBob as unknown as TeamReplica, lapse - 60_000, {
+      Responder: old.SyncSession,
+    });
+    // The control: within the claim, the stroke goes (and an old phone strikes on it).
+    expect(before.a.push([pen(w.root, lapse - 59_000, 1)], lapse - 59_000).send).toHaveLength(1);
+    const after = connect(w.root, oldBob as unknown as TeamReplica, lapse, {
+      Responder: old.SyncSession,
+    });
+    expect(after.a.phase).toBe('open');
+    let frames = 0;
+    for (let i = 0; i < 60; i++) {
+      const t = lapse + i * 250;
+      frames += deliver(after.a.push([pen(w.root, t, i)], t), after.b, t, after.events);
+    }
+    expect(frames).toBe(0);
+    expect(strikes(after.events)).toEqual([]);
+    expect(after.b.phase).toBe('open');
+    // An open session crossing the expiry stops too (the gate reads the session's clock).
+    expect(before.a.push([pen(w.root, lapse + 1, 2)], lapse + 1).send).toHaveLength(0);
+  });
+
+  it('a peer that bans us while strokes are in flight is muted for the team’s other sessions', () => {
+    const { w, rb, sync } = crew();
+    sync(T0 + MIN);
+    const now = T0 + 2 * MIN;
+    const oldBob = new old.TeamReplica(c, w.teamId, rb.keys);
+    oldBob.ingest(envs(rb, now), now);
+    // A claim the old phone cannot honour (a rollback within the week).
+    const liar: SyncStore = Object.assign(Object.create(w.root) as TeamReplica, {
+      canReceive: () => true,
+    });
+    const mute = new Set<string>();
+    const dial = (t: number) => {
+      const { session: a, step } = SyncSession.initiate(c, liar, {
+        carryLiveStrokes: true,
+        liveStrokeMute: mute,
+        now: t,
+      });
+      const link: Link = { a, b: old.SyncSession.respond(c, oldBob as never), events: [] };
+      pump(link, step, t);
+      return link;
+    };
+    const first = dial(now);
+    for (let i = 0; i < 60 && first.a.phase === 'open'; i++) {
+      const t = now + i * 250;
+      const back = first.b.receive(first.a.push([pen(w.root, t, i)], t).send[0]!, t);
+      for (const f of back.send) first.events.push(...first.a.receive(f, t).events);
+    }
+    expect(first.a.phase).toBe('closed');
+    expect(mute).toEqual(new Set([rb.id]));
+    // The next session to Bob (after the ban) sends no stroke, though the store says yes.
+    const t2 = now + 3 * 3600_000;
+    const second = dial(t2);
+    expect(second.a.phase).toBe('open');
+    expect(second.a.push([pen(w.root, t2, 1)], t2).send).toHaveLength(0);
+    expect(second.a.push([drawOn(w.root, t2 + 1, 'kept', MIN)], t2 + 1).send).toHaveLength(1);
+  });
+
+  it('a session we close ourselves, or one long after the last stroke, mutes nobody', () => {
+    const { w, bob, rb, sync } = crew();
+    rb.write(T0 + MIN, 'e.set', capBody(bob.id, T0 + MIN));
+    sync(T0 + 2 * MIN);
+    const now = T0 + 3 * MIN;
+    const mute = new Set<string>();
+    const open = (t: number) => {
+      const { session: a, step } = SyncSession.initiate(c, w.root, {
+        carryLiveStrokes: true,
+        liveStrokeMute: mute,
+        now: t,
+      });
+      const link: Link = {
+        a,
+        b: SyncSession.respond(c, rb, { carryLiveStrokes: true }),
+        events: [],
+      };
+      pump(link, step, t);
+      return link;
+    };
+    const mine = open(now);
+    expect(mine.a.push([pen(w.root, now, 1)], now).send).toHaveLength(1);
+    mine.a.close('bye');
+    const theirs = open(now + 1000);
+    expect(theirs.a.push([pen(w.root, now + 1000, 1)], now + 1000).send).toHaveLength(1);
+    const later = now + 1000 + PEN_IN_FLIGHT_MS + 1;
+    const bye = theirs.b.close('bye');
+    for (const f of bye.send) theirs.a.receive(f, later);
+    expect(theirs.a.phase).toBe('closed');
+    expect(mute.size).toBe(0);
+  });
+
   it('(4) a capable peer takes 4 updates a second for 60 s without a strike or a ban', () => {
     const { w, bob, rb, sync } = crew();
-    rb.write(T0 + MIN, 'e.set', capBody(bob.id));
+    rb.write(T0 + MIN, 'e.set', capBody(bob.id, T0));
     sync(T0 + 2 * MIN);
     const now = T0 + 3 * MIN;
     const toBob = counting(rb);
@@ -448,7 +554,7 @@ describe('pen is capability-gated (#683)', () => {
     addMember(w.root, mal, 'member', T0 + 6);
     const rd = joinReplica(w, dan, w.root, T0 + 7);
     const rm = joinReplica(w, mal, w.root, T0 + 7);
-    rb.write(T0 + MIN, 'e.set', capBody(bob.id));
+    rb.write(T0 + MIN, 'e.set', capBody(bob.id, T0));
     sync(T0 + 2 * MIN);
     for (const r of [rd, rm]) r.ingest(envs(w.root, T0 + 2 * MIN), T0 + 2 * MIN);
     const now = T0 + 3 * MIN;
@@ -489,7 +595,7 @@ describe('pen is capability-gated (#683)', () => {
 
   it('ephemeral ops (seq 0) in a solicited frame still pay the per-op rate (P1-3)', () => {
     const { w, bob, rb, sync } = crew();
-    rb.write(T0 + MIN, 'e.set', capBody(bob.id));
+    rb.write(T0 + MIN, 'e.set', capBody(bob.id, T0));
     sync(T0 + 2 * MIN);
     const now = T0 + 3 * MIN;
     const toBob = counting(rb);

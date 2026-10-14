@@ -87,8 +87,8 @@ async function crew() {
   // Synced: everyone advertises live drawing.
   await until(
     () =>
-      hasCap(active(a).replica.data(now()), active(b).me) &&
-      hasCap(active(b).replica.data(now()), active(a).me),
+      hasCap(active(a).replica.data(now()), active(b).me, now()) &&
+      hasCap(active(b).replica.data(now()), active(a).me, now()),
     'caps both ways',
   );
   return { hub, a, b };
@@ -220,7 +220,7 @@ describe('team drawing on the mesh', () => {
       'Leo synced',
     );
     expect(spy).toHaveBeenCalled();
-    expect(hasCap(active(a).replica.data(now()), active(leo).me)).toBe(false);
+    expect(hasCap(active(a).replica.data(now()), active(leo).me, now())).toBe(false);
 
     for (let n = 2; n <= 8; n++) {
       clock += 250;

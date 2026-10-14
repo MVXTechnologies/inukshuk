@@ -162,6 +162,78 @@ describe('PoliteClient', () => {
     });
   });
 
+  describe('redirects (2.5.2 review: never left to the fetch)', () => {
+    const CDN_ROBOTS = 'https://cdn.example/robots.txt';
+    const PAGE = 'https://cartespleinair.org/cartes/x';
+
+    it('follows a Location itself: the new host’s robots.txt is read and obeyed', async () => {
+      const { client, sent } = harness({
+        [ROBOTS]: SITE_ROBOTS,
+        [PAGE]: response(302, '', { Location: 'https://cdn.example/private/x.pdf' }),
+        [CDN_ROBOTS]: response(200, 'User-agent: *\nDisallow: /private\n'),
+      });
+      expect(await client.request(PAGE, { method: 'HEAD' })).toEqual({ kind: 'disallowed' });
+      // The disallowed file was never asked for, and the fetch never followed anything.
+      expect(sent.map((x) => x.url)).toEqual([ROBOTS, PAGE, CDN_ROBOTS]);
+      for (const x of sent) expect(x.init.redirect).toBe('manual');
+    });
+
+    it('a hop to the same host waits its turn; the answer names the final URL', async () => {
+      const { client, sent } = harness({
+        [ROBOTS]: SITE_ROBOTS,
+        [PAGE]: response(301, '', { Location: '/cartes/y' }),
+        'https://cartespleinair.org/cartes/y': response(200, 'ok'),
+      });
+      const result = await client.request(PAGE, { validators: { etag: '"v1"' } });
+      expect(result.kind === 'response' && result.url).toBe('https://cartespleinair.org/cartes/y');
+      expect(sent.map((x) => x.at - sent[0]!.at)).toEqual([0, 1000, 2000]);
+      // The validators were the first URL's: not sent to the next.
+      expect(sent[1]?.init.headers['If-None-Match']).toBe('"v1"');
+      expect(sent[2]?.init.headers['If-None-Match']).toBeUndefined();
+      expect(client.requestCounts()).toEqual({ 'cartespleinair.org': 3 });
+    });
+
+    it('stops after five hops, refuses a non-http Location, and keeps a 3xx under manual', async () => {
+      const loop: Record<string, HttpResponse> = { [ROBOTS]: SITE_ROBOTS };
+      for (let i = 0; i < 10; i++) {
+        loop[`https://cartespleinair.org/l${i}`] = response(302, '', { Location: `/l${i + 1}` });
+      }
+      const looping = harness(loop);
+      const r = await looping.client.request('https://cartespleinair.org/l0');
+      expect(r.kind).toBe('failed');
+      expect(looping.sent).toHaveLength(1 + 6);
+
+      const odd = harness({
+        [ROBOTS]: SITE_ROBOTS,
+        [PAGE]: response(302, '', { Location: 'file:///etc/passwd' }),
+      });
+      expect((await odd.client.request(PAGE)).kind).toBe('failed');
+      expect(odd.sent).toHaveLength(2);
+
+      const manual = harness({
+        [ROBOTS]: SITE_ROBOTS,
+        [PAGE]: response(302, '', { Location: '/cartes/y' }),
+      });
+      const m = await manual.client.request(PAGE, { redirect: 'manual' });
+      expect(m.kind === 'response' && m.response.status).toBe(302);
+      expect(manual.sent).toHaveLength(2);
+    });
+
+    it('follows a redirected robots.txt (RFC 9309) instead of reading it as disallow-all', async () => {
+      const { client, sent } = harness({
+        [ROBOTS]: response(301, '', { Location: 'https://www.cartespleinair.org/robots.txt' }),
+        'https://www.cartespleinair.org/robots.txt': SITE_ROBOTS,
+        'https://cartespleinair.org/cartes': response(200, 'ok'),
+      });
+      expect((await client.request('https://cartespleinair.org/cartes')).kind).toBe('response');
+      expect(sent.map((x) => x.url)).toEqual([
+        ROBOTS,
+        'https://www.cartespleinair.org/robots.txt',
+        'https://cartespleinair.org/cartes',
+      ]);
+    });
+  });
+
   it('retries a transient failure a bounded number of times, with backoff', async () => {
     let calls = 0;
     const { client, sent, sleeps } = harness({

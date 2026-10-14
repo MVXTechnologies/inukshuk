@@ -185,6 +185,11 @@ export class PenThrottle {
     return body;
   }
 
+  /** When the next body may go (now or past: at once). */
+  readyAt(): number {
+    return this.lastAt + this.intervalMs;
+  }
+
   /** When a kept stroke may go, or null when nothing waits. */
   nextAt(): number | null {
     return this.pending === undefined ? null : this.lastAt + this.intervalMs;

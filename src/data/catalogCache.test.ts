@@ -3,13 +3,16 @@ import {
   CATALOG_SCHEMA_VERSION,
   type CatalogShardRef,
 } from '@core/catalog/schema';
+import { CATALOG_SEARCH_SCHEMA_VERSION } from '@core/catalog/searchDigest';
 import Constants from 'expo-constants';
 import {
+  catalogCacheFile,
   catalogIndexBaseUrl,
   catalogIndexUrls,
   catalogManifestUrl,
   loadCatalogFacets,
   loadCatalogManifest,
+  loadCatalogSearchDigest,
   loadCatalogShard,
   resetCatalogIndexBaseUrl,
 } from './catalogCache';
@@ -503,6 +506,81 @@ describe('catalog editions: v3 first, v2 as the fallback', () => {
     expect(result?.fromCache).toBe(true);
     expect(result?.index.shards.map((s) => s.path)).toEqual(['shards/topo-n40w080.json']);
     expect(fetchedUrls()).toEqual([V3, V2]);
+    expect(catalogIndexBaseUrl()).toBe(V2);
+  });
+
+  // 2.5.2 review: a phone rolled back to 2.5.1 falls back, offline, to any
+  // same-origin copy in the files it reads. A v3 load must never write those
+  // (they would show Cartes Plein-air without its credits, and v3's river
+  // shards under v2's ids).
+  it('a v3 load never writes the files 2.5.1 reads; the shared v2 shard is v2’s own entry', async () => {
+    const v3WithDigests = {
+      ...v3Index,
+      search: { path: 'search.json', byteSize: 10 },
+      facets: { path: 'facets.json', byteSize: 10 },
+    };
+    const riverBody = {
+      id: 'river-n40w080',
+      items: [{ ...validManifest.items[0], id: 'cpa-1', category: 'river' }],
+    };
+    serve({
+      [V3]: okResponse(v3WithDigests),
+      [`${HOST}/v3/search.json`]: okResponse({
+        schemaVersion: CATALOG_SEARCH_SCHEMA_VERSION,
+        shardIds: ['river-n40w080'],
+        tokens: { canot: [0] },
+      }),
+      [`${HOST}/v3/facets.json`]: okResponse({ schemaVersion: 1, shards: {} }),
+      [`${HOST}/v3/shards/river-n40w080.json`]: okResponse(riverBody),
+      [`${HOST}/v2/shards/topo-n40w080.json`]: okResponse(shardBody),
+    });
+    const result = await loadCatalogManifest();
+    const index = result?.index;
+    if (index === undefined) throw new Error('no index');
+    if (index.search) await loadCatalogSearchDigest(index.search);
+    if (index.facets) await loadCatalogFacets(index.facets);
+    for (const shard of index.shards) await loadCatalogShard(shard, sourceIds);
+
+    const writes = writeJson.mock.calls.map((c: unknown[]) => ({
+      file: c[0] as string,
+      url: (c[1] as { url: string }).url,
+    }));
+    expect(writes.map((w) => w.file).sort()).toEqual([
+      'catalog-shard-topo-n40w080.json',
+      'catalog-v3-facets.json',
+      'catalog-v3-search.json',
+      'catalog-v3-shard-river-n40w080.json',
+      'catalog-v3.json',
+    ]);
+    // Every file 2.5.1 reads holds a v2 URL only.
+    const legacy = new Set(['catalog.json', 'catalog-search.json', 'catalog-facets.json']);
+    for (const w of writes) {
+      if (legacy.has(w.file) || /^catalog-shard-/.test(w.file)) expect(w.url).toMatch(/\/v2\//);
+      if (w.url.includes('/v3/')) expect(w.file).toMatch(/^catalog-v3/);
+    }
+  });
+
+  it('names cache files by edition: v1, v2 and fixtures keep the legacy names', () => {
+    expect(catalogCacheFile('', V3)).toBe('catalog-v3.json');
+    expect(catalogCacheFile('-shard-river-x', `${HOST}/v3/shards/river-x.json`)).toBe(
+      'catalog-v3-shard-river-x.json',
+    );
+    expect(catalogCacheFile('-shard-topo-x', `${HOST}/v2/shards/topo-x.json`)).toBe(
+      'catalog-shard-topo-x.json',
+    );
+    expect(catalogCacheFile('', V2)).toBe('catalog.json');
+    expect(catalogCacheFile('-search', `${HOST}/v1/manifest.json`)).toBe('catalog-search.json');
+    expect(catalogCacheFile('', 'http://127.0.0.1:8787/index.json')).toBe('catalog.json');
+    expect(catalogCacheFile('-facets', `${HOST}/v4/facets.json`)).toBe('catalog-v4-facets.json');
+  });
+
+  it('offline with only the v2 copy in catalog.json (no v3 copy yet): browses v2', async () => {
+    readJson.mockImplementation(async (file: string) =>
+      file === 'catalog.json' ? { fetchedAt: Date.now() - 60_000, url: V2, raw: v2Index } : null,
+    );
+    serve({});
+    const result = await loadCatalogManifest();
+    expect(result?.fromCache).toBe(true);
     expect(catalogIndexBaseUrl()).toBe(V2);
   });
 

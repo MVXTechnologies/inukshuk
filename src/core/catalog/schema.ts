@@ -479,22 +479,22 @@ function isShardId(value: unknown): value is string {
  */
 const SIBLING_EDITION_PREFIX = /^\.\.\/v[0-9]{1,3}\//;
 
+/** What a catalog path may be made of: no `%` (an encoded `..` or `/`), `?`, `#`, `:` or `\\`. */
+const CATALOG_PATH_CHARS = /^[A-Za-z0-9._/-]+$/;
+
 /**
  * Catalog document paths are relative to the index and stay inside the
- * catalog: no scheme, no leading slash, and no `..` except one leading
- * `../v<N>/` into a sibling edition. Shared by the parser and
- * `resolveCatalogUrl`, the two locks on the same door.
+ * catalog: plain characters only (`[A-Za-z0-9._/-]`, so no scheme, no query,
+ * and no percent-encoding: `%2e%2e/` is `../` to the server), no leading
+ * slash, no empty, `.` or `..` segment, except one leading `../v<N>/` into a
+ * sibling edition. Shared by the parser and `resolveCatalogUrl`, the two
+ * locks on the same door.
  */
 export function isCatalogRelativePath(value: unknown): value is string {
   if (typeof value !== 'string' || value === '') return false;
   const rest = value.replace(SIBLING_EDITION_PREFIX, '');
-  return (
-    rest !== '' &&
-    !rest.startsWith('/') &&
-    !rest.includes('..') &&
-    !rest.includes('\\') &&
-    !/^[a-z][a-z0-9+.-]*:/i.test(rest)
-  );
+  if (rest === '' || !CATALOG_PATH_CHARS.test(rest) || rest.includes('..')) return false;
+  return rest.split('/').every((segment) => segment !== '' && segment !== '.');
 }
 
 /** Shard paths are relative and must not climb out of the catalog directory. */

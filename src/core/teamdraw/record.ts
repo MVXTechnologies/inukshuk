@@ -51,7 +51,12 @@ export const COLOUR_COUNT = 8;
 const FIELDS: readonly string[] = ['sh', 'g', 'r', 'c', 'w', 'd', 'ht', 'hs', 'tx', 'x'];
 const has = (f: Record<string, Json>, k: string) => Object.prototype.hasOwnProperty.call(f, k);
 const oneOf = <T>(list: readonly T[], v: unknown): v is T => list.includes(v as T);
-const level = (v: unknown) => v === 1 || v === 2 || v === 3;
+/** A line width or head size: 1, 2 or 3. */
+export type Level = 1 | 2 | 3;
+const level = (v: unknown): v is Level => v === 1 || v === 2 || v === 3;
+
+/** Whether `v` names a shape kind. */
+export const isShapeKind = (v: unknown): v is ShapeKind => oneOf(SHAPES, v);
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 /** A note: a string of at most {@link MAX_NOTE_CHARS} (empty clears it). */
@@ -83,14 +88,31 @@ export function parseGeometry(sh: unknown, g: unknown, r: unknown, minFree = 2):
   return extentM(pts) <= MAX_EXTENT_M ? pts : null;
 }
 
-/** The style fields: colour, width, dash, and the arrow head (arrows only). */
-export function validStyle(f: Record<string, Json>): boolean {
-  if (!Number.isInteger(f['c']) || (f['c'] as number) < 0 || (f['c'] as number) >= COLOUR_COUNT) {
-    return false;
+/** A shape's style, typed. */
+export interface ShapeStyle {
+  c: number;
+  w: Level;
+  d: boolean;
+  /** Arrows only (both). */
+  ht?: HeadType;
+  hs?: Level;
+}
+
+/** The style fields (colour, width, dash, and the arrow head, arrows only) typed, or null. */
+export function parseStyle(f: Record<string, Json>): ShapeStyle | null {
+  const { c, w, d } = f;
+  if (typeof c !== 'number' || !Number.isInteger(c) || c < 0 || c >= COLOUR_COUNT) return null;
+  if (!level(w) || typeof d !== 'boolean') return null;
+  if (f['sh'] === 'arrow') {
+    const { ht, hs } = f;
+    return oneOf(HEAD_TYPES, ht) && level(hs) ? { c, w, d, ht, hs } : null;
   }
-  if (!level(f['w']) || typeof f['d'] !== 'boolean') return false;
-  if (f['sh'] === 'arrow') return oneOf(HEAD_TYPES, f['ht']) && level(f['hs']);
-  return !has(f, 'ht') && !has(f, 'hs');
+  return !has(f, 'ht') && !has(f, 'hs') ? { c, w, d } : null;
+}
+
+/** Whether the style fields are valid ({@link parseStyle}). */
+export function validStyle(f: Record<string, Json>): boolean {
+  return parseStyle(f) !== null;
 }
 
 /** `x`: null (never), or after the op's own time and at most 4 h (+ slack) after it. */
@@ -133,11 +155,19 @@ export function liveDrawings(mine: Map<string, number | null> | undefined, wall:
 /** The capability this version advertises: it draws live strokes (`pen`). */
 export const PEN_CAP = 'pen';
 
+/** The live-stroke protocol this version speaks (the claim's `v`). */
+export const PEN_PROTOCOL = 1;
+/** The claim's field holding the pen protocol version. */
+export const CAP_VERSION = 'v';
+/** The claim's field holding its expiry (wall ms). */
+export const CAP_EXPIRES = 'x';
+
 /**
- * `e.set { k: 'cap', id: <member id>, f: { pen: 1 } }`. Every value is a 0/1
- * flag (field names are already checked by `parseSetBody`), so a later
- * version can add flags without older phones refusing the record.
+ * `e.set { k: 'cap', id: <member id>, f: { pen: 1, v: 1, x: <expiry ms> } }`.
+ * Every value is a non-negative safe integer (field names are already checked
+ * by `parseSetBody`): 0/1 flags, the version and the expiry, so a later
+ * version can add fields without this one refusing the record.
  */
 export function validCapFields(f: Record<string, Json>): boolean {
-  return Object.values(f).every((v) => v === 0 || v === 1);
+  return Object.values(f).every((v) => Number.isSafeInteger(v) && (v as number) >= 0);
 }

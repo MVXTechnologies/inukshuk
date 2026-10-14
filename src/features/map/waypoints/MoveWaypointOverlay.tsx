@@ -1,9 +1,11 @@
 import { metersPerPixel } from '@core/geo/scaleBar';
+import { pinScaleFactor } from '@core/map/pinScale';
 import { moveBarHint, moveSummary } from '@core/library/waypointActions';
 import { pinGeometry, WAYPOINT_PIN_DIAMETER, waypointSize } from '@core/library/waypointStyle';
 import type { Units } from '@core/format';
 import type { LatLng } from '@core/models';
 import { useMapStore } from '@state/mapStore';
+import { useSettingsStore } from '@state/settingsStore';
 import { useWaypointMoveStore } from '@state/waypointMoveStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -44,6 +46,8 @@ interface Props {
 export function MoveWaypointOverlay({ units, zoom = null, onCancel, onConfirm, onLocate }: Props) {
   const target = useWaypointMoveStore((s) => s.moving);
   const center = useMapStore((s) => s.mapCenter);
+  // Settings › Pin size (#686): the moving pin matches the map's pins.
+  const scale = useSettingsStore((s) => pinScaleFactor(s.pinScale));
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const insets = useSafeAreaInsets();
@@ -64,7 +68,8 @@ export function MoveWaypointOverlay({ units, zoom = null, onCancel, onConfirm, o
   if (target === null) return null;
   const at: LatLng = center ?? target.from;
   const summary = moveSummary(target.from, at, units);
-  const pinH = pinGeometry(WAYPOINT_PIN_DIAMETER[waypointSize(target.size)]).height;
+  const diameter = WAYPOINT_PIN_DIAMETER[waypointSize(target.size)] * scale;
+  const pinH = pinGeometry(diameter).height;
   const ink = tokens.team.mapInk;
   const halo = tokens.team.mapHalo;
 
@@ -86,8 +91,13 @@ export function MoveWaypointOverlay({ units, zoom = null, onCancel, onConfirm, o
 
       {/* The fixed pin: its tip is the map's centre (the wrapper's middle). */}
       <View style={styles.centre} pointerEvents="none">
-        <View style={{ height: pinH * 2, alignItems: 'center' }}>
-          <WaypointPinView icon={target.icon} color={target.color} size={target.size} />
+        <View style={{ height: pinH * 2, alignItems: 'center' }} testID="move-pin">
+          <WaypointPinView
+            icon={target.icon}
+            color={target.color}
+            size={target.size}
+            diameter={diameter}
+          />
         </View>
       </View>
       <View style={styles.centre} pointerEvents="none" testID="move-crosshair">

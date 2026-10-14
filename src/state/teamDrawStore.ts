@@ -51,9 +51,20 @@ interface TeamDrawState {
 }
 
 let hydrating: Promise<void> | null = null;
+/** A change made before the file was read: written once the read merged it. */
+let dirty = false;
 
-const persist = (s: Pick<TeamDrawState, 'rawPrefs' | 'tool' | 'hints'>) =>
+/**
+ * Writes the whole file, so never before it was read: a write from the
+ * defaults (`prefs: null`) would erase the remembered style (review 2.5.2).
+ */
+const persist = (s: Pick<TeamDrawState, 'hydrated' | 'rawPrefs' | 'tool' | 'hints'>) => {
+  if (!s.hydrated) {
+    dirty = true;
+    return;
+  }
   saveTeamDraw({ prefs: s.rawPrefs, tool: s.tool, hints: s.hints });
+};
 
 export const useTeamDrawStore = create<TeamDrawState>((set, get) => ({
   hydrated: false,
@@ -84,6 +95,10 @@ export const useTeamDrawStore = create<TeamDrawState>((set, get) => ({
         hints: Math.max(s.hints, hints),
       });
       hydrating = null;
+      if (dirty) {
+        dirty = false;
+        persist(get());
+      }
     });
     return hydrating;
   },

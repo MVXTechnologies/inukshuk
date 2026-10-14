@@ -93,6 +93,7 @@ export function WaypointClusterSheet({
                 pressed && { backgroundColor: t.elevation.level4 },
               ]}
               onPress={() => {
+                useWaypointClusterSheet.getState().openedFrom(key);
                 close();
                 onOpen(pin);
               }}

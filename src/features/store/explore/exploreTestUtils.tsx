@@ -89,7 +89,7 @@ export const cpaSource = {
 export const cpaMap = fixtureItem('cpa-41ad13f6', 'Aigle-Désert', 46.5, -76.1, {
   sourceId: 'cartes-plein-air',
   category: 'river',
-  kind: 'trail',
+  kind: 'river',
   activities: ['paddling'],
   format: 'pdf',
   packaging: 'none',

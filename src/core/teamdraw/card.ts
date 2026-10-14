@@ -15,15 +15,18 @@ export const SHAPE_NAMES: Readonly<Record<ShapeKind, string>> = {
   rect: 'rectangle',
 };
 
-/** Navigate's target: an arrow's head, a circle's or rectangle's centre, a line's end. */
-export function navTarget(s: Pick<DrawShape, 'sh' | 'pts'>): Pt {
-  const p = s.pts;
-  if (s.sh === 'arrow') return p[1]!;
+/**
+ * Navigate's target: an arrow's head, a circle's or rectangle's centre, a
+ * line's end; null for a shape without its points (the view never yields one).
+ */
+export function navTarget(s: Pick<DrawShape, 'sh' | 'pts'>): Pt | null {
+  const [a, b, c] = s.pts;
+  if (s.sh === 'arrow') return b ?? null;
   if (s.sh === 'rect') {
-    return [(p[0]![0] + p[2]![0]) / 2, (p[0]![1] + p[2]![1]) / 2];
+    return a !== undefined && c !== undefined ? [(a[0] + c[0]) / 2, (a[1] + c[1]) / 2] : null;
   }
-  if (s.sh === 'circle') return p[0]!;
-  return p[p.length - 1]!;
+  if (s.sh === 'circle') return a ?? null;
+  return s.pts[s.pts.length - 1] ?? null;
 }
 
 const TARGET_WORD: Readonly<Record<ShapeKind, string>> = {
@@ -84,8 +87,8 @@ export function whereText(
   here: Pt | null,
   units: Units,
 ): string | null {
-  if (here === null) return null;
   const t = navTarget(s);
+  if (here === null || t === null) return null;
   const d = haversineM(here, t);
   const where =
     d < 5 ? 'here' : `${formatDistance(d, units)} ${headingToCardinal(bearingDeg(here, t))} of you`;

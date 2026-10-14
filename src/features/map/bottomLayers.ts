@@ -16,6 +16,13 @@ export const BOTTOM_LAYER = {
   waypointCard: { zIndex: 7 },
   /** Snackbars: confirmations ("Waypoint deleted") must never hide under a dock. */
   snackbar: { zIndex: 8 },
+  /**
+   * Team drawing mode (#683): its canvas and bars own the screen, above the
+   * recording panel and the map's snackbars (its own snackbar is inside it).
+   */
+  drawMode: { zIndex: 9 },
+  /** A sheet opened from drawing mode (the map credits): over it. */
+  overDrawMode: { zIndex: 10 },
 } as const;
 
 /** Gap between a floating waypoint card and the recording panel under it. */
@@ -79,4 +86,18 @@ export function liftedSnackbarStyle(columnBottom: number, columnHeight: number |
  */
 export function rowLiftAboveColumnBottom(columnHeight: number, rowY: number): number {
   return Math.max(0, columnHeight - rowY);
+}
+
+/** Gap between the team button and the top of the bottom column. */
+export const TEAM_FAB_GAP = 16;
+
+/**
+ * Where the team button sits: just above the whole bottom column (the
+ * coordinates chip, the scale row and, while navigating or following, the
+ * compass tape), not at a fixed 72 dp, which put it on the chip's right end
+ * once the tape pushed the row up (2.5.2 QA). Before the column's first
+ * layout, as before: 56 dp of column.
+ */
+export function teamFabBottom(columnBottom: number, columnHeight: number | null): number {
+  return columnBottom + (columnHeight ?? 56) + TEAM_FAB_GAP;
 }

@@ -152,6 +152,8 @@ export class TeamSession {
   private link: MeshLink | null = null;
   private host: MeshSessionHost<SessionEvent, SyncSession> | null = null;
   private readonly meta = new Map<string, PeerMeta>();
+  /** Teammates whose phone stopped taking live strokes (#683, `SessionOptions.liveStrokeMute`). */
+  private readonly liveStrokeMute = new Set<string>();
   readonly joinNotices: JoinNotice[] = [];
   /** Connections on which a joiner was admitted (peer id → member id). */
   private readonly admittedOn = new Map<string, string>();
@@ -677,11 +679,15 @@ export class TeamSession {
           return SyncSession.initiate(this.deps.c, this.store, {
             now: this.deps.now(),
             carryLiveStrokes: true,
+            liveStrokeMute: this.liveStrokeMute,
           });
         },
         respond: (peer) => {
           this.touch(peer, false);
-          return SyncSession.respond(this.deps.c, this.store, { carryLiveStrokes: true });
+          return SyncSession.respond(this.deps.c, this.store, {
+            carryLiveStrokes: true,
+            liveStrokeMute: this.liveStrokeMute,
+          });
         },
       },
       (peerId, event, session) => this.onSessionEvent(peerId, event, session),
@@ -812,7 +818,8 @@ export class TeamSession {
 
   private gossip(ops: readonly SignedOp[], except: string | null): void {
     if (ops.length === 0 || this.host === null) return;
-    this.host.forEachOpen((s, peer) => (peer.peerId === except ? empty() : s.push(ops)));
+    const now = this.deps.now();
+    this.host.forEachOpen((s, peer) => (peer.peerId === except ? empty() : s.push(ops, now)));
   }
 
   private afterStored(ops: readonly SignedOp[], from: string | null): void {

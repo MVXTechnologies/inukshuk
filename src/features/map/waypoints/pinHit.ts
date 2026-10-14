@@ -42,8 +42,18 @@ export async function pinAtPoint<T extends VisiblePin>(
   pins: readonly T[],
   point: readonly [number, number],
   selectedKey: string | null = null,
+  /** Every pin drawn (live ones included), when `pins` is only some of them. */
+  drawnCount: number = pins.length,
 ): Promise<T | null> {
   // Long-press: the tight disc, so one next to a pin stays the coordinates chip.
-  const hit = await waypointAtPoint(map, pins, visiblePinKey, selectedKey, point, 'longPress');
+  const hit = await waypointAtPoint(
+    map,
+    pins,
+    visiblePinKey,
+    selectedKey,
+    point,
+    'longPress',
+    drawnCount,
+  );
   return hit.kind === 'pin' ? hit.pin : null;
 }

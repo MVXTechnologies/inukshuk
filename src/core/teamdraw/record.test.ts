@@ -133,10 +133,11 @@ describe('drw style and expiry', () => {
     expect([...mine.keys()]).toEqual(['c', 'd']);
   });
 
-  it('cap flags are 0 or 1', () => {
+  it('cap fields are non-negative safe integers (flags, version, expiry)', () => {
     expect(validCapFields({ pen: 1 })).toBe(true);
     expect(validCapFields({ pen: 0, later: 1 })).toBe(true);
-    expect(validCapFields({ pen: 2 })).toBe(false);
+    expect(validCapFields({ pen: 1, v: 2, x: 1_800_000_000_000 })).toBe(true);
+    expect(validCapFields({ pen: -1 })).toBe(false);
     expect(validCapFields({ pen: true })).toBe(false);
   });
 });

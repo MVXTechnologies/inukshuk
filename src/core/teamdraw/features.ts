@@ -5,6 +5,9 @@ import { bearingDeg, circleRing, destination, haversineM, metresPerDp, type Pt }
 import type { LiveStroke } from './pen';
 import { fullNotes, recencyBand, type DrawShape } from './view';
 
+/** An arrow's head size when a shape carries none (the view gives every arrow one). */
+const DEFAULT_HEAD_SIZE = 2;
+
 /**
  * The one GeoJSON source for team drawings (#683), `team-draw`, rebuilt by
  * this pure function. Polygons fill circles (64-gons) and rectangles; lines
@@ -66,9 +69,10 @@ export interface DrawOptions {
 }
 
 /** Where a shape's badge (and note) sits: the stroke's start, the arrow's tail, the circle's top. */
-export function anchorOf(s: Pick<DrawShape, 'sh' | 'pts' | 'r'>): Pt {
-  const first = s.pts[0]!;
-  return s.sh === 'circle' ? destination(first, 0, s.r!) : first;
+export function anchorOf(s: Pick<DrawShape, 'sh' | 'pts' | 'r'>): Pt | null {
+  const first = s.pts[0];
+  if (first === undefined) return null;
+  return s.sh === 'circle' ? destination(first, 0, s.r ?? 0) : first;
 }
 
 /** Whether an arrow is drawn as the compact pointer at this zoom band. */
@@ -78,8 +82,10 @@ export function isCompact(tail: Pt, head: Pt, zoomBand: number): boolean {
 }
 
 function outline(s: Pick<DrawShape, 'sh' | 'pts' | 'r'>): Pt[] {
-  if (s.sh === 'circle') return circleRing(s.pts[0]!, s.r!, CIRCLE_SIDES);
-  if (s.sh === 'rect') return [...s.pts, s.pts[0]!];
+  const first = s.pts[0];
+  if (first === undefined) return [];
+  if (s.sh === 'circle') return circleRing(first, s.r ?? 0, CIRCLE_SIDES);
+  if (s.sh === 'rect') return [...s.pts, first];
   return [...s.pts];
 }
 
@@ -94,21 +100,20 @@ function geometryFeatures(
   const add = (geometry: Geometry, extra: Partial<Props>) =>
     out.push({ type: 'Feature', geometry, properties: { ...base, ...extra } });
   if (s.sh === 'arrow') {
-    const [tail, head] = s.pts as [Pt, Pt];
+    const [tail, head] = s.pts;
+    if (tail === undefined || head === undefined) return;
+    const hs = s.hs ?? DEFAULT_HEAD_SIZE;
     const rot = bearingDeg(tail, head);
     if (isCompact(tail, head, zoomBand)) {
       const mid: Pt = [(tail[0] + head[0]) / 2, (tail[1] + head[1]) / 2];
-      add({ type: 'Point', coordinates: mid }, { k: 'pointer', rot, s: s.hs! });
+      add({ type: 'Point', coordinates: mid }, { k: 'pointer', rot, s: hs });
       return;
     }
     add({ type: 'LineString', coordinates: [tail, head] }, { k: 'line', w: s.w, d: s.d });
     const icon = s.ht === 'open' ? 'head-open' : 'head-fill';
-    add({ type: 'Point', coordinates: head }, { k: 'head', rot, icon, s: s.hs! });
+    add({ type: 'Point', coordinates: head }, { k: 'head', rot, icon, s: hs });
     if (s.ht === 'both') {
-      add(
-        { type: 'Point', coordinates: tail },
-        { k: 'head', rot: (rot + 180) % 360, icon, s: s.hs! },
-      );
+      add({ type: 'Point', coordinates: tail }, { k: 'head', rot: (rot + 180) % 360, icon, s: hs });
     }
     return;
   }
@@ -148,6 +153,7 @@ export function drawFeatures(
     };
     geometryFeatures(s, base, zoomBand, features);
     const at = anchorOf(s);
+    if (at === null) return;
     const who = initials(s.owner);
     const t = fade.left === null ? who : `${who} · ${formatLeft(fade.left)}`;
     const point = (k: FeatureKind, extra: Partial<Props>) =>
@@ -170,7 +176,8 @@ export function drawFeatures(
       live: true,
     };
     geometryFeatures(l, base, zoomBand, features);
-    const tip = l.sh === 'free' ? l.pts[l.pts.length - 1]! : anchorOf(l);
+    const tip = l.sh === 'free' ? (l.pts[l.pts.length - 1] ?? null) : anchorOf(l);
+    if (tip === null) continue;
     features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: tip },

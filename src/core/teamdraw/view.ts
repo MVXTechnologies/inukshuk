@@ -8,9 +8,11 @@ import {
   LIFE_SLACK_MS,
   MAX_LIFE_MS,
   MAX_LIVE_PER_AUTHOR,
+  isShapeKind,
   parseGeometry,
-  validStyle,
+  parseStyle,
   type HeadType,
+  type Level,
   type ShapeKind,
 } from './record';
 
@@ -55,10 +57,10 @@ export interface DrawShape {
   pts: Pt[];
   r?: number;
   c: number;
-  w: 1 | 2 | 3;
+  w: Level;
   d: boolean;
   ht?: HeadType;
-  hs?: 1 | 2 | 3;
+  hs?: Level;
   /** The note ('' for none). */
   tx: string;
   /** HLC wall of the first write. */
@@ -90,7 +92,8 @@ interface Head {
 function headOf(rec: EntityRecord): Head | null {
   const st = rec.state;
   if (rec.kind !== 'drw' || rec.owner === undefined || st.created === undefined) return null;
-  if (!isLive(st)) return null;
+  const top = lastWrite(st);
+  if (top === undefined || !isLive(st)) return null;
   // A delete older than the first write was aimed at a shape stamped ahead.
   if (st.deleted !== undefined && compareStamp(st.deleted, st.created) < 0) return null;
   const f = visibleFields(st);
@@ -102,7 +105,7 @@ function headOf(rec: EntityRecord): Head | null {
     key: `${rec.owner}:${rec.id}`,
     f,
     created,
-    latest: lastWrite(st)!.wall,
+    latest: top.wall,
     expires: typeof x === 'number' ? Math.min(x, created + MAX_SHOWN_LIFE_MS) : null,
   };
 }
@@ -119,7 +122,9 @@ const geometryCache = new WeakMap<Register, Decoded>();
 function geometryOf(h: Head): Pt[] | null {
   const { f } = h;
   if (typeof f['g'] !== 'string') return null;
-  const reg = own(h.rec.state.fields, 'g')!;
+  const reg = own(h.rec.state.fields, 'g');
+  /* istanbul ignore if -- unreachable: f['g'] is that register's visible value */
+  if (reg === undefined) return null;
   const hit = geometryCache.get(reg);
   if (hit !== undefined && hit.sh === f['sh'] && hit.r === f['r']) return hit.pts;
   drawViewWork.decodes++;
@@ -131,25 +136,22 @@ function geometryOf(h: Head): Pt[] | null {
 function build(h: Head): DrawShape | null {
   const { f, rec, owner } = h;
   const pts = geometryOf(h);
-  if (pts === null || !validStyle(f)) return null;
+  const style = parseStyle(f);
+  const sh = f['sh'];
+  if (pts === null || style === null || !isShapeKind(sh)) return null;
   const shape: DrawShape = {
     key: h.key,
     owner,
     id: rec.id,
-    sh: f['sh'] as ShapeKind,
+    sh,
     pts,
-    c: f['c'] as number,
-    w: f['w'] as 1 | 2 | 3,
-    d: f['d'] as boolean,
+    ...style,
     tx: typeof f['tx'] === 'string' ? f['tx'] : '',
     created: h.created,
     expires: h.expires,
   };
-  if (shape.sh === 'circle') shape.r = f['r'] as number;
-  if (shape.sh === 'arrow') {
-    shape.ht = f['ht'] as HeadType;
-    shape.hs = f['hs'] as 1 | 2 | 3;
-  }
+  const r = f['r'];
+  if (sh === 'circle' && typeof r === 'number') shape.r = r;
   return shape;
 }
 
@@ -167,6 +169,8 @@ const newerFirst = (a: Dated, b: Dated) => b.created - a.created || (a.key < b.k
 
 interface Queue {
   list: Head[];
+  /** `list[0]`, the author's newest. */
+  newest: Head;
   next: number;
   taken: number;
 }
@@ -187,19 +191,24 @@ export function teamShapes(data: TeamData, now: number): DrawShape[] {
     list.push(h);
     byOwner.set(h.owner, list);
   }
-  let open: Queue[] = [...byOwner.values()].map((list) => ({
-    list: list.sort(newerFirst),
-    next: 0,
-    taken: 0,
-  }));
-  open.sort((a, b) => newerFirst(a.list[0]!, b.list[0]!));
+  let open: Queue[] = [...byOwner.values()].flatMap((list) => {
+    const [newest] = list.sort(newerFirst);
+    // A list is made with its first head: never empty.
+    /* istanbul ignore next */
+    if (newest === undefined) return [];
+    return [{ list, newest, next: 0, taken: 0 }];
+  });
+  open.sort((a, b) => newerFirst(a.newest, b.newest));
   const out: DrawShape[] = [];
   while (out.length < MAX_DRAWN && open.length > 0) {
     for (const q of open) {
       if (out.length >= MAX_DRAWN) break;
       // The author's next displayable shape (a malformed one takes no slot).
       while (q.next < q.list.length) {
-        const s = build(q.list[q.next++]!);
+        const h = q.list[q.next++];
+        /* istanbul ignore if -- unreachable: next < list.length */
+        if (h === undefined) break;
+        const s = build(h);
         if (s === null) continue;
         out.push(s);
         q.taken++;

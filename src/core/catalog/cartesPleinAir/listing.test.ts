@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import {
   cpaPageUrl,
+  creditableAuthor,
   extractFlightPayload,
   extractJsonArray,
   jsonValueEnd,
@@ -182,4 +183,40 @@ describe('payload extraction', () => {
 
 it('a map page is a stable URL on the site', () => {
   expect(cpaPageUrl('riviere-x-2023')).toBe('https://cartespleinair.org/cartes/riviere-x-2023');
+});
+
+describe('creditableAuthor (no author, no listing: 2.5.2 QA)', () => {
+  it('a placeholder is no author, whatever its case or accents', () => {
+    for (const v of [
+      'Inconnu',
+      'inconnu',
+      ' INCONNUE ',
+      'Unknown',
+      'Anonyme',
+      'anonymous',
+      'N/A',
+      '?',
+      '',
+      '   ',
+      null,
+      3,
+    ]) {
+      expect([v, creditableAuthor(v)]).toEqual([v, null]);
+    }
+  });
+
+  it('a real name is kept, trimmed', () => {
+    expect(creditableAuthor('  Charles Leduc ')).toBe('Charles Leduc');
+    expect(creditableAuthor('Inconnu Lafleur')).toBe('Inconnu Lafleur');
+  });
+
+  it('the committed fragment lists no map without a real author', () => {
+    const fragment = JSON.parse(
+      readFileSync(
+        join(__dirname, '../../../../scripts/catalog/fragments/cartes-plein-air.json'),
+        'utf8',
+      ),
+    ) as { items: { id: string; author?: unknown }[] };
+    expect(fragment.items.filter((i) => creditableAuthor(i.author) === null)).toEqual([]);
+  });
 });

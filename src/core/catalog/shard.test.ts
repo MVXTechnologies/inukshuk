@@ -1,4 +1,9 @@
-import type { CatalogBbox, CatalogItem, CatalogShardRef } from './schema';
+import {
+  isCatalogRelativePath,
+  type CatalogBbox,
+  type CatalogItem,
+  type CatalogShardRef,
+} from './schema';
 import {
   cellBbox,
   cellId,
@@ -202,6 +207,34 @@ describe('resolveCatalogUrl', () => {
     expect(resolveCatalogUrl(index, '../../secret.json')).toBeNull();
     expect(resolveCatalogUrl(index, 'https://evil.test/shard.json')).toBeNull();
     expect(resolveCatalogUrl(index, 'file:///etc/passwd')).toBeNull();
+  });
+
+  it('refuses percent-encoded climbs and anything outside [A-Za-z0-9._/-] (2.5.2 review)', () => {
+    const v3 = 'https://inukshuk.mvxtechnologies.com/catalog/v3/index.json';
+    for (const path of [
+      '%2e%2e/%2e%2e/secret.json',
+      '%2E%2E/v1/manifest.json',
+      '..%2f..%2fsecret.json',
+      '..%2F..%2Fsecret.json',
+      'shards/%2e%2e/%2e%2e/x.json',
+      '../v2/%2e%2e/%2e%2e/secret.json',
+      '../v2/shards/%2fetc',
+      'shards/a.json?x=1',
+      'shards/a.json#frag',
+      'shards\\a.json',
+      'shards//a.json',
+      './shards/a.json',
+      'shards/./a.json',
+      'shards/a b.json',
+      'shards/é.json',
+    ]) {
+      expect([path, isCatalogRelativePath(path)]).toEqual([path, false]);
+      expect([path, resolveCatalogUrl(v3, path)]).toEqual([path, null]);
+    }
+    // The plain forms still resolve.
+    expect(isCatalogRelativePath('shards/topo-n40w080.json')).toBe(true);
+    expect(isCatalogRelativePath('../v2/shards/topo_n40.w080.json')).toBe(true);
+    expect(isCatalogRelativePath('search.json')).toBe(true);
   });
 
   it('refuses a base URL with no path to hang the shard off', () => {

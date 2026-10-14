@@ -237,6 +237,27 @@ describe('crawlCartesPleinAir', () => {
     );
   });
 
+  it('never follows a file’s redirect off the publisher’s site, nor the listing’s', async () => {
+    const routes = baseRoutes();
+    routes[FILE_B] = redirect('https://elsewhere.example/b.pdf');
+    const h = harness(routes);
+    const out = await crawlCartesPleinAir(input({ client: h.client }));
+    expect(out.items.map((i) => i.id)).toEqual([ID_A]);
+    expect(out.warnings).toContain(
+      `${SLUG_B}: file redirects off the publisher's site (https://elsewhere.example/b.pdf); left out`,
+    );
+    // Not one request to the other host, its robots.txt included.
+    expect(h.sent.filter((x) => x.url.includes('elsewhere.example'))).toEqual([]);
+    for (const x of h.sent) expect(x.init.redirect).toBe('manual');
+
+    const offsite = baseRoutes();
+    offsite[LISTING_URL] = redirect('https://elsewhere.example/cartes');
+    const l = harness(offsite);
+    const refused = await crawlCartesPleinAir(input({ client: l.client }));
+    expect(refused.refused).toBe('listing answered HTTP 302');
+    expect(l.sent.filter((x) => x.url.includes('elsewhere.example'))).toEqual([]);
+  });
+
   it('leaves out a page that is not a redirect, a file that is not a PDF, or a 3xx without Location', async () => {
     const routes = baseRoutes();
     routes[PAGE_A] = res(200, '<html/>', { 'Content-Type': 'text/html' });

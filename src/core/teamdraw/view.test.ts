@@ -177,3 +177,9 @@ describe('order and notes', () => {
     expect(fullNotes(shapes, undefined, undefined)).toEqual(new Set(['d', 'e', 'f']));
   });
 });
+
+describe('a record with nothing written', () => {
+  it('is no shape (no newest write to read)', () => {
+    expect(shapeOf(rec({}, { state: { fields: {}, created: stamp(T0) } }))).toBeNull();
+  });
+});
