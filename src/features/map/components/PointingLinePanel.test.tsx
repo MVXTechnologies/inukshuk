@@ -9,7 +9,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { darkTheme, lightTheme } from '@ui/theme';
 import { darkScheme, lightScheme } from '@ui/tokens';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { Keyboard, StyleSheet } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { PointingLinePanel } from './PointingLinePanel';
 
@@ -233,5 +233,18 @@ describe('PointingLinePanel', () => {
     const custom = StyleSheet.flatten(screen.getByLabelText('Custom length in metres').props.style);
     expect(custom.color).toBe(scheme.ink);
     expect(custom.backgroundColor).toBe(scheme.surfaceVariant);
+  });
+
+  it('closing the panel with the Custom length focused puts the keyboard away (QA 2.6.1)', async () => {
+    const dismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => undefined);
+    useSettingsStore.setState({
+      pointingLine: { ...DEFAULT_POINTING_LINE, length: 'custom', customLengthM: 1000 },
+    });
+    await mount();
+    await fireEvent(screen.getByTestId('pointing-line-custom-length'), 'focus');
+    expect(dismiss).not.toHaveBeenCalled();
+    await screen.unmount();
+    expect(dismiss).toHaveBeenCalledTimes(1);
+    dismiss.mockRestore();
   });
 });

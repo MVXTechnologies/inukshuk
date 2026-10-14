@@ -28,6 +28,7 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useKeyboardRelease } from '@ui/useKeyboardRelease';
 import { Icon, Text } from 'react-native-paper';
 import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
 import {
@@ -206,6 +207,7 @@ function BearingInput({ value, onChange }: { value: number; onChange: (deg: numb
   const tokens = useSchemeTokens();
   const { accent } = useSheetAccent();
   const [text, setText] = useState(() => String(value));
+  const release = useKeyboardRelease();
   return (
     <View style={styles.bearingRow}>
       <Text style={[styles.bearingLabel, { color: tokens.inkVariant }]}>Bearing</Text>
@@ -217,7 +219,11 @@ function BearingInput({ value, onChange }: { value: number; onChange: (deg: numb
           const deg = parseBearing(digits);
           if (deg !== null) onChange(deg);
         }}
-        onBlur={() => setText(String(value))}
+        onFocus={release.onFocus}
+        onBlur={() => {
+          release.onBlur();
+          setText(String(value));
+        }}
         keyboardType="number-pad"
         returnKeyType="done"
         maxLength={3}
@@ -251,6 +257,8 @@ function CustomLengthInput({
   const units = useSettingsStore((s) => s.units);
   const unit = customLengthInputUnit(units);
   const [text, setText] = useState(() => customLengthInputText(valueM, units));
+  // Closing the panel with the field focused must not orphan the keyboard (QA 2.6.1).
+  const release = useKeyboardRelease();
   // A units switch while the panel is open re-reads the stored metres.
   const [shownUnits, setShownUnits] = useState(units);
   if (shownUnits !== units) {
@@ -268,7 +276,11 @@ function CustomLengthInput({
           const m = parseCustomLength(clean, units);
           if (m !== null) onChange(m);
         }}
-        onBlur={() => setText(customLengthInputText(valueM, units))}
+        onFocus={release.onFocus}
+        onBlur={() => {
+          release.onBlur();
+          setText(customLengthInputText(valueM, units));
+        }}
         keyboardType="decimal-pad"
         returnKeyType="done"
         maxLength={7}

@@ -1,4 +1,5 @@
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
+import { useKeyboardRelease } from '@ui/useKeyboardRelease';
 import { useRef } from 'react';
 import { Button, Dialog, TextInput } from 'react-native-paper';
 
@@ -34,6 +35,9 @@ export function NameDialog({
 }: Props) {
   // null = the user hasn't typed since the dialog opened → submit initialValue.
   const typedRef = useRef<string | null>(null);
+  // Create / Cancel with the field focused must not leave the keyboard over
+  // the dialog underneath (QA 2.6.1, Add to Library › New folder…).
+  const release = useKeyboardRelease(visible);
 
   const submit = () => {
     const name = (typedRef.current ?? initialValue).trim();
@@ -59,6 +63,7 @@ export function NameDialog({
               typedRef.current = t;
             }}
             autoFocus
+            {...release}
             // #235 — Return is the only iOS exit from a single-line field, and
             // here the obvious thing for it to do is the dialog's primary action.
             returnKeyType="done"
