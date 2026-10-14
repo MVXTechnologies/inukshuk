@@ -65,7 +65,9 @@ describe('MoveWaypointOverlay (#676)', () => {
   it('names the pin, shows a crosshair, Locate, Cancel and Confirm', async () => {
     useWaypointMoveStore.setState({ moving: TARGET });
     const h = await setup();
-    expect(screen.getByText('Moving “Camp lac” · drag the map')).toBeOnTheScreen();
+    expect(screen.getByText('Moving “Camp lac”')).toBeOnTheScreen();
+    // The hint has its own line: a long name can never cut it (QA 2.6.0).
+    expect(screen.getByText('Drag the map to place it')).toBeOnTheScreen();
     expect(screen.getByTestId('move-crosshair')).toBeOnTheScreen();
     await fireEvent.press(screen.getByLabelText('My location'));
     expect(h.onLocate).toHaveBeenCalledTimes(1);

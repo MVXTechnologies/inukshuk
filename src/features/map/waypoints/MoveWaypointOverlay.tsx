@@ -84,10 +84,20 @@ export function MoveWaypointOverlay({ units, zoom = null, onCancel, onConfirm, o
         accessibilityRole="header"
       >
         <Icon source="arrow-all" size={20} color={theme.colors.onSurface} />
-        <Text
-          numberOfLines={1}
-          style={[styles.bannerText, { color: theme.colors.onSurface }]}
-        >{`Moving “${target.label}” · drag the map`}</Text>
+        {/* Two lines: a long name ellipsises on its own line and the hint is
+          never cut ("Moving “Kiosque Edwin-Bélanger” · drag th…", QA 2.6.0). */}
+        <View style={styles.bannerBody}>
+          <Text
+            numberOfLines={1}
+            style={[styles.bannerText, { color: theme.colors.onSurface }]}
+          >{`Moving “${target.label}”`}</Text>
+          <Text
+            numberOfLines={1}
+            style={[styles.bannerHint, { color: theme.colors.onSurfaceVariant }]}
+          >
+            Drag the map to place it
+          </Text>
+        </View>
       </View>
 
       {/* The fixed pin: its tip is the map's centre (the wrapper's middle). */}
@@ -175,8 +185,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
-    height: 48,
-    borderRadius: 24,
+    minHeight: 52,
+    paddingVertical: 6,
+    borderRadius: 26,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -187,7 +198,9 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
   },
-  bannerText: { flex: 1, fontSize: 14.5, fontWeight: '700' },
+  bannerBody: { flex: 1, minWidth: 0 },
+  bannerText: { fontSize: 14.5, fontWeight: '700' },
+  bannerHint: { fontSize: 12.5 },
   centre: {
     position: 'absolute',
     top: 0,
