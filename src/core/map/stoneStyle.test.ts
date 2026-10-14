@@ -19,6 +19,7 @@ import {
   contourEmphasis,
   contourStroke,
   elevationLabel,
+  heightInUnit,
   IMAGERY_CONTOUR_PAINT,
   IMAGERY_ROAD_OPACITY,
   PARK_BAND_WIDTH,
@@ -697,6 +698,39 @@ describe('elevationLabel', () => {
 
   it('is empty without a height', () => {
     expect(evaluate({})).toBe('');
+  });
+
+  it.each([
+    [808, '2 651 ft'],
+    [100, '328 ft'],
+    [8849, '29 032 ft'],
+  ])('reads %s m in feet when asked (#702) → %j', (ele, text) => {
+    const parsed = createExpression(elevationLabel('ele', 'ft'), 'layers[0].layout.text-field');
+    if (parsed.result !== 'success') throw new Error(JSON.stringify(parsed.value));
+    expect(
+      parsed.value.evaluate({ zoom: 10 }, {
+        type: 'Point',
+        properties: { ele },
+      } as unknown as Parameters<typeof parsed.value.evaluate>[1]),
+    ).toBe(text);
+  });
+
+  it('puts the summits and the contour lines in the elevation unit', () => {
+    const { labels } = buildStoneLayers(LIGHT, {
+      source: SOURCE,
+      elevationUnit: 'ft',
+      contours: { source: 'contours', sourceLayer: 'contours', field: 'ele', levelField: 'level' },
+    });
+    const contour = labels.find((x) => x.id === `${STONE_LAYER_PREFIX}contour-label`) as {
+      layout: { 'text-field': unknown };
+    };
+    expect(contour.layout['text-field']).toEqual(['to-string', heightInUnit('ele', 'ft')]);
+    const peak = labels.find((x) => x.id === `${STONE_LAYER_PREFIX}peak`) as {
+      layout: { 'text-field': unknown[] };
+    };
+    expect(JSON.stringify(peak.layout['text-field'])).toContain(' ft');
+    // Metres by default: nothing changes for a caller that doesn't say.
+    expect(heightInUnit('ele', 'm')).toEqual(['round', ['to-number', ['get', 'ele'], 0]]);
   });
 
   it('never offers a line break inside the height (#461)', () => {

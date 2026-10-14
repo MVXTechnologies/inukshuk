@@ -1,3 +1,4 @@
+import type { ElevationUnit } from '@core/format';
 import { liveAnchorLayers } from '@core/map/liveLayerOrder';
 import { NIGHT_MAP } from '@ui/tokens';
 import { NATIVE_MAX_ZOOM, type PackFormat } from '@core/geo/tiles';
@@ -461,6 +462,8 @@ export interface OsmStyleOptions extends ExtensionStyleOptions {
    * the raster basemaps are always light.
    */
   hillshadeStrength?: HillshadeStrength;
+  /** Summit and contour heights on the vector base map: metres (default) or feet (#702). */
+  elevationUnit?: ElevationUnit;
   /**
    * The "3D relief" setting (#480): unset or `off` = no tilted-map relief
    * pass; otherwise a hidden pass in that mode's palette rides above the
@@ -704,6 +707,7 @@ export function buildOsmStyle(
           ...(options.vectorBasemap.peakDensity
             ? { peakDensity: options.vectorBasemap.peakDensity }
             : {}),
+          ...(options.elevationUnit ? { elevationUnit: options.elevationUnit } : {}),
           ...parksOptions(options.vectorBasemap),
           ...admin1Options(options.vectorBasemap.admin1),
         })
@@ -797,6 +801,7 @@ export function buildOsmStyle(
         ? { peaks: { source: VECTOR_PEAKS_SOURCE, sourceLayer: 'peaks' } }
         : {}),
       ...(imageryLabels?.peakDensity ? { peakDensity: imageryLabels.peakDensity } : {}),
+      ...(options.elevationUnit ? { elevationUnit: options.elevationUnit } : {}),
       // No imagery pass at all: no parks either (`protectedAreas` false).
       ...parksOptions(imageryLabels ?? { protectedAreas: false }),
       ...admin1Options(imageryNames ? imageryLabels?.admin1 : undefined),
