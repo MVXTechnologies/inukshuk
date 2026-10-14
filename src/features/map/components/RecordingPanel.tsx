@@ -684,7 +684,7 @@ function ElevationSoFar({
         <Text style={[styles.fieldLabel, { color: muted }]}>ELEVATION SO FAR</Text>
         {first !== undefined && last !== undefined && (
           <Text style={[styles.elevationRange, { color: ink }]}>
-            {Math.round(first)} → {formatElevation(last)}
+            {formatElevation(first)} → {formatElevation(last)}
           </Text>
         )}
       </View>

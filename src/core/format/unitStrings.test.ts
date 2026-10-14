@@ -19,6 +19,14 @@ const SCAN = ['src', 'app'];
 const UNIT = String.raw`(?:km\/h|km|mph|kn|NM|nmi|mi|ft|m)(?![\w²³/])`;
 /** An interpolation (template or JSX) followed by a space and a unit: `${d} km`, `{d} m`. */
 const AFTER_VALUE = new RegExp(String.raw`\}[ \u00a0]${UNIT}`);
+/**
+ * A bare figure paired with a formatted one — `{Math.round(first)} →
+ * {formatElevation(last)}` (QA 2.6.1): the left end has no unit, so it
+ * stayed in metres in imperial.
+ */
+const BARE_BESIDE_FORMATTED = new RegExp(
+  String.raw`\{(?:Math\.(?:round|floor|ceil)\([^}]*\)|[\w.]+\.toFixed\([^}]*\))\}[ \u00a0]*(?:→|–|—|-|to)[ \u00a0]*\{format`,
+);
 /** A string literal that is just a spaced unit, for concatenation: `' km'`, `" ft"`. */
 const SPACED_LITERAL = new RegExp(String.raw`['"\`][ \u00a0]${UNIT}['"\`]`);
 
@@ -57,7 +65,10 @@ function rawUnitLines(text: string): string[] {
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => !line.startsWith('//') && !line.startsWith('*') && !line.startsWith('/*'))
-    .filter((line) => AFTER_VALUE.test(line) || SPACED_LITERAL.test(line));
+    .filter(
+      (line) =>
+        AFTER_VALUE.test(line) || SPACED_LITERAL.test(line) || BARE_BESIDE_FORMATTED.test(line),
+    );
 }
 
 describe('unit strings guard (#702)', () => {
@@ -68,6 +79,9 @@ describe('unit strings guard (#702)', () => {
     expect(rawUnitLines("label = n + ' ft';")).toHaveLength(1);
     expect(rawUnitLines('`${speed} km/h`')).toHaveLength(1);
     expect(rawUnitLines('`${d} NM`')).toHaveLength(1);
+    // A raw figure as one end of a formatted range (QA 2.6.1, the recording panel).
+    expect(rawUnitLines('{Math.round(first)} → {formatElevation(last)}')).toHaveLength(1);
+    expect(rawUnitLines('{lo.toFixed(0)} – {formatDistance(hi)}')).toHaveLength(1);
   });
 
   it('leaves other units, identifiers and comments alone', () => {
@@ -78,6 +92,7 @@ describe('unit strings guard (#702)', () => {
     expect(rawUnitLines('// e.g. `${d} km`')).toEqual([]);
     expect(rawUnitLines(' * "1.23 km" / "840 m"')).toEqual([]);
     expect(rawUnitLines('`${value} ${unit}`')).toEqual([]);
+    expect(rawUnitLines('{formatElevation(first)} → {formatElevation(last)}')).toEqual([]);
   });
 
   it('finds no hand-formatted distance, height or speed outside the formatter', () => {

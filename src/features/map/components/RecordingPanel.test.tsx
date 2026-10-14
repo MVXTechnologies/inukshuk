@@ -4,6 +4,8 @@ import { Animated, StyleSheet } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSettingsStore } from '@state/settingsStore';
+import { useRecorderStore } from '@state/recorderStore';
+import { IMPERIAL, METRIC } from '@core/format';
 import { EXPANDED_FIELDS } from '@core/recording/panel';
 import { MINI_ON_STRIP_GAP, RecordingPanel } from './RecordingPanel';
 import { resetStripRuntime, setStripRuntime, useStripRuntime } from '../infoStrip/stripRuntime';
@@ -127,6 +129,27 @@ describe('RecordingPanel', () => {
     expect(screen.queryByLabelText('Stop recording')).toBeNull();
     await fireEvent.press(screen.getByLabelText(/^Recording, .*Show instruments$/));
     expect(screen.getByLabelText('Stop recording')).toBeOnTheScreen();
+  });
+
+  it("elevation so far: both ends in the user's units (#702)", async () => {
+    const at = (altitude: number, time: number) => ({
+      latitude: 46.8,
+      longitude: -71.2,
+      altitude,
+      time,
+    });
+    const before = useRecorderStore.getState().points;
+    useRecorderStore.setState({ points: [at(100, 1), at(150, 2)] });
+    useSettingsStore.setState({ units: IMPERIAL });
+    try {
+      await renderPanel();
+      await fireEvent.press(screen.getByLabelText('Show more fields'));
+      // 100 m and 150 m: feet at both ends, never a bare metre figure on the left.
+      expect(screen.getByText('328 ft → 492 ft')).toBeOnTheScreen();
+    } finally {
+      useRecorderStore.setState({ points: before });
+      useSettingsStore.setState({ units: METRIC });
+    }
   });
 
   it('expands to the second detent with more fields', async () => {
