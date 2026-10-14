@@ -1,10 +1,13 @@
 import type { Units } from '@core/format';
 import {
+  MAP_NOT_READY,
   WAITING_FOR_FIX,
   movedMessage,
   moveSummary,
+  waypointCursorDropMessage,
   waypointDropMessage,
 } from '@core/library/waypointActions';
+import { centreCursorPoint } from '@core/map/centreCursor';
 import type { LatLng } from '@core/models';
 import { reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
@@ -39,9 +42,14 @@ interface Options {
 
 export interface WaypointQuickActions {
   snack: ActionSnackbarState;
-  /** + menu → Add waypoint (#671): saved at the fix in one tap. */
+  /** + menu → Pin my location (#671, renamed by #709): saved at the fix in one tap. */
   addAtFix: () => void;
-  /** The + menu row's sub-line, while there is no fix. */
+  /**
+   * + menu → Add waypoint (#709): saved at the centre cursor in one tap (the
+   * fix while the map follows you), with the same EDIT / UNDO bar.
+   */
+  addAtCursor: () => Promise<void>;
+  /** The Pin my location row's sub-line, while there is no fix. */
   addHint: string | undefined;
   /** Card Move / long-press (#676): enter move mode on a saved waypoint. */
   startMove: (id: string) => void;
@@ -75,6 +83,37 @@ export function useWaypointQuickActions({
     opts.current = { location, accuracyM, units, onEdit, onBeforeMove, getCenter };
   });
 
+  /** Save a waypoint at `at` and show the EDIT / UNDO bar with `message(label)`. */
+  const drop = useCallback(
+    (at: LatLng, message: (label: string) => string) => {
+      const lib = useLibraryStore.getState();
+      let id: string;
+      try {
+        id = lib.addWaypoint(at.latitude, at.longitude);
+      } catch (err) {
+        reportError(err, 'waypoint-drop');
+        show('Could not save the waypoint. Please try again.');
+        return;
+      }
+      const label =
+        useLibraryStore.getState().waypoints.find((w) => w.id === id)?.label ?? 'Waypoint';
+      show(message(label), [
+        { label: 'Edit', onPress: () => opts.current.onEdit(id) },
+        {
+          label: 'Undo',
+          onPress: () => {
+            try {
+              useLibraryStore.getState().removeWaypoint(id);
+            } catch (err) {
+              reportError(err, 'waypoint-drop-undo');
+            }
+          },
+        },
+      ]);
+    },
+    [show],
+  );
+
   const addAtFix = useCallback(() => {
     const { location: at, accuracyM: acc, units: u } = opts.current;
     if (at === null) {
@@ -83,31 +122,29 @@ export function useWaypointQuickActions({
       show(WAITING_FOR_FIX);
       return;
     }
-    const lib = useLibraryStore.getState();
-    let id: string;
-    try {
-      id = lib.addWaypoint(at.latitude, at.longitude);
-    } catch (err) {
-      reportError(err, 'waypoint-drop');
-      show('Could not save the waypoint. Please try again.');
+    drop(at, (label) => waypointDropMessage(label, acc, u));
+  }, [show, drop]);
+
+  const addAtCursor = useCallback(async () => {
+    const { location: here, getCenter } = opts.current;
+    // While the map follows you the cursor IS you: the same drop as the fix's.
+    if (useMapStore.getState().followUser && here !== null) {
+      addAtFix();
       return;
     }
-    const label =
-      useLibraryStore.getState().waypoints.find((w) => w.id === id)?.label ?? 'Waypoint';
-    show(waypointDropMessage(label, acc, u), [
-      { label: 'Edit', onPress: () => opts.current.onEdit(id) },
-      {
-        label: 'Undo',
-        onPress: () => {
-          try {
-            useLibraryStore.getState().removeWaypoint(id);
-          } catch (err) {
-            reportError(err, 'waypoint-drop-undo');
-          }
-        },
-      },
-    ]);
-  }, [show]);
+    let centre: LatLng | null = null;
+    try {
+      centre = await getCenter();
+    } catch {
+      centre = null;
+    }
+    const at = centreCursorPoint(centre ?? useMapStore.getState().mapCenter, false, null);
+    if (at === null) {
+      show(MAP_NOT_READY);
+      return;
+    }
+    drop(at, waypointCursorDropMessage);
+  }, [show, drop, addAtFix]);
 
   const startMove = useCallback((id: string) => {
     const w = useLibraryStore.getState().waypoints.find((x) => x.id === id);
@@ -167,6 +204,7 @@ export function useWaypointQuickActions({
   return {
     snack,
     addAtFix,
+    addAtCursor,
     addHint: location === null ? WAITING_FOR_FIX : undefined,
     startMove,
     cancelMove,

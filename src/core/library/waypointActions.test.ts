@@ -4,6 +4,7 @@ import {
   moveBarHint,
   movedMessage,
   moveSummary,
+  waypointCursorDropMessage,
   waypointDropMessage,
 } from './waypointActions';
 
@@ -30,6 +31,12 @@ describe('one-tap drop message (#671)', () => {
     expect(waypointDropMessage('Waypoint 7', 24.4, 'imperial')).toBe(
       'Waypoint 7 added at your position · ±80 ft, low accuracy',
     );
+  });
+});
+
+describe('cursor drop message (#709)', () => {
+  it('names the map centre, with no fix accuracy (it is not a fix)', () => {
+    expect(waypointCursorDropMessage('Waypoint 8')).toBe('Waypoint 8 added at the map centre');
   });
 });
 

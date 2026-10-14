@@ -1,6 +1,7 @@
-# Standalone waypoint e2e (#135, one-tap since #671): "Add waypoint" in the
-# "+" menu saves a waypoint at the GPS fix straight away and shows a snackbar
-# with EDIT and UNDO. The flow opens the editor from EDIT, annotates and
+# Standalone waypoint e2e (#135, one-tap since #671): "Pin my location" in
+# the "+" menu (2.5's "Add waypoint", renamed by #709; "Add waypoint" now
+# drops at the centre cursor) saves a waypoint at the GPS fix straight away
+# and shows a snackbar with EDIT and UNDO. The flow opens the editor from EDIT, annotates and
 # saves, then drops a SECOND waypoint and asserts its auto number is higher
 # ("Waypoint N+…") — only true if the first one reached the persisted store.
 # It ends by deleting every waypoint it dropped (see the tidy-up at the end).
@@ -16,7 +17,7 @@
 # - The editor is a bottom sheet titled "Waypoint"; its name field holds
 #   "Waypoint N", the note input is labelled "Note"; save is "Done" (header
 #   and footer both save), discard is "Delete".
-# - A waypoint needs a GPS fix: before one, "Add waypoint" only shows the
+# - A waypoint needs a GPS fix: before one, "Pin my location" only shows the
 #   "Waiting for a GPS fix…" snackbar — the retry blocks simply try again.
 # - The EDIT/UNDO snackbar lives 8 s. A retry after a missed EDIT drops one
 #   more waypoint, which is why the second number is checked with ">" and
@@ -57,14 +58,14 @@ appId: com.inukshuk.app
     commands:
       - runFlow:
           when:
-            notVisible: 'Add waypoint'
+            notVisible: 'Pin my location'
           commands:
             - tapOn: 'Map actions'
       # 60 s: on software-GL emulators one hierarchy fetch can take that long.
       - extendedWaitUntil:
-          visible: 'Add waypoint'
+          visible: 'Pin my location'
           timeout: 60000
-      - tapOn: 'Add waypoint'
+      - tapOn: 'Pin my location'
       - extendedWaitUntil:
           visible: 'Waypoint \d+ added at your position.*'
           timeout: 8000
@@ -95,13 +96,13 @@ appId: com.inukshuk.app
     commands:
       - runFlow:
           when:
-            notVisible: 'Add waypoint'
+            notVisible: 'Pin my location'
           commands:
             - tapOn: 'Map actions'
       - extendedWaitUntil:
-          visible: 'Add waypoint'
+          visible: 'Pin my location'
           timeout: 60000
-      - tapOn: 'Add waypoint'
+      - tapOn: 'Pin my location'
       - extendedWaitUntil:
           visible: 'Waypoint \d+ added at your position.*'
           timeout: 8000

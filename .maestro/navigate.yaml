@@ -6,9 +6,12 @@
 # - Per-platform launchApp permission values (#128).
 # - The point chip is a map marker the map hit-tests itself (not in the
 #   accessibility tree): its Navigate button sits 75 pt LEFT of and 31 pt
-#   above the pressed point (MAP_POINT_ACTION_LAYOUT), i.e. 32%,46% for a
-#   press at the centre of a ~400 x 880 pt screen — the mirror of
-#   convert.yaml's 68%,46%.
+#   above the chip's point (MAP_POINT_ACTION_LAYOUT) — the mirror of
+#   convert.yaml's. Since #709 a long-press opens the chip at the CENTRE
+#   CURSOR (the map's centre), not the finger: the map ends above the tab
+#   bar, so its centre is ~30–55 pt above the screen's and the button row
+#   lands at ~41–44 % of the height (was 46 % at the finger). The flow tries
+#   43 % then 41 %.
 # - The linear compass itself is not asserted: it needs a compass heading
 #   (or walking, for the course-over-ground fallback), and neither emulator
 #   nor simulator promises one. Jest covers the tape (NavCompass.test.tsx).
@@ -46,7 +49,19 @@ appId: com.inukshuk.app
             - waitForAnimationToEnd:
                 timeout: 2000
             - tapOn:
-                point: '32%,46%'
+                point: '32%,43%'
+      # The other button row height (see the header): a missed tap closed
+      # the chip, so long-press again.
+      - runFlow:
+          when:
+            notVisible: 'Clear destination'
+          commands:
+            - longPressOn:
+                point: '50%,50%'
+            - waitForAnimationToEnd:
+                timeout: 2000
+            - tapOn:
+                point: '32%,41%'
       - extendedWaitUntil:
           visible: 'Clear destination'
           timeout: 10000
