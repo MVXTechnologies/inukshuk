@@ -19,17 +19,21 @@
  * | chrome / sheets  | 0      | region select, map maker, compass, search pill, chips, |
  * |                  |        | rail, banners, the bottom column, the trail inspector, |
  * |                  |        | the night veil, the glove shield, the category sheet,  |
- * |                  |        | the credits sheet, cards, the drawing chrome: by tree  |
+ * |                  |        | the credits sheet, the drawing tools' chrome: by tree  |
  * |                  |        | order, all above the strip                             |
- * | drawingMode      | 0      | reserved: the drawing tools' full-screen mode (2.5.2)  |
  * | shownTrailSheet  | 4      | a long trail shown from Explore                        |
  * | topChip          | 5      | the top-centre lane (destination, night, receiver)     |
  * | recordingPanel   | 6      | the recording panel's dock (above the glove shield:    |
  * |                  |        | its hold-to-unlock stays live)                         |
- * | waypointCard     | 7      | a tapped waypoint's card                               |
+ * | waypointCard     | 7      | the bottom cards: a waypoint's, a cluster's list       |
+ * |                  |        | (2.5.2), a team point's, a photo's, an extension's;    |
+ * |                  |        | docked ON a bottom strip (`waypointCardDockStyle`)     |
  * | snackbar         | 8      | confirmations, EDIT / UNDO                             |
  * | moveOverlay      | 9      | moving a waypoint owns the screen                      |
  * | teamPick         | 9      | picking a teammate's point                             |
+ * | drawingMode      | 9      | team drawing mode (#683, 2.5.2): its canvas and bars   |
+ * |                  |        | own the screen; the strip is hidden while it is on     |
+ * | overDrawMode     | 10     | a sheet opened from drawing mode (the map credits)     |
  * | heatCarousel     | 10     | the heat-spot activity carousel                        |
  * | searchSheet      | 20     | the open place search                                  |
  * | editorSheet      | 30     | the waypoint editor, the info strip editor (its dim at |
@@ -44,15 +48,18 @@
  * draw over all of them (the 2.6.0 review's P0). `overlayOrder.guard.test`
  * pins both halves: the table and MapScreen's mount order.
  *
- * To add a layer (2.5.2's drawing mode): add it here with its zIndex, give
- * its outermost view `MAP_OVERLAY_Z.<layer>`, and list its MapScreen marker
- * in the guard test's `ABOVE_THE_STRIP`.
+ * A layer that owns the whole screen (team drawing, a waypoint move) also
+ * hides the strip, so a top-docked strip does not push its top bar down and
+ * a bottom one lifts nothing under it.
+ *
+ * To add a layer: add it here with its zIndex, give its outermost view
+ * `MAP_OVERLAY_Z.<layer>`, and list its MapScreen marker in the guard test's
+ * `ABOVE_THE_STRIP`.
  */
 export const MAP_OVERLAY_Z = {
   map: 0,
   infoStrip: 0,
   chrome: 0,
-  drawingMode: 0,
   shownTrailSheet: 4,
   topChip: 5,
   recordingPanel: 6,
@@ -60,6 +67,8 @@ export const MAP_OVERLAY_Z = {
   snackbar: 8,
   moveOverlay: 9,
   teamPick: 9,
+  drawingMode: 9,
+  overDrawMode: 10,
   heatCarousel: 10,
   searchSheet: 20,
   editorSheet: 30,

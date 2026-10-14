@@ -514,7 +514,13 @@ The UI is `src/features/map/infoStrip/`:
   (`src/features/map/overlayOrder.ts`, `MAP_OVERLAY_Z`): no zIndex, mounted
   right after the map, so every sheet, card, shield and chip draws over it;
   `overlayOrder.guard.test` pins it. A sheet that covers the bottom edge
-  (the trail inspector) makes a bottom-docked strip step aside.
+  (the trail inspector) makes a bottom-docked strip step aside. Team
+  drawing mode (#683, `MAP_OVERLAY_Z.drawingMode`) and a waypoint move own
+  the screen: the strip is hidden and lifts nothing there. The bottom cards
+  (a waypoint's, a cluster's list, a team point's, a photo's, an
+  extension's) dock ON a bottom strip (`waypointCardDockStyle`), as the
+  bottom column, the team button and the EDIT / UNDO bar do. Before the
+  map's first camera (0, 0) the strip has no centre (`isRealCenter`).
 
 Adding a field: a descriptor in `fields/` with a pure `compute()` and its
 tests, and one line in `registry.ts`; the picker, search, settings page and

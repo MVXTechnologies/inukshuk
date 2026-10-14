@@ -14,6 +14,7 @@ import type {
   StripFix,
 } from '@core/infoStrip/types';
 import type { LatLng, TrackStats } from '@core/models';
+import { isRealCenter } from '@core/map/coordinatesChip';
 import { createCourseTracker, type CourseSample } from '@core/nav/headingTape';
 import { createHeadingGate } from '@core/nav/pointingSource';
 import type { HeroData } from '@core/recording/panel';
@@ -191,7 +192,10 @@ export function useStripSnapshot(
   const needs = useMemo(() => stripNeeds(rows), [rows]);
   const { deps } = needs;
   const wantsCamera = deps.has('camera');
-  const centre = useMapStore((s) => (wantsCamera ? s.mapCenter : null));
+  // No camera yet (0, 0 before MapLibre's first settle): no centre, so no
+  // "0.00000, 0.00000" and no sea-floor elevation lookup (2.5.2 QA).
+  const settled = useMapStore((s) => (wantsCamera ? s.mapCenter : null));
+  const centre = isRealCenter(settled) ? settled : null;
   const followsUser = useMapStore((s) => s.followUser);
   const coordinateFormat = useSettingsStore((s) => s.coordinateFormat);
   const { location, fix, follow, recording } = inputs;
@@ -230,7 +234,8 @@ export function useStripSnapshot(
   const installed = useInstalledExtensions();
   const tidesOn = deps.has('ext:tides') && installed.has('tides');
   const tideParams = useMemo(() => stripStationParams(rows), [rows]);
-  const tideCentre = useMapStore((s) => (tidesOn && location === null ? s.mapCenter : null));
+  const tideSettled = useMapStore((s) => (tidesOn && location === null ? s.mapCenter : null));
+  const tideCentre = isRealCenter(tideSettled) ? tideSettled : null;
   const tides = useStripTides(tidesOn, tideParams, location ?? tideCentre);
 
   const destination = useNavigationStore((s) => s.destination);

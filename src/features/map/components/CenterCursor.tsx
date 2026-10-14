@@ -29,15 +29,15 @@ const PAD = 3;
  * camera moves under it, so panning costs it nothing (no camera
  * subscription). It re-renders only when its settings or follow mode flip.
  *
-  * Hidden when switched off, while the camera follows the user if set so
-  * (the puck marks that spot), and while `suppressed` (the region selector
-  * or map maker owns the screen).
-  *
-  * Over the pins and clusters, on purpose (2.5.2 QA decision): it is not a map
-  * feature but the aim of the centre coordinates, and an aim that hides under
-  * the thing it is on reads the wrong point. A view over the GL map cannot go
-  * between GL layers anyway; it stays small, so a pin or disc under it stays
-  * readable, and a tap goes through it (`pointerEvents="none"`).
+ * Hidden when switched off, while the camera follows the user if set so
+ * (the puck marks that spot), and while `suppressed` (the region selector
+ * or map maker owns the screen).
+ *
+ * Over the pins and clusters, on purpose (2.5.2 QA decision): it is not a map
+ * feature but the aim of the centre coordinates, and an aim that hides under
+ * the thing it is on reads the wrong point. A view over the GL map cannot go
+ * between GL layers anyway; it stays small, so a pin or disc under it stays
+ * readable, and a tap goes through it (`pointerEvents="none"`).
  */
 export const CenterCursor = memo(function CenterCursor({ suppressed }: { suppressed: boolean }) {
   const cursor = useSettingsStore((s) => s.infoStrip.current.aids.cursor);

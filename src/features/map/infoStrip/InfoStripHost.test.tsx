@@ -211,6 +211,46 @@ describe('the default strip (2.5.1 chip, re-homed)', () => {
     await renderStrip({ hidden: true });
     expect(screen.queryByTestId('info-strip')).toBeNull();
   });
+
+  it('steps aside for team drawing or a move (hidden): its lift drops to 0, no editor', async () => {
+    const utils = await renderStrip();
+    await act(async () => fireEvent(screen.getByTestId('info-strip'), 'layout', layout(52)));
+    expect(useStripRuntime.getState().stripH).toBe(52);
+    await act(async () => useStripRuntime.setState({ editorOpen: true }));
+    expect(screen.getByTestId('strip-editor')).toBeOnTheScreen();
+    // MapScreen passes hidden while drawing mode owns the screen.
+    await utils.rerender(
+      <Providers>
+        <InfoStripInsets>
+          <Screen hidden />
+        </InfoStripInsets>
+      </Providers>,
+    );
+    expect(screen.queryByTestId('info-strip')).toBeNull();
+    expect(screen.queryByTestId('strip-editor')).toBeNull();
+    expect(bottomLiftOf(useStripRuntime.getState())).toBe(0);
+    expect(hostRendered.mock.calls.at(-1)![0]).toBe(0);
+  });
+
+  it('never reads 0, 0 nor its sea-floor depth before a real camera exists (2.5.2 QA)', async () => {
+    // Promise turns only: no timer, no sleep.
+    const flush = () =>
+      act(async () => {
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+      });
+    useMapStore.setState({ mapCenter: { latitude: 0, longitude: 0 } });
+    await renderStrip();
+    await flush();
+    expect(screen.queryByText(/0\.00000/)).toBeNull();
+    expect(screen.queryByTestId('map-coords-altitude')).toBeNull();
+    expect(mockDem.calls).toBe(0);
+    // The first real settle: the centre and its ground, read once.
+    await act(async () => useMapStore.getState().setMapCenter(QC));
+    await flush();
+    expect(screen.getByTestId('map-coords-text')).toHaveTextContent('46.81394, -71.20761');
+    expect(screen.getByTestId('map-coords-altitude')).toHaveTextContent('≈412 m');
+    expect(mockDem.calls).toBe(1);
+  });
 });
 
 describe('render budgets (measure, do not assert wall-clock)', () => {

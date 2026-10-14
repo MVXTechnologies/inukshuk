@@ -17,7 +17,7 @@ describe('MapScreen ↔ info strip', () => {
 
   it('mounts the strip on the bottom column lift (tab bar edge, recording panel, sheets)', () => {
     expect(map).toMatch(/<InfoStripHost[^>]*bottomLift=\{bottomColumnLift\}/);
-    expect(map).toMatch(/hidden=\{selecting \|\| makeMapState !== null\}/);
+    expect(map).toMatch(/hidden=\{selecting \|\| makeMapState !== null \|\| stripStepsAside\}/);
     // MapScreen hands over what it already holds per fix: no new subscription.
     expect(map).toMatch(
       /<InfoStripHost\s+location=\{location\}\s+fix=\{lastFix\}\s+follow=\{follow\}/,
@@ -25,7 +25,8 @@ describe('MapScreen ↔ info strip', () => {
   });
 
   it('lifts the bottom column (the scale row over the tape) by the measured strip', () => {
-    expect(map).toMatch(/const stripLift = useInfoStripBottomLift\(\);/);
+    expect(map).toMatch(/const measuredStripLift = useInfoStripBottomLift\(\);/);
+    expect(map).toMatch(/const stripLift = stripStepsAside \? 0 : measuredStripLift;/);
     expect(map).toMatch(/stripLift > 0 && \{ bottom: bottomColumnLift \+ stripLift \}/);
     // The tape stays below the row inside that column (same rule as 2.5.1).
     expect(map.indexOf('<NavigationCompassRow')).toBeGreaterThan(
@@ -33,6 +34,17 @@ describe('MapScreen ↔ info strip', () => {
     );
     // The credits sheet and the tip bubble ride on it too.
     expect(map).toMatch(/bottomColumnLift \+\s*stripLift \+/);
+  });
+
+  it('team drawing (#683) and a waypoint move own the screen: the strip steps aside, lifting nothing', () => {
+    expect(map).toMatch(/const stripStepsAside = teamDrawing \|\| movingWp !== null;/);
+    // Both are known before the lift is read (declared above it).
+    const lift = map.indexOf('const stripStepsAside');
+    expect(map.indexOf('const teamDrawing = ')).toBeLessThan(lift);
+    expect(map.indexOf('const movingWp = ')).toBeLessThan(lift);
+    // MapScreen reads the measured lift in ONE place; everything else reads stripLift.
+    expect(map.match(/useInfoStripBottomLift\(\)/g)).toHaveLength(1);
+    expect(map.match(/measuredStripLift/g)).toHaveLength(2);
   });
 
   it('has no 2.5.1 coordinates chip left: the strip is its home', () => {

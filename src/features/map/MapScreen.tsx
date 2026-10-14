@@ -2721,7 +2721,13 @@ export function MapScreen() {
   // Where the bottom chrome column sits: on the drawing panel, a trail sheet
   // or the recording panel (same precedence as its style), else the edge.
   // A bottom-docked info strip (#673) sits on that, and the column on the strip.
-  const stripLift = useInfoStripBottomLift();
+  // Team drawing mode (#683) and a waypoint move own the screen: the strip
+  // steps aside there (`hidden` below) and lifts nothing, at once rather than
+  // after its own layout reports 0 — the draw-mode credits sheet and the
+  // cards rely on it.
+  const stripStepsAside = teamDrawing || movingWp !== null;
+  const measuredStripLift = useInfoStripBottomLift();
+  const stripLift = stripStepsAside ? 0 : measuredStripLift;
   const bottomColumnLift =
     drawing.panelHeight > 0
       ? drawing.panelHeight
@@ -3411,7 +3417,7 @@ export function MapScreen() {
           follow={follow}
           recording={recordingPanelUp ? { stats, elapsedS, liveSpeedMps } : null}
           bottomLift={bottomColumnLift}
-          hidden={selecting || makeMapState !== null}
+          hidden={selecting || makeMapState !== null || stripStepsAside}
           bottomSheetUp={inspectId !== null}
           focused={isFocused}
           onCopied={onStripCopied}
@@ -3929,7 +3935,10 @@ export function MapScreen() {
           </View>
         )}
         {recordingPanelUp && recordingPhoto.toast && (
-          <View style={waypointCardDockStyle(true, panelHeight)} pointerEvents="box-none">
+          <View
+            style={waypointCardDockStyle(true, panelHeight, stripLift)}
+            pointerEvents="box-none"
+          >
             <CapturedPhotoToast toast={recordingPhoto.toast} onUndo={recordingPhoto.undo} />
           </View>
         )}
@@ -3971,7 +3980,7 @@ export function MapScreen() {
             }}
             here={location}
             cardSlotFree={cardSlotFree && viewWaypoint === null && extensionHit === null}
-            cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+            cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
             onNavigate={(latitude, longitude) => setDestination({ latitude, longitude })}
             screenFocused={isFocused}
           />
@@ -3987,10 +3996,12 @@ export function MapScreen() {
         />
         <TeamPickOverlay
           top={insets.top + 8}
-          cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+          cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
         />
         {/* A tapped photo's bottom card (app-wide, owner 2026-10-07). */}
-        <PhotoBottomCard dockStyle={waypointCardDockStyle(recordingPanelUp, panelHeight)} />
+        <PhotoBottomCard
+          dockStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+        />
 
         {/* Right-edge activity carousel: opened by tapping a "hot" heat spot
           (onMapPress above). Mutually exclusive with TrailInspectPanel — the
@@ -4053,6 +4064,8 @@ export function MapScreen() {
               extensions: shownExtensions,
             })}
             bottom={
+              // Drawing mode hides the strip (stripLift is 0 there): the
+              // sheet docks over the draw tool bar, not the bottom column.
               teamDrawing
                 ? drawCreditsSheetBottom(insets.bottom, recordingPanelUp ? panelHeight : 0)
                 : bottomColumnLift +
@@ -4100,7 +4113,7 @@ export function MapScreen() {
 
         {cardSlotFree && movingWp === null && viewWaypoint !== null && (
           <View
-            style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
             pointerEvents="box-none"
             testID="waypoint-card-dock"
           >
@@ -4152,7 +4165,7 @@ export function MapScreen() {
         {/* A cluster's pins at the camera's cap (#685): pick one to open its card. */}
         {cardSlotFree && movingWp === null && (
           <View
-            style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
             pointerEvents="box-none"
           >
             <WaypointClusterSheet
@@ -4174,7 +4187,7 @@ export function MapScreen() {
             <ExtensionCardDock
               key={extensionHit.key}
               hit={extensionHit}
-              style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+              style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
               dockRef={extensionDockRef}
               onLayout={() => {
                 // The dock's own y is relative to its container, not the map:
