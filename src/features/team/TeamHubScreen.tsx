@@ -8,7 +8,7 @@ import { MESH_DEFAULT_PORT, hotspotCandidates, isPrivateIPv4, parseIPv4 } from '
 import { expiryLine, EXTEND_PRESETS } from '@core/teamui/lifetime';
 import { parseHostPort } from '@core/teamui/invites';
 import { reportError } from '@lib/errorReporting';
-import { teamService, useTeamStore } from '@state/teamStore';
+import { teamService, selectChatUnread, useTeamStore } from '@state/teamStore';
 import type { ComponentType } from 'react';
 import type { TeamTask } from '@core/team/tasks';
 import { HeaderAction } from '@ui/components/ScreenHeader';
@@ -75,7 +75,7 @@ export function TeamHubScreen() {
   const peers = useTeamStore((s) => s.peers);
   const mesh = useTeamStore((s) => s.mesh);
   const meshRunning = useTeamStore((s) => s.meshRunning);
-  const unread = useTeamStore((s) => s.unread);
+  const unread = useTeamStore(selectChatUnread);
   const shares = useTeamStore((s) => s.shares);
   const tasks = useTeamStore((s) => s.tasks);
   const notices = useTeamStore((s) => s.joinNotices);

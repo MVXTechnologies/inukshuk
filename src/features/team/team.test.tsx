@@ -15,7 +15,7 @@ import type { CreatedInvite } from '@data/team/teamSession';
 import { ExtensionsSection } from '@features/settings/ExtensionsSection';
 import { useSettingsStore } from '@state/settingsStore';
 import { IMPERIAL, METRIC } from '@core/format';
-import { useTeamStore, wireTeamStore } from '@state/teamStore';
+import { selectChatUnread, useTeamStore, wireTeamStore } from '@state/teamStore';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { Linking, StyleSheet } from 'react-native';
@@ -125,6 +125,15 @@ describe('the team hub', () => {
   beforeEach(async () => {
     await app.createTeam({ name: 'Relevé MSA', myName: 'Marc', lifetimeMs: lifetimeMs('14d') });
     useTeamStore.getState().refresh();
+  });
+
+  it('counts chat unread as the map chip and the panel do: channel plus sub-threads (#707)', async () => {
+    await render(wrap(<TeamHubScreen />));
+    // 3 in the team channel, 4 across photo / pin / trail threads.
+    await act(() => useTeamStore.setState({ unread: 3, threadsUnread: 4 }));
+    expect(screen.getByTestId('team-unread-badge').props.children).toBe(7);
+    expect(screen.getByText('Chat · 7')).toBeTruthy();
+    expect(selectChatUnread(useTeamStore.getState())).toBe(7);
   });
 
   it('states that sharing is off until switched on, in both themes', async () => {

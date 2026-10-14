@@ -1,5 +1,5 @@
 import { DEVICE_EXTENSIONS } from '@core/extensions/registry';
-import { useTeamStore } from '@state/teamStore';
+import { selectChatUnread, useTeamStore } from '@state/teamStore';
 
 import { SubPanelButton, SwitchRow } from '../../map/components/mapSheet';
 import { setExtensionPrefs, useExtensionPrefs } from '../prefs';
@@ -14,7 +14,7 @@ import type { ExtensionPanelEntryProps } from '../types';
 export function TeamPanelEntry({ onOpenPanel }: ExtensionPanelEntryProps) {
   const { show } = useExtensionPrefs('team');
   const name = useTeamStore((s) => s.view?.name ?? null);
-  const unread = useTeamStore((s) => s.unread);
+  const unread = useTeamStore(selectChatUnread);
   const { label } = DEVICE_EXTENSIONS.team;
   const hint =
     name === null

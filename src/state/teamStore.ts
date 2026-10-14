@@ -162,6 +162,16 @@ function snapshot(service: TeamService | null): Omit<TeamSnapshot, 'banner'> {
   };
 }
 
+/**
+ * Unread in Team chat, the ONE number every chat entry shows (QA 2.6.1,
+ * #707: the map chip and the panel said 7, the Team screen 3): the team
+ * channel's unread plus its sub-threads' (photos, pins, trails). Chat opens
+ * on both tabs, and the two sets are disjoint (the channel holds only
+ * `TEAM_THREAD` messages), so the sum counts each message once.
+ */
+export const selectChatUnread = (s: Pick<TeamSnapshot, 'unread' | 'threadsUnread'>): number =>
+  s.unread + s.threadsUnread;
+
 export const useTeamStore = create<TeamStore>((set) => ({
   ...snapshot(null),
   available: appTeamService() !== null,

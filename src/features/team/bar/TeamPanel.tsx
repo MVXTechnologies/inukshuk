@@ -17,7 +17,7 @@ import { STATUS_LABEL } from '@core/teamui/system';
 import { distanceText, panelMembers } from '@core/teamui/teamBar';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 import { useSettingsStore } from '@state/settingsStore';
-import { useTeamStore } from '@state/teamStore';
+import { selectChatUnread, useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
@@ -56,7 +56,7 @@ export function TeamPanel({
   const peers = useTeamStore((s) => s.peers);
   const meshRunning = useTeamStore((s) => s.meshRunning);
   const statuses = useTeamStore((s) => s.statuses);
-  const unread = useTeamStore((s) => s.unread + s.threadsUnread);
+  const unread = useTeamStore(selectChatUnread);
   const me = view?.me;
   const myOpenTasks = useTeamStore(
     (s) => s.tasks.filter((x) => !x.done && x.assignee === me).length,

@@ -11,7 +11,7 @@
  * it instead of colliding with it.
  */
 import { teamBarSummary, type TeamBarSummary } from '@core/teamui/teamBar';
-import { useTeamStore } from '@state/teamStore';
+import { selectChatUnread, useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
@@ -80,7 +80,7 @@ export function TeamStatusBar({
   const t = useSchemeTokens();
   const router = useRouter();
   const summary = useTeamBarSummary();
-  const unread = useTeamStore((s) => s.unread + s.threadsUnread);
+  const unread = useTeamStore(selectChatUnread);
   const guest = useTeamStore((s) => s.view?.members.find((m) => m.isMe)?.role === 'guest');
   const panelOpen = useTeamSheet((s) => s.sheet?.kind === 'menu');
   const open = useTeamSheet((s) => s.open);
