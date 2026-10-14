@@ -9,6 +9,7 @@ import { darkTheme, lightTheme } from '@ui/theme';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { OverlaysPanel } from './MapOverlaysMenu';
+import { resetStripRuntime, useStripRuntime } from '../infoStrip/stripRuntime';
 
 /**
  * The #484 Overlays sheet: one themed, scrolling list of Switch rows and
@@ -123,7 +124,14 @@ describe('Overlays sheet layout (#484)', () => {
     const tabs: [string, string[], string[]][] = [
       [
         'Map',
-        ['Content: everything', 'PDF maps', 'Parks & protected areas', 'MAP AIDS', 'Pointing line'],
+        [
+          'Content: everything',
+          'PDF maps',
+          'Parks & protected areas',
+          'MAP AIDS',
+          'Customize info strip',
+          'Pointing line',
+        ],
         // Satellite's, PDF maps' and the pointing line's own options live in their sub-panels.
         [
           'Shading',
@@ -239,6 +247,17 @@ describe('Overlays sheet layout (#484)', () => {
     await renderMenu({ onClose });
     fireEvent.press(screen.getByLabelText('Close overlays'));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('"Customize info strip" (#673) closes the sheet and opens the strip editor', async () => {
+    const onClose = jest.fn();
+    resetStripRuntime();
+    await renderMenu({ onClose });
+    expect(screen.getByText('Default · fields, dock, centre cursor')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Customize info strip'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(useStripRuntime.getState().editorOpen).toBe(true);
+    resetStripRuntime();
   });
 
   it('opens the folder picker from the Content row', async () => {

@@ -17,7 +17,8 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useTeamStore, wireTeamStore } from '@state/teamStore';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import { Linking } from 'react-native';
+import { Linking, StyleSheet } from 'react-native';
+import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
 
 import { JoinScreen } from './JoinScreen';
@@ -255,6 +256,10 @@ describe('the map card', () => {
     expect(screen.queryByTestId('team-fab')).toBeNull();
     await act(() => useTeamMapSelection.getState().select(null));
     expect(screen.getByTestId('team-fab')).toBeTruthy();
+    // Closed, the button's layer sits under the bottom cards (QA 2.6.0, 09b).
+    const layerZ = () =>
+      StyleSheet.flatten(screen.getByTestId('team-button-layer').props.style).zIndex;
+    expect(layerZ()).toBe(MAP_OVERLAY_Z.teamButton);
     // Its menu: the owner's six (2026-10-07) and "Draw on map" after Rally (#683).
     await fireEvent.press(screen.getByTestId('team-fab'));
     const ids = ['sos', 'status', 'rally', 'draw', 'tasks', 'chat', 'manage'].map(
@@ -265,6 +270,8 @@ describe('the map card', () => {
       .map((n) => n.props.testID as string)
       .filter((id, k, all) => all.indexOf(id) === k && id !== 'team-fab-scrim');
     expect(shown).toEqual(ids);
+    // Open, the menu's layer rides over the bottom cards (QA 09b).
+    expect(layerZ()).toBe(MAP_OVERLAY_Z.teamMenu);
     expect(screen.getByLabelText('Manage team')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('team-fab-tasks'));
     expect(mockPush).toHaveBeenCalledWith('/team/tasks');

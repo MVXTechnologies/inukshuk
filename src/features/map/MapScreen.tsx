@@ -132,12 +132,11 @@ import { ShownTrailLayers } from './longTrail/ShownTrailLayers';
 import { MapControlsRail } from './components/MapControlsRail';
 import { RenderingToasts } from './components/RenderingToasts';
 import { ScaleBar } from './components/ScaleBar';
-import {
-  CenterCoordinatesChip,
-  onChipRowLayout,
-  onTipSlotLayout,
-} from './components/CenterCoordinatesChip';
 import { CenterCursor } from './components/CenterCursor';
+import { InfoStripHost } from './infoStrip/InfoStripHost';
+import { useMapBack, useStoreBackLayers } from './useMapBack';
+import type { TargetOpen } from '@core/infoStrip/target';
+import { useInfoStripBottomLift, useStripEditorOpen } from './infoStrip/stripRuntime';
 import { metersPerPixel } from '@core/geo/scaleBar';
 import { heatTapRadiusPx } from '@core/heat/heatStyle';
 import { RecordingPanel } from './components/RecordingPanel';
@@ -209,6 +208,7 @@ import {
   snackbarWrapperStyle,
   waypointCardDockStyle,
 } from './bottomLayers';
+import { MAP_OVERLAY_Z } from './overlayOrder';
 import { destinationReadout } from '@core/geo/destination';
 import { nextWaypointLabel } from '@core/library/waypoints';
 import * as Clipboard from 'expo-clipboard';
@@ -1892,6 +1892,56 @@ export function MapScreen() {
     [setDestination, composeWaypointAt, showSnack, router, formatCoords],
   );
 
+  // A tap on the info strip's target name (#696): the waypoint's card (as a
+  // pin tap), or the point chip on the point, flown into view (as a search hit).
+  const openStripTarget = useCallback(
+    (open: TargetOpen) => {
+      setExtensionHit(null);
+      if (open.kind === 'waypoint') {
+        setPointAt(null);
+        setViewWp({ source: 'saved', id: open.waypointId });
+      } else {
+        setViewWp(null);
+        setPointAt(open.point);
+        flyToPoint(open.point);
+      }
+    },
+    // flyToPoint closes over refs only (see aimAt).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  // The strip's coordinates copy (#673 review): "Copied …" with Convert, as
+  // 2.5.1's chip reached it by a long-press (the strip's long-press edits).
+  const showActionSnack = mapSnacks.action.show;
+  const onStripCopied = useCallback(
+    (message: string, convert?: () => void) => {
+      if (convert === undefined) showSnack(message);
+      else showActionSnack(message, [{ label: 'Convert', onPress: convert }]);
+    },
+    [showSnack, showActionSnack],
+  );
+  // The strip's editor is modal: the map behind it leaves the screen reader's reach.
+  const stripEditorOpen = useStripEditorOpen();
+
+  // Android Back closes what is open on the map, topmost first, before it may
+  // leave the app (QA 2.6.0: Back over the point popup exited). `useMapBack`.
+  const storeBackLayers = useStoreBackLayers();
+  useMapBack(isFocused, [
+    { open: railMenuOpen, close: () => setRailMenuOpen(false) },
+    { open: creditsOpen, close: () => setCreditsOpen(false) },
+    { open: modelSheetOpen, close: () => setModelSheetOpen(false) },
+    { open: pickingCategory, close: () => setPickingCategory(false) },
+    { open: forecastAt !== null, close: () => setForecastAt(null) },
+    ...storeBackLayers,
+    { open: extensionHit !== null, close: () => setExtensionHit(null) },
+    { open: viewWp !== null, close: () => setViewWp(null) },
+    { open: pointAt !== null, close: () => setPointAt(null) },
+    { open: heatSelection !== null, close: () => setHeatSelection(null) },
+    { open: !!inspectId, close: () => inspect(null) },
+    { open: compactControlsOpen, close: () => setCompactControlsOpen(false) },
+  ]);
+
   // Team mode (#589): "show on the map" from a task or a pin notification.
   const teamFocus = useTeamMapFocus((s) => s.target);
   useEffect(() => {
@@ -2689,6 +2739,14 @@ export function MapScreen() {
     !drawing.ownsBottom;
   // Where the bottom chrome column sits: on the drawing panel, a trail sheet
   // or the recording panel (same precedence as its style), else the edge.
+  // A bottom-docked info strip (#673) sits on that, and the column on the strip.
+  // Team drawing mode (#683) and a waypoint move own the screen: the strip
+  // steps aside there (`hidden` below) and lifts nothing, at once rather than
+  // after its own layout reports 0 — the draw-mode credits sheet and the
+  // cards rely on it.
+  const stripStepsAside = teamDrawing || movingWp !== null;
+  const measuredStripLift = useInfoStripBottomLift();
+  const stripLift = stripStepsAside ? 0 : measuredStripLift;
   const bottomColumnLift =
     drawing.panelHeight > 0
       ? drawing.panelHeight
@@ -2732,6 +2790,8 @@ export function MapScreen() {
           <Map
             ref={mapRef}
             style={styles.fill}
+            importantForAccessibility={stripEditorOpen ? 'no-hide-descendants' : 'auto'}
+            accessibilityElementsHidden={stripEditorOpen}
             mapStyle={style}
             // Owner call (backlog item 1): the bottom-left ornaments — MapLibre's
             // wordmark logo and the attribution "i" — take too much map. Both are
@@ -3365,6 +3425,24 @@ export function MapScreen() {
         {/* Centre cursor (#677): a static dot over the map's centre. */}
         <CenterCursor suppressed={selecting || makeMapState !== null || movingWp !== null} />
 
+        {/* The info strip (#673): docked on the tab bar / recording panel (or
+          at the top), its own subscriptions in its leaf; it lifts the bottom
+          column by its measured height (stripLift above). The LOWEST overlay
+          (overlayOrder.ts): mounted right after the map, no zIndex, so every
+          sheet, card, shield and chip below draws over it. */}
+        <InfoStripHost
+          location={location}
+          fix={lastFix}
+          follow={follow}
+          recording={recordingPanelUp ? { stats, elapsedS, liveSpeedMps } : null}
+          bottomLift={bottomColumnLift}
+          hidden={selecting || makeMapState !== null || stripStepsAside}
+          bottomSheetUp={inspectId !== null}
+          focused={isFocused}
+          onCopied={onStripCopied}
+          onOpenTarget={openStripTarget}
+        />
+
         {/* Region select overlay for offline download */}
         {selecting && (
           <RegionSelectOverlay
@@ -3482,7 +3560,7 @@ export function MapScreen() {
             style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
             pointerEvents="box-none"
           >
-            <DestinationChip readout={destReadout} onClear={() => setDestination(null)} />
+            <DestinationChip onClear={() => setDestination(null)} />
           </View>
         )}
         {follow !== null && !marineActive && (
@@ -3614,6 +3692,7 @@ export function MapScreen() {
             recordingPanelUp && { bottom: panelHeight },
             trailSheetUp && { bottom: trailSheetHeight },
             drawing.panelHeight > 0 && { bottom: drawing.panelHeight },
+            stripLift > 0 && { bottom: bottomColumnLift + stripLift },
           ]}
           pointerEvents="box-none"
           onLayout={(e) => setBottomColumnH(e.nativeEvent.layout.height)}
@@ -3669,13 +3748,8 @@ export function MapScreen() {
               {/* The tip button hides itself while recording, while a destination is
                 followed, and while a trail sheet, heat carousel or the coordinate
                 dialog is up. */}
-              {/* #677: both onLayouts tell the coordinates chip how much room it has. */}
-              <View
-                style={[styles.bottomSide, styles.bottomSideEnd]}
-                pointerEvents="box-none"
-                onLayout={onChipRowLayout}
-              >
-                <View pointerEvents="box-none" onLayout={onTipSlotLayout}>
+              <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="box-none">
+                <View pointerEvents="box-none">
                   <TipButton
                     navigating={destination !== null || follow !== null}
                     gestureActive={cameraMoving}
@@ -3693,12 +3767,6 @@ export function MapScreen() {
                     blocked={inspectId !== null || heatSelection !== null}
                   />
                 </View>
-                {/* #677: the centre's coordinates and altitude (yours while following). */}
-                <CenterCoordinatesChip
-                  you={followUser ? location : null}
-                  youAltitudeM={followUser ? (lastFix?.altitude ?? null) : null}
-                  onCopied={showSnack}
-                />
               </View>
             </View>
           )}
@@ -3886,7 +3954,10 @@ export function MapScreen() {
           </View>
         )}
         {recordingPanelUp && recordingPhoto.toast && (
-          <View style={waypointCardDockStyle(true, panelHeight)} pointerEvents="box-none">
+          <View
+            style={waypointCardDockStyle(true, panelHeight, stripLift)}
+            pointerEvents="box-none"
+          >
             <CapturedPhotoToast toast={recordingPhoto.toast} onUndo={recordingPhoto.undo} />
           </View>
         )}
@@ -3915,7 +3986,7 @@ export function MapScreen() {
           a tapped teammate's or shared waypoint's card. */}
         {makeMapState === null && (
           <TeamMapOverlay
-            fabBottom={teamFabBottom(bottomColumnLift, bottomColumnH)}
+            fabBottom={teamFabBottom(bottomColumnLift + stripLift, bottomColumnH)}
             sosTop={insets.top + 8}
             onPointActions={(p, what) => {
               const at = { longitude: p[0], latitude: p[1] };
@@ -3928,7 +3999,7 @@ export function MapScreen() {
             }}
             here={location}
             cardSlotFree={cardSlotFree && viewWaypoint === null && extensionHit === null}
-            cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+            cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
             onNavigate={(latitude, longitude) => setDestination({ latitude, longitude })}
             screenFocused={isFocused}
           />
@@ -3944,10 +4015,12 @@ export function MapScreen() {
         />
         <TeamPickOverlay
           top={insets.top + 8}
-          cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+          cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
         />
         {/* A tapped photo's bottom card (app-wide, owner 2026-10-07). */}
-        <PhotoBottomCard dockStyle={waypointCardDockStyle(recordingPanelUp, panelHeight)} />
+        <PhotoBottomCard
+          dockStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+        />
 
         {/* Right-edge activity carousel: opened by tapping a "hot" heat spot
           (onMapPress above). Mutually exclusive with TrailInspectPanel — the
@@ -3984,7 +4057,9 @@ export function MapScreen() {
         {bottomColumnH !== null && bottomRowY !== null && (
           <TipBubble
             right={TIP_BUBBLE_RIGHT}
-            bottom={rowLiftAboveColumnBottom(bottomColumnH, bottomRowY) + TIP_BUBBLE_GAP}
+            bottom={
+              stripLift + rowLiftAboveColumnBottom(bottomColumnH, bottomRowY) + TIP_BUBBLE_GAP
+            }
             tailRight={TIP_BUBBLE_TAIL_RIGHT}
           />
         )}
@@ -4008,9 +4083,12 @@ export function MapScreen() {
               extensions: shownExtensions,
             })}
             bottom={
+              // Drawing mode hides the strip (stripLift is 0 there): the
+              // sheet docks over the draw tool bar, not the bottom column.
               teamDrawing
                 ? drawCreditsSheetBottom(insets.bottom, recordingPanelUp ? panelHeight : 0)
                 : bottomColumnLift +
+                  stripLift +
                   (bottomColumnH !== null && bottomRowY !== null
                     ? rowLiftAboveColumnBottom(bottomColumnH, bottomRowY)
                     : 48) +
@@ -4054,7 +4132,7 @@ export function MapScreen() {
 
         {cardSlotFree && movingWp === null && viewWaypoint !== null && (
           <View
-            style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
             pointerEvents="box-none"
             testID="waypoint-card-dock"
           >
@@ -4106,7 +4184,7 @@ export function MapScreen() {
         {/* A cluster's pins at the camera's cap (#685): pick one to open its card. */}
         {cardSlotFree && movingWp === null && (
           <View
-            style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
             pointerEvents="box-none"
           >
             <WaypointClusterSheet
@@ -4128,7 +4206,7 @@ export function MapScreen() {
             <ExtensionCardDock
               key={extensionHit.key}
               hit={extensionHit}
-              style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+              style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
               dockRef={extensionDockRef}
               onLayout={() => {
                 // The dock's own y is relative to its container, not the map:
@@ -4240,7 +4318,7 @@ export function MapScreen() {
           or the compass row. */}
         <ActionSnackbar
           snack={wpQuick.snack.current}
-          style={liftedSnackbarStyle(bottomColumnLift, bottomColumnH)}
+          style={liftedSnackbarStyle(bottomColumnLift + stripLift, bottomColumnH)}
         />
         <Snackbar
           visible={healthNotice.message !== null}
@@ -4275,11 +4353,17 @@ const styles = StyleSheet.create({
   // Between the compass (16 + 48) and the rail, with 12 dp either side.
   searchPill: { position: 'absolute', left: 76, right: 76 },
   // The open place search takes the whole top band, over compass and rail.
-  searchSheet: { position: 'absolute', left: 12, right: 12, zIndex: 20 },
+  searchSheet: { position: 'absolute', left: 12, right: 12, zIndex: MAP_OVERLAY_Z.searchSheet },
   // Centred under the search pill, between the compass and the rail.
   marineChip: { position: 'absolute', left: 76, right: 76, alignItems: 'center' },
   // Same lane, used by the destination readout (#97).
-  topCenterChip: { position: 'absolute', left: 76, right: 76, alignItems: 'center', zIndex: 5 },
+  topCenterChip: {
+    position: 'absolute',
+    left: 76,
+    right: 76,
+    alignItems: 'center',
+    zIndex: MAP_OVERLAY_Z.topChip,
+  },
   banner: { position: 'absolute', left: 8, right: 8, borderRadius: 12 },
   bottom: { position: 'absolute', left: 16, right: 16, bottom: 0, gap: 12, paddingBottom: 10 },
   bottomRow: { flexDirection: 'row', alignItems: 'flex-end' },

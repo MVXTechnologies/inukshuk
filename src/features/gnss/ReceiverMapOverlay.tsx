@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { ReceiverChipView } from './ReceiverChipView';
 import { ReceiverSheet } from './ReceiverSheet';
 import { useReceiverChip } from './useReceiverChip';
+import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 
 /**
  * The receiver on the map (#588): its status chip in the top-centre lane
@@ -35,5 +36,11 @@ export function ReceiverMapOverlay({ top, showChip }: { top: number; showChip: b
 
 const styles = StyleSheet.create({
   // MapScreen's top-centre lane: between the compass stack and the controls rail.
-  lane: { position: 'absolute', left: 76, right: 76, alignItems: 'center', zIndex: 5 },
+  lane: {
+    position: 'absolute',
+    left: 76,
+    right: 76,
+    alignItems: 'center',
+    zIndex: MAP_OVERLAY_Z.topChip,
+  },
 });

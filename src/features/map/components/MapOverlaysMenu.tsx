@@ -57,6 +57,7 @@ import {
 } from './mapSheet';
 import { PdfMapsPanel } from './PdfMapsPanel';
 import { PointingLinePanel, PointingLineRow } from './PointingLinePanel';
+import { openStripEditor } from '../infoStrip/stripRuntime';
 import { RangeSlider } from './RangeSlider';
 import { SatellitePanel } from './SatellitePanel';
 
@@ -134,11 +135,14 @@ function OverlayRows({
   onSlopeEnabled,
   onOpenFolders,
   openSubPanel,
+  onClose,
 }: {
   tab: Exclude<OverlayTab, 'extensions'>;
   onSlopeEnabled: () => void;
   onOpenFolders: () => void;
   openSubPanel: (panel: OverlaySubPanel) => void;
+  /** Close the sheet (the info strip's editor opens over the map instead). */
+  onClose: () => void;
 }) {
   const { accent } = useSheetAccent();
   const tokens = useSchemeTokens();
@@ -160,6 +164,7 @@ function OverlayRows({
   const peakDensity = useSettingsStore((s) => s.peakDensity);
   const showParks = useSettingsStore((s) => s.showParks);
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
+  const stripName = useSettingsStore((s) => s.infoStrip.current.name);
   const nativeTerrain3d = nativeTerrainAvailable();
   const set = useSettingsStore((s) => s.set);
 
@@ -359,6 +364,16 @@ function OverlayRows({
       />
       {/* Map aids (#681): drawn on the map from you; options in its own page. */}
       <SectionTitle>Map aids</SectionTitle>
+      {/* The info strip's editor (#673; also a long-press on the strip). */}
+      <NavRow
+        icon="view-dashboard-edit-outline"
+        label="Customize info strip"
+        hint={`${stripName} · fields, dock, centre cursor`}
+        onPress={() => {
+          onClose();
+          openStripEditor();
+        }}
+      />
       <PointingLineRow onOpen={() => openSubPanel('pointingLine')} />
     </>
   );
@@ -583,6 +598,7 @@ export function OverlaysPanel({
             onSlopeEnabled={onSlopeEnabled}
             onOpenFolders={onOpenFolders}
             openSubPanel={openSubPanel}
+            onClose={onClose}
           />
         )}
       </ScrollView>

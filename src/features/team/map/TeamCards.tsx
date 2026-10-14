@@ -7,6 +7,7 @@
 import { findMentions } from '@core/teamui/compose';
 import { STATUS_IDS, STATUS_LABEL, type StatusId } from '@core/teamui/system';
 import { teamService, useTeamStore } from '@state/teamStore';
+import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
@@ -677,8 +678,19 @@ export function TeamFab({ bottom }: { bottom: number }) {
     ],
     ['account-cog-outline', 'Manage team', go('/team'), 'team-fab-manage'],
   ];
+  // One elevation-free layer at the map's overlay order (QA 2.6.0, 09b): the
+  // closed button sits UNDER the bottom cards (a cluster's list, a waypoint's
+  // card), the open menu over everything it scrims. The button's own
+  // elevation stays inside the layer, so Android cannot lift it over a card.
   return (
-    <>
+    <View
+      style={[
+        StyleSheet.absoluteFill,
+        { zIndex: menuOpen ? MAP_OVERLAY_Z.teamMenu : MAP_OVERLAY_Z.teamButton },
+      ]}
+      pointerEvents="box-none"
+      testID="team-button-layer"
+    >
       {menuOpen && (
         <Pressable
           style={[StyleSheet.absoluteFill, { backgroundColor: t.team.menuScrim }]}
@@ -740,7 +752,7 @@ export function TeamFab({ bottom }: { bottom: number }) {
           </View>
         )}
       </Pressable>
-    </>
+    </View>
   );
 }
 
@@ -795,7 +807,6 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 8,
     elevation: 6,
   },
   badge: {
@@ -811,7 +822,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   badgeText: { fontSize: 11, fontWeight: '900' },
-  menu: { position: 'absolute', right: 16, gap: 10, alignItems: 'flex-end', zIndex: 9 },
+  menu: { position: 'absolute', right: 16, gap: 10, alignItems: 'flex-end' },
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   menuLabel: {
     borderRadius: 10,

@@ -5,6 +5,16 @@
  *
  * Changing size never touches the recording itself — these are view states.
  */
+import {
+  formatDistance,
+  formatDuration,
+  formatElevation,
+  formatElevationChange,
+  formatPace,
+  formatSpeed,
+  type Units,
+} from '@core/format';
+import { msUntilSunset } from '@core/sun/sunTimes';
 
 /**
  * - `mini`: A, a small overlay pill (map first);
@@ -84,13 +94,19 @@ export const EXPANDED_FIELDS: readonly HeroField[] = [
 
 /**
  * Tap a hero slot: it shows the next field in {@link HERO_FIELD_ORDER} that
- * no other slot already shows. Returns a new tuple; a slot out of range
- * returns the fields unchanged.
+ * no other slot already shows, and none of `skip` (2.6.0: the metrics the
+ * info strip already shows, so every metric has one owner). Returns a new
+ * tuple; a slot out of range, or nothing left to show, returns the fields
+ * unchanged.
  */
-export function cycleHeroField(fields: readonly HeroField[], slot: number): HeroField[] {
+export function cycleHeroField(
+  fields: readonly HeroField[],
+  slot: number,
+  skip: ReadonlySet<HeroField> = new Set(),
+): HeroField[] {
   const current = fields[slot];
   if (current === undefined) return [...fields];
-  const taken = new Set(fields.filter((_, i) => i !== slot));
+  const taken = new Set([...fields.filter((_, i) => i !== slot), ...skip]);
   const start = HERO_FIELD_ORDER.indexOf(current);
   for (let step = 1; step <= HERO_FIELD_ORDER.length; step++) {
     const next = HERO_FIELD_ORDER[(start + step) % HERO_FIELD_ORDER.length]!;
@@ -101,4 +117,67 @@ export function cycleHeroField(fields: readonly HeroField[], slot: number): Hero
     }
   }
   return [...fields];
+}
+
+/** Each hero field's caption, as the panel prints it (upper case). */
+export const HERO_FIELD_LABEL: Record<HeroField, string> = {
+  time: 'TIME',
+  distance: 'DISTANCE',
+  gain: 'GAIN',
+  speed: 'SPEED',
+  pace: 'PACE',
+  altitude: 'ALTITUDE',
+  descent: 'DESCENT',
+  moving: 'MOVING',
+  sunset: 'TO SUNSET',
+};
+
+/** What the hero fields are computed from: the recorder's live numbers. */
+export interface HeroData {
+  /** Recording time so far (pauses excluded), seconds. */
+  elapsedS: number;
+  distanceM: number;
+  ascentM: number;
+  descentM: number;
+  movingTimeS: number;
+  avgSpeedMps: number;
+  liveSpeedMps: number;
+  /** The last fix's altitude, or null when it has none. */
+  altitudeM: number | null;
+  /** The last fix, for the sunset countdown; null before the first one. */
+  position: { latitude: number; longitude: number } | null;
+  nowMs: number;
+}
+
+/**
+ * A hero field's text, in the user's units ("1:12:40", "8.42 km", "+412 m",
+ * "—"): one formatter for the recording panel and the info strip, so the two
+ * can never disagree about the same metric.
+ */
+export function heroFieldText(field: HeroField, d: HeroData, units: Units): string {
+  switch (field) {
+    case 'time':
+      return formatDuration(d.elapsedS);
+    case 'distance':
+      return formatDistance(d.distanceM, units);
+    case 'gain':
+      return formatElevationChange(d.ascentM, 'up', units);
+    case 'speed':
+      return formatSpeed(d.liveSpeedMps, units);
+    case 'pace':
+      return d.avgSpeedMps > 0 ? formatPace(d.avgSpeedMps, units) : '—';
+    case 'altitude':
+      return d.altitudeM === null ? '—' : formatElevation(d.altitudeM, units);
+    case 'descent':
+      return formatElevationChange(d.descentM, 'down', units);
+    case 'moving':
+      return formatDuration(d.movingTimeS);
+    case 'sunset': {
+      const left =
+        d.position === null
+          ? null
+          : msUntilSunset(d.nowMs, d.position.latitude, d.position.longitude);
+      return left === null ? '—' : formatDuration(Math.round(left / 1000));
+    }
+  }
 }

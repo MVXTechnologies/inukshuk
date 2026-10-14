@@ -20,6 +20,7 @@ import {
 import { formatBytes } from '@core/format';
 import { useLibraryStore } from '@state/libraryStore';
 import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
+import { updateCurrentStrip } from '@features/map/infoStrip/stripSettings';
 import { BetaFeaturesSection } from './BetaFeaturesSection';
 import { CoordinateFormatSetting } from './CoordinateFormatSetting';
 import { NavigationButtonsSetting } from './NavigationButtonsSetting';
@@ -149,7 +150,7 @@ export function SettingsScreen() {
   const windParticles = useSettingsStore((s) => s.windParticles);
   const minDisplacement = useSettingsStore((s) => s.minDisplacementM);
   const units = useSettingsStore((s) => s.units);
-  const showCenterCursor = useSettingsStore((s) => s.showCenterCursor);
+  const centerCursorOn = useSettingsStore((s) => s.infoStrip.current.aids.cursor.enabled);
   const themeMode = useSettingsStore((s) => s.themeMode);
   const compactMapChrome = useSettingsStore((s) => s.compactMapChrome);
   const showTipJar = useSettingsStore((s) => s.showTipJar);
@@ -440,14 +441,21 @@ export function SettingsScreen() {
                     <Switch value={showScaleBar} onValueChange={(v) => set('showScaleBar', v)} />
                   )}
                 />
+                {/* 2.6.0 (#673): the coordinates moved into the info strip, which
+                    is customised on the map (Map layers › Customize info strip). */}
                 <List.Item
-                  title="Centre cursor and coordinates"
-                  description="A dot at the map centre, and its coordinates at the bottom (tap to copy)"
+                  title="Centre cursor"
+                  description="A mark at the map centre. Its look, and the info strip, are set on the map"
                   right={() => (
                     <Switch
-                      value={showCenterCursor}
-                      onValueChange={(v) => set('showCenterCursor', v)}
-                      accessibilityLabel="Centre cursor and coordinates"
+                      value={centerCursorOn}
+                      onValueChange={(enabled) =>
+                        updateCurrentStrip((s) => ({
+                          ...s,
+                          aids: { ...s.aids, cursor: { ...s.aids.cursor, enabled } },
+                        }))
+                      }
+                      accessibilityLabel="Centre cursor"
                     />
                   )}
                 />

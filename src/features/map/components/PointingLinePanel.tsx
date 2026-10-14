@@ -238,7 +238,14 @@ function BearingInput({ value, onChange }: { value: number; onChange: (deg: numb
  * to the screen edge), nine colours, four widths, the tick marks and their
  * labels. Every option can be set while the line is off.
  */
-export function PointingLinePanel({ onBack }: { onBack: () => void }) {
+export function PointingLinePanel({
+  onBack,
+  backLabel = 'Back to overlays',
+}: {
+  onBack: () => void;
+  /** The back row's a11y/Maestro handle (the info strip editor's page says where it goes back to). */
+  backLabel?: string;
+}) {
   const tokens = useSchemeTokens();
   const { accent } = useSheetAccent();
   const sheetW = useSheetWidth();
@@ -261,7 +268,7 @@ export function PointingLinePanel({ onBack }: { onBack: () => void }) {
 
   return (
     <>
-      <SubPanelHeader title="Pointing line" backLabel="Back to overlays" onBack={onBack} />
+      <SubPanelHeader title="Pointing line" backLabel={backLabel} onBack={onBack} />
       <Preview cfg={cfg} />
       <SwitchRow
         icon="ray-start-arrow"

@@ -4,9 +4,9 @@ import type { Area } from '@core/models';
 import { useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Surface, Text, useTheme } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HoldButton } from '../components/HoldButton';
+import { useRealSafeAreaInsets } from '../infoStrip/InfoStripInsets';
 
 interface Props {
   area: Area;
@@ -136,7 +136,8 @@ export function AreaCard({ area, units, onEdit, onDelete, onClose, onAddPhoto, o
 }
 
 function PhotoModal({ uri, onClose }: { uri: string | null; onClose: () => void }) {
-  const insets = useSafeAreaInsets();
+  // Its own window, under the status bar: the real inset, not the strip-shifted one.
+  const insets = useRealSafeAreaInsets();
   return (
     <Modal
       visible={uri !== null}
@@ -153,7 +154,11 @@ function PhotoModal({ uri, onClose }: { uri: string | null; onClose: () => void 
       >
         {uri !== null && <Image source={{ uri }} style={styles.full} resizeMode="contain" />}
       </Pressable>
-      <View style={[styles.viewerBar, { top: insets.top + 8 }]} pointerEvents="box-none">
+      <View
+        style={[styles.viewerBar, { top: insets.top + 8 }]}
+        pointerEvents="box-none"
+        testID="photo-viewer-bar"
+      >
         <IconButton
           icon="close"
           mode="contained-tonal"

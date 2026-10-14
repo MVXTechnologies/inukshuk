@@ -197,14 +197,18 @@ func backpressure() {
   let toA = rb.connected[0]["peerId"] as! String
   var stalled = false
   var sent = 0
+  // Writable events counted before the send that hit backpressure. Read it
+  // BEFORE send(): the engine may drain and announce writable on its own
+  // queue before send() even returns to us, and counting after would miss it.
+  var before = 0
   let end = Date().addingTimeInterval(20)
   while !stalled && Date() < end {
+    before = rb.writable.count
     do {
       _ = try b.send(toA, Data(count: frame))
       sent += 1
     } catch let e as MeshError {
       expect(e.code == "E_MESH_BACKPRESSURE", "backpressure code")
-      let before = rb.writable.count
       let wait = Date().addingTimeInterval(1.5)
       while rb.writable.count == before && Date() < wait { usleep(10_000) }
       stalled = rb.writable.count == before
@@ -214,14 +218,14 @@ func backpressure() {
   let aPeers = a.stats()["peers"] as! [[String: Any?]]
   expect(aPeers[0]["throttled"] as? Bool == true, "receiver paused reading")
   expect((a.stats()["inboxBytes"] as! Double) <= Double(5 * frame), "receiver inbox bounded")
-  let writableBefore = rb.writable.count
   var received = 0
   waitFor("all frames delivered after draining", timeout: 20) {
     received += a.takeFrames(max: 64).count
     return received >= sent
   }
   expect(received == sent, "no frame lost or duplicated")
-  waitFor("writable announced after the stall") { rb.writable.count > writableBefore }
+  // The rejected send armed exactly one writable event; it must follow the drain.
+  waitFor("writable announced after the stall") { rb.writable.count > before }
 }
 
 /// A peer whose frames are already queued in the socket: one delivery must not

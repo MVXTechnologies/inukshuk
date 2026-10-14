@@ -44,7 +44,12 @@ async function get(url: string, signal: AbortSignal, as: 'json' | 'text'): Promi
   }
 }
 
-async function load(s: TideStation, signal: AbortSignal): Promise<LiveTide> {
+/**
+ * One station's live level and next high / low from its own agency (two
+ * requests; CHS ones through the shared IWLS limiter). Throws when offline.
+ * Also the info strip's tide fields' source (#695).
+ */
+export async function loadLiveTide(s: TideStation, signal: AbortSignal): Promise<LiveTide> {
   const now = Date.now();
   if (s.live === 'chs' && s.iwlsId !== undefined) {
     // CHS IWLS, live from the phone (rate-limited with the rest of CHS traffic).
@@ -91,7 +96,7 @@ export function useLiveTide(station: TideStation | null, offline: boolean): Live
     if (key === null || station === null) return;
     const controller = new AbortController();
     let cancelled = false;
-    load(station, controller.signal)
+    loadLiveTide(station, controller.signal)
       .then((live) => {
         if (!cancelled) setResult({ key, query: { status: 'ready', live } });
       })

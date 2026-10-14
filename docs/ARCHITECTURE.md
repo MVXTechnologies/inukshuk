@@ -453,6 +453,80 @@ ntripClient.ts` over `data/gnss/ntripSocket.ts` (the module's `openTcp` /
   along the trail, else the next note, else the end, advanced by your furthest
   progress; off trail latches past 30 m and clears within 20 m.
 
+## Info strip (#673, 2.6.0)
+
+The docked strip of fields at the bottom (or top) of the map, plus its two
+map aids (centre cursor, pointing line). The pure core is
+`src/core/infoStrip/` (100 % coverage gate):
+
+- `types.ts`: `InfoStrip` (dock, ≤ 3 rows of `FieldRef`, aids, shared
+  `Target`), `FieldDescriptor` with its `ParamSchema` (drives a generated
+  settings page), `DataDep`, `Tick`, `DepsSnapshot`, `StripValue`.
+- `registry.ts`: every field, `satisfies`-checked like the extension
+  registry; `pickableFields` lists only what fits (nothing greyed out).
+  Fields live in `fields/` (position, navigation, motion, `hero:*` recording
+  metrics through the panel's own `heroFieldText`, extension-fed fields).
+- `layout.ts`: `fitRow` (4 spaces a row, coordinates take 2),
+  `visibleRows` (while recording the panel owns its hero metrics),
+  `stackOffsets` (bottom up: panel or tab bar, strip, compass tape, ⓘ +
+  scale row; the top dock shifts the top chrome).
+- `target.ts` (one strip target, per-field override), `movingSpeed.ts`
+  (10-minute moving speed for ETE/ETA), `presets.ts` (`DEFAULT_STRIP` =
+  2.5.1's chip and dot; Default, Hiking, Navigation, Survey, Paddling),
+  `settings.ts` (the strip's own file, `info-strip.json`, versioned: a
+  missing file is `DEFAULT_STRIP`, or 2.5.1's switch carried over; unknown
+  field ids are kept and skipped, so a rollback loses nothing).
+  `FieldDescriptor.depsFor` narrows a field's deps to its params (a heading
+  on the course never starts the compass).
+- Magnetic declination comes from `core/geo/wmm.ts`, WMM2025 in pure TS,
+  checked against NOAA's published test values.
+
+- `deps.ts` (`stripNeeds`: the union of the placed fields' deps and the
+  clock they need), `compute.ts` (one tick: every field over one snapshot,
+  missing data steps aside), `edit.ts` (the editor's add / remove / move /
+  reorder, each refusing what would not fit, and `dropSlot`).
+
+The UI is `src/features/map/infoStrip/`:
+
+- `InfoStripHost` is the one leaf MapScreen mounts. `useStripSnapshot` is the
+  coordinator: it subscribes to exactly what the placed fields need (camera
+  settle, the DEM for the centre, a 4 Hz gated heading, the course tracker,
+  a 1 Hz or 1-minute clock, the moving-speed window), so none of its ticks
+  re-render MapScreen. `StripField` is the one renderer, memoised on the
+  value's content.
+- `stripRuntime` (a small store) carries the measured strip heights (MapScreen
+  lifts its bottom column by `bottomH`; `InfoStripInsets`, around the Map
+  route, moves the safe-area top to the top-docked strip's bottom edge — its
+  measured height includes the status bar, counted once — and
+  `useRealSafeAreaInsets` gives full-screen modals the real one), the recording
+  panel's hero fields (the de-dup) and the strip's metrics (the panel's
+  cycling skips them).
+- `editor/` is the in-place editor, a plain View sheet: rows with drag,
+  the picker, settings pages generated from each field's params, the centre
+  cursor, 2.5.1's pointing-line panel, presets and your own strips.
+- The strip lives in `settingsStore` (`infoStrip`) but is persisted in its
+  OWN file, `info-strip.json`: 2.5.1 rewrites `settings.json` with only the
+  keys it knows, so a strip kept there would not survive a rollback.
+  `setInfoStrip` writes the file, and `settings.json` only when the 2.5.1
+  `showCenterCursor` mirror flips. A pre-release's `settings.infoStrip` is
+  read once and moved.
+- Stacking: the strip is the LOWEST overlay of the map's one overlay order
+  (`src/features/map/overlayOrder.ts`, `MAP_OVERLAY_Z`): no zIndex, mounted
+  right after the map, so every sheet, card, shield and chip draws over it;
+  `overlayOrder.guard.test` pins it. A sheet that covers the bottom edge
+  (the trail inspector) makes a bottom-docked strip step aside. Team
+  drawing mode (#683, `MAP_OVERLAY_Z.drawingMode`) and a waypoint move own
+  the screen: the strip is hidden and lifts nothing there. The bottom cards
+  (a waypoint's, a cluster's list, a team point's, a photo's, an
+  extension's) dock ON a bottom strip (`waypointCardDockStyle`), as the
+  bottom column, the team button and the EDIT / UNDO bar do. Before the
+  map's first camera (0, 0) the strip has no centre (`isRealCenter`).
+
+Adding a field: a descriptor in `fields/` with a pure `compute()` and its
+tests, and one line in `registry.ts`; the picker, search, settings page and
+presets pick it up (and a glyph line in `infoStrip/glyphs.ts` if it has a
+new one).
+
 ## Error reporting ("no silent fails")
 
 - Capture: a chained `ErrorUtils` global handler (fatal + non-fatal), Hermes'

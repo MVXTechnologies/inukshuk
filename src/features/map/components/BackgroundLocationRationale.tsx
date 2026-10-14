@@ -1,5 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 import { Button, Icon, Surface, Text, useTheme } from 'react-native-paper';
+import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 
 interface Props {
   visible: boolean;
@@ -61,8 +62,8 @@ const styles = StyleSheet.create({
     padding: 24,
     // Above the map's control rail, whose Android elevation otherwise draws
     // it over this scrim (same fix as RecordingCheckPanel).
-    zIndex: 100,
-    elevation: 100,
+    zIndex: MAP_OVERLAY_Z.modal,
+    elevation: MAP_OVERLAY_Z.modal,
   },
   card: { borderRadius: 28, padding: 24 },
   icon: { alignItems: 'center', marginBottom: 12 },

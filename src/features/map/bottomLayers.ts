@@ -1,7 +1,10 @@
 import type { ViewStyle } from 'react-native';
 
+import { MAP_OVERLAY_Z } from './overlayOrder';
+
 /**
- * Stacking order of the map screen's bottom-edge layers (#505).
+ * Stacking order of the map screen's bottom-edge layers (#505), from the
+ * map's one overlay order (`MAP_OVERLAY_Z`, `overlayOrder.ts`).
  *
  * The waypoint card used to be a bare sibling with no zIndex, so the
  * recording panel's dock (zIndex 6) drew — and caught touches — over it while
@@ -11,35 +14,46 @@ import type { ViewStyle } from 'react-native';
  */
 export const BOTTOM_LAYER = {
   /** The recording panel's dock. */
-  recordingPanel: { zIndex: 6 },
+  recordingPanel: { zIndex: MAP_OVERLAY_Z.recordingPanel },
   /** A tapped waypoint's card: always above the recording panel. */
-  waypointCard: { zIndex: 7 },
+  waypointCard: { zIndex: MAP_OVERLAY_Z.waypointCard },
   /** Snackbars: confirmations ("Waypoint deleted") must never hide under a dock. */
-  snackbar: { zIndex: 8 },
+  snackbar: { zIndex: MAP_OVERLAY_Z.snackbar },
   /**
    * Team drawing mode (#683): its canvas and bars own the screen, above the
    * recording panel and the map's snackbars (its own snackbar is inside it).
    */
-  drawMode: { zIndex: 9 },
+  drawMode: { zIndex: MAP_OVERLAY_Z.drawingMode },
   /** A sheet opened from drawing mode (the map credits): over it. */
-  overDrawMode: { zIndex: 10 },
+  overDrawMode: { zIndex: MAP_OVERLAY_Z.overDrawMode },
 } as const;
 
 /** Gap between a floating waypoint card and the recording panel under it. */
 export const FLOATING_CARD_GAP = 8;
 
 /**
- * Where the waypoint card docks. Normally flush with the bottom edge; while
- * the recording panel is up it floats just above the panel (which keeps its
- * live stats and Stop in view) and on top of it in the stacking order, so
- * even a panel that grows under it can never cover the card.
+ * Where the bottom cards dock (a waypoint's card, a cluster's list, a team
+ * point's card, a photo's card, an extension's card). Normally flush with the
+ * bottom edge; while the recording panel is up it floats just above the
+ * panel (which keeps its live stats and Stop in view) and on top of it in the
+ * stacking order, so even a panel that grows under it can never cover the
+ * card.
+ *
+ * A bottom-docked info strip (#673) sits on the tab bar or on the panel, and
+ * the cards sit on the strip (`stripLift`, its measured lift, 0 when it is
+ * hidden or at the top), as the bottom column does: a card never half-covers
+ * the strip, and the strip never shows under a card.
  */
-export function waypointCardDockStyle(recordingPanelUp: boolean, panelHeight: number): ViewStyle {
+export function waypointCardDockStyle(
+  recordingPanelUp: boolean,
+  panelHeight: number,
+  stripLift = 0,
+): ViewStyle {
   const base: ViewStyle = {
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 0,
+    bottom: stripLift,
     ...BOTTOM_LAYER.waypointCard,
   };
   if (!recordingPanelUp) return base;
@@ -47,7 +61,7 @@ export function waypointCardDockStyle(recordingPanelUp: boolean, panelHeight: nu
     ...base,
     left: FLOATING_CARD_GAP,
     right: FLOATING_CARD_GAP,
-    bottom: panelHeight + FLOATING_CARD_GAP,
+    bottom: panelHeight + stripLift + FLOATING_CARD_GAP,
   };
 }
 

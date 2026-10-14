@@ -33,6 +33,7 @@ module.exports = {
     '!src/core/team/testing/**',
     '!src/core/teamdraw/testUtils.ts',
     '!src/core/gnss/testUtils.ts',
+    '!src/core/infoStrip/testUtils.ts',
     '!src/core/geo/pdfjsRealm.testUtils.ts',
   ],
   coverageThreshold: {
@@ -54,6 +55,14 @@ module.exports = {
     // Team drawing (#683) validates peer input and decides what goes on the
     // wire to older phones: every line and branch is exercised.
     './src/core/teamdraw/': {
+      branches: 100,
+      functions: 100,
+      lines: 100,
+      statements: 100,
+    },
+    // The info strip's fields are what a person navigates by (#673): every
+    // line and branch of the strip core is exercised.
+    './src/core/infoStrip/': {
       branches: 100,
       functions: 100,
       lines: 100,

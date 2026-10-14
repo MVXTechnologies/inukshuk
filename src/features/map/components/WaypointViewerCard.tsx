@@ -4,10 +4,10 @@ import type { StoredWaypointIcon } from '@core/models';
 import { useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Surface, Text, useTheme } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { InukshukGlyph } from '@ui/components/InukshukGlyph';
 import { HoldButton } from './HoldButton';
 import { mciGlyph } from './waypointGlyph';
+import { useRealSafeAreaInsets } from '../infoStrip/InfoStripInsets';
 
 export interface ViewableWaypoint {
   label: string;
@@ -218,7 +218,8 @@ function PhotoViewer({
   onShare: () => void;
   onClose: () => void;
 }) {
-  const insets = useSafeAreaInsets();
+  // Its own window, under the status bar: the real inset, not the strip-shifted one.
+  const insets = useRealSafeAreaInsets();
   return (
     <Modal
       visible={visible}
@@ -240,7 +241,11 @@ function PhotoViewer({
           accessibilityIgnoresInvertColors
         />
       </Pressable>
-      <View style={[styles.viewerBar, { top: insets.top + 8 }]} pointerEvents="box-none">
+      <View
+        style={[styles.viewerBar, { top: insets.top + 8 }]}
+        pointerEvents="box-none"
+        testID="photo-viewer-bar"
+      >
         <Button mode="contained-tonal" icon="share-variant" onPress={onShare}>
           Share
         </Button>

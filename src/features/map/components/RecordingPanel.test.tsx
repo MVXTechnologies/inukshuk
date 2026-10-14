@@ -1,10 +1,12 @@
 import type { TrackStats } from '@core/models';
-import { fireEvent, render, screen } from '@testing-library/react-native';
-import { Animated } from 'react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Animated, StyleSheet } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSettingsStore } from '@state/settingsStore';
-import { RecordingPanel } from './RecordingPanel';
+import { EXPANDED_FIELDS } from '@core/recording/panel';
+import { MINI_ON_STRIP_GAP, RecordingPanel } from './RecordingPanel';
+import { resetStripRuntime, setStripRuntime, useStripRuntime } from '../infoStrip/stripRuntime';
 
 jest.mock('@data/storage', () => ({
   writeJson: jest.fn(),
@@ -177,5 +179,80 @@ describe('RecordingPanel', () => {
     await fireEvent.press(screen.getByLabelText('Display Night'));
     expect(useSettingsStore.getState().displayCondition).toBe('night');
     expect(screen.getByLabelText('All display options')).toBeOnTheScreen();
+  });
+
+  describe('with the info strip (#673)', () => {
+    beforeEach(() => resetStripRuntime());
+
+    it('tells the strip which metrics it owns: the hero row, the grid too when expanded, none when minimised', async () => {
+      await renderPanel();
+      expect(useStripRuntime.getState().heroFields).toEqual(['time', 'distance', 'gain']);
+      await fireEvent.press(screen.getByLabelText('Show more fields'));
+      expect([...useStripRuntime.getState().heroFields].sort()).toEqual(
+        [...new Set(['time', 'distance', 'gain', ...EXPANDED_FIELDS])].sort(),
+      );
+      await fireEvent.press(screen.getAllByLabelText('Show fewer fields')[0]!);
+      await fireEvent.press(screen.getByLabelText('Minimize to a small overlay'));
+      expect(useStripRuntime.getState().heroFields).toEqual([]);
+    });
+
+    it('cycling skips the metrics the strip already shows', async () => {
+      // Speed is next after Gain, but the strip shows it: Pace comes instead.
+      setStripRuntime({ stripMetrics: new Set(['speed']) });
+      await renderPanel();
+      await fireEvent.press(screen.getByLabelText(/^Gain .*Tap to change field$/));
+      expect(screen.queryByText('SPEED')).toBeNull();
+      expect(screen.getByText('PACE')).toBeOnTheScreen();
+    });
+
+    it('formats with the shared hero formatter (the strip prints the same text)', async () => {
+      await renderPanel();
+      expect(screen.getByLabelText(/^Distance 3\.42 km/)).toBeOnTheScreen();
+      expect(screen.getByLabelText(/^Gain \+268 m/)).toBeOnTheScreen();
+    });
+
+    it('squares its top while the strip sits on it', async () => {
+      await renderPanel();
+      const sheet = () => screen.getByLabelText('Recording instruments');
+      expect(StyleSheet.flatten(sheet().props.style).borderTopLeftRadius).toBe(24);
+      await act(async () => setStripRuntime({ onPanel: true }));
+      expect(StyleSheet.flatten(sheet().props.style).borderTopLeftRadius).toBe(0);
+    });
+
+    it('under the strip it leaves its status bar and shadow to the strip: one surface (QA 06a)', async () => {
+      await renderPanel();
+      const sheet = () => screen.getByLabelText('Recording instruments');
+      expect(
+        StyleSheet.flatten(screen.getByTestId('recording-status-bar').props.style),
+      ).toMatchObject({ height: 4 });
+      await act(async () => setStripRuntime({ onPanel: true }));
+      expect(screen.queryByTestId('recording-status-bar')).toBeNull();
+      expect(StyleSheet.flatten(sheet().props.style)).toMatchObject({
+        elevation: 0,
+        shadowOpacity: 0,
+      });
+    });
+
+    it('tells the strip when it is minimised and when paused', async () => {
+      await renderPanel({ status: 'paused' });
+      expect(useStripRuntime.getState()).toMatchObject({ panelMini: false, panelPaused: true });
+      await fireEvent.press(screen.getByLabelText('Minimize to a small overlay'));
+      expect(useStripRuntime.getState().panelMini).toBe(true);
+      await screen.unmount();
+      expect(useStripRuntime.getState()).toMatchObject({ panelMini: false, panelPaused: false });
+    });
+
+    it('minimised on a bottom strip, the pill floats on it and reports its height without it (QA 06b)', async () => {
+      setStripRuntime({ dock: 'bottom', stripH: 70 });
+      const onHeightChange = jest.fn();
+      await renderPanel({ onHeightChange });
+      await fireEvent.press(screen.getByLabelText('Minimize to a small overlay'));
+      const wrap = screen.getByTestId('recording-mini-wrap');
+      expect(StyleSheet.flatten(wrap.props.style).paddingBottom).toBe(70 + MINI_ON_STRIP_GAP);
+      await fireEvent(wrap, 'layout', {
+        nativeEvent: { layout: { height: 70 + MINI_ON_STRIP_GAP + 52 } },
+      });
+      expect(onHeightChange).toHaveBeenLastCalledWith(MINI_ON_STRIP_GAP + 52);
+    });
   });
 });

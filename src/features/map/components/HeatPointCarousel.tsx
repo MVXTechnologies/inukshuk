@@ -5,6 +5,7 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useEffect, useMemo, useState } from 'react';
 import { Animated, PanResponder, Pressable, StyleSheet, View } from 'react-native';
 import { Icon, IconButton, Text, useTheme } from 'react-native-paper';
+import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 
 interface Props {
   /** Newest-first trail ids sharing the tapped heat spot (from `heatAt`). */
@@ -268,8 +269,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 6,
     paddingBottom: 4,
-    zIndex: 10,
-    elevation: 10,
+    zIndex: MAP_OVERLAY_Z.heatCarousel,
+    elevation: MAP_OVERLAY_Z.heatCarousel,
     shadowColor: '#000',
     shadowOpacity: 0.25,
     shadowRadius: 10,
