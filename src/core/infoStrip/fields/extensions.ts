@@ -4,7 +4,7 @@
  * tide). Listed in the picker, and kept when a preset applies, only with
  * their extension installed (`requires`).
  */
-import { elevationParts, formatClockTime } from '@core/format';
+import { elevationParts, formatClockTime, type Units } from '@core/format';
 import { formatHeight, kindLabel } from '@core/gnss/chip';
 import { stateOf } from '@core/gnss/quality';
 import { LIVE_MAX_AGE_MS } from '@core/tides/live';
@@ -75,6 +75,20 @@ export function levelIsLive(t: TideSnapshot, nowMs: number): boolean {
 }
 
 /**
+ * A tide level as the strip prints it: the elevation unit (#702), signed,
+ * two decimals, with the trend arrow ("+3.84" "m ↑", "−0.42" "ft ↓").
+ */
+export function tideLevelText(
+  levelM: number,
+  trend: TideSnapshot['trend'],
+  units: Units,
+): Pick<StripValue, 'value' | 'unit'> {
+  const arrow = trend === 'rising' ? ' ↑' : trend === 'falling' ? ' ↓' : '';
+  const q = elevationParts(levelM, units, { decimals: 2 });
+  return { value: q.value.startsWith('−') ? q.value : `+${q.value}`, unit: `${q.unit}${arrow}` };
+}
+
+/**
  * The water level at the chosen tide station, with its trend arrow. Per
  * minute tick: one record lookup and a format; the level itself is fetched
  * by the platform every few minutes, never per tick.
@@ -95,18 +109,11 @@ export const TIDE_LEVEL = defineField<TideParams>({
     const t = tideOf(data, params);
     // An hour-old level is not "now" (a refresh failing for a while, a sleeping phone).
     if (t === null || t.levelM === null || !levelIsLive(t, data.nowMs)) return null;
-    const arrow = t.trend === 'rising' ? ' ↑' : t.trend === 'falling' ? ' ↓' : '';
-    // A height: the elevation unit (#702), signed, two decimals.
-    const q = elevationParts(t.levelM, ctx.units, { decimals: 2 });
-    return {
-      glyph: 'waves',
-      tag: t.stationName,
-      value: q.value.startsWith('−') ? q.value : `+${q.value}`,
-      unit: `${q.unit}${arrow}`,
-    };
+    return { glyph: 'waves', tag: t.stationName, ...tideLevelText(t.levelM, t.trend, ctx.units) };
   },
   // "Tide", never a real station's name: a made-up one read as the station picked (QA 2.6.0).
   sample: { glyph: 'waves', tag: 'Tide', value: '+3.84', unit: 'm ↑' },
+  sampleIn: (units) => ({ glyph: 'waves', tag: 'Tide', ...tideLevelText(3.84, 'rising', units) }),
 });
 
 /** The next high tide at the station, clock time; it steps aside once it has passed. */

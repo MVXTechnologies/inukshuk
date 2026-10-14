@@ -44,6 +44,7 @@ export const SPEED = defineField<SpeedParams>({
       : { glyph: 'speed', ...text };
   },
   sample: { glyph: 'speed', value: '3.6', unit: 'km/h' },
+  sampleIn: (units) => ({ glyph: 'speed', ...splitUnit(formatSpeed(1, units)) }),
 });
 
 /**

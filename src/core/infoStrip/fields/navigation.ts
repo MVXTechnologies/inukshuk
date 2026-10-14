@@ -132,6 +132,7 @@ export const TARGET_DISTANCE = defineField<TargetDistanceParams>({
     return d === null ? null : splitUnit(formatDistanceIn(d.m, params.unit, ctx.units));
   },
   sample: { value: '1.23', unit: 'km' },
+  sampleIn: (units) => splitUnit(formatDistance(1230, units)),
   placeholder: { glyph: 'straighten' },
 });
 

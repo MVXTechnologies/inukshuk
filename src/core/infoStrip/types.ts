@@ -365,6 +365,12 @@ export interface FieldDescriptor<P extends Params = Params> {
    */
   sampleClockMin?: number;
   /**
+   * The sample of a distance, height or speed, in the user's units (#702),
+   * through the same formatter `compute` uses (`sampleValue`): the presets'
+   * miniatures never read "km/h" to someone who set mph. Absent: `sample`.
+   */
+  sampleIn?(units: Units): StripValue;
+  /**
    * The editor's placeholder when there is no live value (`placeholderValue`):
    * this glyph and tag with "—". Absent: the sample's glyph and tag.
    */

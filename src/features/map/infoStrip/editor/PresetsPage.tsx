@@ -5,6 +5,7 @@ import { isEditedPreset, missingExtensions, PRESETS, type Preset } from '@core/i
 import { sampleValue } from '@core/infoStrip/preview';
 import { fieldDescriptor } from '@core/infoStrip/registry';
 import type { InfoStrip } from '@core/infoStrip/types';
+import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -22,6 +23,7 @@ function Miniature({
   installed: ReadonlySet<AnyExtensionKey>;
 }) {
   const t = useSchemeTokens();
+  const units = useSettingsStore((s) => s.units);
   return (
     <View style={[styles.mini, { backgroundColor: t.surfaceVariant }]}>
       {strip.rows.map((row, r) => (
@@ -33,7 +35,7 @@ function Miniature({
             }
             return (
               <View key={`${f.field}-${i}`} style={[styles.miniCell, { flex: d.spaces }]}>
-                <StripField value={sampleValue(d)} shrink muted fit />
+                <StripField value={sampleValue(d, units)} shrink muted fit />
               </View>
             );
           })}

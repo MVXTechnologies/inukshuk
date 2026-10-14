@@ -170,6 +170,7 @@ export const ELEVATION = defineField<Record<string, never>>({
     };
   },
   sample: { glyph: 'terrain', value: '≈212', unit: 'm' },
+  sampleIn: (units) => ({ glyph: 'terrain', ...splitUnit(chipAltitudeText(212, units, 'dem')) }),
 });
 
 /** Your altitude from the fix (the receiver's when it is in use). */
@@ -191,6 +192,7 @@ export const ALTITUDE = defineField<Record<string, never>>({
     return { glyph: 'landscape', ...splitUnit(formatElevation(alt, units)) };
   },
   sample: { glyph: 'landscape', value: '412', unit: 'm' },
+  sampleIn: (units) => ({ glyph: 'landscape', ...splitUnit(formatElevation(412, units)) }),
 });
 
 /** The fix's horizontal accuracy: "±4.0 m" phone, "±2.0 cm" RTK (sage under a metre). */
