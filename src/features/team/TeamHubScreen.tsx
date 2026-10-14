@@ -31,6 +31,10 @@ import {
   useNow,
 } from './components';
 import { actionMessage } from './messages';
+import { AlertBands } from './bar/AlertBands';
+import { useTeamMapFocus } from './map/teamMapFocus';
+import { useNavigationStore } from '@state/navigationStore';
+import { useSettingsStore } from '@state/settingsStore';
 import { TeamDrawingsRow } from './draw/TeamDrawingsRow';
 import { memberSyncLine, openPeers, teamSyncLine } from './syncLine';
 
@@ -63,6 +67,7 @@ export function tasksLine(tasks: readonly TeamTask[], me: string): string {
 export function TeamHubScreen() {
   const t = useSchemeTokens();
   const router = useRouter();
+  const lastKnown = useSettingsStore((x) => x.lastKnownPosition);
   const now = useNow(15_000);
   const loaded = useTeamStore((s) => s.loaded);
   const view = useTeamStore((s) => s.view);
@@ -162,6 +167,21 @@ export function TeamHubScreen() {
           )}
         </View>
       </View>
+
+      {/* An active SOS or gather stays in view here too (#708): Navigate and
+        Centre go to the map. */}
+      <AlertBands
+        here={lastKnown}
+        onNavigate={(latitude, longitude) => {
+          useNavigationStore.getState().setDestination({ latitude, longitude });
+          router.navigate('/' as never);
+        }}
+        onCentre={(latitude, longitude) => {
+          useTeamMapFocus.getState().focus(longitude, latitude, 16);
+          router.navigate('/' as never);
+        }}
+        style={styles.bands}
+      />
 
       {denied && (
         <ActionBanner
@@ -508,6 +528,7 @@ function myAddressLine(port: number): string {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   headerRow: { flexDirection: 'row', alignItems: 'center', marginTop: -space.sm },
+  bands: { marginBottom: space.sm },
   badge: { position: 'absolute', top: 4, right: 4 },
   code: { fontWeight: '800', letterSpacing: 2 },
   actions: { flexDirection: 'row', gap: space.sm },

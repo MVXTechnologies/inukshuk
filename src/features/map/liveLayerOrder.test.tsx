@@ -236,6 +236,8 @@ describe('team and pointing-line layers', () => {
         'team-sos-halo',
         'team-sos-dot',
         'team-sos-label',
+        'team-rally-pulse',
+        'team-sos-pulse',
       ],
     ],
     [

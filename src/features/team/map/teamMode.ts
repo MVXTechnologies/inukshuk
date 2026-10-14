@@ -58,9 +58,9 @@ export function useSearchSlotMode(): SearchSlotMode {
 }
 
 export type TeamSheet =
+  /** The team panel, dropped from the bar (#707). */
   | { kind: 'menu' }
   | { kind: 'status' }
-  | { kind: 'sos' }
   | { kind: 'notify'; at: [number, number] | null }
   | {
       kind: 'spot';

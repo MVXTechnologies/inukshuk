@@ -7,7 +7,7 @@ import type { ExtensionPanelEntryProps } from '../types';
 
 /**
  * Map overlays › Extensions › Team mode: its switch IS team signal mode (taps
- * on the map signal the team; the team button appears). The hint names the
+ * on the map signal the team; the team bar and the SOS button appear). The hint names the
  * open team; the sub-panel accessory (`TeamSubPanel`: the hub, sharing,
  * create, join) carries the unread count.
  */

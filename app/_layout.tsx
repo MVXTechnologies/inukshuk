@@ -16,6 +16,7 @@ import { ImportFeedbackSnackbar } from '@features/share/ImportFeedbackSnackbar';
 import { StravaPushPrompt } from '@features/strava/StravaPushPrompt';
 import { GnssHost } from '@features/gnss/GnssHost';
 import { TeamAlertBanner } from '@features/team/TeamAlertBanner';
+import { SosAlarmBanner } from '@features/team/bar/SosAlarmBanner';
 import { TeamHost } from '@features/team/TeamHost';
 import { installErrorReporting, reportError } from '@lib/errorReporting';
 import { sweepUnfinishedTips } from '@lib/iap';
@@ -200,6 +201,8 @@ export default function RootLayout() {
                   <GnssHost />
                   <TeamHost />
                   <TeamAlertBanner />
+                  {/* A teammate's SOS sounds over every screen until Acknowledge (#708). */}
+                  <SosAlarmBanner />
                 </PdfRasterizerProvider>
               </ErrorBoundary>
             </PaperProvider>

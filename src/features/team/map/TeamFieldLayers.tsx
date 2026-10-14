@@ -4,7 +4,9 @@ import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useTeamStore } from '@state/teamStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { FeatureCollection } from 'geojson';
-import { useMemo, type ReactElement } from 'react';
+import { useEffect, useMemo, useState, type ReactElement } from 'react';
+import { AppState } from 'react-native';
+import { useReducedMotion } from 'react-native-reanimated';
 
 import { teamLabelFont } from './TeamMapLayers';
 import { useTrailEdit } from './TrailEditor';
@@ -168,7 +170,125 @@ export function useTeamFieldLayers(glyphs: string | undefined): ReactElement[] {
       </GeoJSONSource>,
     );
   }
+  // #708: while an SOS or gather is active, its marker pulses (a static halo
+  // under Reduce motion). Its own component, so only it redraws per frame.
+  const pulse: PulsePoint[] = [
+    ...soses
+      .filter((x) => !x.resolved)
+      .map((x) => {
+        const live = positions.find((p) => p.id === x.owner);
+        return { k: 'sos' as const, lng: live ? live.lon : x.lng, lat: live ? live.lat : x.lat };
+      }),
+    ...(rally ? [{ k: 'gather' as const, lng: rally.lng, lat: rally.lat }] : []),
+  ];
+  if (pulse.length > 0)
+    out.push(
+      <AlertPulse key="team-alert-pulse" points={pulse} sos={t.team.sos} gather={t.team.gather} />,
+    );
   return out;
+}
+
+interface PulsePoint {
+  k: 'sos' | 'gather';
+  lng: number;
+  lat: number;
+}
+
+/** One pulse cycle, ms (two rings, half a cycle apart). */
+export const PULSE_MS = 1800;
+/** Redraws per second while pulsing (paint updates only; the source is fixed). */
+export const PULSE_FPS = 12;
+
+/** A ring's radius (px) and opacity at phase `p` (0…1): grows and fades out. */
+export function pulseRing(p: number): { r: number; o: number } {
+  const f = ((p % 1) + 1) % 1;
+  return { r: 13 + f * 28, o: 0.75 * (1 - f) };
+}
+
+/**
+ * The pulsing rings under active SOS and gather markers (#708). The source
+ * holds two features per marker (phase 0 and ½); a timer moves the phase at
+ * {@link PULSE_FPS} — a paint change on two layers, never a source upload —
+ * and stops while the app is in the background. Under Reduce motion: a
+ * static halo under the gather flag (the SOS keeps its own halo).
+ */
+function AlertPulse({
+  points,
+  sos,
+  gather,
+}: {
+  points: readonly PulsePoint[];
+  sos: string;
+  gather: string;
+}) {
+  const reduce = useReducedMotion();
+  const [phase, setPhase] = useState(0);
+  const [awake, setAwake] = useState(AppState.currentState === 'active');
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => setAwake(st === 'active'));
+    return () => sub.remove();
+  }, []);
+  useEffect(() => {
+    if (reduce || !awake) return;
+    const start = Date.now();
+    const id = setInterval(
+      () => setPhase(((Date.now() - start) % PULSE_MS) / PULSE_MS),
+      1000 / PULSE_FPS,
+    );
+    return () => clearInterval(id);
+  }, [reduce, awake]);
+  const json = JSON.stringify(points);
+  const data = useMemo((): FeatureCollection => {
+    const list = JSON.parse(json) as PulsePoint[];
+    return {
+      type: 'FeatureCollection',
+      features: list.flatMap((p) =>
+        [0, 1].map((ph) => ({
+          type: 'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
+          properties: { k: p.k, ph },
+        })),
+      ),
+    };
+  }, [json]);
+  const a = pulseRing(phase);
+  const b = pulseRing(phase + 0.5);
+  const paint = (color: string) =>
+    reduce
+      ? {
+          'circle-radius': ['match', ['get', 'ph'], 0, 30, 0] as never,
+          'circle-color': color,
+          'circle-opacity': 0.22,
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': color,
+          'circle-stroke-opacity': 0.55,
+        }
+      : {
+          'circle-radius': ['match', ['get', 'ph'], 0, a.r, b.r] as never,
+          'circle-color': color,
+          'circle-opacity': 0,
+          'circle-stroke-width': 3,
+          'circle-stroke-color': color,
+          'circle-stroke-opacity': ['match', ['get', 'ph'], 0, a.o, b.o] as never,
+        };
+  return (
+    <GeoJSONSource id="team-alert-pulse" data={data}>
+      <Layer
+        id="team-rally-pulse"
+        beforeId={liveLayerAnchor('team-rally-pulse')}
+        type="circle"
+        filter={['==', ['get', 'k'], 'gather'] as never}
+        paint={paint(gather)}
+      />
+      <Layer
+        id="team-sos-pulse"
+        beforeId={liveLayerAnchor('team-sos-pulse')}
+        type="circle"
+        filter={(reduce ? ['==', ['get', 'k'], 'none'] : ['==', ['get', 'k'], 'sos']) as never}
+        paint={paint(sos)}
+      />
+    </GeoJSONSource>
+  );
 }
 
 /** Team trails: their lines; the edited one's points; "editing" cues. */

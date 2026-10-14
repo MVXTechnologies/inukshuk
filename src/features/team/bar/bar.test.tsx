@@ -1,0 +1,554 @@
+/**
+ * The team bar (#707) and the active alerts (#708) on screen: the pill and
+ * chips, the panel, the SOS hold + undo, Rally here + undo, the bands and
+ * the in-app alarm, in both themes. Timers are jest's (modern fake timers):
+ * no real sleeps; the clock moves only when a test advances it.
+ */
+import { defaultExtensionPrefs } from '@core/extensions/prefs';
+import { nodeCrypto } from '@core/team/testing/nodeCrypto';
+import type { TeamRally, TeamSos } from '@core/teamui/field';
+import type { TeamView } from '@core/teamui/view';
+import { lifetimeMs } from '@core/teamui/lifetime';
+import { resetAppTeamServiceForTests } from '@data/team/appTeam';
+import { LoopbackMeshHub } from '@data/team/loopbackMesh';
+import { MemoryTeamDisk } from '@data/team/teamDisk';
+import { TeamService } from '@data/team/teamService';
+import { useSettingsStore } from '@state/settingsStore';
+import { useTeamStore } from '@state/teamStore';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import type { ReactNode } from 'react';
+import { AppState, Vibration } from 'react-native';
+import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
+
+import { useTeamMapSelection } from '../map/TeamMapOverlay';
+import { useTeamSheet } from '../map/teamMode';
+import { AlertBands } from './AlertBands';
+import { usePendingAlert } from './pendingAlert';
+import { ALARM_MAX_MS, RESOUND_MS, SosAlarmBanner } from './SosAlarmBanner';
+import { SosButton } from './SosButton';
+import { TeamPanel } from './TeamPanel';
+import { TeamStatusBar, useTeamBarLayout } from './TeamStatusBar';
+import { UndoSnack } from './UndoSnack';
+
+const mockPush = jest.fn();
+const mockNavigate = jest.fn();
+jest.mock('expo-router', () => ({
+  useRouter: () => ({
+    push: mockPush,
+    navigate: mockNavigate,
+    back: jest.fn(),
+    replace: jest.fn(),
+  }),
+  useLocalSearchParams: () => ({}),
+  usePathname: () => '/',
+}));
+jest.mock('expo-constants', () => ({ __esModule: true, default: { expoConfig: { extra: {} } } }));
+jest.mock('@data/storage', () => ({
+  newId: () => 'new-id',
+  writeJson: jest.fn(),
+  readJson: jest.fn(async () => null),
+  deleteFileAt: jest.fn(),
+}));
+const mockNotify = jest.fn(async (_n: unknown) => undefined);
+jest.mock('@data/team/teamNotifications', () => ({
+  notifyTeam: (n: unknown) => mockNotify(n),
+  onTeamNotificationTap: () => () => undefined,
+  dismissTeamNotification: async () => undefined,
+  setInAppAlarm: () => undefined,
+  SOS_VIBRATION: [0, 900, 250, 900],
+}));
+jest.mock('@lib/errorReporting', () => ({ addBreadcrumb: jest.fn(), reportError: jest.fn() }));
+jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context'),
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
+
+const HERE = { latitude: 46.8, longitude: -71.2 };
+const wrap = (children: ReactNode, dark = false) => (
+  <PaperProvider theme={dark ? MD3DarkTheme : MD3LightTheme}>{children}</PaperProvider>
+);
+const THEMES = [false, true] as const;
+
+/** Jest's clock for this test (timers and Date.now move only when advanced). */
+let faked = false;
+function fakeClock(): void {
+  jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
+  faked = true;
+}
+// The app is in front (the alarm re-sounds only then).
+Object.defineProperty(AppState, 'currentState', { value: 'active', configurable: true });
+
+beforeEach(() => {
+  mockPush.mockReset();
+  mockNavigate.mockReset();
+  mockNotify.mockClear();
+  const d = defaultExtensionPrefs();
+  useSettingsStore.setState({
+    extensions: { ...d, team: { ...d.team, installedAt: Date.now() } },
+    units: 'metric',
+  });
+  useTeamSheet.getState().close();
+  useTeamMapSelection.getState().select(null);
+  usePendingAlert.setState({ pending: null, error: null });
+});
+
+afterEach(async () => {
+  await act(async () => {
+    usePendingAlert.getState().undo();
+    if (faked) jest.runOnlyPendingTimers();
+  });
+  jest.useRealTimers();
+  faked = false;
+});
+
+// ── A crafted team (store only): the bar, the panel, the bands ──────────────
+
+const member = (id: string, name: string, extra: Partial<TeamView['members'][number]> = {}) =>
+  ({
+    id,
+    name,
+    named: true,
+    initials: name
+      .split(' ')
+      .map((w) => w[0])
+      .join(''),
+    color: '#3F8FD8',
+    role: 'member',
+    active: true,
+    isMe: false,
+    groups: [],
+    joinedAt: 0,
+    via: null,
+    left: false,
+    lastSeenAt: null,
+    ...extra,
+  }) as TeamView['members'][number];
+
+function crew(over: { soses?: TeamSos[]; rally?: TeamRally | null; solo?: boolean } = {}) {
+  const now = Date.now();
+  const members = over.solo
+    ? [member('me', 'Marc Vigneault', { isMe: true, role: 'owner' })]
+    : [
+        member('me', 'Marc Vigneault', { isMe: true, role: 'owner' }),
+        member('julie', 'Julie Tremblay'),
+        member('alex', 'Alex Lavoie'),
+        member('noe', 'Noé Gagnon'),
+        member('sam', 'Sam Bouchard', { lastSeenAt: now - 8 * 60_000 }),
+        member('lea', 'Léa Pelletier'),
+      ];
+  const pos = (id: string, lat: number, lon: number, ageMs: number) => ({
+    id,
+    name: id,
+    initials: id.slice(0, 2),
+    color: '#3F8FD8',
+    role: 'member' as const,
+    lat,
+    lon,
+    accuracy: null,
+    elevation: null,
+    at: now - ageMs,
+    ageMs,
+    band: (ageMs <= 5 * 60_000 ? 'fresh' : ageMs <= 15 * 60_000 ? 'stale' : 'lost') as never,
+  });
+  useTeamStore.setState({
+    view: {
+      teamId: 't',
+      name: 'Chic-Chocs crew',
+      me: 'me',
+      active: true,
+      isAdmin: false,
+      members,
+    } as unknown as TeamView,
+    positions: over.solo
+      ? []
+      : [
+          pos('julie', 46.8026, -71.1977, 0),
+          pos('alex', 46.811, -71.2, 60_000),
+          pos('noe', 46.796, -71.205, 10_000),
+          pos('lea', 46.757, -71.2, 34 * 60_000),
+        ],
+    peers: [],
+    meshRunning: true,
+    unread: 2,
+    threadsUnread: 1,
+    statuses: new Map(),
+    tasks: [],
+    soses: over.soses ?? [],
+    rally: over.rally ?? null,
+    dataVersion: String(now),
+  });
+}
+
+describe('the team status bar (#707)', () => {
+  it.each(THEMES)('pill, faces and chips; a tap opens the panel (dark: %s)', async (dark) => {
+    crew();
+    await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />, dark));
+    expect(
+      screen.getByLabelText(/^Chic-Chocs crew: 4 of 6 online, looking for teammates/),
+    ).toBeTruthy();
+    expect(screen.getByTestId('team-bar-status').props.children).toBe('4/6');
+    expect(screen.getByLabelText('Chat, 3 unread')).toBeTruthy();
+    expect(screen.getByTestId('team-chip-rally')).toBeTruthy();
+    expect(screen.getByTestId('team-chip-draw')).toBeTruthy();
+    expect(screen.queryByTestId('team-chip-invite')).toBeNull();
+    await fireEvent.press(screen.getByTestId('team-chip-chat'));
+    expect(mockPush).toHaveBeenCalledWith('/team/chat');
+    await fireEvent.press(screen.getByTestId('team-bar-pill'));
+    expect(useTeamSheet.getState().sheet).toEqual({ kind: 'menu' });
+  });
+
+  it('solo: "Only you", Invite and Draw; offline reads "Offline"', async () => {
+    crew({ solo: true });
+    const r = await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />));
+    expect(screen.getByTestId('team-bar-status').props.children).toBe('Only you');
+    await fireEvent.press(screen.getByTestId('team-chip-invite'));
+    expect(mockPush).toHaveBeenCalledWith('/team/invite');
+    expect(screen.queryByTestId('team-chip-chat')).toBeNull();
+    await r.unmount();
+    crew();
+    // Not syncing; the newest word from anyone is Sam's, 8 min ago.
+    await act(async () =>
+      useTeamStore.setState((st) => ({
+        meshRunning: false,
+        positions: st.positions.map((p) => ({ ...p, ageMs: p.ageMs + 12 * 60_000 })),
+      })),
+    );
+    await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />));
+    expect(screen.getByTestId('team-bar-status').props.children).toBe('Offline · 8 min');
+  });
+
+  it('publishes the column height for the chips under it', async () => {
+    crew();
+    await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />));
+    const column = screen.getByTestId('team-bar-column');
+    await fireEvent(column, 'layout', { nativeEvent: { layout: { height: 44 } } });
+    expect(useTeamBarLayout.getState().height).toBe(48 + 8 + 44);
+  });
+});
+
+describe('the team panel (#707)', () => {
+  it.each(THEMES)(
+    'members live and nearest first; a row opens the card (dark: %s)',
+    async (dark) => {
+      crew();
+      await render(wrap(<TeamPanel top={0} here={HERE} />, dark));
+      const rows = screen
+        .queryAllByTestId(/^team-panel-member-/)
+        .map((n) => n.props.testID as string)
+        .filter((id, k, all) => all.indexOf(id) === k);
+      expect(rows).toEqual([
+        'team-panel-member-Julie Tremblay',
+        'team-panel-member-Noé Gagnon',
+        'team-panel-member-Alex Lavoie',
+        'team-panel-member-Sam Bouchard',
+        'team-panel-member-Léa Pelletier',
+      ]);
+      expect(screen.getByText('Members · 4 of 6 online')).toBeTruthy();
+      for (const id of ['tasks', 'rally-point', 'manage'])
+        expect(screen.getByTestId(`team-panel-${id}`)).toBeTruthy();
+      await fireEvent.press(screen.getByTestId('team-panel-member-Julie Tremblay'));
+      expect(useTeamMapSelection.getState().hit).toEqual({ kind: 'member', id: 'julie' });
+      expect(useTeamSheet.getState().sheet).toBeNull();
+    },
+  );
+
+  it('a teammate without a position opens their page; Manage team goes to the team', async () => {
+    crew();
+    await render(wrap(<TeamPanel top={0} here={HERE} />));
+    await fireEvent.press(screen.getByTestId('team-panel-member-Sam Bouchard'));
+    expect(mockPush).toHaveBeenCalledWith('/team/member/sam');
+    await fireEvent.press(screen.getByTestId('team-panel-manage'));
+    expect(mockPush).toHaveBeenCalledWith('/team');
+  });
+});
+
+describe('the alert bands (#708)', () => {
+  const sos = (owner: string, id: string, at = Date.now() - 120_000): TeamSos => ({
+    id,
+    owner,
+    lat: 46.804,
+    lng: -71.195,
+    text: '',
+    at,
+    resolved: false,
+    resolvedBy: null,
+  });
+  const rally: TeamRally = {
+    id: 'r1',
+    owner: 'noe',
+    lat: 46.81,
+    lng: -71.2,
+    text: 'Lac-Delage',
+    when: null,
+    radius: 60,
+    at: Date.now(),
+  };
+
+  it.each(THEMES)('others’ SOS: name, where, Navigate and Centre (dark: %s)', async (dark) => {
+    crew({ soses: [sos('julie', 's1')] });
+    const nav = jest.fn();
+    const centre = jest.fn();
+    await render(wrap(<AlertBands here={HERE} onNavigate={nav} onCentre={centre} />, dark));
+    expect(screen.getByText('SOS · Julie Tremblay')).toBeTruthy();
+    // Julie's live position (her SOS follows her).
+    expect(screen.getByText('338 m NE · 2 min')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('team-band-sos-navigate'));
+    expect(nav).toHaveBeenCalledWith(46.8026, -71.1977);
+    await fireEvent.press(screen.getByTestId('team-band-sos-centre'));
+    expect(centre).toHaveBeenCalledWith(46.8026, -71.1977);
+  });
+
+  it('SOS outranks gather; +1 expands to stacked bands', async () => {
+    crew({ soses: [sos('julie', 's1')], rally });
+    await render(wrap(<AlertBands here={HERE} onNavigate={jest.fn()} />));
+    expect(screen.getByTestId('team-band-sos')).toBeTruthy();
+    expect(screen.queryByTestId('team-band-gather')).toBeNull();
+    await fireEvent.press(screen.getByLabelText('1 more active alert'));
+    expect(screen.getByText('Gather · Lac-Delage')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Fold the alerts'));
+    expect(screen.queryByTestId('team-band-gather')).toBeNull();
+  });
+
+  it('the strip variant is one compact line', async () => {
+    crew({ rally });
+    await render(wrap(<AlertBands here={HERE} onNavigate={jest.fn()} variant="strip" />));
+    expect(screen.getByText('Gather · Lac-Delage')).toBeTruthy();
+    expect(screen.queryByText(/by Noé/)).toBeNull();
+  });
+
+  it('nothing active: nothing drawn', async () => {
+    crew();
+    await render(wrap(<AlertBands here={HERE} onNavigate={jest.fn()} />));
+    expect(screen.queryByTestId('team-alert-bands')).toBeNull();
+  });
+});
+
+describe('the in-app SOS alarm (#708)', () => {
+  it.each(THEMES)('sounds and vibrates until Acknowledge (dark: %s)', async (dark) => {
+    fakeClock();
+    crew({
+      soses: [
+        {
+          id: 's1',
+          owner: 'julie',
+          lat: 46.804,
+          lng: -71.195,
+          text: '',
+          at: Date.now(),
+          resolved: false,
+          resolvedBy: null,
+        },
+      ],
+    });
+    useSettingsStore.setState({ lastKnownPosition: HERE });
+    const vibrate = jest.spyOn(Vibration, 'vibrate');
+    const cancel = jest.spyOn(Vibration, 'cancel');
+    await act(async () =>
+      useTeamStore.setState({
+        sosAlarm: {
+          entity: 'sos:julie:s1',
+          owner: 'julie',
+          authorName: 'Julie Tremblay',
+          teamName: 'Chic-Chocs crew',
+          text: 'SOS · needs help',
+          at: Date.now(),
+        },
+      }),
+    );
+    await render(wrap(<SosAlarmBanner />, dark));
+    expect(screen.getByText('SOS · Julie Tremblay')).toBeTruthy();
+    expect(screen.getByText('Needs help · 338 m NE of you · just now')).toBeTruthy();
+    expect(vibrate).toHaveBeenCalledWith([0, 900, 250, 900], true);
+    // Re-sounds every RESOUND_MS under the same id (replaces, never stacks).
+    await act(async () => {
+      jest.advanceTimersByTime(RESOUND_MS * 2);
+    });
+    expect(mockNotify).toHaveBeenCalledTimes(2);
+    expect(mockNotify.mock.calls[0]![0]).toMatchObject({
+      channel: 'sos',
+      identifier: 'sos:julie:s1',
+    });
+    await fireEvent.press(screen.getByTestId('team-sos-acknowledge'));
+    expect(useTeamStore.getState().sosAlarm).toBeNull();
+    expect(screen.queryByTestId('team-sos-alarm')).toBeNull();
+    expect(cancel).toHaveBeenCalled();
+    await act(async () => {
+      jest.advanceTimersByTime(RESOUND_MS * 3);
+    });
+    expect(mockNotify).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops sounding after ALARM_MAX_MS; Navigate acknowledges and goes to the map', async () => {
+    fakeClock();
+    crew({
+      soses: [
+        {
+          id: 's1',
+          owner: 'julie',
+          lat: 46.804,
+          lng: -71.195,
+          text: '',
+          at: Date.now(),
+          resolved: false,
+          resolvedBy: null,
+        },
+      ],
+    });
+    await act(async () =>
+      useTeamStore.setState({
+        sosAlarm: {
+          entity: 'sos:julie:s1',
+          owner: 'julie',
+          authorName: 'Julie Tremblay',
+          teamName: 'T',
+          text: '',
+          at: Date.now(),
+        },
+      }),
+    );
+    const cancel = jest.spyOn(Vibration, 'cancel');
+    cancel.mockClear();
+    await render(wrap(<SosAlarmBanner />));
+    await act(async () => {
+      jest.advanceTimersByTime(ALARM_MAX_MS + RESOUND_MS);
+    });
+    const sounded = mockNotify.mock.calls.length;
+    expect(sounded).toBe(ALARM_MAX_MS / RESOUND_MS - 1);
+    expect(cancel).toHaveBeenCalled();
+    await fireEvent.press(screen.getByTestId('team-sos-alarm-navigate'));
+    expect(mockNavigate).toHaveBeenCalledWith('/');
+    expect(useTeamStore.getState().sosAlarm).toBeNull();
+  });
+});
+
+// ── A real team (one phone): hold + undo, Rally here + undo, Resolve ────────
+
+describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
+  const hub = new LoopbackMeshHub();
+  let app: TeamService;
+  beforeEach(async () => {
+    app = new TeamService({
+      c: nodeCrypto,
+      disk: new MemoryTeamDisk(),
+      transport: hub.createTransport(),
+      tickMs: 0,
+      now: () => Date.now(),
+    });
+    resetAppTeamServiceForTests(app);
+    await app.createTeam({ name: 'Ridge crew', myName: 'Marc', lifetimeMs: lifetimeMs('14d') });
+    fakeClock();
+    await act(async () => useTeamStore.getState().refresh());
+  });
+  afterEach(async () => {
+    await app.active?.stopMesh();
+  });
+
+  const press = async (ms: number) => {
+    const b = screen.getByTestId('team-sos-button');
+    await fireEvent(b, 'pressIn');
+    await act(async () => {
+      jest.advanceTimersByTime(ms);
+    });
+    await fireEvent(b, 'pressOut');
+  };
+
+  it.each(THEMES)(
+    'a short tap only hints; a 2 s hold then 5 s sends the SOS (dark: %s)',
+    async (dark) => {
+      const vibrate = jest.spyOn(Vibration, 'vibrate');
+      vibrate.mockClear();
+      await render(
+        wrap(
+          <>
+            <SosButton bottom={72} here={HERE} />
+            <UndoSnack style={{}} />
+          </>,
+          dark,
+        ),
+      );
+      await press(400);
+      expect(screen.getByTestId('team-sos-hint')).toBeTruthy();
+      expect(usePendingAlert.getState().pending).toBeNull();
+      // The hold: a tick each second, then the countdown; nothing sent yet.
+      await press(2100);
+      expect(vibrate).toHaveBeenCalledTimes(2);
+      expect(usePendingAlert.getState().pending?.kind).toBe('sos');
+      expect(screen.getByTestId('team-undo-snack')).toBeTruthy();
+      expect(screen.getByText('Sends in 5 s')).toBeTruthy();
+      await act(async () => {
+        jest.advanceTimersByTime(4000);
+      });
+      expect(screen.getByText('Sends in 1 s')).toBeTruthy();
+      expect(app.active!.soses()).toHaveLength(0);
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+      expect(app.active!.soses()).toMatchObject([{ owner: app.active!.me, resolved: false }]);
+      expect(screen.queryByTestId('team-undo-snack')).toBeNull();
+      // My SOS is active: the button says so, and a hold does nothing more.
+      await act(async () => useTeamStore.getState().refresh());
+      expect(screen.getByLabelText('Your SOS is active')).toBeTruthy();
+    },
+  );
+
+  it('Undo during the countdown sends nothing, ever', async () => {
+    await render(
+      wrap(
+        <>
+          <SosButton bottom={72} here={HERE} />
+          <UndoSnack style={{}} />
+        </>,
+      ),
+    );
+    await press(2100);
+    await act(async () => {
+      jest.advanceTimersByTime(3000);
+    });
+    await fireEvent.press(screen.getByTestId('team-undo'));
+    await act(async () => {
+      jest.advanceTimersByTime(60_000);
+    });
+    expect(app.active!.soses()).toHaveLength(0);
+    expect(usePendingAlert.getState().pending).toBeNull();
+  });
+
+  it('Rally here: one tap, 5 s undo, then the rally point at my position', async () => {
+    await act(async () => useTeamStore.getState().refresh());
+    await render(
+      wrap(
+        <>
+          <TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />
+          <UndoSnack style={{}} />
+        </>,
+      ),
+    );
+    await fireEvent.press(screen.getByTestId('team-chip-invite'));
+    expect(mockPush).toHaveBeenCalledWith('/team/invite');
+    // Solo teams have Invite instead of Rally; start one from the store as the panel would.
+    await act(async () => {
+      usePendingAlert.getState().start('rally', [HERE.longitude, HERE.latitude]);
+    });
+    expect(screen.getByText('Rally point at your position')).toBeTruthy();
+    expect(app.active!.rally()).toBeNull();
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
+    expect(app.active!.rally()).toMatchObject({ lat: HERE.latitude, lng: HERE.longitude });
+  });
+
+  it('my SOS band: "Sent" (no one can say yet), Resolve confirmed inline', async () => {
+    expect(app.active!.raiseSos(HERE.longitude, HERE.latitude)).toBeNull();
+    await act(async () => useTeamStore.getState().refresh());
+    await render(wrap(<AlertBands here={HERE} onNavigate={jest.fn()} />));
+    expect(screen.getByText('Your SOS is active')).toBeTruthy();
+    expect(screen.getByText('Sent · just now')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('team-band-sos-resolve'));
+    expect(screen.getByText('Resolve for everyone?')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('team-band-sos-cancel'));
+    expect(app.active!.soses()[0]!.resolved).toBe(false);
+    await fireEvent.press(screen.getByTestId('team-band-sos-resolve'));
+    await fireEvent.press(screen.getByTestId('team-band-sos-confirm-yes'));
+    expect(app.active!.soses()[0]!.resolved).toBe(true);
+    expect(screen.queryByTestId('team-band-sos')).toBeNull();
+  });
+});
