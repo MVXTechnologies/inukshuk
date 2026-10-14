@@ -3,7 +3,7 @@ import { stripNeeds } from '@core/infoStrip/deps';
 import { datumTag } from '@core/infoStrip/edit';
 import { createMovingSpeedWindow } from '@core/infoStrip/movingSpeed';
 import { stripStationParams } from '@core/infoStrip/tides';
-import { destinationName } from '@core/infoStrip/target';
+import { destinationWaypoint } from '@core/infoStrip/target';
 import type {
   DatumView,
   DepsSnapshot,
@@ -240,13 +240,13 @@ export function useStripSnapshot(
 
   const destination = useNavigationStore((s) => s.destination);
   const waypointList = useLibraryStore((s) => s.waypoints);
-  const navTarget = useMemo(
-    () =>
-      destination === null
-        ? null
-        : { name: destinationName(destination, waypointList), point: destination },
-    [destination, waypointList],
-  );
+  const navTarget = useMemo((): DepsSnapshot['navTarget'] => {
+    if (destination === null) return null;
+    const on = destinationWaypoint(destination, waypointList);
+    return on === undefined
+      ? { name: 'Destination', point: destination }
+      : { name: on.label, point: destination, waypointId: on.id };
+  }, [destination, waypointList]);
   const refIds = referencedWaypoints(strip, rows).join('\n');
   const waypoints = useMemo(() => {
     const out: Record<string, { name: string; point: LatLng }> = {};

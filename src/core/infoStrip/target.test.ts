@@ -1,5 +1,6 @@
 import {
   destinationName,
+  destinationWaypoint,
   effectiveTarget,
   nearestWaypoints,
   resolveTarget,
@@ -116,6 +117,24 @@ describe('targetOpen (#696: a tap on the target name)', () => {
       kind: 'point',
       point: QC,
     });
+  });
+});
+
+describe('targetOpen: a destination set on a saved waypoint (#696 QA 11a)', () => {
+  it("opens the waypoint's card, never the bare point chip (no duplicate Waypoint)", () => {
+    const onWaypoint = { ...PIN, waypointId: 'w7' };
+    expect(targetOpen({ kind: 'navTarget' }, snapshot({ navTarget: onWaypoint }))).toEqual({
+      kind: 'waypoint',
+      waypointId: 'w7',
+    });
+  });
+});
+
+describe('destinationWaypoint', () => {
+  it('the saved waypoint within 2 m of the destination, else undefined', () => {
+    const camp = { id: 'c', latitude: 46.82, longitude: -71.2 };
+    expect(destinationWaypoint({ latitude: 46.82001, longitude: -71.2 }, [camp])).toBe(camp);
+    expect(destinationWaypoint({ latitude: 46.8201, longitude: -71.2 }, [camp])).toBeUndefined();
   });
 });
 

@@ -71,13 +71,17 @@ export type TargetOpen =
  * - a saved waypoint → its card;
  * - the followed trail's next target → the waypoint's card, or the point
  *   chip on the note or the trail's end;
- * - the destination pin, or a typed coordinate → the point chip there.
+ * - the destination pin set on a saved waypoint → that waypoint's card;
+ * - any other destination pin, or a typed coordinate → the point chip there.
  */
 export function targetOpen(target: Target, data: DepsSnapshot): TargetOpen | null {
   switch (target.kind) {
     case 'navTarget':
       if (data.follow !== null) return followOpen(data.follow);
-      return data.navTarget === null ? null : { kind: 'point', point: data.navTarget.point };
+      if (data.navTarget === null) return null;
+      return data.navTarget.waypointId === undefined
+        ? { kind: 'point', point: data.navTarget.point }
+        : { kind: 'waypoint', waypointId: data.navTarget.waypointId };
     case 'nextOnTrail':
       return data.follow === null ? null : followOpen(data.follow);
     case 'waypoint':
@@ -107,8 +111,15 @@ export function destinationName(
   at: LatLng,
   waypoints: readonly { latitude: number; longitude: number; label: string }[],
 ): string {
-  const w = waypoints.find((p) => haversineMeters(p, at) <= DESTINATION_NAME_RADIUS_M);
-  return w === undefined ? 'Destination' : w.label;
+  return destinationWaypoint(at, waypoints)?.label ?? 'Destination';
+}
+
+/** The saved waypoint a destination was set on (within {@link DESTINATION_NAME_RADIUS_M}), if any. */
+export function destinationWaypoint<W extends LatLng>(
+  at: LatLng,
+  waypoints: readonly W[],
+): W | undefined {
+  return waypoints.find((p) => haversineMeters(p, at) <= DESTINATION_NAME_RADIUS_M);
 }
 
 /**

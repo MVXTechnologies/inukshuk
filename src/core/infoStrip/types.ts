@@ -283,7 +283,12 @@ export interface DepsSnapshot {
   /** Moving speed over the last 10 min (`movingSpeed.ts`), or null while warming up. */
   movingSpeedMps: number | null;
   /** The destination pin, or null. */
-  navTarget: { name: string; point: LatLng } | null;
+  /**
+   * The destination pin, or null. `waypointId`: the saved waypoint it was set
+   * on (Navigate from a waypoint's card), so a tap on its name opens that
+   * waypoint's card, not a bare point's chip (#696).
+   */
+  navTarget: { name: string; point: LatLng; waypointId?: string } | null;
   /** The followed trail's readout, or null when not following. */
   follow: FollowSnapshot | null;
   /** Saved waypoints the strip's targets name, by id. */
