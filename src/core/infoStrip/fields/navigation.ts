@@ -8,12 +8,13 @@
  * the trail's own; ETE and ETA divide it by your moving speed and mark a
  * straight-line estimate "≈" (owner Q2).
  */
-import { formatClockTime, formatDistance } from '@core/format';
+import { formatDistance } from '@core/format';
 import { haversineMeters, initialBearingDeg } from '@core/geo/geomath';
 import { trueToMagnetic } from '@core/geo/wmm';
 
 import {
   bearingValue,
+  formatArrival,
   formatDistanceIn,
   formatHoursMinutes,
   splitUnit,
@@ -151,10 +152,10 @@ export const TARGET_BEARING = defineField<TargetBearingParams>({
     const t = targetOf(data, params.target, ctx);
     if (t === null || data.position === null) return null;
     const trueDeg = initialBearingDeg(data.position, t.point);
-    const magnetic = params.reference === 'magnetic';
-    // A fix is in hand, so the declination is too.
-    const deg = magnetic ? trueToMagnetic(trueDeg, declinationHere(data)!) : trueDeg;
-    return { glyph: 'explore', ...bearingValue(deg, magnetic) };
+    // A fix is in hand, so the declination is too; narrowed rather than asserted.
+    const decl = params.reference === 'magnetic' ? declinationHere(data) : null;
+    const deg = decl === null ? trueDeg : trueToMagnetic(trueDeg, decl);
+    return { glyph: 'explore', ...bearingValue(deg, decl !== null) };
   },
   sample: { glyph: 'explore', value: '042°', unit: 'NE' },
 });
@@ -198,7 +199,7 @@ export const ETA = defineField<TargetOnly>({
     if (t === null) return null;
     const ete = timeToTarget(data, t);
     if (ete === null) return { tag: 'ETA', value: '—' };
-    const at = formatClockTime(data.nowMs + Math.ceil(ete.s / 60) * 60_000);
+    const at = formatArrival(data.nowMs + Math.ceil(ete.s / 60) * 60_000, data.nowMs);
     return { tag: 'ETA', value: `${ete.straight ? '≈' : ''}${at}` };
   },
   sample: { tag: 'ETA', value: '14:32' },

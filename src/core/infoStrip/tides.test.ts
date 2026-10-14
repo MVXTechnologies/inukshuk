@@ -122,13 +122,18 @@ describe('tideSnapshot', () => {
     expect(tideSnapshot(station, LIVE)).toEqual({
       stationName: 'Anse-Fictive',
       levelM: 3.84,
+      // When it was observed, so the field can tell "now" from an hour ago.
+      levelAtMs: 1,
       trend: 'rising',
       nextHigh: { atMs: 5000, levelM: 5.1 },
     });
   });
 
   it('a stale level keeps the next high; nothing at all is nothing', () => {
-    expect(tideSnapshot(station, { ...LIVE, level: null })?.levelM).toBeNull();
+    expect(tideSnapshot(station, { ...LIVE, level: null })).toMatchObject({
+      levelM: null,
+      levelAtMs: null,
+    });
     expect(tideSnapshot(station, { ...LIVE, nextHigh: null })?.nextHigh).toBeNull();
     expect(tideSnapshot(station, { ...LIVE, level: null, nextHigh: null })).toBeNull();
   });

@@ -1,8 +1,9 @@
 import { formatCoordinate } from '@core/convert/coordinateDisplay';
 import { formatDistance, type Units } from '@core/format';
-import { haversineMeters } from '@core/geo/geomath';
+import { cellOf, LIST_CELL_DEG } from '@core/infoStrip/cell';
 import type { Slot } from '@core/infoStrip/edit';
 import { fieldDescriptor } from '@core/infoStrip/registry';
+import { nearestWaypoints } from '@core/infoStrip/target';
 import { nearbyStations, nearestStation, STATIONS_LISTED } from '@core/infoStrip/tides';
 import {
   NEAREST_STATION,
@@ -15,6 +16,7 @@ import {
   type StationSpec,
   type Target,
 } from '@core/infoStrip/types';
+import type { LatLng } from '@core/models';
 import { stationKey } from '@core/tides/station';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -138,6 +140,21 @@ export function FieldSettings({
   );
 }
 
+/**
+ * Where the distance-sorted lists sort from: you (else the map centre),
+ * snapped to its ~50 m cell, as a value that changes only when the cell does.
+ */
+function useListCell(data: DepsSnapshot): LatLng | null {
+  const here = data.position ?? data.centre;
+  const cell = here === null ? null : cellOf(here, LIST_CELL_DEG);
+  const lat = cell?.latitude ?? null;
+  const lng = cell?.longitude ?? null;
+  return useMemo(
+    () => (lat === null || lng === null ? null : { latitude: lat, longitude: lng }),
+    [lat, lng],
+  );
+}
+
 function ChoiceParam({
   spec,
   value,
@@ -209,12 +226,15 @@ function StationParam({
   const t = useSchemeTokens();
   const { accent } = useSheetAccent();
   const stations = useLiveTideStations(true);
-  const here = data.position ?? data.centre;
-  const near = useMemo(
-    () => (here === null ? [] : nearbyStations(stations, here, STATIONS_LISTED)),
-    [stations, here],
+  const cell = useListCell(data);
+  // Sorted per ~50 m cell, never per tick (the page re-renders on every snapshot).
+  const { near, nearest } = useMemo(
+    () => ({
+      near: cell === null ? [] : nearbyStations(stations, cell, STATIONS_LISTED),
+      nearest: cell === null ? null : nearestStation(stations, cell),
+    }),
+    [stations, cell],
   );
-  const nearest = here === null ? null : nearestStation(stations, here);
   const picked =
     value === NEAREST_STATION ? null : (stations.find((s) => stationKey(s) === value) ?? null);
   const rows: { key: string; name: string; hint: string | null }[] = [
@@ -299,15 +319,11 @@ function TargetParam({
   const waypoints = useLibraryStore((s) => s.waypoints);
   const effective = own ?? strip;
   const write = (next: Target) => (own !== null ? onOwn(next) : onStrip(next));
-  const here = data.position ?? data.centre;
+  const cell = useListCell(data);
+  // Sorted per ~50 m cell, never per tick (the page re-renders on every snapshot).
   const nearest = useMemo(
-    () =>
-      here === null
-        ? waypoints.slice(0, WAYPOINTS_SHOWN)
-        : [...waypoints]
-            .sort((a, b) => haversineMeters(here, a) - haversineMeters(here, b))
-            .slice(0, WAYPOINTS_SHOWN),
-    [waypoints, here],
+    () => nearestWaypoints(waypoints, cell, WAYPOINTS_SHOWN),
+    [waypoints, cell],
   );
   const firstWaypoint = nearest[0];
   const point =

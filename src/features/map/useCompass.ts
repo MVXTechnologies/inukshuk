@@ -7,6 +7,13 @@ export interface CompassSample {
   headingDeg: number;
   /** Sensor calibration level (0 worst … 3 best), or null if unknown. */
   accuracy: number | null;
+  /**
+   * Which north `headingDeg` is from. The OS reports true heading once it has
+   * a location fix to compute the declination from; before that (no
+   * permission, no fix yet) it reports -1 and only the magnetic heading is
+   * known — labelled so, never passed off as true.
+   */
+  reference: 'true' | 'magnetic';
 }
 
 type Listener = (sample: CompassSample) => void;
@@ -39,13 +46,20 @@ let starting = false;
 let latest: CompassSample | null = null;
 const filter = createHeadingFilter();
 
-function onHeading(h: Location.LocationHeadingObject): void {
+/** The north the filter's history is on: switching restarts it (no smoothing across the declination). */
+let filterReference: CompassSample['reference'] | null = null;
+
+/** Exported for tests: one OS heading event through the shared filter to the listeners. */
+export function onHeading(h: Location.LocationHeadingObject): void {
   // trueHeading is -1 when unavailable (no location permission / no fix yet).
-  const raw = h.trueHeading >= 0 ? h.trueHeading : h.magHeading;
+  const reference: CompassSample['reference'] = h.trueHeading >= 0 ? 'true' : 'magnetic';
+  const raw = reference === 'true' ? h.trueHeading : h.magHeading;
   if (!Number.isFinite(raw)) return;
+  if (filterReference !== null && filterReference !== reference) filter.reset();
+  filterReference = reference;
   const accuracy = Number.isFinite(h.accuracy) ? h.accuracy : null;
   const headingDeg = filter.push({ degrees: raw, timestampMs: Date.now(), accuracy });
-  latest = { headingDeg, accuracy };
+  latest = { headingDeg, accuracy, reference };
   for (const listener of listeners) listener(latest);
 }
 
@@ -72,6 +86,7 @@ function stopWatching(): void {
   subscription = null;
   latest = null;
   filter.reset();
+  filterReference = null;
 }
 
 /**

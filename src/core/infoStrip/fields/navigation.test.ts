@@ -136,6 +136,13 @@ describe('ETE and ETA (Q2)', () => {
     );
   });
 
+  it('an arrival more than 24 h away carries its day ("Thu 14:32")', () => {
+    const far = navigating({ follow: { ...FOLLOW, targetDistanceM: 200_000 }, movingSpeedMps: 1 });
+    const at = NOW + Math.ceil(200_000 / 60) * 60_000;
+    const day = new Date(at).toLocaleDateString(undefined, { weekday: 'short' });
+    expect(ETA.compute(far, { target: null }, METRIC)?.value).toBe(`${day} ${formatClockTime(at)}`);
+  });
+
   it('"—" below 0.5 m/s or while the speed warms up', () => {
     const slow = navigating({ movingSpeedMps: ETE_MIN_SPEED_MPS - 0.01 });
     expect(ETE.compute(slow, { target: null }, METRIC)).toEqual({ tag: 'ETE', value: '—' });

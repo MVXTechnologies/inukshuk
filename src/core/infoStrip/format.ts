@@ -3,7 +3,7 @@
  * into the value and the (smaller) unit, distances in a fixed unit, bearings
  * and durations as the strip prints them.
  */
-import { formatDistance, type Units } from '@core/format';
+import { formatClockTime, formatDistance, type Units } from '@core/format';
 import { formatBearing } from '@core/geo/destination';
 
 import type { StripValue } from './types';
@@ -57,4 +57,18 @@ export function signedDegrees(deg: number): string {
   const t = Math.abs(deg).toFixed(1);
   if (Number(t) === 0) return `${t}°`;
   return `${deg < 0 ? '−' : '+'}${t}°`;
+}
+
+/** A day, ms. */
+export const DAY_MS = 24 * 3_600_000;
+
+/**
+ * An arrival as the strip prints it: the clock time, and the day too once it
+ * is more than 24 h away ("Thu 14:32"), so a multi-day ETA never reads as
+ * today's.
+ */
+export function formatArrival(atMs: number, nowMs: number): string {
+  const clock = formatClockTime(atMs);
+  if (atMs - nowMs <= DAY_MS) return clock;
+  return `${new Date(atMs).toLocaleDateString(undefined, { weekday: 'short' })} ${clock}`;
 }

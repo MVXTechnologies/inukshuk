@@ -7,6 +7,7 @@
 import { formatClockTime } from '@core/format';
 import { formatHeight, kindLabel } from '@core/gnss/chip';
 import { stateOf } from '@core/gnss/quality';
+import { LIVE_MAX_AGE_MS } from '@core/tides/live';
 
 import { splitUnit } from '../format';
 import { NEAREST_STATION, type DepsSnapshot, type StripValue, type TideSnapshot } from '../types';
@@ -26,9 +27,9 @@ export const GNSS_HEIGHT = defineField<Record<string, never>>({
   deps: ['ext:gnss'],
   tick: 'position',
   compute(data) {
-    const h = data.gnss?.ellipsoidalHeightM;
-    if (h == null) return null;
-    return { tag: 'h', ...splitUnit(formatHeight(h, data.gnss!.heightAccuracyM)) };
+    const g = data.gnss;
+    if (g === null || g.ellipsoidalHeightM === null) return null;
+    return { tag: 'h', ...splitUnit(formatHeight(g.ellipsoidalHeightM, g.heightAccuracyM)) };
   },
   sample: { tag: 'h', value: '183.42', unit: 'm' },
 });
@@ -66,6 +67,14 @@ function tideOf(data: DepsSnapshot, params: TideParams): TideSnapshot | null {
 }
 
 /**
+ * Whether a station's level is still "now" at `nowMs`: observed no more than
+ * `LIVE_MAX_AGE_MS` ago (the tide card's rule). A level without a time is not.
+ */
+export function levelIsLive(t: TideSnapshot, nowMs: number): boolean {
+  return t.levelM !== null && t.levelAtMs !== null && nowMs - t.levelAtMs <= LIVE_MAX_AGE_MS;
+}
+
+/**
  * The water level at the chosen tide station, with its trend arrow. Per
  * minute tick: one record lookup and a format; the level itself is fetched
  * by the platform every few minutes, never per tick.
@@ -84,7 +93,8 @@ export const TIDE_LEVEL = defineField<TideParams>({
   tick: 'minute',
   compute(data, params) {
     const t = tideOf(data, params);
-    if (t === null || t.levelM === null) return null;
+    // An hour-old level is not "now" (a refresh failing for a while, a sleeping phone).
+    if (t === null || t.levelM === null || !levelIsLive(t, data.nowMs)) return null;
     const arrow = t.trend === 'rising' ? ' ↑' : t.trend === 'falling' ? ' ↓' : '';
     const sign = t.levelM < 0 ? '−' : '+';
     return {

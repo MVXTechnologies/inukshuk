@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { declinationAt, magneticField, trueToMagnetic } from './wmm';
+import { declinationAt, magneticField, magneticToTrue, trueToMagnetic } from './wmm';
 import { WMM2025_COEFFS } from './wmm2025';
 
 /**
@@ -81,5 +81,14 @@ describe('WMM2025', () => {
     expect(trueToMagnetic(42, -14.6)).toBeCloseTo(56.6);
     expect(trueToMagnetic(5, 10)).toBeCloseTo(355);
     expect(trueToMagnetic(355, -10)).toBeCloseTo(5);
+  });
+
+  it('turns a magnetic bearing true, the exact inverse', () => {
+    expect(magneticToTrue(56.6, -14.6)).toBeCloseTo(42);
+    expect(magneticToTrue(355, 10)).toBeCloseTo(5);
+    expect(magneticToTrue(5, -10)).toBeCloseTo(355);
+    for (const deg of [0, 90, 181.5, 359.9]) {
+      expect(magneticToTrue(trueToMagnetic(deg, -14.6), -14.6)).toBeCloseTo(deg);
+    }
   });
 });

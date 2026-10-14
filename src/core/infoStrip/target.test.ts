@@ -1,4 +1,10 @@
-import { destinationName, effectiveTarget, resolveTarget, targetOpen } from './target';
+import {
+  destinationName,
+  effectiveTarget,
+  nearestWaypoints,
+  resolveTarget,
+  targetOpen,
+} from './target';
 import { QC, snapshot } from './testUtils';
 import type { FollowSnapshot } from './types';
 
@@ -121,5 +127,19 @@ describe('destinationName', () => {
     expect(destinationName({ latitude: 46.82001, longitude: -71.2 }, [camp])).toBe('Camp lac');
     expect(destinationName({ latitude: 46.8201, longitude: -71.2 }, [camp])).toBe('Destination');
     expect(destinationName(QC, [])).toBe('Destination');
+  });
+});
+
+describe('nearestWaypoints (the target picker)', () => {
+  const far = { id: 'far', latitude: 47.5, longitude: -70, label: 'Far' };
+  const mid = { id: 'mid', latitude: 46.9, longitude: -71.2, label: 'Mid' };
+  const near = { id: 'near', latitude: 46.814, longitude: -71.208, label: 'Near' };
+
+  it('nearest first, cut to the limit', () => {
+    expect(nearestWaypoints([far, mid, near], QC, 2).map((w) => w.id)).toEqual(['near', 'mid']);
+  });
+
+  it('without a place: as stored', () => {
+    expect(nearestWaypoints([far, mid, near], null, 2).map((w) => w.id)).toEqual(['far', 'mid']);
   });
 });

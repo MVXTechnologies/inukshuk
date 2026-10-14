@@ -59,6 +59,8 @@ export function setStripRuntime(patch: Partial<StripRuntime>): void {
 }
 
 export const openStripEditor = () => setStripRuntime({ editorOpen: true });
+/** Whether the editor is open (re-renders only on open and close). */
+export const useStripEditorOpen = (): boolean => useStripRuntime((s) => s.editorOpen);
 export const closeStripEditor = () => setStripRuntime({ editorOpen: false });
 
 /** Tests: back to the initial state. */
@@ -76,12 +78,16 @@ export function bottomLiftOf(s: Pick<StripRuntime, 'dock' | 'stripH'>): number {
   return o.tapeBottom! - STACK_GAP_DP;
 }
 
-/** How far the top chrome moves down for a top-docked strip (`stackOffsets`). */
+/**
+ * A top-docked strip's measured height (`stackOffsets`), status bar included:
+ * `InfoStripInsets` moves the top chrome by the part below the status bar
+ * (`topChromeShiftDp`).
+ */
 export function topShiftOf(s: Pick<StripRuntime, 'dock' | 'stripH'>): number {
   return stackOffsets(s.dock, s.stripH, 0, false).topChromeShift;
 }
 
 /** MapScreen: how far the bottom column rides up for a bottom-docked strip. */
 export const useInfoStripBottomLift = (): number => useStripRuntime(bottomLiftOf);
-/** `InfoStripInsets`: how far the top chrome moves down for a top-docked strip. */
+/** `InfoStripInsets`: the top-docked strip's height (0 at the bottom), status bar included. */
 export const useInfoStripTopShift = (): number => useStripRuntime(topShiftOf);

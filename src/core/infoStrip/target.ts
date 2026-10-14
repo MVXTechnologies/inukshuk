@@ -110,3 +110,21 @@ export function destinationName(
   const w = waypoints.find((p) => haversineMeters(p, at) <= DESTINATION_NAME_RADIUS_M);
   return w === undefined ? 'Destination' : w.label;
 }
+
+/**
+ * The `limit` saved waypoints nearest `here`, nearest first (the target
+ * picker's list); the first `limit` as stored without a place. O(n log n):
+ * callers memo it on a coarse cell (`cellOf`), never per tick.
+ */
+export function nearestWaypoints<W extends LatLng>(
+  waypoints: readonly W[],
+  here: LatLng | null,
+  limit: number,
+): W[] {
+  if (here === null) return waypoints.slice(0, limit);
+  return waypoints
+    .map((w) => ({ w, d: haversineMeters(here, w) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, limit)
+    .map((x) => x.w);
+}

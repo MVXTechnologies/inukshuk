@@ -473,9 +473,11 @@ map aids (centre cursor, pointing line). The pure core is
 - `target.ts` (one strip target, per-field override), `movingSpeed.ts`
   (10-minute moving speed for ETE/ETA), `presets.ts` (`DEFAULT_STRIP` =
   2.5.1's chip and dot; Default, Hiking, Navigation, Survey, Paddling),
-  `settings.ts` (`settings.infoStrip`, versioned: a missing key is
-  `DEFAULT_STRIP`; unknown field ids are kept and skipped, so a rollback
-  loses nothing).
+  `settings.ts` (the strip's own file, `info-strip.json`, versioned: a
+  missing file is `DEFAULT_STRIP`, or 2.5.1's switch carried over; unknown
+  field ids are kept and skipped, so a rollback loses nothing).
+  `FieldDescriptor.depsFor` narrows a field's deps to its params (a heading
+  on the course never starts the compass).
 - Magnetic declination comes from `core/geo/wmm.ts`, WMM2025 in pure TS,
   checked against NOAA's published test values.
 
@@ -494,14 +496,25 @@ The UI is `src/features/map/infoStrip/`:
   value's content.
 - `stripRuntime` (a small store) carries the measured strip heights (MapScreen
   lifts its bottom column by `bottomH`; `InfoStripInsets`, around the Map
-  route, adds `topH` to the safe-area top for the top dock), the recording
+  route, moves the safe-area top to the top-docked strip's bottom edge — its
+  measured height includes the status bar, counted once — and
+  `useRealSafeAreaInsets` gives full-screen modals the real one), the recording
   panel's hero fields (the de-dup) and the strip's metrics (the panel's
   cycling skips them).
 - `editor/` is the in-place editor, a plain View sheet: rows with drag,
   the picker, settings pages generated from each field's params, the centre
   cursor, 2.5.1's pointing-line panel, presets and your own strips.
-- `settings.infoStrip` lives in `settingsStore` (`setInfoStrip` writes it
-  with the 2.5.1 `showCenterCursor` mirror in one write, for rollbacks).
+- The strip lives in `settingsStore` (`infoStrip`) but is persisted in its
+  OWN file, `info-strip.json`: 2.5.1 rewrites `settings.json` with only the
+  keys it knows, so a strip kept there would not survive a rollback.
+  `setInfoStrip` writes the file, and `settings.json` only when the 2.5.1
+  `showCenterCursor` mirror flips. A pre-release's `settings.infoStrip` is
+  read once and moved.
+- Stacking: the strip is the LOWEST overlay of the map's one overlay order
+  (`src/features/map/overlayOrder.ts`, `MAP_OVERLAY_Z`): no zIndex, mounted
+  right after the map, so every sheet, card, shield and chip draws over it;
+  `overlayOrder.guard.test` pins it. A sheet that covers the bottom edge
+  (the trail inspector) makes a bottom-docked strip step aside.
 
 Adding a field: a descriptor in `fields/` with a pure `compute()` and its
 tests, and one line in `registry.ts`; the picker, search, settings page and

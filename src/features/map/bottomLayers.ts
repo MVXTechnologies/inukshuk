@@ -1,7 +1,10 @@
 import type { ViewStyle } from 'react-native';
 
+import { MAP_OVERLAY_Z } from './overlayOrder';
+
 /**
- * Stacking order of the map screen's bottom-edge layers (#505).
+ * Stacking order of the map screen's bottom-edge layers (#505), from the
+ * map's one overlay order (`MAP_OVERLAY_Z`, `overlayOrder.ts`).
  *
  * The waypoint card used to be a bare sibling with no zIndex, so the
  * recording panel's dock (zIndex 6) drew — and caught touches — over it while
@@ -11,11 +14,11 @@ import type { ViewStyle } from 'react-native';
  */
 export const BOTTOM_LAYER = {
   /** The recording panel's dock. */
-  recordingPanel: { zIndex: 6 },
+  recordingPanel: { zIndex: MAP_OVERLAY_Z.recordingPanel },
   /** A tapped waypoint's card: always above the recording panel. */
-  waypointCard: { zIndex: 7 },
+  waypointCard: { zIndex: MAP_OVERLAY_Z.waypointCard },
   /** Snackbars: confirmations ("Waypoint deleted") must never hide under a dock. */
-  snackbar: { zIndex: 8 },
+  snackbar: { zIndex: MAP_OVERLAY_Z.snackbar },
   /**
    * Team drawing mode (#683): its canvas and bars own the screen, above the
    * recording panel and the map's snackbars (its own snackbar is inside it).

@@ -9,6 +9,9 @@ import {
   stripHeroMetrics,
   TAPE_H_DP,
   visibleRows,
+  topChromeShiftDp,
+  EDITOR_MAX_SHARE,
+  editorMaxHeightDp,
 } from './layout';
 import { ref } from './presets';
 import type { FieldRef } from './types';
@@ -121,5 +124,38 @@ describe('stackOffsets', () => {
   it('an empty strip lifts nothing', () => {
     expect(stackOffsets('bottom', 0, TAB, false).scaleRowBottom).toBe(TAB + STACK_GAP_DP);
     expect(stackOffsets('top', 0, TAB, false).topChromeShift).toBe(0);
+  });
+});
+
+describe('topChromeShiftDp (the top dock counts the status bar once)', () => {
+  it('moves the chrome by the strip below the status bar', () => {
+    // A one-row strip measured with the 40 dp status bar it reaches behind.
+    expect(topChromeShiftDp(40 + stripHeightDp(1), 40)).toBe(stripHeightDp(1));
+  });
+
+  it('never negative (nothing measured yet, or no strip)', () => {
+    expect(topChromeShiftDp(0, 40)).toBe(0);
+    expect(topChromeShiftDp(30, 40)).toBe(0);
+  });
+});
+
+describe('editorMaxHeightDp (the editor fits between the status bar and the lifted bottom)', () => {
+  const base = { windowH: 800, areaH: 740, statusBarH: 40, bottomLift: 0, dock: 'bottom' as const };
+
+  it('its share of the window when there is room', () => {
+    expect(editorMaxHeightDp(base)).toBe(800 * EDITOR_MAX_SHARE);
+  });
+
+  it('on the recording panel: never taller than the room above it, below the status bar', () => {
+    expect(editorMaxHeightDp({ ...base, bottomLift: 300 })).toBe(740 - 300 - 40);
+  });
+
+  it('top dock: from the top edge down to the lift', () => {
+    expect(editorMaxHeightDp({ ...base, dock: 'top', bottomLift: 300 })).toBe(740 - 300);
+  });
+
+  it('before the area is measured: the window; never negative', () => {
+    expect(editorMaxHeightDp({ ...base, areaH: null, bottomLift: 500 })).toBe(800 - 500 - 40);
+    expect(editorMaxHeightDp({ ...base, bottomLift: 900 })).toBe(0);
   });
 });

@@ -15,6 +15,7 @@ export function snapshot(over: Partial<DepsSnapshot> = {}): DepsSnapshot {
     followsUser: false,
     position: null,
     headingDeg: null,
+    headingReference: null,
     course: null,
     movingSpeedMps: null,
     navTarget: null,

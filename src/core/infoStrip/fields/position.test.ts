@@ -6,6 +6,7 @@ import {
   ACCURACY,
   ALTITUDE,
   COORDS,
+  coordsPoint,
   DECLINATION,
   declinationHere,
   ELEVATION,
@@ -81,6 +82,26 @@ describe('coords', () => {
     expect(COORDS.compute(data, P({ datum: 'csrs', point: 'you' }), METRIC)?.tag).toBe('WGS 84');
     // No project datum view at all.
     expect(COORDS.compute(data, P({ datum: 'project' }), METRIC)?.tag).toBe('WGS 84');
+  });
+});
+
+describe("coordsPoint (the copy's Convert)", () => {
+  const you = fix({ latitude: 46.9, longitude: -71.3 });
+
+  it('the centre, which is you while the map follows you; or you', () => {
+    expect(coordsPoint(snapshot({ centre: QC }), { point: 'centre' })).toEqual(QC);
+    expect(
+      coordsPoint(snapshot({ centre: QC, followsUser: true, position: you }), { point: 'centre' }),
+    ).toEqual({ latitude: 46.9, longitude: -71.3 });
+    expect(coordsPoint(snapshot({ centre: QC, position: you }), { point: 'you' })).toEqual({
+      latitude: 46.9,
+      longitude: -71.3,
+    });
+  });
+
+  it('nothing to show: null', () => {
+    expect(coordsPoint(snapshot(), { point: 'centre' })).toBeNull();
+    expect(coordsPoint(snapshot({ centre: QC }), { point: 'you' })).toBeNull();
   });
 });
 

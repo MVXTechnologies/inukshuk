@@ -1,5 +1,9 @@
+import { formatClockTime } from '@core/format';
+
 import {
   bearingValue,
+  DAY_MS,
+  formatArrival,
   formatDistanceIn,
   formatHoursMinutes,
   signedDegrees,
@@ -43,5 +47,14 @@ describe('strip formatting', () => {
     expect(signedDegrees(-14.62)).toBe('−14.6°');
     expect(signedDegrees(2.14)).toBe('+2.1°');
     expect(signedDegrees(-0.02)).toBe('0.0°');
+  });
+
+  it('an arrival: the clock time, with the day once it is more than 24 h away', () => {
+    // Tuesday 2026-10-13, 12:00 local.
+    const now = new Date(2026, 9, 13, 12, 0).getTime();
+    expect(formatArrival(now + 3_600_000, now)).toBe(formatClockTime(now + 3_600_000));
+    expect(formatArrival(now + DAY_MS, now)).toBe(formatClockTime(now + DAY_MS));
+    const thu = new Date(2026, 9, 15, 14, 32).getTime();
+    expect(formatArrival(thu, now)).toBe(`Thu ${formatClockTime(thu)}`);
   });
 });

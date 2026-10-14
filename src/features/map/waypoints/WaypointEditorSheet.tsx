@@ -44,6 +44,7 @@ import { Segmented } from '../components/mapSheet';
 import { IconTile } from './IconTile';
 import { WaypointIconPickerPage } from './WaypointIconPickerPage';
 import { WaypointPinView } from './WaypointPinView';
+import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 
 /**
  * The minimal waypoint shape the editor needs — satisfied by both a live
@@ -574,7 +575,14 @@ function Section({ title }: { title: string }) {
 const MAX_PIN = WAYPOINT_PIN_DIAMETER.XL;
 
 const styles = StyleSheet.create({
-  root: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 30 },
+  root: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: MAP_OVERLAY_Z.editorSheet,
+  },
   scrim: {
     position: 'absolute',
     top: 0,

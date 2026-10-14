@@ -1,5 +1,6 @@
 import type { AnyExtensionKey } from '@core/extensions/keys';
 import { addField, setFieldParams, stripTitle, uniqueName, type Slot } from '@core/infoStrip/edit';
+import { editorMaxHeightDp } from '@core/infoStrip/layout';
 import { applyPreset, isEditedPreset, type Preset } from '@core/infoStrip/presets';
 import { MAX_SAVED_STRIPS } from '@core/infoStrip/settings';
 import type { DepsSnapshot, Dock, FieldRef, InfoStrip } from '@core/infoStrip/types';
@@ -8,9 +9,19 @@ import { useSettingsStore } from '@state/settingsStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  BackHandler,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { Button, Text } from 'react-native-paper';
+
+import { ActionSnackbar } from '../../../common/ActionSnackbar';
+import { useActionSnackbar } from '../../../common/useActionSnackbar';
 
 import {
   NavRow,
@@ -27,6 +38,7 @@ import { FieldPicker } from './FieldPicker';
 import { FieldSettings } from './FieldSettings';
 import { PresetsPage, SaveStripPage } from './PresetsPage';
 import { RowsEditor } from './RowsEditor';
+import { MAP_OVERLAY_Z } from '../../overlayOrder';
 
 export type EditorPage =
   | { kind: 'main' }
@@ -43,8 +55,24 @@ const DOCKS: readonly { value: Dock; label: string }[] = [
   { value: 'top', label: 'Top' },
 ];
 
-/** The sheet's tallest share of the window. */
-const MAX_SHARE = 0.72;
+/** The editor's own snackbar (UNDO a delete, the saved-strips limit), ms. */
+export const EDITOR_SNACK_MS = 6000;
+
+/** What "Your strips" says at its limit instead of dropping your oldest strip. */
+export const SAVED_LIMIT_MESSAGE = `You can keep ${MAX_SAVED_STRIPS} strips. Delete one to save another.`;
+
+/** Where Android Back goes from each page: up one level, then closed. */
+function parentPage(page: EditorPage): EditorPage | null {
+  switch (page.kind) {
+    case 'main':
+      return null;
+    case 'save':
+    case 'rename':
+      return { kind: 'presets' };
+    default:
+      return { kind: 'main' };
+  }
+}
 
 /**
  * The info strip's editor (mockup §3): the strip lifts into a sheet docked
@@ -57,17 +85,25 @@ const MAX_SHARE = 0.72;
  *   from its params), the centre cursor, the pointing line (2.5.1's panel),
  *   presets and "your strips", save as / rename.
  *
- * Every change is written at once (one settings write, the 2.5.1 mirror
- * with it): the strip behind the sheet is the live preview.
+ * Every change is written at once (the strip's own file, the 2.5.1 mirror
+ * when it flips): the strip behind the sheet is the live preview.
+ *
+ * Modal: Android Back goes up a page, then closes it (only while the map
+ * screen is in front: tab screens stay mounted); screen readers stay in the
+ * sheet (`accessibilityViewIsModal`; MapScreen hides the map behind it). Its
+ * height fits between the status bar and the lifted bottom edge.
  */
 export function InfoStripEditor({
   data,
   bottomLift,
   topInset,
+  focused = true,
 }: {
   data: DepsSnapshot;
   bottomLift: number;
   topInset: number;
+  /** The map screen is in front: only then does Android Back belong to the editor. */
+  focused?: boolean;
 }) {
   const t = useSchemeTokens();
   const { accent, onAccent } = useSheetAccent();
@@ -78,7 +114,26 @@ export function InfoStripEditor({
   const setSetting = useSettingsStore((s) => s.set);
   const installed = useInstalledExtensions();
   const [page, setPage] = useState<EditorPage>({ kind: 'main' });
+  const [areaH, setAreaH] = useState<number | null>(null);
+  const snack = useActionSnackbar(EDITOR_SNACK_MS);
   const strip = all.current;
+
+  // Android Back: up one page, then closed. Read through a ref, registered once per focus.
+  const pageRef = useRef(page);
+  useEffect(() => {
+    pageRef.current = page;
+  });
+  useEffect(() => {
+    if (!focused) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      const up = parentPage(pageRef.current);
+      if (up === null) closeStripEditor();
+      else setPage(up);
+      return true;
+    });
+    return () => sub.remove();
+  }, [focused]);
+  const full = all.saved.length >= MAX_SAVED_STRIPS;
   const ctx = { units, target: strip.target };
   const edited = isEditedPreset(strip, installed);
   const top = strip.dock === 'top';
@@ -160,9 +215,17 @@ export function InfoStripEditor({
               setSetting('pointingLine', saved.aids.pointingLine);
             }
           }}
-          onSave={() => setPage({ kind: 'save' })}
+          onSave={() => {
+            // At the limit: say so, never drop the oldest strip silently.
+            if (full) snack.show(SAVED_LIMIT_MESSAGE);
+            else setPage({ kind: 'save' });
+          }}
           onRename={(index) => setPage({ kind: 'rename', index })}
-          onDuplicate={(i) =>
+          onDuplicate={(i) => {
+            if (full) {
+              snack.show(SAVED_LIMIT_MESSAGE);
+              return;
+            }
             updateInfoStrip((a) => {
               const s = a.saved[i];
               if (s === undefined || a.saved.length >= MAX_SAVED_STRIPS) return a;
@@ -174,11 +237,38 @@ export function InfoStripEditor({
                 ),
               };
               return { ...a, saved: [...a.saved.slice(0, i + 1), copy, ...a.saved.slice(i + 1)] };
-            })
-          }
-          onDelete={(i) =>
-            updateInfoStrip((a) => ({ ...a, saved: a.saved.filter((_, j) => j !== i) }))
-          }
+            });
+          }}
+          onDelete={(i) => {
+            const gone = all.saved[i];
+            if (gone === undefined) return;
+            updateInfoStrip((a) => ({ ...a, saved: a.saved.filter((_, j) => j !== i) }));
+            // A timed UNDO (own timer, never Paper's), not a confirm dialog.
+            snack.show(`Deleted “${gone.name}”`, [
+              {
+                label: 'Undo',
+                onPress: () =>
+                  updateInfoStrip((a) =>
+                    a.saved.length >= MAX_SAVED_STRIPS
+                      ? a
+                      : {
+                          ...a,
+                          saved: [
+                            ...a.saved.slice(0, i),
+                            {
+                              ...gone,
+                              name: uniqueName(
+                                gone.name,
+                                a.saved.map((x) => x.name),
+                              ),
+                            },
+                            ...a.saved.slice(i),
+                          ],
+                        },
+                  ),
+              },
+            ]);
+          }}
           onGetExtension={getExtension}
           onBack={main}
         />
@@ -191,6 +281,11 @@ export function InfoStripEditor({
           initialName={uniqueName(strip.name, takenNames)}
           summary={`${strip.rows.flat().length} fields in ${strip.rows.length} row${strip.rows.length === 1 ? '' : 's'}, dock ${strip.dock}, map aids included`}
           onSave={(name) => {
+            if (useSettingsStore.getState().infoStrip.saved.length >= MAX_SAVED_STRIPS) {
+              snack.show(SAVED_LIMIT_MESSAGE);
+              setPage({ kind: 'presets' });
+              return;
+            }
             updateInfoStrip((a) => {
               // Your own strip now: no "· edited" against a preset.
               const { basedOn: _drop, ...rest } = a.current;
@@ -206,7 +301,7 @@ export function InfoStripEditor({
               return {
                 ...a,
                 current: mine,
-                saved: [...a.saved, mine].slice(-MAX_SAVED_STRIPS),
+                saved: [...a.saved, mine],
               };
             });
             setPage({ kind: 'presets' });
@@ -292,6 +387,7 @@ export function InfoStripEditor({
       <Pressable
         style={[StyleSheet.absoluteFill, styles.dim]}
         onPress={closeStripEditor}
+        onLayout={(e) => setAreaH(e.nativeEvent.layout.height)}
         accessibilityLabel="Close the info strip editor"
         accessibilityRole="button"
         testID="strip-editor-backdrop"
@@ -302,12 +398,19 @@ export function InfoStripEditor({
           {
             backgroundColor: t.surface,
             borderColor: t.outlineVariant,
-            maxHeight: height * MAX_SHARE,
+            maxHeight: editorMaxHeightDp({
+              windowH: height,
+              areaH,
+              statusBarH: topInset,
+              bottomLift,
+              dock: strip.dock,
+            }),
           },
           top
             ? [styles.sheetTop, { top: 0, paddingTop: topInset }]
             : [styles.sheetBottom, { bottom: bottomLift }],
         ]}
+        accessibilityViewIsModal
         testID="strip-editor"
       >
         {page.kind === 'main' && (
@@ -340,18 +443,19 @@ export function InfoStripEditor({
         >
           {body}
         </ScrollView>
+        <ActionSnackbar snack={snack.current} />
       </View>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  dim: { backgroundColor: 'rgba(20,24,28,0.35)', zIndex: 30 },
+  dim: { backgroundColor: 'rgba(20,24,28,0.35)', zIndex: MAP_OVERLAY_Z.editorSheet },
   sheet: {
     position: 'absolute',
     left: 0,
     right: 0,
-    zIndex: 31,
+    zIndex: MAP_OVERLAY_Z.editorSheetBody,
     elevation: 12,
     shadowColor: palette.shadow,
     shadowOpacity: 0.25,

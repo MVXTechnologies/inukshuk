@@ -4,8 +4,16 @@
  * sliding window. Stops (a break, a photo) do not drag it down, and a fresh
  * pace after a climb shows within minutes.
  *
- * Incremental: each fix adds one segment and evicts the ones that left the
- * window, keeping running sums — O(1) amortised per fix, one haversine.
+ * Incremental: each fix adds at most one segment and evicts the ones that
+ * left the window, keeping running sums — O(1) amortised per fix, one
+ * haversine.
+ *
+ * Fixes are timed by their own timestamps (the fix's `time`), never by when
+ * the UI got round to them. GPS jitter is rejected by the fixes' accuracy: a
+ * move shorter than the two fixes' accuracy radii together is no move — the
+ * window keeps measuring from the earlier fix (its anchor) until you have
+ * really left it, so a slow walk still counts and a 15 m jump while standing
+ * with ±8 m fixes does not.
  */
 import { haversineMeters } from '@core/geo/geomath';
 import type { LatLng } from '@core/models';
@@ -26,8 +34,12 @@ interface Segment {
 }
 
 export interface MovingSpeedWindow {
-  /** Add a fix (epoch ms). Out-of-order or duplicate times are ignored. */
-  push(p: LatLng, atMs: number): void;
+  /**
+   * Add a fix: its own time (epoch ms) and its horizontal accuracy radius
+   * (metres; null or absent when unknown, then every move counts).
+   * Out-of-order or duplicate times are ignored.
+   */
+  push(p: LatLng, atMs: number, accuracyM?: number | null): void;
   /** Moving speed, m/s, or null while warming up or when nothing moved in the window. */
   speedMps(nowMs: number): number | null;
   reset(): void;
@@ -38,7 +50,9 @@ export function createMovingSpeedWindow(): MovingSpeedWindow {
   let head = 0;
   let sumM = 0;
   let sumS = 0;
-  let last: { p: LatLng; atMs: number } | null = null;
+  /** The fix segments are measured from: the last one you really moved away from. */
+  let anchor: { p: LatLng; atMs: number; accM: number } | null = null;
+  let lastMs: number | null = null;
   let firstMs: number | null = null;
 
   const evict = (nowMs: number) => {
@@ -61,19 +75,28 @@ export function createMovingSpeedWindow(): MovingSpeedWindow {
   };
 
   return {
-    push(p, atMs) {
-      if (last !== null && atMs <= last.atMs) return;
+    push(p, atMs, accuracyM = null) {
+      if (!Number.isFinite(atMs) || (lastMs !== null && atMs <= lastMs)) return;
+      lastMs = atMs;
       firstMs ??= atMs;
-      if (last !== null && atMs - last.atMs <= MOVING_MAX_GAP_MS) {
-        const dtS = (atMs - last.atMs) / 1000;
-        const dM = haversineMeters(last.p, p);
-        if (dM / dtS >= MOVING_SEGMENT_MIN_MPS) {
-          segments.push({ endMs: atMs, dM, dtS });
-          sumM += dM;
-          sumS += dtS;
+      const accM =
+        accuracyM !== null && Number.isFinite(accuracyM) && accuracyM > 0 ? accuracyM : 0;
+      if (anchor === null || atMs - anchor.atMs > MOVING_MAX_GAP_MS) {
+        // The first fix, or a stop / lost signal longer than a segment may span.
+        anchor = { p, atMs, accM };
+      } else {
+        const dM = haversineMeters(anchor.p, p);
+        // Inside the two fixes' accuracy: jitter, not a move; keep the anchor.
+        if (dM >= anchor.accM + accM) {
+          const dtS = (atMs - anchor.atMs) / 1000;
+          if (dM / dtS >= MOVING_SEGMENT_MIN_MPS) {
+            segments.push({ endMs: atMs, dM, dtS });
+            sumM += dM;
+            sumS += dtS;
+          }
+          anchor = { p, atMs, accM };
         }
       }
-      last = { p, atMs };
       evict(atMs);
     },
     speedMps(nowMs) {
@@ -86,7 +109,8 @@ export function createMovingSpeedWindow(): MovingSpeedWindow {
       head = 0;
       sumM = 0;
       sumS = 0;
-      last = null;
+      anchor = null;
+      lastMs = null;
       firstMs = null;
     },
   };

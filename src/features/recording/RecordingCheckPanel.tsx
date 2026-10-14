@@ -9,6 +9,7 @@ import { ActivityIndicator, Button, Icon, Text, useTheme } from 'react-native-pa
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRecordingReadiness } from './useRecordingReadiness';
+import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 
 export type RecordingCheckMode =
   /** Before a recording starts: "Start recording" proceeds. */
@@ -213,8 +214,8 @@ const styles = StyleSheet.create({
     // Above every piece of map chrome: the control rail's Surfaces carry an
     // Android elevation that otherwise draws them over this scrim (seen on
     // the first E2E screenshot), and zIndex orders it on iOS.
-    zIndex: 100,
-    elevation: 100,
+    zIndex: MAP_OVERLAY_Z.modal,
+    elevation: MAP_OVERLAY_Z.modal,
   },
   card: { borderRadius: 28, maxHeight: '100%', overflow: 'hidden' },
   content: { padding: 24, paddingBottom: 8 },

@@ -1,15 +1,19 @@
+import { prefillFromPoint } from '@core/convert/prefill';
 import { computeRows, type PlacedValue } from '@core/infoStrip/compute';
+import { coordsPoint } from '@core/infoStrip/fields/position';
 import { stripHeroMetrics, visibleRows } from '@core/infoStrip/layout';
 import { effectiveTarget, targetOpen, type TargetOpen } from '@core/infoStrip/target';
 import type { Target } from '@core/infoStrip/types';
 import { useSettingsStore } from '@state/settingsStore';
+import { openConvert } from '@features/convert/openConvert';
 import * as Clipboard from 'expo-clipboard';
-import { memo, useCallback, useContext, useEffect, useMemo } from 'react';
+import { useRouter } from 'expo-router';
+import { memo, useCallback, useEffect, useMemo } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 
 import { InfoStripView } from './InfoStrip';
 import { InfoStripEditor } from './editor/InfoStripEditor';
-import { RealTopInsetContext } from './InfoStripInsets';
+import { useRealSafeAreaInsets } from './InfoStripInsets';
 import { useCurrentStrip } from './stripSettings';
 import { openStripEditor, setStripRuntime, useStripRuntime } from './stripRuntime';
 import { useStripSnapshot, type StripInputs } from './useStripData';
@@ -19,7 +23,20 @@ export interface InfoStripHostProps extends StripInputs {
   bottomLift: number;
   /** The region selector or the map maker owns the screen: no strip. */
   hidden: boolean;
-  onCopied: (message: string) => void;
+  /**
+   * A sheet covers the whole bottom edge (the trail inspector): a
+   * bottom-docked strip steps aside rather than peek from under it, and
+   * lifts nothing. A top-docked strip stays.
+   */
+  bottomSheetUp?: boolean;
+  /** The map screen is the one in front (the editor's Android Back listens only then). */
+  focused?: boolean;
+  /**
+   * The coordinates were copied: say so, with `convert` to open Convert on
+   * that point (2.5.1's chip reached it by a long-press; the strip's
+   * long-press edits, so the confirmation carries it).
+   */
+  onCopied: (message: string, convert?: () => void) => void;
   /**
    * A tap on the target name (#696): MapScreen opens the card on its own
    * paths (a waypoint's card, or the point chip on a point).
@@ -36,7 +53,9 @@ export interface InfoStripHostProps extends StripInputs {
  *   the recording panel); MapScreen lifts its bottom column — the ⓘ + scale
  *   row and the compass tape — by the measured height.
  * - Top dock: under (and behind) the status bar; `InfoStripInsets` shifts
- *   every piece of top chrome down by the measured height.
+ *   every piece of top chrome down by the measured height below it.
+ * - Stacking: the LOWEST overlay (`overlayOrder.ts`): no zIndex, mounted
+ *   right after the map, so every sheet, card and shield draws over it.
  * - Recording: the panel owns its hero metrics; the strip drops the ones it
  *   shows (`visibleRows`) and tells the panel which ones the strip has
  *   (cycling skips them).
@@ -44,6 +63,8 @@ export interface InfoStripHostProps extends StripInputs {
 export const InfoStripHost = memo(function InfoStripHost({
   bottomLift,
   hidden,
+  bottomSheetUp = false,
+  focused = true,
   onCopied,
   onOpenTarget,
   ...inputs
@@ -52,7 +73,8 @@ export const InfoStripHost = memo(function InfoStripHost({
   const units = useSettingsStore((s) => s.units);
   const heroFields = useStripRuntime((s) => s.heroFields);
   const editorOpen = useStripRuntime((s) => s.editorOpen);
-  const topInset = useContext(RealTopInsetContext);
+  const topInset = useRealSafeAreaInsets().top;
+  const router = useRouter();
   const recording = inputs.recording !== null;
 
   const rows = useMemo(
@@ -65,8 +87,8 @@ export const InfoStripHost = memo(function InfoStripHost({
     [rows, data, units, strip.target],
   );
 
-  const shown = !hidden && placed.length > 0;
   const top = strip.dock === 'top';
+  const shown = !hidden && !(bottomSheetUp && !top) && placed.length > 0;
   const onPanel = shown && !top && recording && heroFields.length > 0;
 
   // What the strip tells the others: its metrics (the panel's cycling) and
@@ -88,9 +110,16 @@ export const InfoStripHost = memo(function InfoStripHost({
   const onCopy = useCallback(
     (p: PlacedValue) => {
       void Clipboard.setStringAsync(p.value.value);
-      onCopied(`Copied ${p.value.value}`);
+      // Convert on the point the field shows, in WGS 84 (as 2.5.1's long-press).
+      const at = coordsPoint(data, p.ref.params);
+      onCopied(
+        `Copied ${p.value.value}`,
+        at === null
+          ? undefined
+          : () => openConvert(router, prefillFromPoint(at.latitude, at.longitude)),
+      );
     },
-    [onCopied],
+    [data, onCopied, router],
   );
   // Resolved at the tap, on the snapshot the field was drawn from.
   const onOpen = useCallback(
@@ -108,6 +137,7 @@ export const InfoStripHost = memo(function InfoStripHost({
         <View
           style={[styles.dock, top ? styles.top : { bottom: bottomLift }]}
           pointerEvents="box-none"
+          testID="info-strip-dock"
         >
           <InfoStripView
             rows={placed}
@@ -122,13 +152,19 @@ export const InfoStripHost = memo(function InfoStripHost({
         </View>
       )}
       {editorOpen && !hidden && (
-        <InfoStripEditor data={data} bottomLift={bottomLift} topInset={topInset} />
+        <InfoStripEditor
+          data={data}
+          bottomLift={bottomLift}
+          topInset={topInset}
+          focused={focused}
+        />
       )}
     </>
   );
 });
 
 const styles = StyleSheet.create({
-  dock: { position: 'absolute', left: 0, right: 0, zIndex: 4 },
+  // The bottom of the map's overlay order (overlayOrder.ts), so neither zIndex nor elevation.
+  dock: { position: 'absolute', left: 0, right: 0 },
   top: { top: 0 },
 });

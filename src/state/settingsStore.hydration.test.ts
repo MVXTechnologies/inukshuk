@@ -124,9 +124,11 @@ it('a reset before hydration writes nothing until the file is read', async () =>
 
   storage.readJson.mockResolvedValueOnce(ON_DISK);
   await store.getState().hydrate();
-  // The user asked for defaults; they get them, written once.
+  // The user asked for defaults; they get them, written once (each file:
+  // settings.json, and the info strip's own file).
   expect(store.getState().units).toBe('metric');
-  expect(storage.writeJson).toHaveBeenCalledTimes(1);
+  const files = storage.writeJson.mock.calls.map(([name]) => name as string);
+  expect(files.sort()).toEqual(['info-strip.json', 'settings.json']);
 });
 
 it('reads settings.json once for concurrent hydrate() calls', async () => {
@@ -134,7 +136,9 @@ it('reads settings.json once for concurrent hydrate() calls', async () => {
   const release = heldRead(storage);
   const launch = store.getState().hydrate();
   const foregroundRetry = store.getState().hydrate();
-  expect(storage.readJson).toHaveBeenCalledTimes(1);
+  const reads = (name: string) => storage.readJson.mock.calls.filter(([f]) => f === name).length;
+  expect(reads('settings.json')).toBe(1);
+  expect(reads('info-strip.json')).toBe(1);
 
   release(ON_DISK);
   await Promise.all([launch, foregroundRetry]);

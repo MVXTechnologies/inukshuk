@@ -193,3 +193,8 @@ export function declinationAt(
 export function trueToMagnetic(trueDeg: number, declinationDeg: number): number {
   return (((trueDeg - declinationDeg) % 360) + 360) % 360;
 }
+
+/** A magnetic bearing as a true one (magnetic + declination), in [0, 360). */
+export function magneticToTrue(magneticDeg: number, declinationDeg: number): number {
+  return (((magneticDeg + declinationDeg) % 360) + 360) % 360;
+}

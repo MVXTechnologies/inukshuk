@@ -38,7 +38,9 @@ export function useLiveTideStations(on: boolean): readonly TideStation[] {
  *   every {@link TIDE_REFRESH_MS} (two rate-limited requests per station),
  *   never per tick: the fields compute on the strip's minute clock;
  * - a failed refresh keeps the next high (a prediction) and drops the level
- *   (no longer "now"); offline-only mode fetches nothing.
+ *   (no longer "now"); offline-only mode fetches nothing; each level carries
+ *   its observation time, and the field drops it past `LIVE_MAX_AGE_MS`;
+ * - a station no longer resolved is dropped from the live readouts.
  */
 export function useStripTides(
   on: boolean,
@@ -68,6 +70,14 @@ export function useStripTides(
   const byKey = useMemo(() => new Map(stations.map((s) => [stationKey(s), s])), [stations]);
 
   const [live, setLive] = useState<Readonly<Record<string, TideSnapshot>>>(NONE);
+  // A station no longer resolved (you moved on, a param changed) is dropped
+  // as the resolution changes (React's "adjust state on a prop change"):
+  // coming back to it later must not show its old level before the refetch.
+  const [liveFor, setLiveFor] = useState(fetchKey);
+  if (liveFor !== fetchKey) {
+    setLiveFor(fetchKey);
+    setLive((prev) => onlyKeys(prev, fetchKey === '' ? [] : fetchKey.split('\n')));
+  }
   useEffect(() => {
     if (!active || offline || fetchKey === '') return;
     const controller = new AbortController();
@@ -87,7 +97,11 @@ export function useStripTides(
             // Offline mid-way: the level is no longer "now"; the next high still is.
             setLive((prev) => {
               const old = prev[key];
-              return withKey(prev, key, old === undefined ? null : { ...old, levelM: null });
+              return withKey(
+                prev,
+                key,
+                old === undefined ? null : { ...old, levelM: null, levelAtMs: null },
+              );
             });
           });
       };
@@ -106,10 +120,24 @@ export function useStripTides(
     for (const [param, station] of resolved) {
       const snap = station === null ? undefined : live[stationKey(station)];
       // Offline-only mode: no level is "now" any more; the predicted high still holds.
-      if (snap !== undefined) out[param] = offline ? { ...snap, levelM: null } : snap;
+      if (snap !== undefined) {
+        out[param] = offline ? { ...snap, levelM: null, levelAtMs: null } : snap;
+      }
     }
     return out;
   }, [active, resolved, live, offline]);
+}
+
+/** `prev` cut to `keys`; the same object when nothing goes (no re-render). */
+function onlyKeys(
+  prev: Readonly<Record<string, TideSnapshot>>,
+  keys: readonly string[],
+): Readonly<Record<string, TideSnapshot>> {
+  const gone = Object.keys(prev).filter((k) => !keys.includes(k));
+  if (gone.length === 0) return prev;
+  const next = { ...prev };
+  for (const k of gone) delete next[k];
+  return next;
 }
 
 function withKey(

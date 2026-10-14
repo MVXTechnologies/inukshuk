@@ -16,6 +16,7 @@ import type { LatLng } from '@core/models';
 import type { LiveTide } from '@core/tides/live';
 import { parseTideStation, stationKey, type TideStation } from '@core/tides/station';
 
+import { cellOf } from './cell';
 import { fieldDescriptor } from './registry';
 import { NEAREST_STATION, type FieldRef, type TideSnapshot } from './types';
 
@@ -85,8 +86,7 @@ export function nearestStation(
 
 /** The cell `at` falls in, as its rounded centre: "nearest" changes only with it. */
 export function stationCell(at: LatLng): LatLng {
-  const round = (v: number) => Math.round(v / STATION_CELL_DEG) * STATION_CELL_DEG;
-  return { latitude: round(at.latitude), longitude: round(at.longitude) };
+  return cellOf(at, STATION_CELL_DEG);
 }
 
 /** The station a `station` param names now, or null (nothing near, or a station gone from the list). */
@@ -119,6 +119,7 @@ export function tideSnapshot(station: TideStation, live: LiveTide): TideSnapshot
   return {
     stationName: station.name,
     levelM: live.level?.heightM ?? null,
+    levelAtMs: live.level?.timeMs ?? null,
     trend: live.trend,
     nextHigh:
       live.nextHigh === null ? null : { atMs: live.nextHigh.timeMs, levelM: live.nextHigh.heightM },

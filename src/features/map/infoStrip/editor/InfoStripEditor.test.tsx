@@ -5,16 +5,19 @@
  */
 import { DEFAULT_POINTING_LINE } from '@core/map/pointingLineSettings';
 import { DEFAULT_STRIP } from '@core/infoStrip/presets';
+import { MAX_SAVED_STRIPS } from '@core/infoStrip/settings';
+import type { InfoStrip } from '@core/infoStrip/types';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { darkScheme, lightScheme } from '@ui/tokens';
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { BackHandler, StyleSheet } from 'react-native';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { State } from 'react-native-gesture-handler';
 
 import { InfoStripHost } from '../InfoStripHost';
 import { openStripEditor, useStripRuntime } from '../stripRuntime';
+import { SAVED_LIMIT_MESSAGE } from './InfoStripEditor';
 import { currentStrip, Providers, putStrip, QC, resetStores } from '../testUtils';
 
 jest.mock('@data/storage', () => ({ writeJson: jest.fn(), readJson: jest.fn(async () => null) }));
@@ -28,7 +31,7 @@ jest.mock('../../useCompass', () => ({ subscribeHeading: () => () => undefined }
 
 const fields = () => currentStrip().rows.map((r) => r.map((f) => f.field));
 
-async function openEditor(dark = false) {
+async function openEditor(dark = false, over: { bottomLift?: number; focused?: boolean } = {}) {
   await render(
     <Providers dark={dark}>
       <InfoStripHost
@@ -36,7 +39,8 @@ async function openEditor(dark = false) {
         fix={{ altitude: 200, accuracy: 4, speed: 1 }}
         follow={null}
         recording={null}
-        bottomLift={0}
+        bottomLift={over.bottomLift ?? 0}
+        focused={over.focused ?? true}
         hidden={false}
         onCopied={() => undefined}
         onOpenTarget={() => undefined}
@@ -103,7 +107,9 @@ describe('the editor sheet', () => {
     await tap('Done editing the info strip');
     expect(useStripRuntime.getState().editorOpen).toBe(false);
     await act(async () => openStripEditor());
-    await fireEvent.press(screen.getByTestId('strip-editor-backdrop'));
+    // The dim is outside the modal sheet: hidden from screen readers, still a touch target.
+    const dim = screen.getByTestId('strip-editor-backdrop', { includeHiddenElements: true });
+    await fireEvent.press(dim);
     expect(screen.queryByTestId('strip-editor')).toBeNull();
   });
 
@@ -367,5 +373,122 @@ describe('presets and your strips', () => {
     await tap('More for Kayak');
     await fireEvent.press(screen.getByText('Delete'));
     expect(all().saved.map((s) => s.name)).toEqual(['Ridge survey']);
+  });
+});
+
+describe('a modal sheet (#673 review)', () => {
+  type Back = () => boolean | null | undefined;
+  let backs: Back[] = [];
+  beforeEach(() => {
+    backs = [];
+    jest.spyOn(BackHandler, 'addEventListener').mockImplementation((_e, h) => {
+      backs.push(h as Back);
+      return { remove: () => (backs = backs.filter((x) => x !== h)) };
+    });
+  });
+  afterEach(() => jest.restoreAllMocks());
+  const pressBack = async () => {
+    let handled: boolean | null | undefined = false;
+    await act(async () => {
+      handled = backs.at(-1)?.();
+    });
+    return handled;
+  };
+
+  it('Android Back goes up a page, then closes it', async () => {
+    await openEditor();
+    await tap('Presets');
+    expect(screen.getByTestId('strip-save-current')).toBeOnTheScreen();
+    expect(await pressBack()).toBe(true);
+    expect(screen.queryByTestId('strip-save-current')).toBeNull();
+    expect(screen.getByText('Info strip')).toBeOnTheScreen();
+    expect(await pressBack()).toBe(true);
+    expect(useStripRuntime.getState().editorOpen).toBe(false);
+    // Closed: Back is the screen's again.
+    expect(backs).toHaveLength(0);
+  });
+
+  it('Back is not taken while another tab is in front (tab screens stay mounted)', async () => {
+    await openEditor(false, { focused: false });
+    expect(screen.getByTestId('strip-editor')).toBeOnTheScreen();
+    expect(backs).toHaveLength(0);
+  });
+
+  it('keeps screen readers inside the sheet', async () => {
+    await openEditor();
+    expect(screen.getByTestId('strip-editor').props.accessibilityViewIsModal).toBe(true);
+  });
+
+  it('fits between the status bar and the lifted bottom (on the recording panel)', async () => {
+    await openEditor(false, { bottomLift: 300 });
+    await act(async () =>
+      fireEvent(
+        screen.getByTestId('strip-editor-backdrop', { includeHiddenElements: true }),
+        'layout',
+        {
+          nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 740 } },
+        },
+      ),
+    );
+    const sheet = StyleSheet.flatten(screen.getByTestId('strip-editor').props.style);
+    expect(sheet.bottom).toBe(300);
+    // 740 of map, 300 under the sheet, 40 of status bar.
+    expect(sheet.maxHeight).toBe(740 - 300 - 40);
+  });
+});
+
+describe('your strips: UNDO a delete, and the limit says so', () => {
+  const saved = (n: number): InfoStrip[] =>
+    Array.from({ length: n }, (_, i) => ({ ...DEFAULT_STRIP, name: `Strip ${i + 1}` }));
+  const putSaved = (list: InfoStrip[]) =>
+    useSettingsStore.setState({
+      infoStrip: { ...useSettingsStore.getState().infoStrip, saved: list },
+    });
+  const names = () => useSettingsStore.getState().infoStrip.saved.map((s) => s.name);
+
+  it('a delete offers UNDO, which puts it back where it was', async () => {
+    putSaved(saved(3));
+    await openEditor();
+    await tap('Presets');
+    await tap('More for Strip 2');
+    await fireEvent.press(screen.getByText('Delete'));
+    expect(names()).toEqual(['Strip 1', 'Strip 3']);
+    expect(screen.getByTestId('action-snackbar')).toHaveTextContent(/Deleted “Strip 2”/);
+    await tap('Undo');
+    expect(names()).toEqual(['Strip 1', 'Strip 2', 'Strip 3']);
+    expect(screen.queryByTestId('action-snackbar')).toBeNull();
+  });
+
+  it('saving at the limit refuses with a message, never dropping your oldest strip', async () => {
+    putSaved(saved(MAX_SAVED_STRIPS));
+    await openEditor();
+    await tap('Presets');
+    await fireEvent.press(screen.getByTestId('strip-save-current'));
+    expect(screen.queryByTestId('strip-name-input')).toBeNull();
+    expect(screen.getByTestId('action-snackbar')).toHaveTextContent(SAVED_LIMIT_MESSAGE);
+    expect(names()).toHaveLength(MAX_SAVED_STRIPS);
+    expect(names()[0]).toBe('Strip 1');
+  });
+
+  it('a save that reaches the limit while the name is typed is refused too', async () => {
+    putSaved(saved(MAX_SAVED_STRIPS - 1));
+    await openEditor();
+    await tap('Presets');
+    await fireEvent.press(screen.getByTestId('strip-save-current'));
+    await act(async () => putSaved(saved(MAX_SAVED_STRIPS)));
+    await tap('Save strip');
+    expect(screen.getByTestId('action-snackbar')).toHaveTextContent(SAVED_LIMIT_MESSAGE);
+    expect(names()).toHaveLength(MAX_SAVED_STRIPS);
+    expect(names()[0]).toBe('Strip 1');
+  });
+
+  it('Duplicate at the limit says so too', async () => {
+    putSaved(saved(MAX_SAVED_STRIPS));
+    await openEditor();
+    await tap('Presets');
+    await tap('More for Strip 1');
+    await fireEvent.press(screen.getByText('Duplicate'));
+    expect(names()).toHaveLength(MAX_SAVED_STRIPS);
+    expect(screen.getByTestId('action-snackbar')).toHaveTextContent(SAVED_LIMIT_MESSAGE);
   });
 });

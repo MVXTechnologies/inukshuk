@@ -34,8 +34,8 @@ import { useStripTides } from './useStripTides';
 export interface StripInputs {
   /** The user's position, or null before the first fix. */
   location: LatLng | null;
-  /** The last phone fix (altitude, accuracy, speed), or null. */
-  fix: { altitude?: number; accuracy?: number; speed?: number } | null;
+  /** The last phone fix (altitude, accuracy, speed, its own time), or null. */
+  fix: { altitude?: number; accuracy?: number; speed?: number; time?: number } | null;
   follow: FollowState | null;
   /** The recorder's numbers while recording, else null. */
   recording: { stats: TrackStats; elapsedS: number; liveSpeedMps: number } | null;
@@ -43,21 +43,33 @@ export interface StripInputs {
 
 /** How often the course tracker re-reads the last fix, so the speed decays at a stop (as the pointing line). */
 export const COURSE_REFRESH_MS = 3000;
+
+interface GatedHeading {
+  deg: number | null;
+  /** Which north the compass read: true, or magnetic when the OS had no fix to correct it. */
+  reference: 'true' | 'magnetic';
+}
+
+const NO_HEADING: GatedHeading = { deg: null, reference: 'true' };
+
 /** The compass at 4 Hz with a 1° dead-band (the pointing line's gate), only while `on`. */
-function useGatedHeading(on: boolean): number | null {
-  const [deg, setDeg] = useState<number | null>(null);
+function useGatedHeading(on: boolean): GatedHeading {
+  const [heading, setHeading] = useState<GatedHeading>(NO_HEADING);
   useEffect(() => {
     if (!on) return;
     const gate = createHeadingGate();
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const unsubscribe = subscribeHeading(({ headingDeg }) => {
-      const r = gate.push(headingDeg, Date.now());
-      if (r.kind === 'emit') setDeg(r.headingDeg);
+    // The reference rides with the sample the gate lets through.
+    let reference: GatedHeading['reference'] = 'true';
+    const unsubscribe = subscribeHeading((sample) => {
+      reference = sample.reference;
+      const r = gate.push(sample.headingDeg, Date.now());
+      if (r.kind === 'emit') setHeading({ deg: r.headingDeg, reference });
       else if (r.kind === 'wait' && timer === null) {
         timer = setTimeout(() => {
           timer = null;
           const held = gate.flush(Date.now());
-          if (held !== null) setDeg(held);
+          if (held !== null) setHeading({ deg: held, reference });
         }, r.inMs);
       }
     });
@@ -66,7 +78,7 @@ function useGatedHeading(on: boolean): number | null {
       if (timer !== null) clearTimeout(timer);
     };
   }, [on]);
-  return on ? deg : null;
+  return on ? heading : NO_HEADING;
 }
 
 /** Course over ground from the fixes, only while `on` (re-read on a timer so it decays when you stop). */
@@ -90,15 +102,25 @@ function useCourse(on: boolean, location: LatLng | null): CourseSample | null {
   return on && location !== null ? course : null;
 }
 
+/** One fix for the moving-speed window: where, its own time (null: unknown, timed on arrival), its accuracy radius. */
+interface MovingSample {
+  p: LatLng;
+  atMs: number | null;
+  accuracyM: number | null;
+}
+
 /**
  * The clock (each `ms`, never with null) and, read on its ticks, the moving
  * speed over the last 10 minutes (only while `moving`): the window is fed
- * one push per new fix.
+ * one push per new fix, timed by the fix itself.
+ *
+ * The clock reads now as soon as it starts or changes rate: a field placed
+ * an hour after the strip mounted never shows the mount's time for a tick.
  */
 function useClockAndMovingSpeed(
   ms: number | null,
   moving: boolean,
-  location: LatLng | null,
+  sample: MovingSample | null,
 ): { nowMs: number; movingSpeedMps: number | null } {
   const windowRef = useRef(createMovingSpeedWindow());
   const [clock, setClock] = useState(() => ({
@@ -106,18 +128,22 @@ function useClockAndMovingSpeed(
     movingSpeedMps: null as number | null,
   }));
   useEffect(() => {
-    if (moving && location !== null) windowRef.current.push(location, Date.now());
-  }, [moving, location]);
+    if (moving && sample !== null) {
+      windowRef.current.push(sample.p, sample.atMs ?? Date.now(), sample.accuracyM);
+    }
+  }, [moving, sample]);
   useEffect(() => {
     if (moving) return;
     windowRef.current.reset();
   }, [moving]);
   useEffect(() => {
     if (ms === null) return;
-    const id = setInterval(() => {
+    const tick = () => {
       const nowMs = Date.now();
       setClock({ nowMs, movingSpeedMps: moving ? windowRef.current.speedMps(nowMs) : null });
-    }, ms);
+    };
+    tick();
+    const id = setInterval(tick, ms);
     return () => clearInterval(id);
   }, [ms, moving]);
   return moving ? clock : { nowMs: clock.nowMs, movingSpeedMps: null };
@@ -144,11 +170,13 @@ function referencedWaypoints(strip: InfoStrip, rows: readonly (readonly FieldRef
  * - camera: `mapStore.mapCenter`, written once per settle (never per frame);
  *   the DEM read only for the elevation field, only for the centre;
  * - position: the fix MapScreen already re-renders for (props);
- * - heading: its own 4 Hz, 1° gated subscription, only with a heading field;
+ * - heading: its own 4 Hz, 1° gated subscription, only with a heading field
+ *   on the compass (`stripNeeds` reads the params), with the north it is on;
  * - course: the tracker, only with a field that can show COG;
  * - clock: 1 Hz with ETE or a recording metric, each minute with sunset or
  *   ETA, none otherwise;
- * - moving speed: the 10-minute window, fed per fix, only with ETE/ETA;
+ * - moving speed: the 10-minute window, fed per fix by the fix's own time
+ *   and accuracy, only with ETE/ETA;
  * - tides: only with a tide field and the extension installed; the station
  *   re-resolved per ~1 km cell, its level fetched every 10 min
  *   (`useStripTides`), the fields computed on the minute clock.
@@ -171,18 +199,32 @@ export function useStripSnapshot(
   const centreElevationM = useCenterElevation(
     deps.has('elevation') && !youAreCentre ? centre : null,
   );
-  const headingDeg = useGatedHeading(deps.has('heading'));
+  const heading = useGatedHeading(deps.has('heading'));
   const course = useCourse(deps.has('course'), location);
-  const { nowMs, movingSpeedMps } = useClockAndMovingSpeed(
-    needs.clockMs,
-    needs.movingSpeed,
-    location,
-  );
 
   // An external receiver in use: its altitude, and the fix in other datums.
   const gnssUse = useGnssStore((s) => s.use);
   const gnssFix = useGnssStore((s) => (s.use === 'external' ? s.fix : null));
   const gnssProject = useGnssStore((s) => (s.use === 'external' ? s.project : null));
+
+  // The moving-speed window's fix: the phone fix's own time and accuracy when
+  // it is the position (else the receiver's accuracy, on arrival).
+  const external = gnssUse === 'external' && gnssFix !== null;
+  const sample = useMemo((): MovingSample | null => {
+    if (location === null) return null;
+    return {
+      p: location,
+      atMs: external ? null : (fix?.time ?? null),
+      accuracyM: external ? (gnssFix?.accuracy?.h95 ?? null) : (fix?.accuracy ?? null),
+    };
+    // Per new position only: the fix object arrives with it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location]);
+  const { nowMs, movingSpeedMps } = useClockAndMovingSpeed(
+    needs.clockMs,
+    needs.movingSpeed,
+    sample,
+  );
 
   // Tide stations (#695): "nearest" to you, or to the map centre before a fix.
   const installed = useInstalledExtensions();
@@ -212,7 +254,6 @@ export function useStripSnapshot(
   }, [refIds, waypointList]);
 
   return useMemo((): DepsSnapshot => {
-    const external = gnssUse === 'external' && gnssFix !== null;
     const position: StripFix | null =
       location === null
         ? null
@@ -264,7 +305,8 @@ export function useStripSnapshot(
       centreElevationM,
       followsUser,
       position,
-      headingDeg,
+      headingDeg: heading.deg,
+      headingReference: heading.deg === null ? null : heading.reference,
       course,
       movingSpeedMps,
       navTarget,
@@ -286,12 +328,12 @@ export function useStripSnapshot(
     fix,
     follow,
     recording,
-    headingDeg,
+    heading,
     course,
     navTarget,
     waypoints,
     coordinateFormat,
-    gnssUse,
+    external,
     gnssFix,
     gnssProject,
     tides,

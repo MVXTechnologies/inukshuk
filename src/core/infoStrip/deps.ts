@@ -5,7 +5,7 @@
  * starts the compass; a strip without ETE never runs the moving-speed window.
  */
 import { fieldDescriptor } from './registry';
-import type { DataDep, FieldRef } from './types';
+import type { DataDep, FieldRef, Params } from './types';
 
 /** The clock periods a strip can ask for, ms. */
 export const SECOND_MS = 1000;
@@ -26,7 +26,7 @@ export interface StripNeeds {
 /** The fields whose compute() reads `movingSpeedMps`. */
 const MOVING_SPEED_FIELDS: ReadonlySet<string> = new Set(['ete', 'eta']);
 
-/** The union of what `rows`' known fields need (unknown ids need nothing). */
+/** The union of what `rows`' known fields need with their params (unknown ids need nothing). */
 export function stripNeeds(rows: readonly (readonly FieldRef[])[]): StripNeeds {
   const deps = new Set<DataDep>();
   let second = false;
@@ -36,7 +36,9 @@ export function stripNeeds(rows: readonly (readonly FieldRef[])[]): StripNeeds {
     for (const f of row) {
       const d = fieldDescriptor(f.field);
       if (d === undefined) continue;
-      for (const dep of d.deps) deps.add(dep);
+      // Param-aware: what the field reads as it is set up, not all it could.
+      const own = d.depsFor?.(f.params as Params) ?? d.deps;
+      for (const dep of own) deps.add(dep);
       if (d.tick === 'second') second = true;
       if (d.tick === 'minute' || d.deps.includes('clock')) minute = true;
       if (MOVING_SPEED_FIELDS.has(d.id)) movingSpeed = true;

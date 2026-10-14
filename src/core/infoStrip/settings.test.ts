@@ -10,7 +10,9 @@ import {
   normaliseCursor,
   normaliseInfoStripSettings,
   normaliseStrip,
+  readInfoStrip,
 } from './settings';
+import type { InfoStrip } from './types';
 
 const roundTrip = (v: unknown) => JSON.parse(JSON.stringify(v)) as unknown;
 
@@ -181,5 +183,41 @@ describe('legacyShowCenterCursor (rollback safety)', () => {
     expect(
       legacyShowCenterCursor({ ...off, aids: { cursor: { ...DEFAULT_CURSOR, enabled: true } } }),
     ).toBe(true);
+  });
+});
+
+describe('readInfoStrip: its own file first (lossless rollback)', () => {
+  const nav = (): InfoStrip => ({ ...DEFAULT_STRIP, name: 'Navigation', basedOn: 'navigation' });
+  const fileOf = (current: InfoStrip) => roundTrip({ schema: 1, current, saved: [current] });
+
+  it('the file wins over a settings key and the 2.5.1 switch', () => {
+    const r = readInfoStrip(fileOf(nav()), {
+      showCenterCursor: false,
+      infoStrip: { schema: 1, current: DEFAULT_STRIP, saved: [] },
+    });
+    expect(r.origin).toBe('file');
+    expect(r.settings.current.name).toBe('Navigation');
+    expect(r.settings.saved).toHaveLength(1);
+  });
+
+  it('no file: a 2.6.0 pre-release settings key is migrated', () => {
+    const r = readInfoStrip(null, { infoStrip: fileOf(nav()) });
+    expect(r.origin).toBe('settingsKey');
+    expect(r.settings.current.name).toBe('Navigation');
+  });
+
+  it("neither: 2.5.1's switch, as before", () => {
+    const off = readInfoStrip(null, { showCenterCursor: false });
+    expect(off.origin).toBe('legacy');
+    expect(off.settings.current.rows).toEqual([]);
+    expect(readInfoStrip(null, null).settings.current).toEqual(DEFAULT_STRIP);
+  });
+
+  it('a junk or half-written file is skipped, not read as the default strip', () => {
+    for (const junk of ['junk', 42, [], {}, { schema: 1 }, { current: 'x' }]) {
+      const r = readInfoStrip(junk, { infoStrip: fileOf(nav()) });
+      expect(r.origin).toBe('settingsKey');
+      expect(r.settings.current.name).toBe('Navigation');
+    }
   });
 });

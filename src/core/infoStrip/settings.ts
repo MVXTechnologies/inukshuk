@@ -1,5 +1,11 @@
 /**
- * `settings.infoStrip`: the persisted strip (versioned, normalised).
+ * The persisted strip (versioned, normalised), in its own file
+ * (`info-strip.json`, {@link INFO_STRIP_FILE}).
+ *
+ * Its own file because 2.5.1 rewrites `settings.json` with only the keys it
+ * knows: a strip kept there was dropped by a rollback and lost on the way
+ * forward again. 2.5.1 never touches this file, so a rollback is lossless;
+ * `settings.json` keeps only the 2.5.1 mirror (`showCenterCursor`).
  *
  * - A missing key means {@link DEFAULT_STRIP}, so a fresh install, an upgrade
  *   from 2.5.1 and an OTA rollback all read a valid state. A 2.5.1 user who
@@ -30,6 +36,9 @@ import {
 } from './types';
 
 export const INFO_STRIP_SCHEMA = 1;
+
+/** The strip's own file, next to `settings.json`. */
+export const INFO_STRIP_FILE = 'info-strip.json';
 
 /** The most saved strips kept ("Your strips"). */
 export const MAX_SAVED_STRIPS = 50;
@@ -176,4 +185,31 @@ export function normaliseInfoStripSettings(
     current: normaliseStrip(raw.current) ?? fromLegacy(legacy),
     saved,
   };
+}
+
+/** Where the strip was read from at launch. */
+export type InfoStripOrigin = 'file' | 'settingsKey' | 'legacy';
+
+/**
+ * Which persisted state the strip starts from, in order:
+ * 1. its own file, when it holds a strip at all (a junk or half-written file
+ *    is skipped, never read as "the default strip");
+ * 2. `settings.infoStrip`, where 2.6.0 pre-releases kept it (migrated: the
+ *    caller writes the file once);
+ * 3. 2.5.1's `showCenterCursor` switch (an upgrade, or nothing at all).
+ */
+export function readInfoStrip(
+  file: unknown,
+  settings: unknown,
+): { settings: InfoStripSettings; origin: InfoStripOrigin } {
+  const raw = isObject(settings) ? settings : {};
+  const legacy: LegacyStripSettings =
+    typeof raw.showCenterCursor === 'boolean' ? { showCenterCursor: raw.showCenterCursor } : {};
+  if (isObject(file) && normaliseStrip(file.current) !== null) {
+    return { settings: normaliseInfoStripSettings(file, legacy), origin: 'file' };
+  }
+  if (isObject(raw.infoStrip) && normaliseStrip(raw.infoStrip.current) !== null) {
+    return { settings: normaliseInfoStripSettings(raw.infoStrip, legacy), origin: 'settingsKey' };
+  }
+  return { settings: normaliseInfoStripSettings(undefined, legacy), origin: 'legacy' };
 }

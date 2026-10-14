@@ -138,3 +138,40 @@ export function stackOffsets(
     topChromeShift: bottom ? 0 : stripH,
   };
 }
+
+/**
+ * How far the top chrome moves down for a top-docked strip whose MEASURED
+ * height is `stripH`, dp. The strip's surface reaches up behind the status
+ * bar, so its height includes `statusBarH`: the chrome, already below the
+ * status bar, moves by the rest — never by the status bar twice.
+ */
+export function topChromeShiftDp(stripH: number, statusBarH: number): number {
+  return Math.max(0, stripH - statusBarH);
+}
+
+/** The editor sheet's tallest share of the window. */
+export const EDITOR_MAX_SHARE = 0.72;
+
+export interface EditorRoom {
+  windowH: number;
+  /** The map area the sheet lives in (measured), or null before its first layout. */
+  areaH: number | null;
+  statusBarH: number;
+  /** What the bottom edge is lifted by (the recording panel, a trail sheet). */
+  bottomLift: number;
+  dock: Dock;
+}
+
+/**
+ * The editor sheet's max height, dp: its share of the window, and never more
+ * than the room it has — between the status bar and the lifted bottom edge
+ * (bottom dock: it sits on `bottomLift`), or from the top edge down to that
+ * lift (top dock: its own padding covers the status bar). Its scroll view
+ * takes the rest, so a tall page never runs under the status bar or the
+ * recording panel.
+ */
+export function editorMaxHeightDp(r: EditorRoom): number {
+  const area = r.areaH ?? r.windowH;
+  const room = r.dock === 'top' ? area - r.bottomLift : area - r.bottomLift - r.statusBarH;
+  return Math.max(0, Math.min(r.windowH * EDITOR_MAX_SHARE, room));
+}

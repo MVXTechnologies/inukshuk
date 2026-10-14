@@ -36,6 +36,28 @@ function centreOrYou(data: DepsSnapshot): { p: LatLng; you: boolean } | null {
   return data.centre === null ? null : { p: data.centre, you: false };
 }
 
+/** The point a coordinates field reads (WGS 84) and whether it is you, or null. */
+function coordsAt(
+  data: DepsSnapshot,
+  params: Pick<CoordsParams, 'point'>,
+): { p: LatLng; you: boolean } | null {
+  if (params.point === 'you')
+    return data.position === null ? null : { p: data.position, you: true };
+  return centreOrYou(data);
+}
+
+/**
+ * The WGS 84 point a coordinates field shows (the map centre, or you), for
+ * its Convert action; null when it shows nothing.
+ */
+export function coordsPoint(
+  data: DepsSnapshot,
+  params: Readonly<Record<string, unknown>>,
+): LatLng | null {
+  const at = coordsAt(data, { point: params.point === 'you' ? 'you' : 'centre' });
+  return at === null ? null : { latitude: at.p.latitude, longitude: at.p.longitude };
+}
+
 export type CoordsParams = {
   point: 'centre' | 'you';
   format: 'app' | CoordinateFormat;
@@ -101,12 +123,7 @@ export const COORDS = defineField<CoordsParams>({
   deps: ['camera', 'position'],
   tick: 'position',
   compute(data, params) {
-    const at =
-      params.point === 'you'
-        ? data.position === null
-          ? null
-          : { p: data.position, you: true }
-        : centreOrYou(data);
+    const at = coordsAt(data, params);
     if (at === null) return null;
     let p = at.p;
     let tag: string | undefined;

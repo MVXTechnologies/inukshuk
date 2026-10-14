@@ -246,6 +246,12 @@ export interface TideSnapshot {
   stationName: string;
   /** The latest observed level above chart datum, metres; null when no fresh observation. */
   levelM: number | null;
+  /**
+   * When that level was observed (epoch ms), or null with no level. The level
+   * field steps aside once it is older than `LIVE_MAX_AGE_MS`: a refresh that
+   * keeps failing never leaves an old number reading as "now".
+   */
+  levelAtMs: number | null;
   trend: 'rising' | 'falling' | 'slack' | null;
   nextHigh: { atMs: number; levelM: number } | null;
 }
@@ -264,8 +270,14 @@ export interface DepsSnapshot {
   /** The camera follows you: the centre is you (2.5.1). */
   followsUser: boolean;
   position: StripFix | null;
-  /** Compass heading, degrees true, or null (no magnetometer). */
+  /** Compass heading, degrees, or null (no magnetometer). */
   headingDeg: number | null;
+  /**
+   * Which north `headingDeg` is from: true (the OS corrected it for the
+   * declination) or magnetic (no fix yet, so the OS could not). Null with no
+   * heading.
+   */
+  headingReference: 'true' | 'magnetic' | null;
   /** The course tracker's latest sample (`@core/nav` createCourseTracker), or null. */
   course: CourseSample | null;
   /** Moving speed over the last 10 min (`movingSpeed.ts`), or null while warming up. */
@@ -328,7 +340,13 @@ export interface FieldDescriptor<P extends Params = Params> {
   requires?: AnyExtensionKey;
   params: ParamSchema<P>;
   defaults: P;
+  /** Everything the field may read, whatever its params (the picker's and the registry's view). */
   deps: readonly DataDep[];
+  /**
+   * What it reads with THESE params, when that is less than `deps` (a heading
+   * on the course never starts the compass). Absent: `deps`.
+   */
+  depsFor?(params: P): readonly DataDep[];
   tick: Tick;
   /** Dropped from the strip while the recording panel shows this metric (Q5). */
   recordingMetric?: HeroField;

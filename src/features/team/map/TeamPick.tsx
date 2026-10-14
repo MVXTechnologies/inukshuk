@@ -16,6 +16,7 @@ import { teamService, useTeamStore } from '@state/teamStore';
 
 import { usePinDraft } from './TeamPinComposer';
 import { useTeamSheet } from './teamMode';
+import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 
 export type PickPurpose = 'task' | 'notify' | 'pin' | 'rally';
 
@@ -168,7 +169,7 @@ export function TeamPickOverlay({ top, cardStyle }: { top: number; cardStyle: ob
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  lane: { position: 'absolute', left: 8, right: 8, zIndex: 9 },
+  lane: { position: 'absolute', left: 8, right: 8, zIndex: MAP_OVERLAY_Z.teamPick },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',

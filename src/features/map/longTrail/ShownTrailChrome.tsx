@@ -15,6 +15,7 @@ import { type LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-nativ
 import { Icon, Text } from 'react-native-paper';
 
 import { TRAIL_FOCUS_PADDING } from './trailFocus';
+import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 
 /**
  * The chrome of a long-distance trail shown on the main map (#467, board
@@ -218,7 +219,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingBottom: space.lg,
     gap: 10,
-    zIndex: 4,
+    zIndex: MAP_OVERLAY_Z.shownTrailSheet,
   },
   handle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center' },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },

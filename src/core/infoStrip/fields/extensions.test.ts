@@ -2,12 +2,15 @@ import { formatClockTime } from '@core/format';
 
 import { METRIC, NOW, snapshot } from '../testUtils';
 import { NEAREST_STATION, type GnssSnapshot, type TideSnapshot } from '../types';
-import { GNSS_FIX, GNSS_HEIGHT, TIDE_LEVEL, TIDE_NEXT_HIGH } from './extensions';
+import { LIVE_MAX_AGE_MS } from '@core/tides/live';
+
+import { GNSS_FIX, GNSS_HEIGHT, levelIsLive, TIDE_LEVEL, TIDE_NEXT_HIGH } from './extensions';
 
 const RTK: GnssSnapshot = { kind: 'rtk-fixed', ellipsoidalHeightM: 183.4231, heightAccuracyM: 0.4 };
 const TIDE: TideSnapshot = {
   stationName: 'Lauzon',
   levelM: 3.842,
+  levelAtMs: NOW - 6 * 60_000,
   trend: 'rising',
   nextHigh: { atMs: NOW + 3 * 3600_000, levelM: 5.1 },
 };
@@ -62,6 +65,23 @@ describe('tide fields', () => {
     expect(TIDE_LEVEL.compute(snapshot(), NEAREST, METRIC)).toBeNull();
     // No fresh observation: no level (the next high may still show).
     expect(TIDE_LEVEL.compute(at({ ...TIDE, levelM: null }), NEAREST, METRIC)).toBeNull();
+  });
+
+  it('an observation older than the live limit is not "now": the level steps aside', () => {
+    const edge = { ...TIDE, levelAtMs: NOW - LIVE_MAX_AGE_MS };
+    expect(levelIsLive(edge, NOW)).toBe(true);
+    expect(TIDE_LEVEL.compute(at(edge), NEAREST, METRIC)).not.toBeNull();
+    const stale = { ...TIDE, levelAtMs: NOW - LIVE_MAX_AGE_MS - 1 };
+    expect(levelIsLive(stale, NOW)).toBe(false);
+    expect(TIDE_LEVEL.compute(at(stale), NEAREST, METRIC)).toBeNull();
+    // The same snapshot, read on a later minute tick, goes stale on its own.
+    expect(TIDE_LEVEL.compute(at(TIDE), NEAREST, METRIC)).not.toBeNull();
+    const later = snapshot({ nowMs: NOW + LIVE_MAX_AGE_MS, tides: { [NEAREST_STATION]: TIDE } });
+    expect(TIDE_LEVEL.compute(later, NEAREST, METRIC)).toBeNull();
+    // A level without a time is never "now"; the next high is a prediction and stays.
+    const untimed = { ...TIDE, levelAtMs: null };
+    expect(TIDE_LEVEL.compute(at(untimed), NEAREST, METRIC)).toBeNull();
+    expect(TIDE_NEXT_HIGH.compute(at(stale), NEAREST, METRIC)).not.toBeNull();
   });
 
   it('reads the station its param names, not another', () => {

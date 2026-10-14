@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MapButton } from '../components/MapButton';
 import { formatWaypointCoords } from './formatWaypointCoords';
 import { WaypointPinView } from './WaypointPinView';
+import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 
 interface Props {
   /** The map's settled zoom (for the precision hint), null before the first settle. */
@@ -169,7 +170,7 @@ const GAP = 6;
 const styles = StyleSheet.create({
   // Above the recording panel (6), a waypoint card (7) and the snackbars (8):
   // move mode owns the screen until Confirm or Cancel.
-  root: { ...StyleSheet.absoluteFill, zIndex: 9 },
+  root: { ...StyleSheet.absoluteFill, zIndex: MAP_OVERLAY_Z.moveOverlay },
   banner: {
     position: 'absolute',
     left: 16,

@@ -3,7 +3,8 @@ import { declinationAt } from '@core/geo/wmm';
 import { sunTimes } from '@core/sun/sunTimes';
 
 import { fix, IMPERIAL, METRIC, NOW, QC, snapshot } from '../testUtils';
-import { HEADING, SPEED, SUNSET } from './motion';
+import { stripNeeds } from '../deps';
+import { HEADING, northAs, SPEED, SUNSET } from './motion';
 
 describe('speed', () => {
   it('speed over ground, in the app units', () => {
@@ -31,6 +32,21 @@ describe('speed', () => {
       SPEED.compute(snapshot({ position: fix({ speedMps: null }) }), SPEED.defaults, METRIC),
     ).toEqual({ glyph: 'speed', value: '—' });
     expect(SPEED.compute(snapshot(), SPEED.defaults, METRIC)).toBeNull();
+  });
+
+  it('"—" for an invalid speed (iOS reports −1), never "0.0"', () => {
+    for (const bad of [-1, -0.01, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(
+        SPEED.compute(snapshot({ position: fix({ speedMps: bad }) }), SPEED.defaults, METRIC),
+      ).toEqual({ glyph: 'speed', value: '—' });
+    }
+    expect(
+      SPEED.compute(snapshot({ position: fix({ speedMps: -1 }) }), { style: 'sog' }, METRIC),
+    ).toEqual({ glyph: 'sailing', tag: 'SOG', value: '—' });
+    // Standing still is a real 0.
+    expect(
+      SPEED.compute(snapshot({ position: fix({ speedMps: 0 }) }), SPEED.defaults, METRIC)?.value,
+    ).toBe('0.0');
   });
 });
 
@@ -61,6 +77,60 @@ describe('heading', () => {
         METRIC,
       )?.value,
     ).toBe('340°');
+  });
+
+  describe('a compass reading on magnetic north (the OS had no fix to correct it)', () => {
+    const decl = declinationAt(QC.latitude, QC.longitude, NOW);
+    const pad = (d: number) => String(Math.round((d + 360) % 360) % 360).padStart(3, '0');
+
+    it('true wanted: magnetic plus the declination, unmarked', () => {
+      const data = snapshot({ headingDeg: 340, headingReference: 'magnetic', centre: QC });
+      expect(HEADING.compute(data, HEADING.defaults, METRIC)?.value).toBe(`${pad(340 + decl)}°`);
+    });
+
+    it('magnetic wanted: the reading as it is, "°M"', () => {
+      const data = snapshot({ headingDeg: 340, headingReference: 'magnetic', centre: QC });
+      expect(
+        HEADING.compute(data, { source: 'compass', reference: 'magnetic' }, METRIC)?.value,
+      ).toBe('340°M');
+    });
+
+    it('no declination to convert with: says "°M" rather than pass for true', () => {
+      const data = snapshot({ headingDeg: 340, headingReference: 'magnetic' });
+      expect(HEADING.compute(data, HEADING.defaults, METRIC)?.value).toBe('340°M');
+    });
+
+    it('a true reading is unchanged by the flag (and the course is always true)', () => {
+      const data = snapshot({ headingDeg: 340, headingReference: 'true', centre: QC });
+      expect(HEADING.compute(data, HEADING.defaults, METRIC)?.value).toBe('340°');
+      const cog = snapshot({
+        headingReference: 'magnetic',
+        course: moving,
+        centre: QC,
+      });
+      expect(HEADING.compute(cog, HEADING.defaults, METRIC)).toMatchObject({
+        tag: 'COG',
+        value: '028°',
+      });
+    });
+
+    it('northAs: both ways, and no conversion without a declination', () => {
+      expect(northAs(10, 'true', 'true', -14)).toEqual({ deg: 10, magnetic: false });
+      expect(northAs(10, 'magnetic', 'magnetic', -14)).toEqual({ deg: 10, magnetic: true });
+      expect(northAs(10, 'true', 'magnetic', -14).deg).toBeCloseTo(24);
+      expect(northAs(24, 'magnetic', 'true', -14).deg).toBeCloseTo(10);
+      expect(northAs(10, 'true', 'magnetic', null)).toEqual({ deg: 10, magnetic: false });
+    });
+  });
+
+  it('subscribes to the compass only on the compass source', () => {
+    const compass = stripNeeds([[{ field: 'heading', params: HEADING.defaults }]]);
+    expect(compass.deps.has('heading')).toBe(true);
+    const course = stripNeeds([
+      [{ field: 'heading', params: { source: 'course', reference: 'true' } }],
+    ]);
+    expect(course.deps.has('heading')).toBe(false);
+    expect(course.deps.has('course')).toBe(true);
   });
 
   it('no magnetometer: the course over ground, tagged COG, above 0.5 m/s', () => {

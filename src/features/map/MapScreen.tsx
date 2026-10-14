@@ -135,7 +135,7 @@ import { ScaleBar } from './components/ScaleBar';
 import { CenterCursor } from './components/CenterCursor';
 import { InfoStripHost } from './infoStrip/InfoStripHost';
 import type { TargetOpen } from '@core/infoStrip/target';
-import { useInfoStripBottomLift } from './infoStrip/stripRuntime';
+import { useInfoStripBottomLift, useStripEditorOpen } from './infoStrip/stripRuntime';
 import { metersPerPixel } from '@core/geo/scaleBar';
 import { heatTapRadiusPx } from '@core/heat/heatStyle';
 import { RecordingPanel } from './components/RecordingPanel';
@@ -207,6 +207,7 @@ import {
   snackbarWrapperStyle,
   waypointCardDockStyle,
 } from './bottomLayers';
+import { MAP_OVERLAY_Z } from './overlayOrder';
 import { destinationReadout } from '@core/geo/destination';
 import { nextWaypointLabel } from '@core/library/waypoints';
 import * as Clipboard from 'expo-clipboard';
@@ -1909,6 +1910,19 @@ export function MapScreen() {
     [],
   );
 
+  // The strip's coordinates copy (#673 review): "Copied …" with Convert, as
+  // 2.5.1's chip reached it by a long-press (the strip's long-press edits).
+  const showActionSnack = mapSnacks.action.show;
+  const onStripCopied = useCallback(
+    (message: string, convert?: () => void) => {
+      if (convert === undefined) showSnack(message);
+      else showActionSnack(message, [{ label: 'Convert', onPress: convert }]);
+    },
+    [showSnack, showActionSnack],
+  );
+  // The strip's editor is modal: the map behind it leaves the screen reader's reach.
+  const stripEditorOpen = useStripEditorOpen();
+
   // Team mode (#589): "show on the map" from a task or a pin notification.
   const teamFocus = useTeamMapFocus((s) => s.target);
   useEffect(() => {
@@ -2751,6 +2765,8 @@ export function MapScreen() {
           <Map
             ref={mapRef}
             style={styles.fill}
+            importantForAccessibility={stripEditorOpen ? 'no-hide-descendants' : 'auto'}
+            accessibilityElementsHidden={stripEditorOpen}
             mapStyle={style}
             // Owner call (backlog item 1): the bottom-left ornaments — MapLibre's
             // wordmark logo and the attribution "i" — take too much map. Both are
@@ -3384,6 +3400,24 @@ export function MapScreen() {
         {/* Centre cursor (#677): a static dot over the map's centre. */}
         <CenterCursor suppressed={selecting || makeMapState !== null || movingWp !== null} />
 
+        {/* The info strip (#673): docked on the tab bar / recording panel (or
+          at the top), its own subscriptions in its leaf; it lifts the bottom
+          column by its measured height (stripLift above). The LOWEST overlay
+          (overlayOrder.ts): mounted right after the map, no zIndex, so every
+          sheet, card, shield and chip below draws over it. */}
+        <InfoStripHost
+          location={location}
+          fix={lastFix}
+          follow={follow}
+          recording={recordingPanelUp ? { stats, elapsedS, liveSpeedMps } : null}
+          bottomLift={bottomColumnLift}
+          hidden={selecting || makeMapState !== null}
+          bottomSheetUp={inspectId !== null}
+          focused={isFocused}
+          onCopied={onStripCopied}
+          onOpenTarget={openStripTarget}
+        />
+
         {/* Region select overlay for offline download */}
         {selecting && (
           <RegionSelectOverlay
@@ -3852,20 +3886,6 @@ export function MapScreen() {
           </View>
         )}
 
-        {/* The info strip (#673): docked on the tab bar / recording panel (or
-          at the top), its own subscriptions in its leaf; it lifts the bottom
-          column by its measured height (stripLift above). */}
-        <InfoStripHost
-          location={location}
-          fix={lastFix}
-          follow={follow}
-          recording={recordingPanelUp ? { stats, elapsedS, liveSpeedMps } : null}
-          bottomLift={bottomColumnLift}
-          hidden={selecting || makeMapState !== null}
-          onCopied={showSnack}
-          onOpenTarget={openStripTarget}
-        />
-
         {/* Glove lock (revamp §3): a shield over the map and all its chrome;
           only the panel's hold-to-unlock stays live. */}
         {recordingPanelUp && gloveLocked && (
@@ -4266,7 +4286,7 @@ export function MapScreen() {
           or the compass row. */}
         <ActionSnackbar
           snack={wpQuick.snack.current}
-          style={liftedSnackbarStyle(bottomColumnLift, bottomColumnH)}
+          style={liftedSnackbarStyle(bottomColumnLift + stripLift, bottomColumnH)}
         />
         <Snackbar
           visible={healthNotice.message !== null}
@@ -4301,11 +4321,17 @@ const styles = StyleSheet.create({
   // Between the compass (16 + 48) and the rail, with 12 dp either side.
   searchPill: { position: 'absolute', left: 76, right: 76 },
   // The open place search takes the whole top band, over compass and rail.
-  searchSheet: { position: 'absolute', left: 12, right: 12, zIndex: 20 },
+  searchSheet: { position: 'absolute', left: 12, right: 12, zIndex: MAP_OVERLAY_Z.searchSheet },
   // Centred under the search pill, between the compass and the rail.
   marineChip: { position: 'absolute', left: 76, right: 76, alignItems: 'center' },
   // Same lane, used by the destination readout (#97).
-  topCenterChip: { position: 'absolute', left: 76, right: 76, alignItems: 'center', zIndex: 5 },
+  topCenterChip: {
+    position: 'absolute',
+    left: 76,
+    right: 76,
+    alignItems: 'center',
+    zIndex: MAP_OVERLAY_Z.topChip,
+  },
   banner: { position: 'absolute', left: 8, right: 8, borderRadius: 12 },
   bottom: { position: 'absolute', left: 16, right: 16, bottom: 0, gap: 12, paddingBottom: 10 },
   bottomRow: { flexDirection: 'row', alignItems: 'flex-end' },

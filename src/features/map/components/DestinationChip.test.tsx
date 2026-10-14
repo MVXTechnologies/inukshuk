@@ -52,4 +52,42 @@ describe('DestinationChip (slim since 2.6.0, #673)', () => {
     );
     expect(screen.getByText('Camp lac')).toBeOnTheScreen();
   });
+
+  it('takes the name of the waypoint it was set on (within 2 m), else "Destination"', async () => {
+    // ~1.1 m north of the camp: its name.
+    useNavigationStore.setState({ destination: { latitude: 46.82001, longitude: -71.2 } });
+    await renderChip();
+    expect(screen.getByLabelText('Navigating to Camp lac')).toBeOnTheScreen();
+    // ~5.6 m north: a dropped pin.
+    await act(async () =>
+      useNavigationStore.setState({ destination: { latitude: 46.82005, longitude: -71.2 } }),
+    );
+    expect(screen.getByLabelText('Navigating to Destination')).toBeOnTheScreen();
+  });
+
+  it('follows a rename of that waypoint', async () => {
+    useNavigationStore.setState({ destination: { latitude: 46.82, longitude: -71.2 } });
+    await renderChip();
+    await act(async () =>
+      useLibraryStore.setState({ waypoints: [{ ...CAMP, label: 'Camp du lac' }] as never }),
+    );
+    expect(screen.getByText('Camp du lac')).toBeOnTheScreen();
+  });
+
+  it('a long name stays on one line, the ✕ still in reach', async () => {
+    const long = 'Refuge du sommet nord, versant est, après le deuxième ruisseau';
+    useLibraryStore.setState({ waypoints: [{ ...CAMP, label: long }] as never });
+    useNavigationStore.setState({ destination: { latitude: 46.82, longitude: -71.2 } });
+    await renderChip();
+    expect(screen.getByText(long).props.numberOfLines).toBe(1);
+    expect(screen.getByLabelText('Clear destination')).toBeOnTheScreen();
+  });
+
+  it('carries no numbers in any state: navigating, renamed, cleared', async () => {
+    useNavigationStore.setState({ destination: { latitude: 46.9, longitude: -71.3 } });
+    await renderChip();
+    expect(screen.queryByText(/\d/)).toBeNull();
+    await act(async () => useNavigationStore.setState({ destination: null }));
+    expect(screen.queryByLabelText(/Navigating to/)).toBeNull();
+  });
 });

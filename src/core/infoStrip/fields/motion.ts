@@ -1,6 +1,6 @@
 /** Motion and time fields: speed, heading, sunset. */
 import { formatClockTime, formatSpeed } from '@core/format';
-import { trueToMagnetic } from '@core/geo/wmm';
+import { magneticToTrue, trueToMagnetic } from '@core/geo/wmm';
 import { choosePointingBearing } from '@core/nav/pointingSource';
 import { sunTimes } from '@core/sun/sunTimes';
 
@@ -36,13 +36,33 @@ export const SPEED = defineField<SpeedParams>({
   compute(data, params, { units }) {
     if (data.position === null) return null;
     const v = data.position.speedMps;
-    const text = v === null ? { value: '—' } : splitUnit(formatSpeed(v, units));
+    // iOS reports −1 for "no speed": an invalid speed is unknown, never "0.0".
+    const valid = v !== null && Number.isFinite(v) && v >= 0;
+    const text = valid ? splitUnit(formatSpeed(v, units)) : { value: '—' };
     return params.style === 'sog'
       ? { glyph: 'sailing', tag: 'SOG', ...text }
       : { glyph: 'speed', ...text };
   },
   sample: { glyph: 'speed', value: '3.6', unit: 'km/h' },
 });
+
+/**
+ * A bearing read against `from` north, shown against `want` north. Without a
+ * declination (no fix, no centre) it cannot convert, and says which north it
+ * is honestly: a magnetic reading stays "°M" rather than pass for true.
+ */
+export function northAs(
+  deg: number,
+  from: NorthReference,
+  want: NorthReference,
+  declinationDeg: number | null,
+): { deg: number; magnetic: boolean } {
+  if (from === want) return { deg, magnetic: from === 'magnetic' };
+  if (declinationDeg === null) return { deg, magnetic: from === 'magnetic' };
+  return want === 'magnetic'
+    ? { deg: trueToMagnetic(deg, declinationDeg), magnetic: true }
+    : { deg: magneticToTrue(deg, declinationDeg), magnetic: false };
+}
 
 export type HeadingParams = { source: 'compass' | 'course'; reference: NorthReference };
 
@@ -71,6 +91,9 @@ export const HEADING = defineField<HeadingParams>({
   },
   defaults: { source: 'compass', reference: 'true' },
   deps: ['heading', 'course', 'position'],
+  // On the course it never needs the compass (the sensor stays off).
+  depsFor: (p) =>
+    p.source === 'course' ? ['course', 'position'] : ['heading', 'course', 'position'],
   tick: 'heading4Hz',
   compute(data, params) {
     const course = data.course ?? { speedMps: 0, courseDeg: null };
@@ -81,9 +104,12 @@ export const HEADING = defineField<HeadingParams>({
       course,
     );
     if (b === null) return params.source === 'course' ? { tag: 'COG', value: '—' } : { value: '—' };
-    const decl = params.reference === 'magnetic' ? declinationHere(data) : null;
-    const deg = decl === null ? b.bearingDeg : trueToMagnetic(b.bearingDeg, decl);
-    const out: StripValue = { glyph: 'navigation', ...bearingValue(deg, decl !== null) };
+    // The course is always true; the compass is true unless the OS had no fix
+    // to correct it with (`headingReference`).
+    const from: NorthReference =
+      b.kind === 'compass' && data.headingReference === 'magnetic' ? 'magnetic' : 'true';
+    const r = northAs(b.bearingDeg, from, params.reference, declinationHere(data));
+    const out: StripValue = { glyph: 'navigation', ...bearingValue(r.deg, r.magnetic) };
     if (b.kind === 'cog') out.tag = 'COG';
     return out;
   },

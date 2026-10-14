@@ -25,8 +25,10 @@ import {
 } from '@core/extensions/prefs';
 import type { ExtensionPrefsMap } from '@core/extensions/types';
 import {
+  INFO_STRIP_FILE,
   legacyShowCenterCursor,
   normaliseInfoStripSettings,
+  readInfoStrip,
   type InfoStripSettings,
 } from '@core/infoStrip/settings';
 import { DEFAULT_CATEGORY_ID } from '@core/library/categories';
@@ -220,8 +222,10 @@ export interface Settings {
   /**
    * The info strip (#673): the docked rows of fields, its dock, the map aids
    * (centre cursor; the pointing line stays `pointingLine`) and the saved
-   * strips. Normalised on read (`@core/infoStrip/settings`): a missing or
-   * junk key is the default strip, unknown fields are kept for a newer build.
+   * strips. Persisted in its OWN file (`info-strip.json`), never in
+   * settings.json, which 2.5.1 rewrites without it. Normalised on read
+   * (`@core/infoStrip/settings`): a missing or junk file is the default
+   * strip, unknown fields are kept for a newer build.
    */
   infoStrip: InfoStripSettings;
   /** How positions are written app-wide: DD (default), DMS, DDM, UTM or MGRS (#677). */
@@ -461,12 +465,24 @@ interface SettingsState extends Settings {
 }
 
 function persist(s: Settings): void {
+  // The strip lives in its own file (`persistInfoStrip`); only its 2.5.1
+  // mirror (`showCenterCursor`) is written here.
+  const { infoStrip: _own, ...rest } = s;
   storage.writeJson(SETTINGS_FILE, {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
-    ...s,
+    ...rest,
     // Rollback safety: the extensions' pre-registry keys, for older builds.
     ...legacyExtensionFields(s.extensions),
   });
+}
+
+/**
+ * The info strip's own file (#673 review): 2.5.1 rewrites settings.json with
+ * the keys it knows and would drop the strip; it never touches this file, so
+ * rolling back and forward again loses nothing.
+ */
+function persistInfoStrip(strip: InfoStripSettings): void {
+  storage.writeJson(INFO_STRIP_FILE, strip);
 }
 
 /**
@@ -628,7 +644,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   hydrate: () => {
     hydration ??= (async () => {
-      const saved = await storage.readJson<unknown>(SETTINGS_FILE);
+      const [saved, savedStrip] = await Promise.all([
+        storage.readJson<unknown>(SETTINGS_FILE),
+        storage.readJson<unknown>(INFO_STRIP_FILE),
+      ]);
       // Migration ladder: legacy unversioned files merge over DEFAULTS; junk
       // fields and wrong-typed values are dropped instead of crashing hydration.
       const next = migrateSettings(saved, DEFAULTS);
@@ -691,14 +710,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // An object default: the ladder's typeof check would pass object junk.
       next.waypointIcons = sanitizeWaypointIconPrefs(next.waypointIcons);
       next.pointingLine = sanitizePointingLine(next.pointingLine);
-      // From the raw file: the ladder only checked `typeof`. A missing key (an
-      // upgrade from 2.5.1) carries 2.5.1's chip-and-dot switch over.
-      next.infoStrip = normaliseInfoStripSettings(
-        typeof saved === 'object' && saved !== null
-          ? (saved as { infoStrip?: unknown }).infoStrip
-          : undefined,
-        { showCenterCursor: next.showCenterCursor },
-      );
+      // The strip's own file, else a pre-release's settings key (moved to the
+      // file below), else 2.5.1's chip-and-dot switch (an upgrade).
+      const strip = readInfoStrip(savedStrip, saved);
+      next.infoStrip = strip.settings;
       next.showCenterCursor = legacyShowCenterCursor(next.infoStrip.current);
       if (!isImageryLook(next.satelliteImagery)) next.satelliteImagery = DEFAULT_IMAGERY_LOOK;
       // 0 (estimate) or a plausible typed max; anything else falls back to the estimate.
@@ -713,7 +728,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const early: Partial<Settings> = {};
       for (const key of pendingWrites) Object.assign(early, { [key]: current[key] });
       set({ ...next, ...early, hydrated: true });
+      // Its own file from now on: a strip found in settings.json moves there
+      // (a strip changed before the read is written just below).
+      if (strip.origin === 'settingsKey' && !pendingWrites.has('infoStrip')) {
+        persistInfoStrip(get().infoStrip);
+      }
       if (pendingWrites.size > 0) {
+        if (pendingWrites.has('infoStrip')) persistInfoStrip(get().infoStrip);
         pendingWrites.clear();
         // One write for all of them. Should it fail, the store is hydrated and
         // the values are in memory, so the next `set` writes them again; the
@@ -727,6 +748,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   set: (key, value) => {
+    // The strip has its own file and mirror: one path for it.
+    if (key === 'infoStrip') {
+      get().setInfoStrip(value as InfoStripSettings);
+      return;
+    }
     // A no-op write still notifies every subscriber AND rewrites settings.json
     // synchronously (persist → storage.writeJson stages, writes, deletes and
     // moves a file on the JS thread). Re-setting the value a toggle already
@@ -743,14 +769,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setInfoStrip: (next) => {
+    if (Object.is(get().infoStrip, next)) return;
     const showCenterCursor = legacyShowCenterCursor(next.current);
+    const mirrorChanged = showCenterCursor !== get().showCenterCursor;
     set({ infoStrip: next, showCenterCursor });
     if (!get().hydrated) {
       pendingWrites.add('infoStrip');
       pendingWrites.add('showCenterCursor');
       return;
     }
-    persist(snapshot(get()));
+    // The strip's own file; settings.json only when its 2.5.1 mirror flips.
+    persistInfoStrip(next);
+    if (mirrorChanged) persist(snapshot(get()));
   },
 
   reset: () => {
@@ -760,6 +790,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       return;
     }
     persist(DEFAULTS);
+    persistInfoStrip(DEFAULTS.infoStrip);
   },
 }));
 
