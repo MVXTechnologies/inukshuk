@@ -103,7 +103,12 @@ export const HEADING = defineField<HeadingParams>({
       data.headingDeg,
       course,
     );
-    if (b === null) return params.source === 'course' ? { tag: 'COG', value: '—' } : { value: '—' };
+    // Nothing to read yet: still its glyph (as speed and sunset keep theirs),
+    // so a bare "—" never stands in the strip with nothing to say what it is.
+    if (b === null)
+      return params.source === 'course'
+        ? { glyph: 'navigation', tag: 'COG', value: '—' }
+        : { glyph: 'navigation', value: '—' };
     // The course is always true; the compass is true unless the OS had no fix
     // to correct it with (`headingReference`).
     const from: NorthReference =

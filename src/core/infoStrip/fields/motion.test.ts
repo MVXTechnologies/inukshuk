@@ -146,8 +146,11 @@ describe('heading', () => {
         HEADING.defaults,
         METRIC,
       ),
-    ).toEqual({ value: '—' });
-    expect(HEADING.compute(snapshot(), HEADING.defaults, METRIC)).toEqual({ value: '—' });
+    ).toEqual({ glyph: 'navigation', value: '—' });
+    expect(HEADING.compute(snapshot(), HEADING.defaults, METRIC)).toEqual({
+      glyph: 'navigation',
+      value: '—',
+    });
   });
 
   it('course source: COG even with a compass', () => {
@@ -159,6 +162,7 @@ describe('heading', () => {
       },
     );
     expect(HEADING.compute(snapshot({ headingDeg: 340 }), p, METRIC)).toEqual({
+      glyph: 'navigation',
       tag: 'COG',
       value: '—',
     });
