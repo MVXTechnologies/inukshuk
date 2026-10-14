@@ -11,6 +11,19 @@ import type {
 } from '@core/models';
 import type { ImportedNote } from '@core/geo/track';
 import { toggleId } from '@core/library/toggleId';
+import {
+  applyFolderMoves,
+  applyShown,
+  folderSnapshot,
+  isEmptyRemoval,
+  removedFileUris,
+  removeItems,
+  restoreFolder,
+  restoreItems,
+  type FolderSnapshot,
+  type RemovedItems,
+} from '@core/library/bulkEdits';
+import type { FolderMove, ItemRef } from '@core/library/selection';
 import type { CustomCategory } from '@core/library/categories';
 import {
   LIBRARY_SCHEMA_VERSION,
@@ -191,10 +204,30 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
    * An unknown folder id is ignored (no-op) rather than committed as dangling.
    */
   setItemFolder: (
-    kind: 'map' | 'track' | 'waypoint',
+    kind: 'map' | 'track' | 'waypoint' | 'area',
     itemId: string,
     folderId: string | null,
   ) => void;
+  // Bulk edits behind the Library's select mode (#711), each ONE index write
+  // (`@core/library/bulkEdits`).
+  /** Move many items between folders (a Move, or its Undo). */
+  moveItems: (moves: readonly FolderMove[]) => void;
+  /**
+   * Take items out of the Library for an Undo-able delete: the index is
+   * written at once (the map stops drawing them), their files stay until
+   * {@link purgeRemovedItems}. Returns what {@link restoreRemovedItems} needs.
+   */
+  removeItemsForUndo: (refs: readonly ItemRef[]) => RemovedItems;
+  /** Undo: put removed items back where they were. */
+  restoreRemovedItems: (removed: RemovedItems) => void;
+  /** The Undo window has passed: delete the removed items' files and photos. */
+  purgeRemovedItems: (removed: RemovedItems) => void;
+  /** Delete a folder (items fall back to Ungrouped) and return what Undo needs. */
+  removeFolderForUndo: (id: string) => FolderSnapshot | null;
+  /** Undo a folder delete. */
+  restoreFolder: (snapshot: FolderSnapshot) => void;
+  /** Show or hide many maps and trails on the map; returns how many changed. */
+  setItemsShown: (refs: readonly ItemRef[], shown: boolean) => number;
   // Activity categories — built-ins live in @core/library/categories; only
   // user-defined ones are stored (and persisted) here.
   /** Create a custom category (name assumed pre-validated); returns its id. */
@@ -837,6 +870,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         maps: s.maps.map(clear),
         tracks: s.tracks.map(clear),
         waypoints: s.waypoints.map(clear),
+        areas: s.areas.map(clear),
         visibleFolderIds: s.visibleFolderIds.filter((f) => f !== id),
       };
       persist(next);
@@ -858,15 +892,91 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
                 ...s,
                 tracks: s.tracks.map((t) => (t.id === itemId ? { ...t, folderId: folder } : t)),
               }
-            : {
-                ...s,
-                waypoints: s.waypoints.map((w) =>
-                  w.id === itemId ? { ...w, folderId: folder } : w,
-                ),
-              };
+            : kind === 'waypoint'
+              ? {
+                  ...s,
+                  waypoints: s.waypoints.map((w) =>
+                    w.id === itemId ? { ...w, folderId: folder } : w,
+                  ),
+                }
+              : {
+                  ...s,
+                  areas: s.areas.map((a) => (a.id === itemId ? { ...a, folderId: folder } : a)),
+                };
       persist(next);
       return next;
     }),
+
+  moveItems: (moves) =>
+    set((s) => {
+      if (moves.length === 0) return s;
+      const next = { ...s, ...applyFolderMoves(s, moves) };
+      persist(next);
+      return next;
+    }),
+
+  removeItemsForUndo: (refs) => {
+    const { next: edited, removed } = removeItems(get(), refs);
+    if (isEmptyRemoval(removed)) return removed;
+    set((s) => {
+      const next = { ...s, ...edited };
+      persist(next);
+      return next;
+    });
+    return removed;
+  },
+
+  restoreRemovedItems: (removed) =>
+    set((s) => {
+      if (isEmptyRemoval(removed)) return s;
+      const next = { ...s, ...restoreItems(s, removed) };
+      persist(next);
+      return next;
+    }),
+
+  purgeRemovedItems: (removed) => {
+    // The index no longer names them (it was written at the delete); an item
+    // put back by Undo is never purged, as Undo cancels this call.
+    for (const uri of removedFileUris(removed)) {
+      try {
+        storage.deleteFileAt(uri);
+      } catch {
+        // Metadata is committed: an orphan file must not surface as an error.
+      }
+    }
+    for (const { item } of removed.tracks) {
+      try {
+        deleteTrailPhotoFolder(item.id);
+      } catch {
+        // Same as above.
+      }
+    }
+  },
+
+  removeFolderForUndo: (id) => {
+    const snapshot = folderSnapshot(get(), id);
+    if (snapshot === null) return null;
+    get().removeFolder(id);
+    return snapshot;
+  },
+
+  restoreFolder: (snapshot) =>
+    set((s) => {
+      const next = { ...s, ...restoreFolder(s, snapshot) };
+      persist(next);
+      return next;
+    }),
+
+  setItemsShown: (refs, shown) => {
+    const result = applyShown(get(), refs, shown);
+    if (result.changed === 0) return 0;
+    set((s) => {
+      const next = { ...s, maps: result.maps, activeTrackIds: result.activeTrackIds };
+      persist(next);
+      return next;
+    });
+    return result.changed;
+  },
 
   addCustomCategory: (name, color) => {
     const id = storage.newId();
