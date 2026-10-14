@@ -16,6 +16,10 @@ import type { TeamTask } from '@core/team/tasks';
 import type { TeammatePosition } from '@core/teamui/positions';
 import type { TeamShares } from '@core/teamui/shares';
 import type { TeamView } from '@core/teamui/view';
+import { formatLeft } from '@core/teamdraw/fade';
+import type { DrawShape } from '@core/teamdraw/view';
+import { drawingSummary } from '@data/team/teamDraw';
+import { useTeamDrawStore } from './teamDrawStore';
 import { appTeamService } from '@data/team/appTeam';
 import { notifyTeam } from '@data/team/teamNotifications';
 import type { MeshLinkStatus } from '@data/team/meshLink';
@@ -56,6 +60,8 @@ export interface TeamSnapshot {
   soses: TeamSos[];
   /** The team's rally point. */
   rally: TeamRally | null;
+  /** Team drawings (#683), oldest first; same identity while no data op arrived. */
+  drawings: DrawShape[];
   /** `owner:id` of resolved messages (pins, notifies). */
   resolved: ReadonlySet<string>;
   /** Unread messages across Team chat's sub-threads (photos, pins, trails). */
@@ -88,6 +94,7 @@ const NO_THREADS: ReadonlyMap<string, readonly Said[]> = new Map();
 const NO_STATUSES: ReadonlyMap<string, MemberStatus> = new Map();
 const NO_RESOLVED: ReadonlySet<string> = new Set();
 const NO_EDITORS: ReadonlyMap<string, string> = new Map();
+const NO_DRAWINGS: DrawShape[] = [];
 
 function snapshot(service: TeamService | null): Omit<TeamSnapshot, 'banner'> {
   const s: TeamSession | null = service?.active ?? null;
@@ -111,6 +118,7 @@ function snapshot(service: TeamService | null): Omit<TeamSnapshot, 'banner'> {
     teamTrails: s?.teamTrails() ?? [],
     editors: s?.editors() ?? NO_EDITORS,
     rally: s?.rally() ?? null,
+    drawings: s?.draw.shapes() ?? NO_DRAWINGS,
     photoThreads: s?.photoThreads() ?? NO_THREADS,
     dataVersion: s?.dataVersion ?? '',
     peers: s?.peers() ?? [],
@@ -126,9 +134,26 @@ export const useTeamStore = create<TeamStore>((set) => ({
   available: appTeamService() !== null,
   loaded: false,
   banner: null,
-  refresh: () => set(snapshot(appTeamService())),
+  refresh: () => {
+    set(snapshot(appTeamService()));
+    // A finished shape replaces its live stroke (#683).
+    refreshLive();
+  },
   dismissBanner: () => set({ banner: null }),
 }));
+
+/** Teammates' live strokes into the drawing store, at most once per frame (#683). */
+let liveFrame: ReturnType<typeof requestAnimationFrame> | null = null;
+function refreshLive(): void {
+  useTeamDrawStore.getState().setLive(appTeamService()?.active?.draw.live() ?? []);
+}
+function scheduleLive(): void {
+  if (liveFrame !== null) return;
+  liveFrame = requestAnimationFrame(() => {
+    liveFrame = null;
+    refreshLive();
+  });
+}
 
 let wired: TeamService | null = null;
 let unwire: (() => void) | null = null;
@@ -171,9 +196,30 @@ export function wireTeamStore(): TeamService | null {
       });
     }
   });
+  const offDraw = service.onDraw(scheduleLive);
+  const offDrawAlert = service.onDrawAlert((alert) => {
+    const view = service.active?.view();
+    const name = view?.members.find((m) => m.id === alert.author)?.name ?? 'A teammate';
+    if (alert.snackbar) useTeamDrawStore.getState().announce(alert.author, name);
+    // One system notification per author per drawing session (fade ≥ 1 min).
+    if (alert.notify !== null && alert.shape !== null) {
+      const life =
+        alert.shape.expires === null
+          ? 'never fades'
+          : `fades in ${formatLeft(Math.max(0, Math.round((alert.shape.expires - Date.now()) / 1000)))}`;
+      void notifyTeam({
+        title: `${name.split(' ')[0]} drew on the map`,
+        body: `${drawingSummary(alert.shape.sh, alert.shape.tx)} · ${life}`,
+        url: `/team/draw/${alert.author}`,
+        quiet: alert.notify === 'badge',
+      });
+    }
+  });
   unwire = () => {
     offChange();
     offAlert();
+    offDraw();
+    offDrawAlert();
   };
   void service.load().then(() => {
     loadedFlag = true;

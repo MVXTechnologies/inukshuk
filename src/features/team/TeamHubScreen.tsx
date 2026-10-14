@@ -31,6 +31,7 @@ import {
   useNow,
 } from './components';
 import { actionMessage } from './messages';
+import { TeamDrawingsRow } from './draw/TeamDrawingsRow';
 import { memberSyncLine, openPeers, teamSyncLine } from './syncLine';
 
 const SHARE_INTERVALS = [
@@ -391,6 +392,7 @@ export function TeamHubScreen() {
         style={styles.listItem}
         testID="team-shares-row"
       />
+      <TeamDrawingsRow />
 
       <SectionLabel>Sync</SectionLabel>
       <Text variant="bodySmall" style={{ color: t.inkVariant }}>

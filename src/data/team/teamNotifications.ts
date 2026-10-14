@@ -81,7 +81,13 @@ export async function ensureTeamNotifications(): Promise<boolean> {
 }
 
 /** Raise a local notification now. Never throws. */
-export async function notifyTeam(n0: { title: string; body: string; url: string }): Promise<void> {
+export async function notifyTeam(n0: {
+  title: string;
+  body: string;
+  url: string;
+  /** A `badge`-level event (#683 drawings): shown, but without a sound. */
+  quiet?: boolean;
+}): Promise<void> {
   const n = api();
   if (n === null) return;
   try {
@@ -91,7 +97,7 @@ export async function notifyTeam(n0: { title: string; body: string; url: string 
         title: n0.title,
         body: n0.body.length > 180 ? `${n0.body.slice(0, 179)}…` : n0.body,
         data: { url: n0.url, team: true },
-        sound: 'default',
+        sound: n0.quiet === true ? false : 'default',
       },
       trigger: Platform.OS === 'android' ? { channelId: TEAM_CHANNEL } : null,
     });

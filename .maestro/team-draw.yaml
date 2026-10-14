@@ -1,0 +1,208 @@
+# Team drawing e2e (#683), one phone, on the loopback mesh build (see team.yaml).
+#
+# Create a team → the team menu's "Draw on map" → drawing mode (hint, tool
+# bar, top bar) → Style: fade Never → Arrow → one-finger drag draws it →
+# Done → tap the arrow: its card → leave the team.
+#
+# First of the team shard, on the shard's fresh emulator; it does not clear
+# state itself (team.yaml, which does, must stay last), so it creates its own
+# team and leaves it at the end. Settings rows merge title + subtitle on iOS:
+# wildcard regexes (maestro-ios-tap-traps).
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            notifications: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+            notifications: allow
+- tapOn:
+    text: 'Got it'
+    optional: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- setLocation:
+    latitude: 47.0745
+    longitude: -70.9065
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Settings'
+    timeout: 15000
+- tapOn: 'Settings'
+- scrollUntilVisible:
+    element: 'Extensions.*'
+    direction: DOWN
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: '.*Team mode.*'
+          commands:
+            - tapOn: 'Extensions.*'
+      - scrollUntilVisible:
+          element: '.*Team mode.*'
+          direction: DOWN
+          timeout: 5000
+- scrollUntilVisible:
+    element:
+      id: 'extension-row-team'
+    direction: DOWN
+- runFlow:
+    when:
+      visible: 'Get Team mode'
+    commands:
+      - tapOn: 'Get Team mode'
+- runFlow:
+    when:
+      notVisible:
+        id: 'extension-details-team'
+    commands:
+      - tapOn:
+          id: 'extension-row-team'
+- scrollUntilVisible:
+    element:
+      id: 'team-create-row'
+    direction: DOWN
+- tapOn:
+    id: 'team-create-row'
+- extendedWaitUntil:
+    visible:
+      id: 'team-create-screen'
+    timeout: 10000
+- tapOn:
+    id: 'team-create-name'
+- inputText: 'Ridge crew'
+- tapOn:
+    id: 'team-create-myname'
+- eraseText: 40
+- inputText: 'Marc'
+- hideKeyboard
+- tapOn:
+    id: 'team-create-ends-14d'
+- tapOn:
+    id: 'team-create-submit'
+- extendedWaitUntil:
+    visible: '(Allow|Ridge crew)'
+    timeout: 40000
+- runFlow:
+    when:
+      visible: 'Allow'
+    commands:
+      - tapOn: 'Allow'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 15000
+# Manage team › Drawings (the organizer is an admin): none yet.
+- scrollUntilVisible:
+    element:
+      id: 'team-drawings-row'
+    direction: DOWN
+- assertVisible: '.*None on the map.*'
+# To the map.
+- tapOn: 'Back'
+- tapOn: 'Back'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: 'team-fab'
+    timeout: 10000
+# The team menu: "Draw on map", right after Rally.
+- tapOn:
+    id: 'team-fab'
+- tapOn:
+    id: 'team-fab-draw'
+- extendedWaitUntil:
+    visible:
+      id: 'team-draw-toolbar'
+    timeout: 5000
+# Drawing mode owns the screen: its hint the first time, no team button, no search.
+- assertVisible:
+    id: 'team-draw-hint'
+- assertNotVisible:
+    id: 'team-fab'
+- assertNotVisible: 'Search places'
+- takeScreenshot: team-draw-entered
+# Style: fades Never (the arrow must outlive this flow's taps).
+- tapOn:
+    id: 'team-draw-style-button'
+- extendedWaitUntil:
+    visible:
+      id: 'team-draw-style'
+    timeout: 5000
+- takeScreenshot: team-draw-style
+- tapOn:
+    id: 'team-draw-fade-6'
+- tapOn:
+    id: 'team-draw-style-close'
+# Arrow: one finger from tail to head.
+- tapOn:
+    id: 'team-draw-tool-arrow'
+- swipe:
+    start: '50%,62%'
+    end: '50%,42%'
+    duration: 900
+# Sent: Undo is live now, and the arrow tool stays selected.
+- extendedWaitUntil:
+    visible:
+      id: 'team-draw-undo'
+      enabled: true
+    timeout: 5000
+- takeScreenshot: team-draw-arrow
+- tapOn:
+    id: 'team-draw-done'
+- extendedWaitUntil:
+    visible:
+      id: 'team-fab'
+    timeout: 5000
+# Outside drawing mode, a tap on the arrow's shaft opens its card.
+- tapOn:
+    point: '50%,52%'
+- extendedWaitUntil:
+    visible:
+      id: 'team-shape-card'
+    timeout: 5000
+- assertVisible: '.*You · arrow.*'
+- assertVisible: '.*Never fades.*'
+- takeScreenshot: team-draw-card
+- tapOn:
+    id: 'team-shape-delete'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-shape-card'
+    timeout: 5000
+# Leave the team (it is deleted from this phone).
+- tapOn:
+    id: 'team-fab'
+- tapOn:
+    id: 'team-fab-manage'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 5000
+- scrollUntilVisible:
+    element: 'Leave team'
+    direction: DOWN
+- tapOn: 'Leave team'
+- tapOn: 'Leave'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-hub-screen'
+    timeout: 10000

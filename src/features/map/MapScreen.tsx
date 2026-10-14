@@ -144,6 +144,10 @@ import { RecordingPanel } from './components/RecordingPanel';
 import { ReceiverFollow } from '@features/gnss/ReceiverFollow';
 import { ReceiverMapOverlay } from '@features/gnss/ReceiverMapOverlay';
 import { TeamMapLayers } from '@features/team/map/TeamMapLayers';
+import { TeamDrawLayers } from '@features/team/draw/TeamDrawLayers';
+import { TeamDrawMode, useTeamDrawActive } from '@features/team/draw/TeamDrawMode';
+import { hitTestTeamDraw } from '@features/team/draw/hitTestDraw';
+import { useTeamDrawStore } from '@state/teamDrawStore';
 import {
   clusterExpansionZoom,
   clusterMarks,
@@ -1037,6 +1041,9 @@ export function MapScreen() {
   const teamField = useTeamFieldLayers(style.glyphs);
   const teamTrailLayers = useTeamTrailLayers(style.glyphs);
   const teamMenuOpen = useTeamSheet((s) => s.sheet?.kind === 'menu');
+  // Team drawing mode (#683) owns the screen: the rail, search and bottom row step aside.
+  const teamDrawing = useTeamDrawActive();
+  const teamOwnsRail = teamMenuOpen || teamDrawing;
 
   // Native 3D terrain (docs/plans/native-terrain.md): with "3D relief" on and
   // a binary that ships the module, tilting past ~25° grows real relief out of
@@ -2237,6 +2244,17 @@ export function MapScreen() {
       // Team mode (#589): a teammate's dot or a shared waypoint, above the
       // map extensions (they are what the user is looking for on a team map).
       const teamHit = await hitTestTeam(map, px, py);
+      // A team drawing (#683): its card; a teammate on it wins the tap.
+      if (teamHit === null) {
+        const drawKey = await hitTestTeamDraw(map, px, py);
+        if (drawKey !== null) {
+          setPointAt(null);
+          useTeamMapSelection.getState().select(null);
+          useTeamDrawStore.getState().openCard(drawKey);
+          return;
+        }
+      }
+      useTeamDrawStore.getState().openCard(null);
       if (teamHit !== null) {
         drawingRef.current.closeAreaCard();
         setPointAt(null);
@@ -2930,7 +2948,8 @@ export function MapScreen() {
               // this whole module exists to tame, so the map would shake even
               // while the needle sat still. "default" (CameraMode.TRACKING) keeps
               // the centre-on-user behaviour and leaves the bearing to us.
-              bearing={headingForCamera}
+              // Drawing mode (#683) turns the map with two fingers: no heading.
+              bearing={teamDrawing ? undefined : headingForCamera}
               {...(headingForCamera !== undefined
                 ? { duration: 150, easing: 'linear' as const }
                 : {})}
@@ -3289,6 +3308,8 @@ export function MapScreen() {
             )}
             {/* Team mode (#589): teammates' positions, shared waypoints and trails. */}
             <TeamMapLayers glyphs={style.glyphs} />
+            {/* Team drawings (#683): their own subscriber, never this screen. */}
+            <TeamDrawLayers glyphs={style.glyphs} zoom={scaleAt?.zoom ?? null} />
             {/* Team mode (#589): teammates' trail photos (the trail-photo
               layers), then comment bubbles, pins and tasks (visual Markers,
               hit-tested in onMapPress). */}
@@ -3399,6 +3420,7 @@ export function MapScreen() {
           heatSelection === null &&
           !selecting &&
           !drawing.active &&
+          !teamDrawing &&
           movingWp === null && (
             <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
               {/* A shown long-distance trail takes the pill's place (#467). */}
@@ -3464,7 +3486,7 @@ export function MapScreen() {
           would again leave hidden nodes in the a11y tree; it comes back the
           instant the carousel closes (heatSelection back to null). */}
         {/* Also hidden while the team menu runs down the same edge. */}
-        {makeMapState === null && heatSelection === null && !teamMenuOpen && movingWp === null && (
+        {makeMapState === null && heatSelection === null && !teamOwnsRail && movingWp === null && (
           <MapControlsRail
             top={insets.top + 8}
             viewToggle={
@@ -3612,7 +3634,7 @@ export function MapScreen() {
           {/* Not while the region selector or the map maker owns the bottom
             edge: their sheets sit in this column's footprint, and the row
             would draw over their Cancel / Download / Next buttons. */}
-          {!selecting && makeMapState === null && (
+          {!selecting && makeMapState === null && !teamDrawing && (
             <View
               style={styles.bottomRow}
               pointerEvents="box-none"
@@ -3893,6 +3915,8 @@ export function MapScreen() {
             onNavigate={(latitude, longitude) => setDestination({ latitude, longitude })}
           />
         )}
+        {/* Team drawing mode (#683): its canvas, top bar and tool bar. */}
+        <TeamDrawMode mapRef={mapRef} cameraRef={cameraRef} focused={isFocused} />
         <TeamPickOverlay
           top={insets.top + 8}
           cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight)}

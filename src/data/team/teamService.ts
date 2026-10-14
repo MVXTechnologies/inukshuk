@@ -20,6 +20,7 @@ import { addBreadcrumb } from '@lib/errorReporting';
 import type { MeshTransport } from './meshTransport';
 import { DEFAULT_TEAM_PREFS, type TeamDisk, type TeamRecord } from './teamDisk';
 import { JoinAttempt } from './teamJoin';
+import type { SessionDrawAlert } from './teamDraw';
 import { TeamSession, type ActionError } from './teamSession';
 
 export interface ServiceDeps {
@@ -33,6 +34,7 @@ export interface ServiceDeps {
 
 export type ServiceListener = () => void;
 export type AlertListener = (alert: TeamAlert, teamId: string) => void;
+export type DrawAlertListener = (alert: SessionDrawAlert, teamId: string) => void;
 
 /** After a join, report when no teammate link comes up within this long (the joiner flake). */
 export const FIRST_LINK_WATCH_MS = 30_000;
@@ -45,6 +47,8 @@ export class TeamService {
   private joinName = '';
   private readonly listeners = new Set<ServiceListener>();
   private readonly alertListeners = new Set<AlertListener>();
+  private readonly drawListeners = new Set<ServiceListener>();
+  private readonly drawAlertListeners = new Set<DrawAlertListener>();
   private loaded: Promise<void> | null = null;
   readonly now: () => number;
 
@@ -63,6 +67,28 @@ export class TeamService {
     this.alertListeners.add(fn);
     return () => this.alertListeners.delete(fn);
   }
+
+  /** Teammates' live strokes changed (#683): its own channel, never `subscribe`'s. */
+  onDraw(fn: ServiceListener): () => void {
+    this.drawListeners.add(fn);
+    return () => this.drawListeners.delete(fn);
+  }
+
+  /** A teammate's drawing earned a snackbar or a notification (#683). */
+  onDrawAlert(fn: DrawAlertListener): () => void {
+    this.drawAlertListeners.add(fn);
+    return () => this.drawAlertListeners.delete(fn);
+  }
+
+  private emitDraw = (): void => {
+    for (const fn of [...this.drawListeners]) {
+      try {
+        fn();
+      } catch {
+        // A UI listener's failure must not break the sync plumbing.
+      }
+    }
+  };
 
   private emit = (): void => {
     for (const fn of [...this.listeners]) {
@@ -159,6 +185,11 @@ export class TeamService {
         const teamId = this.session?.teamId ?? '';
         for (const fn of [...this.alertListeners]) fn(alert, teamId);
       },
+      onDraw: this.emitDraw,
+      onDrawAlert: (alert: SessionDrawAlert) => {
+        const teamId = this.session?.teamId ?? '';
+        for (const fn of [...this.drawAlertListeners]) fn(alert, teamId);
+      },
       ...(this.deps.tickMs !== undefined ? { tickMs: this.deps.tickMs } : {}),
     };
   }
@@ -217,6 +248,8 @@ export class TeamService {
     session.onRecordChange = (r) => this.putRecord(r);
     this.session = session;
     session.updateRecord({ lastOpenedAt: this.now() });
+    // A team opened or just joined: advertise live drawing (#683) if not yet.
+    session.draw.advertise();
     if (record.name !== session.view().name) session.updateRecord({ name: session.view().name });
     this.emit();
     return session;

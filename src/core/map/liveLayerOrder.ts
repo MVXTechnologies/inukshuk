@@ -30,8 +30,8 @@
  * 3. The heading cone, then the pointing line: directions from you, under
  *    the pins they point across.
  * 4. The team: the rally area and shared trails (lines and areas first),
- *    the rally flag, shared waypoints, the chat/task marks, then teammates
- *    over them.
+ *    the team's drawings (#683), the rally flag, shared waypoints, the
+ *    chat/task marks, then teammates over them.
  * 5. Move mode's dashed line and old spot, under the pins.
  * 6. Trail photos (#587: thumbnails, stacks and their counts, the selected
  *    photo on its ring), then the waypoint clusters (#685: disc, inukshuk,
@@ -81,6 +81,15 @@ export const LIVE_LAYER_ORDER = [
   'team-trl-line',
   'team-trl-vertex',
   'team-trl-who',
+  // Team drawings (#683): over the trails and areas, under the flag, the
+  // pins and the teammates (a tap on both goes to the teammate or the pin).
+  // Heads turn with the map; badges, notes and the pen tip stay upright.
+  'team-draw-fill',
+  'team-draw-casing',
+  'team-draw-line',
+  'team-draw-dash',
+  'team-draw-head',
+  'team-draw-sym',
   'team-rally-dot',
   'team-rally-label',
   'team-waypoint-dot',

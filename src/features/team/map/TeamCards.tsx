@@ -27,6 +27,7 @@ import { loadTrackGeometry } from '@data/trackGeometry';
 import { useLibraryStore } from '@state/libraryStore';
 import { useTeamPick } from './TeamPick';
 import { useTeamSheet, type TeamSheet } from './teamMode';
+import { enterDrawing } from '../draw/TeamDrawMode';
 
 const STATUS_ICON: Record<StatusId, string> = {
   ok: 'check-circle',
@@ -627,7 +628,8 @@ export function TeamFab({ bottom }: { bottom: number }) {
     close();
     router.push(href as never);
   };
-  // Owner, 2026-10-07: exactly these six, in this order. A new task starts
+  // Owner, 2026-10-07: exactly these six, in this order (2026-10-13: plus
+  // "Draw on map" after Rally, #683). A new task starts
   // from the task list (or a tap on the map); pins from a spot on the map.
   const chatUnread = unread + threadsUnread;
   const items: [string, string, () => void, string, string?][] = [
@@ -649,6 +651,16 @@ export function TeamFab({ bottom }: { bottom: number }) {
               useTeamPick.getState().start('rally');
             },
             'team-fab-rally',
+          ],
+          // #683 (owner 2026-10-13): a seventh row, right after Rally.
+          [
+            'draw',
+            'Draw on map',
+            () => {
+              close();
+              enterDrawing();
+            },
+            'team-fab-draw',
           ],
         ] as [string, string, () => void, string][])),
     [

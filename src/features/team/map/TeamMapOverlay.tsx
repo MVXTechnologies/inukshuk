@@ -31,6 +31,9 @@ import { KeyboardLifted } from '@ui/components/KeyboardLifted';
 import { TeamPinCard } from './TeamPinCard';
 import { useTeamPick } from './TeamPick';
 import { TeamPinComposer, usePinDraft } from './TeamPinComposer';
+import { DrawAlertSnack } from '../draw/DrawAlertSnack';
+import { TeamShapeCard } from '../draw/ShapeCard';
+import { useTeamDrawStore } from '@state/teamDrawStore';
 
 export type TeamMapHit =
   | { kind: 'member'; id: string }
@@ -116,6 +119,9 @@ export function TeamMapOverlay({
   const photoCard = usePhotoCard((s) => s.target);
   const picking = useTeamPick((s) => s.purpose !== null);
   const editing = useTrailEdit((s) => s.trail !== null);
+  // Team drawing (#683): its mode owns the screen; a shape's card is a card.
+  const drawing = useTeamDrawStore((s) => s.active);
+  const shapeCard = useTeamDrawStore((s) => s.card !== null);
   if (installedAt === 0 || !show || view === null) return null;
 
   const member = hit?.kind === 'member' ? positions.find((p) => p.id === hit.id) : undefined;
@@ -147,6 +153,8 @@ export function TeamMapOverlay({
       {/* The rally point's pill: signal mode, no card up. */}
       {signal &&
         !picking &&
+        !drawing &&
+        !shapeCard &&
         draft === null &&
         hit === null &&
         photoCard === null &&
@@ -157,6 +165,8 @@ export function TeamMapOverlay({
       {signal &&
         !picking &&
         !editing &&
+        !drawing &&
+        !shapeCard &&
         cardSlotFree &&
         draft === null &&
         hit === null &&
@@ -172,6 +182,12 @@ export function TeamMapOverlay({
           <TeamSheetCard sheet={sheet} here={here} onPointActions={onPointActions} />
         </View>
       )}
+      {!drawing && draft === null && !card && cardSlotFree && hit === null && shapeCard && (
+        <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
+          <TeamShapeCard here={here} onNavigate={onNavigate} />
+        </View>
+      )}
+      {signal && !drawing && <DrawAlertSnack style={{ bottom: fabBottom, right: 76 }} />}
       {draft === null && !card && cardSlotFree && pin && (
         <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
           <TeamPinCard pin={pin} view={view} here={here} onClose={() => select(null)} />
