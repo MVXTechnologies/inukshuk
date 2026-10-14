@@ -40,6 +40,25 @@ describe('fitStripValue (QA 2.6.0: values are never cut)', () => {
     expect(fitStripValue(eta, 30).value).toEqual({ value: '≈9:35 AM' });
   });
 
+  it('a shorter unit can be enough ("1.24 nmi" → "1.24 NM")', () => {
+    const v = { glyph: 'straighten', value: '1.24', unit: 'nmi' };
+    const w = estimateWidthDp({ glyph: 'straighten', value: '1.24', unit: 'NM' }, VALUE_SMALL_SP);
+    expect(fitStripValue(v, w)).toEqual({
+      value: { glyph: 'straighten', value: '1.24', unit: 'NM' },
+      valueSp: VALUE_SMALL_SP,
+    });
+  });
+
+  it('a long name that fits nowhere keeps only its text, for native shrinking', () => {
+    expect(fitStripValue({ glyph: 'flag', value: 'Kiosque Edwin-Bélanger' }, 60)).toEqual({
+      value: { value: 'Kiosque Edwin-Bélanger' },
+      valueSp: VALUE_SMALL_SP,
+    });
+    expect(fitStripValue({ value: 'Kiosque Edwin-Bélanger' }, 60).value).toEqual({
+      value: 'Kiosque Edwin-Bélanger',
+    });
+  });
+
   it('a larger font scale fits less', () => {
     const v = { glyph: 'speed', value: '13.6', unit: 'km/h' };
     expect(estimateWidthDp(v, VALUE_SP, 1.3)).toBeGreaterThan(estimateWidthDp(v, VALUE_SP));

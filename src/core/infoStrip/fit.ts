@@ -63,14 +63,12 @@ export interface FittedValue {
 export function fitStripValue(v: StripValue, widthDp: number, fontScale = 1): FittedValue {
   const fits = (x: StripValue, sp: number) => estimateWidthDp(x, sp, fontScale) <= widthDp;
   if (fits(v, VALUE_SP)) return { value: v, valueSp: VALUE_SP };
-  const steps: StripValue[] = [];
   let cur: StripValue = v;
   // 1. The tag, when a glyph still names the field; else it stays to the end.
   if (cur.tag !== undefined && cur.glyph !== undefined) {
     cur = without(cur, 'tag');
     if (fits(cur, VALUE_SP)) return { value: cur, valueSp: VALUE_SP };
   }
-  steps.push(cur);
   // 2. One type step.
   if (fits(cur, VALUE_SMALL_SP)) return { value: cur, valueSp: VALUE_SMALL_SP };
   // 3. Unit detail.
