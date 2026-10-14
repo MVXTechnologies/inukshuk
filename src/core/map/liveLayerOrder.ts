@@ -90,6 +90,8 @@ export const LIVE_LAYER_ORDER = [
   'team-draw-dash',
   'team-draw-head',
   'team-draw-sym',
+  // An active gather's pulse (#708), under its flag.
+  'team-rally-pulse',
   'team-rally-dot',
   'team-rally-label',
   'team-waypoint-dot',
@@ -128,7 +130,8 @@ export const LIVE_LAYER_ORDER = [
   'waypoint-pin-selected',
   'waypoint-pin-selected-photo',
   'waypoint-pin-selected-label',
-  // 7. A teammate's SOS.
+  // 7. A teammate's SOS (its pulse under its halo, #708).
+  'team-sos-pulse',
   'team-sos-halo',
   'team-sos-dot',
   'team-sos-label',

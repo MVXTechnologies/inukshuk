@@ -29,7 +29,7 @@ import { useState, type ReactNode } from 'react';
 import { Alert, BackHandler, StyleSheet, View } from 'react-native';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
 
-import { TeamFab } from '../map/TeamCards';
+import { TeamPanel } from '../bar/TeamPanel';
 import { useTeamMapFocus } from '../map/teamMapFocus';
 import { DrawAlertSnack } from './DrawAlertSnack';
 import { TeamShapeCard } from './ShapeCard';
@@ -221,28 +221,32 @@ afterEach(async () => {
 const style = penStyle({ ...defaultPrefs(0), fadeMs: 30_000 });
 const arrow = (id: string): Stroke => ({ id, sh: 'arrow', pts: [QC, NEAR], style });
 
-describe('the team menu', () => {
-  it('has “Draw on map” right after Rally, which opens drawing mode', async () => {
-    await render(wrap(<TeamFab bottom={72} />));
-    await fireEvent.press(screen.getByTestId('team-fab'));
+describe('the team panel (the old team menu, #707)', () => {
+  it('has Draw right after Rally here, which opens drawing mode', async () => {
+    await render(wrap(<TeamPanel top={0} here={null} />));
     const ids = screen
-      .queryAllByTestId(/^team-fab-/)
+      .queryAllByTestId(/^team-panel-(chat|rally|draw|status)$/)
       .map((n) => n.props.testID as string)
-      .filter((id, k, all) => all.indexOf(id) === k && id !== 'team-fab-scrim');
-    expect(ids.indexOf('team-fab-draw')).toBe(ids.indexOf('team-fab-rally') + 1);
-    await fireEvent.press(screen.getByTestId('team-fab-draw'));
+      .filter((id, k, all) => all.indexOf(id) === k);
+    expect(ids).toEqual([
+      'team-panel-chat',
+      'team-panel-rally',
+      'team-panel-draw',
+      'team-panel-status',
+    ]);
+    await fireEvent.press(screen.getByTestId('team-panel-draw'));
     expect(useTeamDrawStore.getState().active).toBe(true);
   });
 
-  it('hides it for guests', async () => {
+  it('hides Draw and Rally for guests', async () => {
     const view = useTeamStore.getState().view!;
     useTeamStore.setState({
       view: { ...view, members: view.members.map((m) => ({ ...m, role: 'guest' as const })) },
     });
-    await render(wrap(<TeamFab bottom={72} />));
-    await fireEvent.press(screen.getByTestId('team-fab'));
-    expect(screen.queryByTestId('team-fab-draw')).toBeNull();
-    expect(screen.queryByTestId('team-fab-rally')).toBeNull();
+    await render(wrap(<TeamPanel top={0} here={null} />));
+    expect(screen.queryByTestId('team-panel-draw')).toBeNull();
+    expect(screen.queryByTestId('team-panel-rally')).toBeNull();
+    expect(screen.queryByTestId('team-panel-rally-point')).toBeNull();
   });
 });
 

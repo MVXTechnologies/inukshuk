@@ -1,31 +1,33 @@
 /**
- * Team mode's chrome on the map (#589, mockups v2): in signal mode the team
- * action button (bottom right, its badge the only team indicator) and its
- * compact cards; the popup of a tapped teammate (status, position age,
- * distance; message, task, "where are you?", centre, go to) or shared
+ * Team mode's chrome on the map (#589, #707, #708): in signal mode the
+ * SOS-only button (bottom right; the team's other actions live in the bar's
+ * panel), the sender's undo snackbar, the team panel dropped from the bar,
+ * the active SOS / gather band in the strip area while the bar is away, and
+ * the compact cards; a tapped teammate's card (`TeammateCard`) or shared
  * waypoint; pins and the pin composer. A plain themed View
  * for the card (paper-surface-ios-flex-collapse); its own state store so
  * MapScreen only routes the tap.
  */
-import { rangeAndBearing, shortAge } from '@core/teamui/positions';
-import { STATUS_LABEL } from '@core/teamui/system';
+import { rangeAndBearing } from '@core/teamui/positions';
 import { useExtensionPrefs } from '@features/extensions/prefs';
-import { teamService, useTeamStore } from '@state/teamStore';
+import { useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { useRouter } from 'expo-router';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Text } from 'react-native-paper';
 import { create } from 'zustand';
 
-import { MemberAvatar } from '../components';
+import { AlertBands } from '../bar/AlertBands';
+import { SosButton } from '../bar/SosButton';
+import { TeamPanel } from '../bar/TeamPanel';
+import { UndoSnack } from '../bar/UndoSnack';
+import { usePendingAlert } from '../bar/pendingAlert';
 import { TEAM_TAP_LAYERS } from './layerIds';
-import { Round, TeamFab, TeamSheetCard } from './TeamCards';
-import { useTeamMapFocus } from './teamMapFocus';
+import { TeamSheetCard } from './TeamCards';
+import { TeammateCard } from './TeammateCard';
 import { useTeamSheet, useTeamSignalMode } from './teamMode';
 import { usePhotoCard } from '@features/photos/PhotoBottomCard';
-import { RallyPill, SosBanner } from './TeamField';
 import { TrailEditBar, useTrailEdit } from './TrailEditor';
 import { KeyboardLifted } from '@ui/components/KeyboardLifted';
 import { TeamPinCard } from './TeamPinCard';
@@ -87,7 +89,9 @@ export function TeamMapOverlay({
   cardStyle,
   cardSlotFree,
   fabBottom,
-  sosTop,
+  panelTop,
+  snackStyle,
+  bandInStrip = false,
   onNavigate,
   onPointActions,
   screenFocused = true,
@@ -96,10 +100,17 @@ export function TeamMapOverlay({
   here: { latitude: number; longitude: number } | null;
   cardStyle: StyleProp<ViewStyle>;
   cardSlotFree: boolean;
-  /** Where the team button sits (above the bottom chrome). */
+  /** Where the SOS button sits (above the bottom chrome). */
   fabBottom: number;
-  /** Where the SOS banner sits (under the status bar). */
-  sosTop: number;
+  /** Where the team panel drops from (the top of the team bar). */
+  panelTop: number;
+  /** Where the undo snackbar docks (the map's snackbar lane). */
+  snackStyle: StyleProp<ViewStyle>;
+  /**
+   * The bar's column is not on screen (the top slot is busy): the active
+   * SOS / gather band shows in the strip area instead (#708).
+   */
+  bandInStrip?: boolean;
   onNavigate: (latitude: number, longitude: number) => void;
   /** Long-press menu's secondary row: Navigate here / Coordinates / Convert. */
   onPointActions: (at: [number, number], what: 'navigate' | 'coordinates' | 'convert') => void;
@@ -107,11 +118,9 @@ export function TeamMapOverlay({
   screenFocused?: boolean;
 }) {
   const t = useSchemeTokens();
-  const router = useRouter();
   const { installedAt, show } = useExtensionPrefs('team');
   const view = useTeamStore((s) => s.view);
   const positions = useTeamStore((s) => s.positions);
-  const statuses = useTeamStore((s) => s.statuses);
   const shares = useTeamStore((s) => s.shares);
   const pins = useTeamStore((s) => s.pins);
   const draft = usePinDraft((s) => s.at);
@@ -122,6 +131,7 @@ export function TeamMapOverlay({
   const photoCard = usePhotoCard((s) => s.target);
   const picking = useTeamPick((s) => s.purpose !== null);
   const editing = useTrailEdit((s) => s.trail !== null);
+  const pending = usePendingAlert((s) => s.pending !== null);
   // Team drawing (#683): its mode owns the screen; a shape's card is a card.
   const drawing = useTeamDrawStore((s) => s.active);
   const shapeCard = useTeamDrawStore((s) => s.card !== null);
@@ -133,16 +143,25 @@ export function TeamMapOverlay({
   // #676 — a shared pin is not one of mine: its card says whose share it is
   // instead of offering Move (the team record has its own edit rules).
   const sharer = wpt?.by ? view.members.find((m) => m.id === wpt.by) : undefined;
-  const target = member
-    ? { lat: member.lat, lon: member.lon }
-    : wpt
-      ? { lat: wpt.lat, lon: wpt.lon }
-      : null;
+  const target = wpt ? { lat: wpt.lat, lon: wpt.lon } : null;
   const rb = target && here ? rangeAndBearing(here, target) : null;
   const pin =
     hit?.kind === 'pin' ? pins.find((p) => p.owner === hit.owner && p.id === hit.id) : undefined;
-  const status = member ? statuses.get(member.id) : undefined;
-  const card = sheet !== null && sheet.kind !== 'menu';
+  const panel = sheet?.kind === 'menu';
+  const card = sheet !== null && !panel;
+  // The SOS button and the strip band never cover a card: any card, sheet
+  // or popup hides them.
+  const chromeFree =
+    signal &&
+    !picking &&
+    !editing &&
+    !drawing &&
+    !shapeCard &&
+    cardSlotFree &&
+    draft === null &&
+    hit === null &&
+    photoCard === null &&
+    !card;
 
   return (
     <>
@@ -151,30 +170,18 @@ export function TeamMapOverlay({
           <TrailEditBar style={{}} />
         </KeyboardLifted>
       )}
-      {/* An open SOS is pinned at the top for everyone, signal mode or not. */}
-      <SosBanner top={sosTop} here={here} onNavigate={onNavigate} />
-      {/* The rally point's pill: signal mode, no card up. */}
-      {signal &&
-        !picking &&
-        !drawing &&
-        !shapeCard &&
-        draft === null &&
-        hit === null &&
-        photoCard === null &&
-        (sheet === null || sheet.kind === 'menu') && (
-          <RallyPill bottom={fabBottom} here={here} onNavigate={onNavigate} />
-        )}
-      {/* The team button never covers a card: any card, sheet or popup hides it. */}
-      {signal &&
-        !picking &&
-        !editing &&
-        !drawing &&
-        !shapeCard &&
-        cardSlotFree &&
-        draft === null &&
-        hit === null &&
-        photoCard === null &&
-        (sheet === null || sheet.kind === 'menu') && <TeamFab bottom={fabBottom} />}
+      {/* The active SOS / gather in the strip area while the bar's column is away (#708). */}
+      {bandInStrip && chromeFree && !panel && (
+        <AlertBands
+          here={here}
+          onNavigate={onNavigate}
+          variant="strip"
+          style={[styles.stripBand, { bottom: fabBottom + 8 }]}
+        />
+      )}
+      {chromeFree && <SosButton bottom={pending ? fabBottom + 28 : fabBottom} here={here} />}
+      {signal && !drawing && <UndoSnack style={snackStyle} />}
+      {panel && <TeamPanel top={panelTop} here={here} focused={screenFocused} />}
       {draft !== null && (
         <KeyboardLifted style={cardStyle} testID="team-card-dock">
           <TeamPinComposer onPinned={(owner, id) => select({ kind: 'pin', owner, id })} />
@@ -198,98 +205,13 @@ export function TeamMapOverlay({
       )}
       {draft === null && !card && cardSlotFree && member && row && (
         <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: t.elevation.level2, shadowColor: palette.shadow },
-            ]}
-            testID="team-card"
-          >
-            <View style={styles.cardHead}>
-              <MemberAvatar initials={row.initials} color={row.color} size={36} />
-              <View style={styles.flex}>
-                <Text variant="titleSmall" style={{ color: t.ink }} numberOfLines={1}>
-                  {status ? `${member.name} · ${STATUS_LABEL[status.id]}` : member.name}
-                </Text>
-                <Text
-                  variant="bodySmall"
-                  style={{ color: member.band === 'fresh' ? t.inkVariant : t.status.gpsLostInk }}
-                  numberOfLines={1}
-                  testID="team-card-range"
-                >
-                  {[
-                    member.band === 'lost'
-                      ? `lost · ${shortAge(member.ageMs)} ago`
-                      : shortAge(member.ageMs) === 'now'
-                        ? 'just now'
-                        : `${shortAge(member.ageMs)} ago`,
-                    member.accuracy !== null ? `±${Math.round(member.accuracy)} m` : null,
-                    rb ? `${dist(rb.meters)} ${rb.compass}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </Text>
-              </View>
-              <IconButton
-                icon="close"
-                size={20}
-                onPress={() => select(null)}
-                accessibilityLabel="Close"
-              />
-            </View>
-            <View style={styles.roundRow}>
-              <Round
-                icon="message-text-outline"
-                label="Message"
-                testID="team-member-message"
-                onPress={() => {
-                  select(null);
-                  router.push('/team/chat');
-                }}
-              />
-              {row.role !== 'guest' && view.members.find((m) => m.isMe)?.role !== 'guest' && (
-                <Round
-                  icon="checkbox-marked-circle-plus-outline"
-                  label="Task"
-                  testID="team-member-task"
-                  onPress={() => {
-                    select(null);
-                    router.push(`/team/task-new?to=${member.id}` as never);
-                  }}
-                />
-              )}
-              <Round
-                icon="map-marker-question-outline"
-                label="Where are you?"
-                testID="team-member-where"
-                onPress={() => {
-                  const session = teamService()?.active;
-                  const text = `@${member.name} where are you?`;
-                  session?.sendMessage(text, {
-                    mentions: [member.id],
-                    aud: { m: [member.id, view.me] },
-                  });
-                  useTeamStore.getState().refresh();
-                  select(null);
-                }}
-              />
-              <Round
-                icon="crosshairs-gps"
-                label="Centre"
-                testID="team-member-centre"
-                onPress={() => useTeamMapFocus.getState().focus(member.lon, member.lat, 16)}
-              />
-              <Round
-                icon="navigation-variant-outline"
-                label="Go to"
-                testID="team-member-goto"
-                onPress={() => {
-                  onNavigate(member.lat, member.lon);
-                  select(null);
-                }}
-              />
-            </View>
-          </View>
+          <TeammateCard
+            member={member}
+            row={row}
+            here={here}
+            onNavigate={onNavigate}
+            onClose={() => select(null)}
+          />
         </View>
       )}
       {draft === null && !card && cardSlotFree && wpt && (
@@ -347,7 +269,7 @@ export function TeamMapOverlay({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  /** Cards stop short of the team button's column. */
+  /** Cards stop short of the SOS button's column. */
   card: {
     borderRadius: 16,
     paddingHorizontal: 12,
@@ -360,5 +282,6 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 4 },
-  roundRow: { flexDirection: 'row', justifyContent: 'space-around' },
+  /** The strip-area band: left of the SOS button, above the bottom chrome. */
+  stripBand: { position: 'absolute', left: 16, right: 88, zIndex: 7 },
 });

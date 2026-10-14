@@ -1,11 +1,11 @@
 /**
- * The compact team cards of signal mode (#589, mockups v2): the action
- * button's menu, my quick status, notify someone, a trail spot's actions and
+ * The compact team cards of signal mode (#589, mockups v2): my quick
+ * status, notify someone, a trail spot’s actions and
  * the long-press menu. Compact by default (one row of big round targets,
  * thumb-reachable); plain themed Views (paper-surface-ios-flex-collapse).
  */
 import { findMentions } from '@core/teamui/compose';
-import { STATUS_IDS, STATUS_LABEL, type StatusId } from '@core/teamui/system';
+import { STATUS_IDS, type StatusId } from '@core/teamui/system';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -21,13 +21,10 @@ import { photoHere } from '../photoHere';
 import type { TeamMarkHit } from './TeamMapMarks';
 import { useTeamMapSelection } from './TeamMapOverlay';
 import { usePinDraft } from './TeamPinComposer';
-import { SosHoldCard } from './TeamField';
 import { startEditing } from './TrailEditor';
 import { loadTrackGeometry } from '@data/trackGeometry';
 import { useLibraryStore } from '@state/libraryStore';
-import { useTeamPick } from './TeamPick';
 import { useTeamSheet, type TeamSheet } from './teamMode';
-import { enterDrawing } from '../draw/TeamDrawMode';
 
 const STATUS_ICON: Record<StatusId, string> = {
   ok: 'check-circle',
@@ -599,149 +596,11 @@ export function TeamSheetCard({
       );
     case 'press':
       return <PressCard at={sheet.at} onClose={close} onPointActions={onPointActions} />;
-    case 'sos':
-      return <SosHoldCard here={here} onClose={close} />;
     case 'list':
       return <ListCard items={sheet.items} onClose={close} />;
     default:
       return null;
   }
-}
-
-/** The team action button (bottom right) and its menu. */
-export function TeamFab({ bottom }: { bottom: number }) {
-  const t = useSchemeTokens();
-  const router = useRouter();
-  const sheet = useTeamSheet((s) => s.sheet);
-  const open = useTeamSheet((s) => s.open);
-  const close = useTeamSheet((s) => s.close);
-  const unread = useTeamStore((s) => s.unread);
-  const me = useTeamStore((s) => s.view?.me);
-  const myStatus = useTeamStore((s) => (me ? s.statuses.get(me)?.id : undefined));
-  const guest = useTeamStore((s) => s.view?.members.find((m) => m.isMe)?.role === 'guest');
-  const menuOpen = sheet?.kind === 'menu';
-  const threadsUnread = useTeamStore((s) => s.threadsUnread);
-  const myOpenTasks = useTeamStore(
-    (s) => s.tasks.filter((x) => !x.done && x.assignee === me).length,
-  );
-  const go = (href: string) => () => {
-    close();
-    router.push(href as never);
-  };
-  // Owner, 2026-10-07: exactly these six, in this order (2026-10-13: plus
-  // "Draw on map" after Rally, #683). A new task starts
-  // from the task list (or a tap on the map); pins from a spot on the map.
-  const chatUnread = unread + threadsUnread;
-  const items: [string, string, () => void, string, string?][] = [
-    ['hand-back-left', 'SOS · hold', () => open({ kind: 'sos' }), 'team-fab-sos', t.team.sos],
-    [
-      'check-circle-outline',
-      myStatus ? `My status · ${STATUS_LABEL[myStatus]}` : 'My status',
-      () => open({ kind: 'status' }),
-      'team-fab-status',
-    ],
-    ...(guest
-      ? []
-      : ([
-          [
-            'flag-variant',
-            'Rally team',
-            () => {
-              close();
-              useTeamPick.getState().start('rally');
-            },
-            'team-fab-rally',
-          ],
-          // #683 (owner 2026-10-13): a seventh row, right after Rally.
-          [
-            'draw',
-            'Draw on map',
-            () => {
-              close();
-              void enterDrawing();
-            },
-            'team-fab-draw',
-          ],
-        ] as [string, string, () => void, string][])),
-    [
-      'format-list-checks',
-      myOpenTasks > 0 ? `Task list · ${myOpenTasks}` : 'Task list',
-      go('/team/tasks'),
-      'team-fab-tasks',
-    ],
-    [
-      'message-text-outline',
-      chatUnread > 0 ? `Team chat · ${chatUnread}` : 'Team chat',
-      go('/team/chat'),
-      'team-fab-chat',
-    ],
-    ['account-cog-outline', 'Manage team', go('/team'), 'team-fab-manage'],
-  ];
-  return (
-    <>
-      {menuOpen && (
-        <Pressable
-          style={[StyleSheet.absoluteFill, { backgroundColor: t.team.menuScrim }]}
-          onPress={close}
-          accessibilityLabel="Close the team menu"
-          testID="team-fab-scrim"
-        />
-      )}
-      {menuOpen && (
-        <View style={[styles.menu, { bottom: bottom + 72 }]} pointerEvents="box-none">
-          {items.map(([icon, label, run, id, tint]) => (
-            <Pressable
-              key={id}
-              onPress={run}
-              style={styles.menuRow}
-              accessibilityRole="button"
-              accessibilityLabel={label}
-              testID={id}
-            >
-              <View
-                style={[
-                  styles.menuLabel,
-                  { backgroundColor: t.elevation.level2, shadowColor: palette.shadow },
-                ]}
-              >
-                <Text variant="labelLarge" style={{ color: t.ink }}>
-                  {label}
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.menuBtn,
-                  { backgroundColor: tint ?? t.elevation.level2, shadowColor: palette.shadow },
-                ]}
-              >
-                <Icon source={icon} size={24} color={tint ? palette.white : t.ink} />
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      )}
-      <Pressable
-        onPress={() => (menuOpen ? close() : open({ kind: 'menu' }))}
-        style={[styles.fab, { bottom, borderColor: t.team.bubbleNew, backgroundColor: t.ink }]}
-        accessibilityRole="button"
-        accessibilityLabel={
-          menuOpen ? 'Close the team menu' : `Team actions${unread ? `, ${unread} unread` : ''}`
-        }
-        testID="team-fab"
-      >
-        <Icon source={menuOpen ? 'close' : 'account-group'} size={28} color={t.background} />
-        {!menuOpen && unread > 0 && (
-          <View
-            style={[styles.badge, { backgroundColor: t.team.bubbleNew, borderColor: t.background }]}
-          >
-            <Text style={[styles.badgeText, { color: t.team.bubbleNewInk }]}>
-              {unread > 9 ? '9+' : unread}
-            </Text>
-          </View>
-        )}
-      </Pressable>
-    </>
-  );
 }
 
 const styles = StyleSheet.create({
@@ -785,50 +644,5 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: 10,
-  },
-  fab: {
-    position: 'absolute',
-    right: 12,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 8,
-    elevation: 6,
-  },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  badgeText: { fontSize: 11, fontWeight: '900' },
-  menu: { position: 'absolute', right: 16, gap: 10, alignItems: 'flex-end', zIndex: 9 },
-  menuRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  menuLabel: {
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  menuBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 4,
   },
 });

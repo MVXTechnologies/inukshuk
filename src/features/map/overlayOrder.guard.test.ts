@@ -34,6 +34,7 @@ const ABOVE_THE_STRIP: Record<string, string> = {
   'glove shield': 'recordingPanelUp && gloveLocked && (',
   'recording panel': '<RecordingPanel',
   'receiver chip': '<ReceiverMapOverlay',
+  'team bar': '<TeamStatusBar',
   'team overlay': '<TeamMapOverlay',
   'team pick': '<TeamPickOverlay',
   'team drawing mode': '<TeamDrawMode',

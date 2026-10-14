@@ -272,6 +272,13 @@ export interface SchemeTokens {
     /** SOS: the banner, the hold button and the map marker; its ink. */
     sos: string;
     sosInk: string;
+    /** A gather (rally point, #708): its band, chip and marker; dark ink on it (>= 8:1). */
+    gather: string;
+    gatherInk: string;
+    /** The undo snackbar (inverse surface), its words and its UNDO / countdown accent. */
+    snack: string;
+    snackInk: string;
+    snackAccent: string;
   };
   /** Logbook statistics (Statistics, Personal records, Year in review). */
   stats: {
@@ -456,6 +463,11 @@ export const lightScheme: SchemeTokens = {
     taskCommand: '#2F6F8F',
     sos: '#C62828',
     sosInk: palette.white,
+    gather: '#E8A000',
+    gatherInk: '#1F1600',
+    snack: '#2D3740',
+    snackInk: '#F2ECE0',
+    snackAccent: '#B6C98A',
   },
   stats: {
     flame: '#C2410C',
@@ -641,6 +653,11 @@ export const darkScheme: SchemeTokens = {
     taskCommand: '#7FC4E3',
     sos: '#C62828',
     sosInk: palette.white,
+    gather: '#FFB74D',
+    gatherInk: '#2A1C00',
+    snack: '#E9E4D8',
+    snackInk: '#1E252C',
+    snackAccent: '#566B33',
   },
   stats: {
     flame: '#F07A45',
@@ -816,6 +833,11 @@ export const sunlightScheme: SchemeTokens = {
     taskCommand: palette.black,
     sos: '#C62828',
     sosInk: palette.white,
+    gather: '#E8A000',
+    gatherInk: palette.black,
+    snack: palette.black,
+    snackInk: palette.white,
+    snackAccent: '#B6C98A',
   },
   stats: {
     flame: '#B02222',
@@ -996,6 +1018,11 @@ export const nightScheme: SchemeTokens = {
     taskCommand: NIGHT_INK,
     sos: '#C62828',
     sosInk: palette.white,
+    gather: '#1F0E0E',
+    gatherInk: NIGHT_INK,
+    snack: '#1F0E0E',
+    snackInk: NIGHT_INK,
+    snackAccent: NIGHT_INK,
   },
   stats: {
     flame: '#FF5C5C',

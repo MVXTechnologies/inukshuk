@@ -160,6 +160,7 @@ import {
 import { useTeamMapFocus } from '@features/team/map/teamMapFocus';
 import { TeamTrailPhotos } from '@features/team/map/TeamTrailPhotos';
 import { useSearchSlotMode, useTeamSheet, useTeamSignalMode } from '@features/team/map/teamMode';
+import { TeamStatusBar, useTeamBarLayout } from '@features/team/bar/TeamStatusBar';
 import { TeamPickOverlay, useTeamPick } from '@features/team/map/TeamPick';
 import {
   hitTestTeamTrail,
@@ -537,6 +538,7 @@ export function MapScreen() {
   const teamSignal = useTeamSignalMode();
   // The top slot: search, team (its bar goes here), or nothing until known (#707).
   const searchSlot = useSearchSlotMode();
+  const teamBarHeight = useTeamBarLayout((s) => s.height);
   const teamSignalRef = useRef(teamSignal);
   useEffect(() => {
     teamSignalRef.current = teamSignal;
@@ -2755,6 +2757,19 @@ export function MapScreen() {
     },
     [mapAreaRef],
   );
+  // Team mode (#707): the team status bar holds the search slot whenever the
+  // search pill would show; the top-centre chips then sit below its column.
+  const teamBarShown =
+    searchSlot === 'team' &&
+    makeMapState === null &&
+    heatSelection === null &&
+    !selecting &&
+    !drawing.active &&
+    !teamDrawing &&
+    movingWp === null &&
+    shownTrail === null &&
+    !searchOpen;
+  const topChipOffset = teamBarShown && teamBarHeight > 0 ? 8 + teamBarHeight + 8 : TOP_CHIP_OFFSET;
   return (
     <MapAreaBottomContext.Provider value={mapAreaBottom}>
       <View
@@ -3516,6 +3531,14 @@ export function MapScreen() {
               )}
             </View>
           )}
+        {/* Team mode (#707): the team status bar in the search slot. */}
+        {teamBarShown && (
+          <TeamStatusBar
+            top={insets.top + 8}
+            here={location}
+            onNavigate={(latitude, longitude) => setDestination({ latitude, longitude })}
+          />
+        )}
         {searchOpen && !drawing.active && (
           <View style={[styles.searchSheet, { top: insets.top + 8 }]} pointerEvents="box-none">
             <PlaceSearchSheet
@@ -3533,7 +3556,7 @@ export function MapScreen() {
           like the GPS warning, never a Portal/Dialog. */}
         {marineActive && (
           <View
-            style={[styles.marineChip, { top: insets.top + TOP_CHIP_OFFSET }]}
+            style={[styles.marineChip, { top: insets.top + topChipOffset }]}
             pointerEvents="none"
           >
             <MarineDisclaimerChip />
@@ -3546,7 +3569,7 @@ export function MapScreen() {
           destination exists; the ✕ on it is the way out. */}
         {destination !== null && !marineActive && (
           <View
-            style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
+            style={[styles.topCenterChip, { top: insets.top + topChipOffset }]}
             pointerEvents="box-none"
           >
             <DestinationChip onClear={() => setDestination(null)} />
@@ -3554,7 +3577,7 @@ export function MapScreen() {
         )}
         {follow !== null && !marineActive && (
           <View
-            style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
+            style={[styles.topCenterChip, { top: insets.top + topChipOffset }]}
             pointerEvents="box-none"
           >
             <FollowChip name={follow.name} onStop={stopFollowing} />
@@ -3894,7 +3917,7 @@ export function MapScreen() {
         {/* "Night on · tap to exit" (Night-Mode board), under the search pill. */}
         {displayCondition === 'night' && makeMapState === null && (
           <View
-            style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
+            style={[styles.topCenterChip, { top: insets.top + topChipOffset }]}
             pointerEvents="box-none"
           >
             <NightExitPill />
@@ -3960,7 +3983,7 @@ export function MapScreen() {
           <ReceiverMapOverlay
             top={
               insets.top +
-              TOP_CHIP_OFFSET +
+              topChipOffset +
               (marineActive ||
               destination !== null ||
               follow !== null ||
@@ -3977,7 +4000,9 @@ export function MapScreen() {
         {makeMapState === null && (
           <TeamMapOverlay
             fabBottom={teamFabBottom(bottomColumnLift + stripLift, bottomColumnH)}
-            sosTop={insets.top + 8}
+            panelTop={insets.top + 4}
+            snackStyle={liftedSnackbarStyle(bottomColumnLift + stripLift, bottomColumnH)}
+            bandInStrip={searchSlot === 'team' && !teamBarShown}
             onPointActions={(p, what) => {
               const at = { longitude: p[0], latitude: p[1] };
               // Navigate starts navigating (compass + destination chip), as the

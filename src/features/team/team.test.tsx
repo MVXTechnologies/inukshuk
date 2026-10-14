@@ -241,33 +241,25 @@ describe('the map card', () => {
           cardSlotFree
           cardStyle={{}}
           fabBottom={72}
-          sosTop={0}
+          panelTop={0}
+          snackStyle={{}}
           onNavigate={jest.fn()}
           onPointActions={jest.fn()}
         />,
       ),
     );
-    // The popup: position age, accuracy, distance and direction; its actions.
-    expect(screen.getByTestId('team-card-range').props.children).toBe('just now · ±5 m · 1.1 km N');
+    // The card (#707): freshness and accuracy, distance, bearing, last fix; its actions.
+    expect(screen.getByTestId('team-card-fresh').props.children).toBe('Live · updated now · ±5 m');
+    expect(screen.getByLabelText('Distance: 1.1 km')).toBeTruthy();
+    expect(screen.getByLabelText('Bearing: 0° N')).toBeTruthy();
     expect(screen.getByText('Julie')).toBeTruthy();
-    expect(screen.getByTestId('team-member-where')).toBeTruthy();
-    // The team button never covers a popup: hidden while one is up, back after.
-    expect(screen.queryByTestId('team-fab')).toBeNull();
+    for (const id of ['message', 'goto', 'centre', 'where'])
+      expect(screen.getByTestId(`team-member-${id}`)).toBeTruthy();
+    // The SOS button never covers a card: hidden while one is up, back after.
+    expect(screen.queryByTestId('team-sos-button')).toBeNull();
     await act(() => useTeamMapSelection.getState().select(null));
-    expect(screen.getByTestId('team-fab')).toBeTruthy();
-    // Its menu: the owner's six (2026-10-07) and "Draw on map" after Rally (#683).
-    await fireEvent.press(screen.getByTestId('team-fab'));
-    const ids = ['sos', 'status', 'rally', 'draw', 'tasks', 'chat', 'manage'].map(
-      (x) => `team-fab-${x}`,
-    );
-    const shown = screen
-      .queryAllByTestId(/^team-fab-/)
-      .map((n) => n.props.testID as string)
-      .filter((id, k, all) => all.indexOf(id) === k && id !== 'team-fab-scrim');
-    expect(shown).toEqual(ids);
-    expect(screen.getByLabelText('Manage team')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('team-fab-tasks'));
-    expect(mockPush).toHaveBeenCalledWith('/team/tasks');
+    expect(screen.getByTestId('team-sos-button')).toBeTruthy();
+    expect(screen.queryByTestId('team-fab')).toBeNull();
     await session.stopMesh();
   });
 });
