@@ -654,13 +654,18 @@ export class TeamSession {
     this.host = new MeshSessionHost<SessionEvent, SyncSession>(
       transport,
       {
+        // The mesh links teammates' phones directly (LAN / hotspot): a
+        // first-party transport, so it may carry live strokes (#683).
         initiate: (peer) => {
           this.touch(peer, false);
-          return SyncSession.initiate(this.deps.c, this.store, { now: this.deps.now() });
+          return SyncSession.initiate(this.deps.c, this.store, {
+            now: this.deps.now(),
+            carryLiveStrokes: true,
+          });
         },
         respond: (peer) => {
           this.touch(peer, false);
-          return SyncSession.respond(this.deps.c, this.store);
+          return SyncSession.respond(this.deps.c, this.store, { carryLiveStrokes: true });
         },
       },
       (peerId, event, session) => this.onSessionEvent(peerId, event, session),

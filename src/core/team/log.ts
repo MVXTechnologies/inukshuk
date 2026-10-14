@@ -1,6 +1,6 @@
 import { own } from './crdt';
-import { expiresAt, isEphemeralType, type SignedOp } from './envelope';
-import { compareStamp } from './hlc';
+import { expiresAt, isEphemeralType, PEN_TTL_S, type SignedOp } from './envelope';
+import { compareStamp, MAX_CLOCK_LEAD_MS, type Stamp } from './hlc';
 
 /**
  * The local op store (#589), in memory. The data layer persists the same
@@ -14,6 +14,13 @@ import { compareStamp } from './hlc';
  *   holding the same ops agrees.
  * - **Ephemeral ops** (`pos`, `pen`) have `seq` 0 and no chain. Only the newest
  *   unexpired one per (author, type) is kept.
+ * - A **live stroke** (`pen`, #683) lives 30 s, too short to judge against
+ *   the author's clock: a receiver whose clock runs a minute ahead would drop
+ *   every stroke as stale. Its life runs from its **arrival** here, at most
+ *   its ttl (≤ {@link PEN_TTL_S}), and it is refused once its own expiry is
+ *   more than {@link MAX_CLOCK_LEAD_MS} behind this clock (no replaying old
+ *   strokes). The newest stroke stamp per author is remembered past expiry,
+ *   so an older stroke never comes back.
  */
 export type InsertResult = 'new' | 'duplicate' | 'fork' | 'stale' | 'full';
 
@@ -28,6 +35,10 @@ export class OpLog {
   /** Highest seq held per author, maintained incrementally. */
   private readonly top = new Map<string, number>();
   private readonly ephemeral = new Map<string, SignedOp>();
+  /** `pen` only: when each held stroke goes, by this clock (arrival + ttl). */
+  private readonly penDeadline = new Map<string, number>();
+  /** `pen` only: the newest stroke stamp ever held per author (≤ one per member). */
+  private readonly penNewest = new Map<string, Stamp>();
   private loggedBytes = 0;
   /** `[firstOpId, conflictingOpId]`: both signed ops stay retrievable with `get`. */
   readonly equivocations: [string, string][] = [];
@@ -36,13 +47,18 @@ export class OpLog {
   insert(op: SignedOp, now: number, pinned?: string): InsertResult {
     const { env } = op;
     if (isEphemeralType(env.t)) {
-      const exp = expiresAt(env);
-      if (exp !== undefined && exp < now) return 'stale';
       const key = `${env.au}|${env.t}`;
+      const pen = env.t === 'pen';
+      if (pen ? !penFresh(op, now) : isPast(expiresAt(env), now)) return 'stale';
       const prev = this.ephemeral.get(key);
       if (prev?.id === op.id) return 'duplicate';
-      if (prev !== undefined && compareStamp(prev.stamp, op.stamp) >= 0) return 'stale';
+      const newest = pen ? this.penNewest.get(key) : prev?.stamp;
+      if (newest !== undefined && compareStamp(newest, op.stamp) >= 0) return 'stale';
       this.ephemeral.set(key, op);
+      if (pen) {
+        this.penNewest.set(key, op.stamp);
+        this.penDeadline.set(key, now + Math.min(env.ttl ?? 0, PEN_TTL_S) * 1000);
+      }
       return 'new';
     }
     if (this.byId.has(op.id)) return 'duplicate';
@@ -89,10 +105,28 @@ export class OpLog {
   /** Unexpired ephemeral ops (dropping expired ones as a side effect). */
   liveEphemeral(now: number): SignedOp[] {
     for (const [key, op] of this.ephemeral) {
-      const exp = expiresAt(op.env);
-      if (exp !== undefined && exp < now) this.ephemeral.delete(key);
+      const gone =
+        op.env.t === 'pen'
+          ? !penFresh(op, now) || isPast(this.penDeadline.get(key), now)
+          : isPast(expiresAt(op.env), now);
+      if (gone) {
+        this.ephemeral.delete(key);
+        this.penDeadline.delete(key);
+      }
     }
     return [...this.ephemeral.values()];
+  }
+
+  /**
+   * When a held ephemeral op goes, by this device's clock: a `pen` by its
+   * arrival (see the class note), anything else by its own expiry.
+   */
+  ephemeralDeadline(op: SignedOp): number | undefined {
+    const key = `${op.env.au}|${op.env.t}`;
+    if (op.env.t === 'pen' && this.ephemeral.get(key)?.id === op.id) {
+      return this.penDeadline.get(key);
+    }
+    return expiresAt(op.env);
   }
 
   /** Forget a removed member's ops past their cut. */
@@ -124,6 +158,13 @@ export class OpLog {
     return this.loggedBytes;
   }
 }
+
+const isPast = (deadline: number | undefined, now: number) =>
+  deadline !== undefined && deadline < now;
+
+/** A stroke whose own expiry is within this clock's tolerated lead (not a replay). */
+const penFresh = (op: SignedOp, now: number) =>
+  !isPast((expiresAt(op.env) ?? 0) + MAX_CLOCK_LEAD_MS, now);
 
 /**
  * What `mine` should ask `theirs` for: per author, the seqs they hold

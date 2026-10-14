@@ -38,6 +38,22 @@ describe('PeerGuard', () => {
     expect(g.admitOp('pos', 0)).toBe(true);
   });
 
+  it('meters live strokes per author first, then per link (#683)', () => {
+    const g = new PeerGuard({
+      ...LAN_LIMITS,
+      drawPerAuthor: [1, 2],
+      ops: { ...LAN_LIMITS.ops, draw: [1, 5] },
+    });
+    // The noisy author spends only their own burst…
+    expect([1, 2, 3, 4].map(() => g.admitDraw('noisy', 0))).toEqual([true, true, false, false]);
+    // …so the others still get theirs, until the link's own ceiling.
+    expect(g.admitDraw('a', 0)).toBe(true);
+    expect(g.admitDraw('a', 0)).toBe(true);
+    expect(g.admitDraw('b', 0)).toBe(true);
+    expect(g.admitDraw('b', 0)).toBe(false); // the link's 5 are spent
+    expect(g.admitDraw('c', 1000)).toBe(true); // refilled
+  });
+
   it('bans after enough strikes inside the window, and the ban expires', () => {
     const g = new PeerGuard({ ...LAN_LIMITS, strikesToBan: 3, strikeWindowMs: 1000, banMs: 5000 });
     expect(g.strike(0)).toBe(false);

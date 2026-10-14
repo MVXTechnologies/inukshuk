@@ -90,6 +90,12 @@ export const MAX_OP_BYTES: Readonly<Record<OpType, number>> = {
 export const MAX_SEQ = 2 ** 31 - 1;
 /** Ephemeral ops live at most a day. */
 export const MAX_TTL_S = 24 * 60 * 60;
+/**
+ * A live stroke (`pen`, #683) outlives its sender by at most this long if the
+ * phone drops. A `pen` claiming longer is malformed: it would keep a stroke
+ * on everyone's map that its author can no longer change.
+ */
+export const PEN_TTL_S = 30;
 export const MAX_SEALED_RECIPIENTS = 64;
 
 export interface SealedKeys {
@@ -229,7 +235,8 @@ function shapeOk(r: Record<string, unknown>, t: OpType): boolean {
   if (isEphemeralType(t)) {
     if (r['sq'] !== 0) return false;
     const ttl = r['ttl'];
-    return Number.isSafeInteger(ttl) && (ttl as number) >= 1 && (ttl as number) <= MAX_TTL_S;
+    const maxTtl = t === 'pen' ? PEN_TTL_S : MAX_TTL_S;
+    return Number.isSafeInteger(ttl) && (ttl as number) >= 1 && (ttl as number) <= maxTtl;
   }
   if (has('ttl')) return false;
   return Number.isSafeInteger(r['sq']) && (r['sq'] as number) >= 1;

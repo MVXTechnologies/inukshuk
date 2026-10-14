@@ -1,7 +1,8 @@
 import { canonicalize, isRecord, type Json } from '@core/team/canonical';
 import type { Decode } from '@core/team/data';
 import type { SignedOp } from '@core/team/envelope';
-import { expiresAt } from '@core/team/envelope';
+import { expiresAt, PEN_TTL_S } from '@core/team/envelope';
+import { MAX_CLOCK_LEAD_MS } from '@core/team/hlc';
 import { isShortId } from '@core/team/ids';
 import { admitEphemeral, type TeamState } from '@core/team/membership';
 import { encodePolyline } from '@core/trails/polyline';
@@ -35,6 +36,7 @@ import {
 /** Plaintext cap: with the AEAD tag, base64 and the header, the envelope stays ≤ 6 KB. */
 export const MAX_PEN_BODY_BYTES = 4_096;
 export const PEN_INTERVAL_MS = 250;
+const PEN_TTL_MS = PEN_TTL_S * 1000;
 /** Simplification tolerance on screen. */
 export const SIMPLIFY_DP = 1.5;
 
@@ -201,24 +203,34 @@ export interface LiveStroke extends PenBody {
   pts: Pt[];
   /** HLC wall of the update. */
   at: number;
-  /** When it disappears if no update or final shape arrives. */
+  /**
+   * When it disappears if no update or final shape arrives, by this phone's
+   * clock: at most {@link PEN_TTL_S} after it arrived (or after its stamp).
+   */
   until: number;
 }
 
 /**
- * The live strokes to draw: `pen` ops admitted against the current team state
- * (active members, data-op rules: guests do not draw), valid bodies, minus
- * those whose final shape is already here (`finished(author, id)`).
+ * The live strokes to draw at `now` (the replica's clock, `drawClock`): `pen`
+ * ops admitted against the current team state (active members, data-op
+ * rules: guests do not draw), valid bodies, minus those whose final shape is
+ * already here (`finished(author, id)`) and those stamped further ahead than
+ * the clock's tolerated lead. `arrived` is the replica's arrival deadline
+ * (`TeamReplica.ephemeralDeadline`): it keeps a stroke live on a phone whose
+ * clock runs ahead of the drawer's. Without it, the stroke's own stamp counts.
  */
 export function liveStrokes(
   ops: readonly SignedOp[],
   state: TeamState,
   decode: Decode,
   finished: (author: string, id: string) => boolean,
+  now: number,
+  arrived?: (op: SignedOp) => number | undefined,
 ): LiveStroke[] {
   const out: LiveStroke[] = [];
   for (const op of ops) {
     if (op.env.t !== 'pen' || !admitEphemeral(state, op)) continue;
+    if (op.stamp.wall > now + MAX_CLOCK_LEAD_MS) continue;
     const body = parsePenBody(decode(op));
     if (body === null || finished(op.env.au, body.id)) continue;
     const pts = parseGeometry(body.sh, body.g, body.r, 1)!;
@@ -227,7 +239,10 @@ export function liveStrokes(
       author: op.env.au,
       pts,
       at: op.stamp.wall,
-      until: expiresAt(op.env)!,
+      until: Math.min(
+        arrived?.(op) ?? Math.min(expiresAt(op.env)!, op.stamp.wall + PEN_TTL_MS),
+        now + PEN_TTL_MS,
+      ),
     });
   }
   return out;

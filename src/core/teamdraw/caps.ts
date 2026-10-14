@@ -29,6 +29,19 @@ export function hasCap(data: TeamData, member: string, cap: string = PEN_CAP): b
   return rec.state.deleted === undefined || compareStamp(reg.stamp, rec.state.deleted) > 0;
 }
 
+/**
+ * Every member advertising `cap`, in one pass over the fold (the replica
+ * caches this per data change, so the sync session's per-stroke gate is a
+ * set lookup).
+ */
+export function capHolders(data: TeamData, cap: string = PEN_CAP): Set<string> {
+  const out = new Set<string>();
+  for (const rec of data.entities.values()) {
+    if (rec.kind === 'cap' && hasCap(data, rec.id, cap)) out.add(rec.id);
+  }
+  return out;
+}
+
 /** The body this device writes once to advertise what it understands. */
 export function capBody(me: string): { k: 'cap'; id: string; f: Record<string, Json> } {
   return { k: 'cap', id: me, f: { [PEN_CAP]: 1 } };

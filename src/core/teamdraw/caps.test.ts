@@ -1,6 +1,6 @@
 import { T0, MIN } from '@core/team/testing/fixtures';
 
-import { capBody, capKey, hasCap, needsCap, PEN_CAP } from './caps';
+import { capBody, capHolders, capKey, hasCap, needsCap, PEN_CAP } from './caps';
 import { crew } from './testUtils';
 
 describe('capability records', () => {
@@ -34,5 +34,15 @@ describe('capability records', () => {
     rb.write(T0 + 6 * MIN, 'e.set', capBody(bob.id));
     sync(T0 + 7 * MIN);
     expect(hasCap(w.root.data(), bob.id)).toBe(true);
+  });
+
+  it('capHolders: every member with the flag on, in one pass (Eve’s is off)', () => {
+    const { w, bob, eve, rb, re, sync } = crew();
+    re.write(T0 + MIN, 'e.set', { k: 'cap', id: eve.id, f: { pen: 0 } });
+    rb.write(T0 + MIN, 'e.set', capBody(bob.id));
+    rb.write(T0 + MIN + 1, 'e.set', { k: 'rly', id: 'r', f: { la: 46.8, lo: -71.2 } });
+    sync(T0 + 2 * MIN);
+    expect(capHolders(w.root.data())).toEqual(new Set([bob.id]));
+    expect(capHolders(w.root.data(), 'other')).toEqual(new Set());
   });
 });

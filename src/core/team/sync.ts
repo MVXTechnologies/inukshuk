@@ -18,7 +18,14 @@ import type { SignedOp } from './envelope';
 import { isMemberId, isTeamId, memberPublicKey } from './ids';
 import { JOIN_PROOF_KEYS, parseJoinProof, type JoinProof } from './invite';
 import { missingRanges, type VersionVector } from './log';
-import { categoryOf, LAN_LIMITS, PeerGuard, type PeerLimits, type StrikeReason } from './ratelimit';
+import {
+  categoryOf,
+  LAN_LIMITS,
+  PeerGuard,
+  type OpCategory,
+  type PeerLimits,
+  type StrikeReason,
+} from './ratelimit';
 import type { IngestReport } from './replica';
 
 /**
@@ -117,6 +124,13 @@ export interface SessionOptions {
   now?: number;
   /** The handshake must finish within this long (default {@link HANDSHAKE_TIMEOUT_MS}). */
   handshakeTimeoutMs?: number;
+  /**
+   * Whether this transport may carry live strokes (`pen`, #683) at all. Off by
+   * default (fail closed): only a first-party link between teammates' phones
+   * (the LAN mesh) turns it on, never a transport shared with strangers such
+   * as a Nostr relay. Even then a stroke goes only to a capable peer.
+   */
+  carryLiveStrokes?: boolean;
 }
 
 /** A handshake that takes longer is dropped (re-review #4: no time to stall and grind). */
@@ -668,13 +682,16 @@ export class SyncSession {
       const env = isRecord(raw) ? raw : undefined;
       const author = env?.['au'];
       const sq = env?.['sq'];
+      // Only logged ops (seq ≥ 1) can answer a `want`: an ephemeral op (seq 0)
+      // in a solicited frame is unsolicited and pays its rate like any other.
       const asked =
         solicited &&
         typeof author === 'string' &&
         typeof sq === 'number' &&
+        sq >= 1 &&
         sq <= (this.outstanding.get(author) ?? 0);
       const category = categoryOf(String(env?.['t'] ?? ''));
-      if (!asked && !this.guard.admitOp(category, now)) {
+      if (!asked && !this.admit(category, author, now)) {
         // An over-rate live stroke is dropped without a strike: each one holds the
         // whole stroke so far (the next heals it), and three teammates drawing at
         // once must not get a relaying phone banned. Frames and bytes still strike.
@@ -725,11 +742,26 @@ export class SyncSession {
     }
   }
 
-  /** A gated op goes only to a capable peer, and never over a third-party relay. */
+  /**
+   * Rate check for one unsolicited op. Live strokes are metered per author
+   * (a member's own bucket; anyone not an active member shares one), so one
+   * noisy drawer cannot starve the others on this link (#683).
+   */
+  private admit(category: OpCategory, author: unknown, now: number): boolean {
+    if (category !== 'draw') return this.guard.admitOp(category, now);
+    const key = typeof author === 'string' && this.store.isActiveMember(author) ? author : '';
+    return this.guard.admitDraw(key, now);
+  }
+
+  /**
+   * A gated op goes only over a transport allowed to carry it
+   * ({@link SessionOptions.carryLiveStrokes}, off by default) and only to a
+   * capable peer.
+   */
   private mayCarry(op: SignedOp): boolean {
     const cap = own(GATED_TYPES, op.env.t);
     if (cap === undefined) return true;
-    if (this.guard.limits.thirdParty === true || this.peer === undefined) return false;
+    if (this.options.carryLiveStrokes !== true || this.peer === undefined) return false;
     return this.store.canReceive?.(this.peer, cap) === true;
   }
 

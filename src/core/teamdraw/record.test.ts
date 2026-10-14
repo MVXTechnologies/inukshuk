@@ -2,10 +2,12 @@ import { isLive, visibleFields } from '@core/team/crdt';
 import { entityKey } from '@core/team/data';
 import { authorizeRecord, emptyIndex } from '@core/team/records';
 import { T0, MIN, HOUR } from '@core/team/testing/fixtures';
+import { MEMBER_COLORS } from '@core/teamui/colors';
 import { encodePolyline } from '@core/trails/polyline';
 
 import { destination, type Pt } from './geo';
 import {
+  COLOUR_COUNT,
   drawWrite,
   liveDrawings,
   MAX_FREE_POINTS,
@@ -19,6 +21,12 @@ import { arrowFields, crew, drawOn, NEAR, QC, why } from './testUtils';
 
 const W = T0 + MIN;
 const enc = (pts: Pt[]) => encodePolyline(pts);
+
+describe('drw colours', () => {
+  it('the wire palette size matches the member palette (kept apart so core/team needs no UI)', () => {
+    expect(COLOUR_COUNT).toBe(MEMBER_COLORS.length);
+  });
+});
 
 describe('drw geometry', () => {
   it('accepts each shape with its point count, inside 50 km', () => {

@@ -6,10 +6,16 @@
  * - `RECORD_KINDS` without `drw`/`cap` (so `parseSetBody` fails `isKind`, as
  *   it does on 2.5.1, and the fold records `skipped: invalid`);
  * - `checkEnvelope` refusing `pen` with reason `type` (2.5.1's `OP_TYPES`).
+ *
+ * This suite also passed once against the frozen 2.5.1 sources (`src/core/team`
+ * at 101c7fe0, extracted to a scratch module dir, security review #683). It
+ * cannot do that in CI: the checkout is shallow, and an integration commit
+ * may not survive a squash merge. Vendoring a copy of the old protocol would
+ * leave ~6,000 lines of dead code to keep compiling.
  */
 import type { SignedOp } from '@core/team/envelope';
 import type { TeamReplica } from '@core/team/replica';
-import { RELAY_LIMITS } from '@core/team/ratelimit';
+import { LAN_LIMITS, RELAY_LIMITS } from '@core/team/ratelimit';
 import { SyncSession, type SessionEvent, type Step, type SyncStore } from '@core/team/sync';
 import { addMember, c, device, joinReplica, MIN, T0 } from '@core/team/testing/fixtures';
 import { alertContext, alertFor } from '@core/teamui/alerts';
@@ -17,6 +23,7 @@ import { alertContext, alertFor } from '@core/teamui/alerts';
 import { capBody } from './caps';
 import { destination } from './geo';
 import { penBody, toleranceM, type Stroke } from './pen';
+import { teamShapes } from './view';
 import { crew, drawOn, QC } from './testUtils';
 
 const OLD_KINDS = ['trl', 'tve', 'sos', 'rly', 'mres'];
@@ -205,6 +212,35 @@ describe('backward compatibility (#683)', () => {
       ]);
     }
   });
+
+  it('an admin’s e.del {o} of a drawing and a guest’s cap: skipped by an old peer, chains intact', () => {
+    const { w, bob, gus, rb, re, rg, sync } = crew();
+    sync(T0 + MIN);
+    const now = T0 + 2 * MIN;
+    drawOn(rb, now, 'a1', 5 * MIN);
+    sync(now + 1);
+    const del = w.root.write(now + 2, 'e.del', { k: 'drw', id: 'a1', o: bob.id })!;
+    const after = w.root.write(now + 3, 'msg', { id: 'm1', th: 'team', tx: 'Removed it' })!;
+    const cap = rg.write(now + 4, 'e.set', capBody(gus.id))!;
+    const gAfter = rg.write(now + 5, 'msg', { id: 'g1', th: 'team', tx: 'Guest still here' })!;
+    w.root.ingest(envs(rg, now + 6), now + 6);
+    const oldEve = new old.TeamReplica(c, w.teamId, re.keys);
+    oldEve.ingest(envs(w.root, now + 6), now + 6);
+    const data = oldEve.data(now + 6);
+    const skipped = new Map(data.skipped.map((s) => [s.id, s.why]));
+    expect(skipped.get(del.id)).toBe('invalid');
+    expect(skipped.get(cap.id)).toBe('invalid');
+    // What follows each in its author's chain still applies.
+    expect(data.entities.get(`msg:${w.owner.id}:m1`)).toBeDefined();
+    expect(data.entities.get(`msg:${gus.id}:g1`)).toBeDefined();
+    expect(after.env.pv).toBe(del.id);
+    expect(gAfter.env.pv).toBe(cap.id);
+    expect(oldEve.versionVector()).toEqual(w.root.versionVector());
+    expect(oldEve.parkedSize).toBe(0);
+    // The current fold applies both: the drawing is gone, the guest is capable.
+    expect(teamShapes(w.root.data(now + 6), now + 6)).toEqual([]);
+    expect(w.root.canReceive(gus.id, 'pen')).toBe(true);
+  });
 });
 
 // ── Sessions ─────────────────────────────────────────────────────────────────
@@ -237,19 +273,22 @@ function pump(link: Link, first: Step, now: number): void {
   }
 }
 
-/** `from` dials `to`; `to` may be an old version's session class. */
+/**
+ * `from` dials `to` over the LAN mesh (which may carry live strokes) unless
+ * `carry` is false; `to` may be an old version's session class.
+ */
 function connect(
   from: SyncStore,
   to: SyncStore,
   now: number,
-  opts: { limits?: typeof RELAY_LIMITS; Responder?: typeof SyncSession } = {},
+  opts: { limits?: typeof RELAY_LIMITS; Responder?: typeof SyncSession; carry?: boolean } = {},
 ): Link {
-  const { session: a, step } = SyncSession.initiate(
-    c,
-    from,
-    opts.limits ? { limits: opts.limits } : {},
-  );
-  const b = (opts.Responder ?? SyncSession).respond(c, to);
+  const carry = opts.carry ?? true;
+  const { session: a, step } = SyncSession.initiate(c, from, {
+    ...(opts.limits ? { limits: opts.limits } : {}),
+    ...(carry ? { carryLiveStrokes: true } : {}),
+  });
+  const b = (opts.Responder ?? SyncSession).respond(c, to, carry ? { carryLiveStrokes: true } : {});
   const link = { a, b, events: [] };
   pump(link, step, now);
   return link;
@@ -325,20 +364,28 @@ describe('pen is capability-gated (#683)', () => {
     expect(strikes([...lb.events, ...le.events])).toEqual([]);
   });
 
-  it('never over a third-party relay, and never from a store that cannot tell', () => {
+  it('never over a transport not cleared for it (the default), nor from a store that cannot tell', () => {
     const { w, eve, re, sync } = crew();
     re.write(T0 + MIN, 'e.set', capBody(eve.id));
     sync(T0 + 2 * MIN);
     const now = T0 + 3 * MIN;
-    const relay = connect(w.root, re, now, { limits: RELAY_LIMITS });
+    // A Nostr relay: the session is not told it may carry strokes.
+    const relay = connect(w.root, re, now, { limits: RELAY_LIMITS, carry: false });
     expect(relay.a.phase).toBe('open');
     expect(relay.a.push([pen(w.root, now + 1, 1)]).send).toHaveLength(0);
+    // The default is BLOCK, whatever the limits: LAN limits, no option, a capable peer.
+    const plain = connect(w.root, re, now, { carry: false });
+    expect(plain.a.phase).toBe('open');
+    expect(plain.a.push([pen(w.root, now + 2, 2)]).send).toHaveLength(0);
+    // The same peer over a cleared link does get it (the control).
+    const lanOk = connect(w.root, re, now);
+    expect(lanOk.a.push([pen(w.root, now + 3, 3)]).send).toHaveLength(1);
     // A store without `canReceive` (an embedding that predates it): fail closed.
     const bare: SyncStore = Object.assign(Object.create(w.root) as TeamReplica, {
       canReceive: undefined,
     });
     const lan = connect(bare, re, now + 2);
-    expect(lan.a.push([pen(w.root, now + 3, 2)]).send).toHaveLength(0);
+    expect(lan.a.push([pen(w.root, now + 4, 2)]).send).toHaveLength(0);
   });
 
   it('an old phone talking to a new one: no pen, no strike; ungated it would ban the drawer', () => {
@@ -393,31 +440,72 @@ describe('pen is capability-gated (#683)', () => {
     expect(rb.liveEphemeral(now + 60_000).filter((op) => op.env.t === 'pen')).toHaveLength(1);
   });
 
-  it('three teammates drawing at once through one relay: over-rate strokes drop, never a strike', () => {
+  it('three teammates and one noisy member through one relay: each honest drawer gets ≥ 3/s, no strike', () => {
     const { w, bob, rb, re, sync } = crew();
     const dan = device();
+    const mal = device();
     addMember(w.root, dan, 'member', T0 + 5);
-    const rd = joinReplica(w, dan, w.root, T0 + 6);
+    addMember(w.root, mal, 'member', T0 + 6);
+    const rd = joinReplica(w, dan, w.root, T0 + 7);
+    const rm = joinReplica(w, mal, w.root, T0 + 7);
     rb.write(T0 + MIN, 'e.set', capBody(bob.id));
     sync(T0 + 2 * MIN);
-    rd.ingest(envs(w.root, T0 + 2 * MIN), T0 + 2 * MIN);
+    for (const r of [rd, rm]) r.ingest(envs(w.root, T0 + 2 * MIN), T0 + 2 * MIN);
     const now = T0 + 3 * MIN;
-    const toBob = counting(rb);
-    const link = connect(w.root, toBob.store, now);
-    for (let i = 0; i < 240; i++) {
+    // Count what reaches Bob's replica, per author.
+    const got = new Map<string, number>();
+    const store: SyncStore = Object.assign(Object.create(rb) as TeamReplica, {
+      ingest(raws: readonly unknown[], t: number) {
+        for (const raw of raws) {
+          const e = raw as SignedOp['env'];
+          if (e.t === 'pen') got.set(e.au, (got.get(e.au) ?? 0) + 1);
+        }
+        return rb.ingest(raws, t);
+      },
+    });
+    const link = connect(w.root, store, now);
+    const honest = [re, rd, w.root];
+    const SECONDS = 20;
+    for (let i = 0; i < SECONDS * 4; i++) {
       const t = now + i * 250;
-      const ops = [re, rd, w.root].map((r) => pen(r, t, i % 200, 'x'));
+      const ops = honest.map((r) => pen(r, t, i % 200, 'x'));
+      // Mallory sends ten strokes in every 250 ms (40/s), unthrottled.
+      for (let k = 0; k < 10; k++) ops.push(pen(rm, t + k * 25, (i + k) % 200, 'm'));
       w.root.ingest(
         ops.map((o) => o.env),
         t,
       );
       deliver(link.a.push(ops), link.b, t, link.events);
     }
-    const got = toBob.seen.get('pen') ?? 0;
-    expect(got).toBeLessThan(720);
-    expect(got).toBeGreaterThan(500); // burst 40 + 8/s × 60 s
+    for (const r of honest) {
+      expect(got.get(r.id) ?? 0).toBeGreaterThanOrEqual(3 * SECONDS);
+    }
+    // The noisy member gets their own share and no more (6/s plus a burst of 12 on a LAN).
+    const [rate, burst] = LAN_LIMITS.drawPerAuthor;
+    expect(got.get(mal.id) ?? 0).toBeLessThanOrEqual(rate * SECONDS + burst);
     expect(strikes(link.events)).toEqual([]);
     expect(link.b.phase).toBe('open');
+  });
+
+  it('ephemeral ops (seq 0) in a solicited frame still pay the per-op rate (P1-3)', () => {
+    const { w, bob, rb, sync } = crew();
+    rb.write(T0 + MIN, 'e.set', capBody(bob.id));
+    sync(T0 + 2 * MIN);
+    const now = T0 + 3 * MIN;
+    const toBob = counting(rb);
+    const link = connect(w.root, toBob.store, now);
+    const before = toBob.seen.get('pen') ?? 0;
+    // A peer marks a frame of 200 strokes "solicited" (re: 1) though nobody asked.
+    const ops = Array.from({ length: 200 }, (_, i) => pen(w.root, now + i, i % 50).env);
+    const step: Step = { send: [], events: [] };
+    (link.a as unknown as { sendSealed(o: unknown, s: Step): void }).sendSealed(
+      { t: 'ops', o: ops, re: 1 },
+      step,
+    );
+    deliver(step, link.b, now + 200, link.events);
+    // Only the author's burst went through; the rest dropped without a strike.
+    expect((toBob.seen.get('pen') ?? 0) - before).toBe(LAN_LIMITS.drawPerAuthor[1]);
+    expect(strikes(link.events)).toEqual([]);
   });
 
   it('pen bodies stay under the 6 KB envelope cap, and a stroke past it stops growing', () => {

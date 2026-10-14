@@ -146,6 +146,7 @@ describe('live strokes', () => {
         w.root.state,
         (o) => w.root.decode(o),
         () => false,
+        t,
       );
       expect(live).toHaveLength(1);
       expect(w.root.data(t).positions.size).toBe(0);
@@ -164,12 +165,12 @@ describe('live strokes', () => {
     const pos = w.root.position(now, { la: 46.8, lo: -71.2, at: now })!;
     const ops = [b, g, junk, pos];
     const decode = (op: (typeof ops)[number]) => w.root.decode(op);
-    const live = liveStrokes(ops, w.root.state, decode, () => false);
+    const live = liveStrokes(ops, w.root.state, decode, () => false, now);
     expect(live).toHaveLength(1);
     expect(live[0]).toMatchObject({ author: bob.id, id: 'a1', at: now, until: now + 30_000 });
     expect(live[0]!.pts.length).toBeGreaterThanOrEqual(1);
-    expect(liveStrokes(ops, w.root.state, decode, (a, id) => a === bob.id && id === 'a1')).toEqual(
-      [],
-    );
+    expect(
+      liveStrokes(ops, w.root.state, decode, (a, id) => a === bob.id && id === 'a1', now),
+    ).toEqual([]);
   });
 });

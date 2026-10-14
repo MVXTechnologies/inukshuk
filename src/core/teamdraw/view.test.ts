@@ -1,11 +1,13 @@
 import { setOp, deleteOp, mergeEntity } from '@core/team/crdt';
-import type { EntityRecord } from '@core/team/data';
-import { T0, MIN } from '@core/team/testing/fixtures';
+import { emptyData, type EntityRecord } from '@core/team/data';
+import { T0, MIN, HOUR } from '@core/team/testing/fixtures';
 import { encodePolyline } from '@core/trails/polyline';
 
 import {
   drawClock,
+  drawViewWork,
   fullNotes,
+  MAX_SHOWN_LIFE_MS,
   MAX_DRAWN,
   recencyBand,
   shapeOf,
@@ -54,6 +56,54 @@ describe('shapes from the fold', () => {
     expect(shapeOf(rec({}, { state: gone }))).toBeNull();
     expect(shapeOf(rec({ ...arrowFields(T0), g: '' }))).toBeNull();
     expect(shapeOf(rec({ ...arrowFields(T0), c: 99 }))).toBeNull();
+  });
+
+  it('caps the life at 4 h + 1 min from the first write, whatever `x` says', () => {
+    const long = shapeOf(rec(arrowFields(T0, 10 * HOUR)))!;
+    expect(long.expires).toBe(T0 + MAX_SHOWN_LIFE_MS);
+    expect(shapeOf(rec(arrowFields(T0, HOUR)))!.expires).toBe(T0 + HOUR);
+  });
+
+  it('a delete stamped before the first write deletes; a later re-set (Undo) revives', () => {
+    const at = setOp(arrowFields(T0 + HOUR) as never, stamp(T0 + HOUR));
+    expect(shapeOf(rec({}, { state: mergeEntity(at, deleteOp(stamp(T0))) }))).toBeNull();
+    const undo = mergeEntity(
+      mergeEntity(setOp(arrowFields(T0) as never, stamp(T0)), deleteOp(stamp(T0 + 1))),
+      setOp(arrowFields(T0) as never, stamp(T0 + 2)),
+    );
+    expect(shapeOf(rec({}, { state: undo }))).not.toBeNull();
+  });
+
+  it('only a note visible (the shape was deleted before it): nothing to draw', () => {
+    const st = mergeEntity(
+      mergeEntity(setOp(arrowFields(T0) as never, stamp(T0)), deleteOp(stamp(T0 + 1))),
+      setOp({ tx: 'late' }, stamp(T0 + 2)),
+    );
+    expect(shapeOf(rec({}, { state: st }))).toBeNull();
+  });
+
+  it('re-decodes when the shape kind or radius changed under the same geometry', () => {
+    const first = setOp(
+      { sh: 'circle', g: encodePolyline([QC]), r: 40, c: 0, w: 1, d: true, x: null },
+      stamp(T0),
+    );
+    const r = rec({}, { state: first });
+    drawViewWork.decodes = 0;
+    expect(shapeOf(r)!.r).toBe(40);
+    expect(shapeOf(r)!.r).toBe(40);
+    expect(drawViewWork.decodes).toBe(1);
+    const wider = rec({}, { state: mergeEntity(first, setOp({ r: 60 }, stamp(T0 + 1))) });
+    expect(shapeOf(wider)!.r).toBe(60);
+    expect(drawViewWork.decodes).toBe(2);
+  });
+
+  it('a malformed shape takes no slot: the author’s next one is drawn', () => {
+    const data = emptyData();
+    const put = (id: string, f: Record<string, unknown>, wall: number) =>
+      data.entities.set(`drw:me:${id}`, rec(f, { id, state: setOp(f as never, stamp(wall)) }));
+    put('ok', arrowFields(T0, null), T0);
+    put('bad', { ...arrowFields(T0, null), c: 99 }, T0 + 1);
+    expect(teamShapes(data, T0 + 2).map((s) => s.id)).toEqual(['ok']);
   });
 
   it('drops expired shapes against the replica clock, keeps Never', () => {

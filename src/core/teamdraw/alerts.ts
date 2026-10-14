@@ -1,3 +1,4 @@
+import { MAX_CLOCK_LEAD_MS } from '@core/team/hlc';
 import { activeMembers, type TeamState } from '@core/team/membership';
 import { LARGE_TEAM } from '@core/team/notify';
 import { isAdminRole } from '@core/team/roles';
@@ -14,7 +15,9 @@ import { isAdminRole } from '@core/team/roles';
  *   my groups, a badge in a team of up to 30, nothing in a larger team.
  * - Never for my own drawing, never when I'm not active, and never for a
  *   shape that has already expired when it reaches me (it does not even
- *   extend the session). `now` is the replica's HLC (`drawClock`).
+ *   extend the session), nor for one stamped further ahead than the clock's
+ *   tolerated lead (it is not shown either, `./view`). `now` is the
+ *   replica's HLC (`drawClock`).
  */
 export const DRAW_SESSION_GAP_MS = 5 * 60_000;
 export const NOTIFY_MIN_LIFE_MS = 60_000;
@@ -62,7 +65,10 @@ export class DrawAlerts {
   admit(state: TeamState, e: DrawEvent, me: string, now: number): DrawAlert | null {
     if (e.author === me || state.members.get(me)?.status !== 'active') return null;
     if (state.members.get(e.author)?.status !== 'active') return null;
-    if (e.kind === 'shape' && e.expires !== null && e.expires <= now) return null;
+    if (e.kind === 'shape') {
+      if (e.expires !== null && e.expires <= now) return null;
+      if (e.created > now + MAX_CLOCK_LEAD_MS) return null;
+    }
     let s = this.sessions.get(e.author);
     if (s === undefined || now - s.last > DRAW_SESSION_GAP_MS) {
       s = { last: now, snack: false, notified: false };

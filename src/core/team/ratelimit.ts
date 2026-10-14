@@ -56,10 +56,11 @@ export interface PeerLimits {
   strikeWindowMs: number;
   banMs: number;
   /**
-   * A transport shared with strangers (Nostr relays): live strokes (`pen`)
-   * are never sent over it (#683), only finished shapes.
+   * Live strokes per AUTHOR inside `ops.draw`: [per second, burst] (#683).
+   * One noisy member (or a relay forwarding one) fills only their own
+   * bucket, never their teammates' strokes on the same link.
    */
-  thirdParty?: true;
+  drawPerAuthor: [number, number];
 }
 
 /** Phones on the same Wi-Fi or hotspot. */
@@ -75,12 +76,14 @@ export const LAN_LIMITS: PeerLimits = {
     msg: [10, 100],
     // 500 members relaying positions every ~10 s.
     pos: [60, 600],
-    // Live strokes: ≤ 4/s per drawer (`@core/teamdraw/pen`), two at once at full rate.
-    draw: [8, 40],
+    // Live strokes, all drawers on this link: five at full rate (4/s each).
+    draw: [20, 60],
   },
   strikesToBan: 20,
   strikeWindowMs: 60_000,
   banMs: 10 * 60_000,
+  // One drawer sends ≤ 4/s (`@core/teamdraw/pen`); the slack absorbs relay bunching.
+  drawPerAuthor: [6, 12],
 };
 
 /** Third-party relays (Nostr, later): tiny budgets, the relay is shared with strangers. */
@@ -90,12 +93,13 @@ export const RELAY_LIMITS: PeerLimits = {
   burstBytes: 512 * 1024,
   framesPerSec: 20,
   burstFrames: 60,
-  // `pen` is never sent over a relay: an honest peer uses none of `draw`.
+  // `pen` is never sent over a relay (sessions carry it only when told to,
+  // `SessionOptions.carryLiveStrokes`): an honest peer uses none of `draw`.
   ops: { control: [1, 20], data: [5, 50], msg: [5, 50], pos: [10, 100], draw: [1, 4] },
   strikesToBan: 10,
   strikeWindowMs: 60_000,
   banMs: 30 * 60_000,
-  thirdParty: true,
+  drawPerAuthor: [1, 4],
 };
 
 export type StrikeReason =
@@ -105,6 +109,8 @@ export class PeerGuard {
   private readonly bytes: TokenBucket;
   private readonly frames: TokenBucket;
   private readonly ops: Record<OpCategory, TokenBucket>;
+  /** Per author `draw` buckets (≤ one per member: the caller maps strangers to one key). */
+  private readonly drawers = new Map<string, TokenBucket>();
   private strikes: number[] = [];
   bannedUntil: number | undefined;
 
@@ -133,6 +139,19 @@ export class PeerGuard {
 
   admitOp(category: OpCategory, now: number): boolean {
     return this.ops[category].take(1, now);
+  }
+
+  /**
+   * A live stroke by `author`: their own bucket first, then the link's `draw`
+   * bucket, so an author over their rate never spends their teammates' share.
+   */
+  admitDraw(author: string, now: number): boolean {
+    let mine = this.drawers.get(author);
+    if (mine === undefined) {
+      mine = new TokenBucket(...this.limits.drawPerAuthor);
+      this.drawers.set(author, mine);
+    }
+    return mine.take(1, now) && this.ops.draw.take(1, now);
   }
 
   /** Record a strike; returns true when this one triggers a ban. */

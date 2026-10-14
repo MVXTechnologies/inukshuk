@@ -1,6 +1,5 @@
 import type { Json } from '@core/team/canonical';
 import { decodeLine } from '@core/team/polyline';
-import { MEMBER_COLORS } from '@core/teamui/colors';
 
 import { extentM, type Pt } from './geo';
 
@@ -15,7 +14,7 @@ import { extentM, type Pt } from './geo';
  *   sh: 'free' | 'arrow' | 'circle' | 'rect',
  *   g:  encoded polyline (1e5): free ≤ 500 points · arrow [tail, head] · circle [centre] · rect 4 corners
  *   r:  circle radius, m (circle only)
- *   c:  MEMBER_COLORS index 0–7 · w: 1|2|3 · d: dashed
+ *   c:  palette index 0–7 (COLOUR_COUNT) · w: 1|2|3 · d: dashed
  *   ht: 'fill'|'open'|'both', hs: 1|2|3 (arrow only)
  *   tx: note, ≤ 40 chars (optional; later an `e.set { tx }` alone, by the owner)
  *   x:  expiry, epoch ms, in (created, created + 4 h + 1 min], or null = never
@@ -41,7 +40,13 @@ export const MAX_LIFE_MS = 4 * 60 * 60_000;
 export const LIFE_SLACK_MS = 60_000;
 export const MAX_EXTENT_M = 50_000;
 export const MAX_LIVE_PER_AUTHOR = 30;
-export const COLOUR_COUNT = MEMBER_COLORS.length;
+/**
+ * Palette size on the wire (`c` is 0–7). A protocol constant, not the UI's
+ * palette length: `@core/team` validates drawings through this module and must
+ * not depend on UI modules, and a peer must never refuse a colour another
+ * version sends. `record.test.ts` pins it to `MEMBER_COLORS.length`.
+ */
+export const COLOUR_COUNT = 8;
 
 const FIELDS: readonly string[] = ['sh', 'g', 'r', 'c', 'w', 'd', 'ht', 'hs', 'tx', 'x'];
 const has = (f: Record<string, Json>, k: string) => Object.prototype.hasOwnProperty.call(f, k);
