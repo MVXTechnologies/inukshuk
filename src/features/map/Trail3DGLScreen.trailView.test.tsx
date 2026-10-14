@@ -9,6 +9,8 @@ import { useOnMapTrailStore } from '@state/onMapTrailStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
+import { State } from 'react-native-gesture-handler';
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Trail3DGLScreen } from './Trail3DGLScreen';
@@ -194,30 +196,12 @@ it('scrubs every chart from a drag on any one of them', async () => {
   // The stop on top is labelled on the pace chart, where its line breaks.
   // (SVG text isn't a host <Text>, so read it off the rendered tree.)
   expect(JSON.stringify(screen.toJSON())).toMatch(/stop (9|10) min/);
-  const touch = { locationX: 30, pageX: 30, pageY: 0, identifier: 0, timestamp: 1 };
   await act(async () =>
-    fireEvent(surface, 'responderGrant', {
-      nativeEvent: { ...touch, touches: [touch], changedTouches: [touch] },
-      touchHistory: {
-        numberActiveTouches: 1,
-        indexOfSingleActiveTouch: 0,
-        mostRecentTimeStamp: 1,
-        touchBank: [
-          {
-            touchActive: true,
-            startPageX: 30,
-            startPageY: 0,
-            startTimeStamp: 1,
-            currentPageX: 30,
-            currentPageY: 0,
-            currentTimeStamp: 1,
-            previousPageX: 30,
-            previousPageY: 0,
-            previousTimeStamp: 1,
-          },
-        ],
-      },
-    }),
+    fireGestureHandler(getByGestureTestId('chart-hr-scrub'), [
+      { state: State.BEGAN, x: 30, y: 40 },
+      { state: State.ACTIVE, x: 30, y: 40 },
+      { state: State.END, x: 30, y: 40 },
+    ]),
   );
   // 10 % along: walking uphill, so all three charts and the map read a value.
   expect(screen.getByTestId('chart-pace-value').props.children).toMatch(/\/km$/);

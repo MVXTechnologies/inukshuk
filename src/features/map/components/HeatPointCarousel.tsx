@@ -2,7 +2,7 @@ import { findCategory } from '@core/library/categories';
 import type { TrackSummary } from '@core/models';
 import { formatDistance, formatDuration, formatTimestamp } from '@state/formatters';
 import { useLibraryStore } from '@state/libraryStore';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, PanResponder, Pressable, StyleSheet, View } from 'react-native';
 import { Icon, IconButton, Text, useTheme } from 'react-native-paper';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
@@ -88,46 +88,51 @@ export function HeatPointCarousel({
 
   // Drag moves the stack live (one step max per gesture, rubber-banded at
   // the ends); release either commits the step via onFocus — the spring
-  // then settles on the new index — or springs back. Recreated when
-  // focus/count change (the ElevationProfile recipe) so callbacks always
-  // close over current values.
-  const pan = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_e, g) =>
-          Math.abs(g.dy) > 10 && Math.abs(g.dy) > Math.abs(g.dx),
-        onPanResponderMove: (_e, g) => {
-          const raw = clamped - g.dy / PEEK;
-          const lo = Math.max(0, clamped - 1);
-          const hi = Math.min(count - 1, clamped + 1);
-          // Soft clamp: allow a 20% overshoot at the hard ends for feel.
-          anim.setValue(Math.max(lo - 0.2, Math.min(hi + 0.2, raw)));
-        },
-        onPanResponderRelease: (_e, g) => {
-          let target = clamped;
-          if (g.dy <= -SWIPE_STEP && clamped < count - 1) target = clamped + 1;
-          else if (g.dy >= SWIPE_STEP && clamped > 0) target = clamped - 1;
-          if (target !== clamped) onFocus(target);
-          // Same index: spring back from wherever the drag left the stack.
-          else
-            Animated.spring(anim, {
-              toValue: clamped,
-              useNativeDriver: true,
-              friction: 9,
-              tension: 80,
-            }).start();
-        },
-        onPanResponderTerminate: () => {
-          Animated.spring(anim, {
-            toValue: clamped,
-            useNativeDriver: true,
-            friction: 9,
-            tension: 80,
-          }).start();
-        },
-      }),
-    [clamped, count, onFocus, anim],
-  );
+  // then settles on the new index — or springs back.
+  //
+  // ONE PanResponder for the deck's lifetime, reading focus/count/onFocus
+  // from a ref. It used to be rebuilt whenever they changed, and MapScreen
+  // passes a fresh `onFocus` arrow on every render (each GPS tick): a rebuild
+  // mid-swipe swapped in a responder whose gestureState started from dy = 0,
+  // so the stack snapped back under the finger and the release judged only
+  // the travel since the swap — the swipe "stopped" and often didn't commit.
+  const latest = useRef({ clamped, count, onFocus });
+  useEffect(() => {
+    latest.current = { clamped, count, onFocus };
+  }, [clamped, count, onFocus]);
+  const pan = useMemo(() => {
+    const springBack = () =>
+      Animated.spring(anim, {
+        toValue: latest.current.clamped,
+        useNativeDriver: true,
+        friction: 9,
+        tension: 80,
+      }).start();
+    // The ref is read in touch callbacks only, never during render.
+    // eslint-disable-next-line react-hooks/refs
+    return PanResponder.create({
+      onMoveShouldSetPanResponder: (_e, g) =>
+        Math.abs(g.dy) > 10 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderMove: (_e, g) => {
+        const { clamped: at, count: n } = latest.current;
+        const raw = at - g.dy / PEEK;
+        const lo = Math.max(0, at - 1);
+        const hi = Math.min(n - 1, at + 1);
+        // Soft clamp: allow a 20% overshoot at the hard ends for feel.
+        anim.setValue(Math.max(lo - 0.2, Math.min(hi + 0.2, raw)));
+      },
+      onPanResponderRelease: (_e, g) => {
+        const { clamped: at, count: n, onFocus: focus } = latest.current;
+        let target = at;
+        if (g.dy <= -SWIPE_STEP && at < n - 1) target = at + 1;
+        else if (g.dy >= SWIPE_STEP && at > 0) target = at - 1;
+        if (target !== at) focus(target);
+        // Same index: spring back from wherever the drag left the stack.
+        else springBack();
+      },
+      onPanResponderTerminate: springBack,
+    });
+  }, [anim]);
 
   if (count === 0) return null;
   const focusedItem = items[clamped];
@@ -248,7 +253,7 @@ export function HeatPointCarousel({
           accessibilityLabel="Close activities"
         />
       </View>
-      <View style={styles.deck} {...pan.panHandlers}>
+      <View style={styles.deck} {...pan.panHandlers} testID="heat-deck">
         {rendered.map((i) => {
           const t = items[i];
           return t ? card(t, i) : null;
