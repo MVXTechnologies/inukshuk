@@ -1,8 +1,8 @@
 /**
  * THE draw order of the map's own live layers — everything the main map
  * mounts above the style as MapView children: the followed trail, the
- * location puck, the heading cone, the pointing line, the team, the
- * waypoint pins. Bottom → top, in ONE list (2.5.1 final QA).
+ * location puck, the heading cone, the pointing line, the team, trail
+ * photos, the waypoint pins. Bottom → top, in ONE list (2.5.1 final QA).
  *
  * ## Why one anchor per layer
  *
@@ -29,12 +29,29 @@
  *    pin inside them.
  * 3. The heading cone, then the pointing line: directions from you, under
  *    the pins they point across.
- * 4. The team: shared waypoints, then teammates over them.
+ * 4. The team: the rally area and shared trails (lines and areas first),
+ *    the rally flag, shared waypoints, the chat/task marks, then teammates
+ *    over them.
  * 5. Move mode's dashed line and old spot, under the pins.
- * 6. The waypoint pins, their photo badges and their names: above every
- *    line and area, so a pin is never hidden by them.
- * 7. The puck's ring and dot, on top of everything: where YOU are must never
- *    be covered.
+ * 6. Trail photos (#587: thumbnails, stacks and their counts, the selected
+ *    photo on its ring), then the waypoint pins, their photo badges and their
+ *    names: above every line and area, so a pin is never hidden by them, and
+ *    a pin over a photo (a pin also wins the tap there).
+ * 7. A teammate's SOS: over every pin and photo, under only…
+ * 8. The puck's ring and dot, on top of everything: where YOU are must never
+ *    be covered (2.5.1 QA: standing on a photo spot, its circle hid the dot).
+ *
+ * Trail photos are drawn by several instances at once (each trail on the
+ * main map, the live recording, team trails), each with its own layer ids
+ * (`<instance>-photos-img`, …). They share one anchor per KIND of photo
+ * layer: instances stack among themselves in any order, all of them under
+ * the pins and the puck.
+ *
+ * Layers that are NOT here sit below the whole live stack on purpose, each
+ * at its slot's anchor (`@core/map/layerSlots` `overlayAnchor`): library and
+ * team track lines, the heatmap, a long trail, drawn routes and areas, PDF
+ * maps, drapes. Every layer the main map mounts names one or the other;
+ * none mounts without a `beforeId`.
  *
  * PURE: no React Native / Expo imports.
  */
@@ -53,9 +70,27 @@ export const LIVE_LAYER_ORDER = [
   'pointing-line',
   'pointing-line-end',
   'pointing-line-labels',
-  // 4. Team mode (#589): shared waypoints, then teammates.
+  // 4. Team mode (#589): rally area and shared trails, the rally flag,
+  // shared waypoints, chat/task marks, then teammates.
+  'team-rally-area',
+  'team-rally-edge',
+  'team-trl-casing',
+  'team-trl-line',
+  'team-trl-vertex',
+  'team-trl-who',
+  'team-rally-dot',
+  'team-rally-label',
   'team-waypoint-dot',
   'team-waypoint-label',
+  'team-mark-cluster',
+  'team-mark-pin',
+  'team-mark-pin-badge',
+  'team-mark-bubble',
+  'team-mark-cluster-count',
+  'team-mark-pin-initials',
+  'team-mark-pin-count',
+  'team-mark-bubble-count',
+  'team-mark-task',
   'team-member-halo',
   'team-member-dot',
   'team-member-initials',
@@ -64,11 +99,20 @@ export const LIVE_LAYER_ORDER = [
   'waypoint-move-line',
   'waypoint-move-from-halo',
   'waypoint-move-from',
-  // 6. Waypoint pins (#675).
+  // 6. Trail photos (#587; one anchor per kind, shared by every instance),
+  // then the waypoint pins (#675).
+  'trail-photos',
+  'trail-photos-count',
+  'trail-photos-selected-ring',
+  'trail-photos-selected',
   'waypoint-pin',
   'waypoint-pin-photo',
   'waypoint-pin-label',
-  // 7. The puck itself: always on top.
+  // 7. A teammate's SOS.
+  'team-sos-halo',
+  'team-sos-dot',
+  'team-sos-label',
+  // 8. The puck itself: always on top.
   'inukshuk-puck-ring',
   'inukshuk-puck-dot',
 ] as const;

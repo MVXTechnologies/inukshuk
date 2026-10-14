@@ -18,6 +18,7 @@ import {
   stackTapAction,
   touchSprites,
 } from '@core/photos/mapStyle';
+import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import type { TrackPhoto } from '@core/photos/model';
 import { PHOTO_CLUSTER_PROPERTIES, photoFeatureCollection } from '@core/photos/stack';
 import {
@@ -46,6 +47,11 @@ import { photoFileUri } from './photoUri';
  * to an LRU of at most 150 (≈10 MB of texture); with clustering a view needs
  * far fewer. Note photos are not drawn here (their note has its own pin).
  * The style logic is in `@core/photos/mapStyle`.
+ *
+ * Every layer sits at its kind's live anchor (`@core/map/liveLayerOrder`):
+ * under the waypoint pins and the location puck on the main map, whatever
+ * order MapLibre re-inserts layers in after a style reload. Without one a
+ * photo circle landed on top of the stack and hid the blue dot (2.5.1 QA).
  */
 export interface TrailPhotoLayersProps {
   /** Unique per map: source and layer ids are prefixed with it. */
@@ -213,10 +219,17 @@ export function TrailPhotoLayers({
         clusterProperties={PHOTO_CLUSTER_PROPERTIES as never}
         onPress={onPress}
       >
-        <Layer id={`${id}-photos-img`} type="symbol" layout={spriteLayout(prefix)} {...zoomProps} />
+        <Layer
+          id={`${id}-photos-img`}
+          type="symbol"
+          beforeId={liveLayerAnchor('trail-photos')}
+          layout={spriteLayout(prefix)}
+          {...zoomProps}
+        />
         <Layer
           id={`${id}-photos-count`}
           type="symbol"
+          beforeId={liveLayerAnchor('trail-photos-count')}
           filter={CLUSTER_FILTER}
           layout={countLayout()}
           {...zoomProps}
@@ -226,12 +239,14 @@ export function TrailPhotoLayers({
         <Layer
           id={`${id}-photos-sel-ring`}
           type="symbol"
+          beforeId={liveLayerAnchor('trail-photos-selected-ring')}
           layout={selectedRingLayout()}
           {...zoomProps}
         />
         <Layer
           id={`${id}-photos-sel-img`}
           type="symbol"
+          beforeId={liveLayerAnchor('trail-photos-selected')}
           layout={selectedSpriteLayout(prefix)}
           {...zoomProps}
         />
