@@ -1,19 +1,24 @@
 /**
  * The app-wide coordinate DISPLAY format (Settings › Display › Coordinates,
  * #677): how a position is written wherever the app shows one to a person —
- * the map's centre chip, waypoint cards, copy actions.
+ * the map's centre chip, the info strip, waypoint cards, copy actions.
  *
  * Convert keeps its own millimetre-grade output; this is the field-grade
- * readout: about a metre at the default precision, about ten metres in the
- * `compact` form a narrow screen falls back to before anything wraps.
+ * readout, at about a decimetre in every format (#701: six decimals of a
+ * degree ≈ 0.11 m). It is ONE string per position: what is shown is what a
+ * copy puts on the clipboard, so there is no shorter "narrow-screen" form;
+ * a tight cell shrinks its font instead.
  *
- * - `dd`   `46.81394, -71.20761` — signed, "lat, lon": pastes straight into
- *          every map app's search box. Identical to `formatLatLng` (5 dp).
- * - `dms`  `46°48′50.2″N, 71°12′27.4″W` — Convert's `formatAngle`, compact.
- * - `ddm`  `46°48.836′N, 71°12.457′W` — ditto.
- * - `utm`  `19T 331586 5186854` — zone + latitude band, easting, northing
- *          (whole metres).
- * - `mgrs` `19T CM 31586 86854` — 1 m (5+5 digits; 10 m compact).
+ * - `dd`   `46.813944, -71.207611` — signed, "lat, lon", 6 decimals: pastes
+ *          straight into every map app's search box. Identical to
+ *          `formatLatLng`.
+ * - `dms`  `46°48′50.20″N, 71°12′27.40″W` — Convert's `formatAngle`,
+ *          compact; 0.01″ ≈ 0.3 m.
+ * - `ddm`  `46°48.8366′N, 71°12.4567′W` — ditto; 0.0001′ ≈ 0.2 m.
+ * - `utm`  `19T 331586.4 5186854.7` — zone + latitude band, easting,
+ *          northing, to the decimetre.
+ * - `mgrs` `19T CM 31586 86854` — 1 m (5+5 digits), the finest standard
+ *          MGRS reference.
  *
  * Both TRUNCATE, as MGRS requires (a reference names the square the point is
  * in) and as GeographicLib does for UTM, so the two never disagree.
@@ -47,14 +52,12 @@ export function isCoordinateFormat(v: unknown): v is CoordinateFormat {
   return COORDINATE_FORMATS.some((f) => f.value === v);
 }
 
-export interface FormatOptions {
-  /**
-   * The narrow-screen form (~10 m instead of ~1 m): 4 decimals of a degree,
-   * whole seconds, 2 decimals of a minute, a 4+4-digit MGRS reference. UTM
-   * is already whole metres and keeps its form.
-   */
-  compact?: boolean;
-}
+/** Decimals of a degree in the DD readout: 1e-6° ≈ 0.11 m (#701). */
+export const DD_DECIMALS = 6;
+/** Decimals of a second in DMS: 0.01″ ≈ 0.3 m. */
+export const DMS_DECIMALS = 2;
+/** Decimals of a minute in DDM: 0.0001′ ≈ 0.2 m. */
+export const DDM_DECIMALS = 4;
 
 /** Longitude into [-180, 180): the camera reports e.g. -190 past the antimeridian. */
 export function wrapLongitude(lon: number): number {
@@ -163,35 +166,33 @@ export function toMgrs(lat: number, lon: number, digits = 5): string | null {
   return `${u.zone}${u.band} ${square} ${pad(e)} ${pad(n)}`;
 }
 
-/** "19T 330587 5186370", or null outside 80°S–84°N. */
+/** Metres truncated (never rounded) to the decimetre: 330587.48 → "330587.4". */
+function decimetres(v: number): string {
+  return (Math.floor(v * 10) / 10).toFixed(1);
+}
+
+/** "19T 330587.4 5186370.9", or null outside 80°S–84°N. */
 export function formatUtm(lat: number, lon: number): string | null {
   const u = toUtm(lat, lon);
   if (u === null) return null;
   // Truncated like MGRS (and GeographicLib), so the two readouts of one
-  // point agree digit for digit: the metre the point is in.
-  return `${u.zone}${u.band} ${Math.floor(u.easting)} ${Math.floor(u.northing)}`;
+  // point agree digit for digit: the whole metres are MGRS's digits.
+  return `${u.zone}${u.band} ${decimetres(u.easting)} ${decimetres(u.northing)}`;
 }
 
 /** A position in the given display format (see the module note). */
-export function formatCoordinate(
-  lat: number,
-  lon: number,
-  fmt: CoordinateFormat,
-  opts: FormatOptions = {},
-): string {
-  const compact = opts.compact === true;
+export function formatCoordinate(lat: number, lon: number, fmt: CoordinateFormat): string {
   const L = wrapLongitude(lon);
   if (fmt === 'utm') {
     const s = formatUtm(lat, L);
     if (s !== null) return s;
   } else if (fmt === 'mgrs') {
-    const s = toMgrs(lat, L, compact ? 4 : 5);
+    const s = toMgrs(lat, L, 5);
     if (s !== null) return s;
   } else if (fmt === 'dms' || fmt === 'ddm') {
-    const decimals = fmt === 'dms' ? (compact ? 0 : 1) : compact ? 2 : 3;
+    const decimals = fmt === 'dms' ? DMS_DECIMALS : DDM_DECIMALS;
     const o = { decimals, compact: true };
     return `${formatAngle(lat, 'lat', fmt, o)}, ${formatAngle(L, 'lon', fmt, o)}`;
   }
-  const d = compact ? 4 : 5;
-  return `${fixed(lat, d)}, ${fixed(L, d)}`;
+  return `${fixed(lat, DD_DECIMALS)}, ${fixed(L, DD_DECIMALS)}`;
 }

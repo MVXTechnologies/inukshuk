@@ -157,7 +157,7 @@ describe('timelineEventText', () => {
       'metric',
       totals,
     );
-    expect(t.sub).toBe('46.8123, -71.2057');
+    expect(t.sub).toBe('46.812340, -71.205670');
   });
 
   it('titles a note with its first line and quotes the rest', () => {

@@ -72,7 +72,7 @@ describe('WaypointViewerCard (#505)', () => {
       'Spring on the left of the trail. Water is good after rain.',
     );
     expect(screen.getByLabelText('View photo')).toBeTruthy();
-    expect(screen.getByText('46.81390, -71.20800')).toBeTruthy();
+    expect(screen.getByText('46.813900, -71.208000')).toBeTruthy();
   });
 
   it('shows the whole note: no line clamp (it scrolls instead)', async () => {
@@ -120,7 +120,7 @@ describe('WaypointViewerCard (#505)', () => {
     await fireEvent.press(screen.getByLabelText('Copy coordinates'));
     expect(h.onCopyNote).toHaveBeenCalledTimes(1);
     expect(h.onCopyCoords).toHaveBeenCalledTimes(1);
-    expect(h.onCopyCoords).toHaveBeenCalledWith('46.81390, -71.20800');
+    expect(h.onCopyCoords).toHaveBeenCalledWith('46.813900, -71.208000');
   });
 
   it('shows and copies the coordinates in the app-wide format (#677)', async () => {

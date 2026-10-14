@@ -5,6 +5,7 @@ import {
   formatSpan,
   type Units,
 } from '@core/format';
+import { formatLatLng } from '@core/geo/formatCoords';
 import type { ElevationExtremes, Split, TimelineEvent, TrailTiming } from '@core/geo/track';
 import type { TrackStats } from '@core/models';
 
@@ -194,9 +195,7 @@ export function timelineEventText(
     case 'start':
       return {
         title: 'Start',
-        sub:
-          join(elev ?? null, high, stopped) ||
-          `${e.at.latitude.toFixed(4)}, ${e.at.longitude.toFixed(4)}`,
+        sub: join(elev ?? null, high, stopped) || formatLatLng(e.at.latitude, e.at.longitude),
         time,
       };
     case 'note': {

@@ -43,7 +43,6 @@ const WAYPOINTS_SHOWN = 30;
 
 const TOGGLE_ICON: Record<string, string> = {
   tapToCopy: 'content-copy',
-  showAccuracy: 'crosshairs-gps',
 };
 
 type TargetKind = Target['kind'];

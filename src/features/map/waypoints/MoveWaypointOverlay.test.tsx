@@ -78,12 +78,12 @@ describe('MoveWaypointOverlay (#676)', () => {
   it('shows the settled centre and how far the pin moved', async () => {
     useWaypointMoveStore.setState({ moving: TARGET });
     await setup();
-    expect(screen.getByTestId('move-coords')).toHaveTextContent('46.81394, -71.20761');
+    expect(screen.getByTestId('move-coords')).toHaveTextContent('46.813940, -71.207610');
     expect(screen.getByText('Pan the map to put the pin in its new place')).toBeOnTheScreen();
     await act(async () =>
       useMapStore.setState({ mapCenter: { latitude: 46.81418, longitude: -71.20726 } }),
     );
-    expect(screen.getByTestId('move-coords')).toHaveTextContent('46.81418, -71.20726');
+    expect(screen.getByTestId('move-coords')).toHaveTextContent('46.814180, -71.207260');
     // No scale known: no zoom hint.
     expect(screen.getByText('Moved 38 m NE')).toBeOnTheScreen();
   });

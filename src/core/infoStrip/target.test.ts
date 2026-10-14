@@ -70,7 +70,7 @@ describe('resolveTarget', () => {
     ).toBe('Borne 23A');
     const t = resolveTarget({ kind: 'coordinate', point: QC }, snapshot());
     expect(t).toEqual({
-      name: '46.8139, -71.2076',
+      name: '46.813940, -71.207610',
       point: QC,
       glyph: 'my_location',
       alongTrailM: null,
