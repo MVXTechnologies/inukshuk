@@ -2,12 +2,8 @@ import { MapAreaBottomContext, useWindowEdge } from './mapAreaBottom';
 import { reportError } from '@lib/errorReporting';
 import { fnv1a32 } from '@core/encoding/fnv1a';
 import { isWebUrl } from '@core/links/externalUrl';
-import {
-  nearestPinAt,
-  projectablePins,
-  unprojectablePins,
-  type ProjectedPin,
-} from '@core/geo/pinHitTest';
+import { unprojectablePins } from '@core/geo/pinHitTest';
+import type { WaypointTapRoute } from '@core/map/waypointClusters';
 import {
   chipSurvivesHit,
   pointChipAfterBareTap,
@@ -183,7 +179,13 @@ import { TipBubble } from '@features/support/TipBubble';
 import { WaypointViewerCard } from './components/WaypointViewerCard';
 import { MoveWaypointLayers } from './waypoints/MoveWaypointLayers';
 import { MoveWaypointOverlay } from './waypoints/MoveWaypointOverlay';
-import { pinAtPoint, toPinInputs } from './waypoints/pinHit';
+import { pinAtPoint, toPinInputs, visiblePinKey } from './waypoints/pinHit';
+import { WaypointClusterSheet } from './waypoints/WaypointClusterSheet';
+import {
+  openWaypointCluster,
+  useWaypointClusterSheet,
+  waypointAtPoint,
+} from './waypoints/waypointTap';
 import { useWaypointQuickActions } from './waypoints/useWaypointQuickActions';
 import { WaypointEditorSheet, type WaypointStylePatch } from './waypoints/WaypointEditorSheet';
 import { WaypointScreenReaderList } from './waypoints/WaypointScreenReaderList';
@@ -1990,6 +1992,8 @@ export function MapScreen() {
       photoTapRef.current = null;
       const map = mapRef.current;
       if (!map) return;
+      // Any tap closes the waypoint cluster list (#685); a cluster tap reopens it.
+      useWaypointClusterSheet.getState().close();
       // #232 — the chip's action row already took this touch (see
       // chipTouchAtRef); the map must not act on it a second time.
       if (Date.now() - chipTouchAtRef.current < CHIP_ACTION_TOUCH_MS) return;
@@ -2106,6 +2110,7 @@ export function MapScreen() {
       };
 
       let best: (typeof visiblePins)[number] | null = null;
+      let wpHit: WaypointTapRoute<(typeof visiblePins)[number]> | null = null;
       if (visiblePins.length > 0) {
         // One bad pin must never cost the whole tap (#343). This used to
         // project every pin with `Promise.all` and `return` on rejection, so a
@@ -2127,23 +2132,33 @@ export function MapScreen() {
             'map-tap',
           );
         }
-        const projected: ProjectedPin[] = new Array<ProjectedPin>(visiblePins.length).fill(null);
-        const results = await Promise.allSettled(
-          projectablePins(visiblePins).map(async ({ index, lngLat }) => ({
-            index,
-            point: await map.project(lngLat),
-          })),
+        // Pins folded into a cluster (#685) are not candidates; a cluster
+        // under the finger is its own hit (see waypoints/waypointTap).
+        wpHit = await waypointAtPoint(
+          map,
+          visiblePins,
+          visiblePinKey,
+          viewWp ? `${viewWp.source}-${viewWp.id}` : null,
+          [px, py],
+          'tap',
         );
-        for (const result of results) {
-          if (result.status !== 'fulfilled') continue;
-          const { index, point } = result.value;
-          if (point != null) projected[index] = point;
-        }
-        best = nearestPinAt(visiblePins, projected, [px, py], 'tap');
+        if (wpHit.kind === 'pin') best = wpHit.pin;
       }
       const route = routeMapTap(chipHit, best);
       if (route.kind === 'chip' && pointAt !== null) {
         runPointChipHit(route.hit, pointAt);
+        return;
+      }
+      if (wpHit?.kind === 'cluster') {
+        // #685: glide to where the cluster splits, or list its pins.
+        drawingRef.current.closeAreaCard();
+        setViewWp(null);
+        setExtensionHit(null);
+        void openWaypointCluster(
+          wpHit.cluster,
+          getMapZoom().catch(() => null),
+          zoomMapTo,
+        );
         return;
       }
       if (route.kind === 'pin') {
@@ -2400,6 +2415,8 @@ export function MapScreen() {
       pointAt,
       pointChip.shiftX,
       runPointChipHit,
+      viewWp,
+      getMapZoom,
     ],
   );
   // A tapped survey mark (an extension whose card recentres) slides into the
@@ -2763,7 +2780,12 @@ export function MapScreen() {
                 bareLongPress();
                 return;
               }
-              void pinAtPoint(map, savedPins, pressPoint)
+              void pinAtPoint(
+                map,
+                savedPins,
+                pressPoint,
+                viewWp ? `${viewWp.source}-${viewWp.id}` : null,
+              )
                 .catch(() => null)
                 .then((pin) => {
                   if (pin) wpQuick.startMove(pin.id);
@@ -4025,6 +4047,21 @@ export function MapScreen() {
               onMove={viewWp?.source === 'saved' ? () => wpQuick.startMove(viewWp.id) : undefined}
               onDelete={deleteViewedWaypoint}
               onClose={() => setViewWp(null)}
+            />
+          </View>
+        )}
+
+        {/* A cluster's pins at the camera's cap (#685): pick one to open its card. */}
+        {cardSlotFree && (
+          <View
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+            pointerEvents="box-none"
+          >
+            <WaypointClusterSheet
+              pins={visiblePins}
+              suppressed={viewWaypoint !== null}
+              floating={recordingPanelUp}
+              onOpen={(pin) => setViewWp({ source: pin.source, id: pin.id })}
             />
           </View>
         )}

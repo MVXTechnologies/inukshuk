@@ -16,6 +16,7 @@
  * - Children are arrays, never Fragments (see `mapLayers.tsx`).
  */
 import { liveLayerAnchor } from '@core/map/liveLayerOrder';
+import { pinScaleFactor } from '@core/map/pinScale';
 import { overlayAnchor } from '@core/map/layerSlots';
 import { STONE_FONTS_ATKINSON, STONE_FONTS_NOTO } from '@core/map/stoneStyle';
 import { MEMBER_COLORS, memberColor } from '@core/teamui/colors';
@@ -25,6 +26,7 @@ import type { TeamShares } from '@core/teamui/shares';
 import type { MemberRow } from '@core/teamui/view';
 import { useExtensionPrefs } from '@features/extensions/prefs';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
+import { useSettingsStore } from '@state/settingsStore';
 import { useTeamStore } from '@state/teamStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { FeatureCollection } from 'geojson';
@@ -94,6 +96,9 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
     );
   }, [shares, members, teamTrails]);
   const points = useMemo(() => waypointsGeoJson(shares), [shares]);
+  // Settings › Display › Pin size (#686): shared waypoints are pins too. The
+  // teammates' dots are people, not pins, and keep their size.
+  const k = pinScaleFactor(useSettingsStore((s) => s.pinScale));
   const font = teamLabelFont(glyphs);
   const tokens = useSchemeTokens();
   const { mapInk: ink, mapHalo: halo, mapPaper: paper, leadRing, onAvatar } = tokens.team;
@@ -195,9 +200,9 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
         beforeId={liveLayerAnchor('team-waypoint-dot')}
         type="circle"
         paint={{
-          'circle-radius': 6,
+          'circle-radius': 6 * k,
           'circle-color': paper,
-          'circle-stroke-width': 3,
+          'circle-stroke-width': 3 * k,
           'circle-stroke-color': ['coalesce', ['get', 'color'], ink],
           'circle-pitch-alignment': 'map',
         }}
@@ -214,7 +219,7 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
                 'text-field': ['get', 'label'],
                 'text-font': font,
                 'text-size': 11,
-                'text-offset': [0.9, 0],
+                'text-offset': [0.9 * k, 0],
                 'text-anchor': 'left',
                 'text-optional': true,
               }}
@@ -223,7 +228,7 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
           ]
         : []),
     ],
-    [font, ink, halo, paper],
+    [font, ink, halo, paper, k],
   );
 
   const trackLayers = useMemo(

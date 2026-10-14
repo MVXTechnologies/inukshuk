@@ -127,6 +127,17 @@ describe('WaypointScreenReaderList', () => {
     expect(screen.getByText('Waypoints on the map').props.accessibilityRole).toBe('header');
   });
 
+  it('lists pins at one spot one by one, though the map draws them as one cluster (#685)', async () => {
+    const stacked = [pin('a', 'Trailhead', 50, 0), pin('b', 'Kit', 50, 0), pin('c', 'Tent', 50, 0)];
+    await setup({ pins: stacked });
+    expect(button()?.props.accessibilityLabel).toBe('Waypoints on the map (3)');
+    await fireEvent.press(button()!);
+    expect(rowLabels()).toHaveLength(3);
+    expect(rowLabels().map((l) => l.split(',')[0])).toEqual(
+      expect.arrayContaining(['Trailhead', 'Kit', 'Tent']),
+    );
+  });
+
   it('measures from the map centre before a fix', async () => {
     useMapStore.setState({ mapCenter: pin('c', 'c', 900, 0) });
     await setup({ here: null });

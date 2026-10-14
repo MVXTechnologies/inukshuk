@@ -25,6 +25,7 @@
     "map": [
       "smoke.yaml",
       "waypoint.yaml",
+      "waypoint-cluster.yaml",
       "navigate.yaml",
       "map-overlays.yaml",
       "settings.yaml",

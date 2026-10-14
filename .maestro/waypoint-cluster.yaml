@@ -1,0 +1,167 @@
+# Waypoint clusters e2e (#685): three waypoints dropped at ONE fix draw as
+# one round cluster mark with a count; tapping it at the camera's cap opens
+# the list sheet ("3 waypoints here"), and a row opens that pin's card.
+#
+# How the tap is aimed: the pins are MapLibre symbols with no view and no
+# a11y node (see waypoint.yaml), so the flow taps the centre of the map view
+# (testID 'map-area') while the camera FOLLOWS the user — the heatmap.yaml
+# idiom: while following, the centre IS the fix the pins were dropped at.
+# The `own-location` tag pauses the runner's background geo-fix loop (it
+# alternated the user ~86 m every 2 s), so all three pins land on exactly
+# the same point.
+#
+# Why no zoom-out step: pins at one point are clustered at every zoom up to
+# the camera's cap (z18, `PIN_CLUSTER_MAX_ZOOM`), so the cluster is under
+# the finger at whatever zoom the follow camera is at, and its expansion zoom
+# is past the cap — the tap opens the list rather than zooming in. Should a
+# fix have jittered (two points metres apart), the first tap glides in to
+# where they split instead; the retry taps again, up to the cap, where either
+# the list or a single pin's card answers. Both prove the tap reached the
+# cluster route.
+#
+# The cluster tap outranks the user dot (MapScreen handleMapPress: the dot is
+# the lowest priority), and opening the list never stops following.
+#
+# It ends by deleting every waypoint it dropped, from the Library (the
+# waypoint.yaml tidy-up): navigate.yaml, next in this shard, long-presses the
+# map centre, and a pin there would start Move instead.
+appId: com.inukshuk.app
+tags:
+  - own-location
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- setLocation:
+    latitude: 46.8139
+    longitude: -71.2082
+# Drop three waypoints at the fix. Each drop: the guarded dial tap (a blind
+# re-tap on retry toggled a slow-but-open dial closed), "Add waypoint", and
+# its snackbar. Retries absorb the cold-start tap race and the no-fix-yet
+# snackbar; an extra pin from a retry only makes the count larger.
+- repeat:
+    times: 3
+    commands:
+      - retry:
+          maxRetries: 3
+          commands:
+            - runFlow:
+                when:
+                  notVisible: 'Add waypoint'
+                commands:
+                  - tapOn: 'Map actions'
+            # 60 s: on software-GL emulators one hierarchy fetch can take that long.
+            - extendedWaitUntil:
+                visible: 'Add waypoint'
+                timeout: 60000
+            - tapOn: 'Add waypoint'
+            - extendedWaitUntil:
+                visible: 'Waypoint \d+ added at your position.*'
+                timeout: 8000
+      # Let the snackbar go, so the next drop's text match is its own.
+      - extendedWaitUntil:
+          notVisible: 'Waypoint \d+ added at your position.*'
+          timeout: 15000
+# Follow the user, so the map's centre is the fix (heatmap.yaml's guarded
+# Locate: a blind tap toggles follow OFF when it is already on).
+- retry:
+    maxRetries: 2
+    commands:
+      - runFlow:
+          when:
+            notVisible:
+              text: 'Locate'
+              selected: true
+          commands:
+            - tapOn: 'Locate'
+      - extendedWaitUntil:
+          visible:
+            text: 'Locate'
+            selected: true
+          timeout: 10000
+- waitForAnimationToEnd:
+    timeout: 5000
+# Tap the cluster. At one point it only splits past the cap: the list.
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: 'map-area'
+          retryTapIfNoChange: false
+      - waitForAnimationToEnd:
+          timeout: 5000
+      - extendedWaitUntil:
+          visible:
+            id: 'waypoint-cluster-sheet|waypoint-card-name'
+          timeout: 8000
+# The list: every pin of the cluster by name; a row opens that pin's card.
+- runFlow:
+    when:
+      visible:
+        id: 'waypoint-cluster-sheet'
+    commands:
+      - assertVisible: '\d+ waypoints here'
+      - assertVisible:
+          id: 'waypoint-cluster-row-saved-.*'
+          index: 2
+      - tapOn:
+          id: 'waypoint-cluster-row-saved-.*'
+          index: 0
+      - extendedWaitUntil:
+          visible:
+            id: 'waypoint-card-name'
+          timeout: 8000
+      - assertNotVisible:
+          id: 'waypoint-cluster-sheet'
+# Close the card.
+- tapOn: 'Close waypoint'
+- extendedWaitUntil:
+    notVisible:
+      id: 'waypoint-card-name'
+    timeout: 8000
+# Tidy up: every waypoint this flow dropped, from the Library (waypoint.yaml).
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Import'
+    timeout: 15000
+- repeat:
+    times: 8
+    while:
+      visible: 'Waypoint \d+.*'
+    commands:
+      - longPressOn: 'Waypoint \d+.*'
+      - extendedWaitUntil:
+          visible: 'Delete waypoint'
+          timeout: 8000
+      - tapOn: 'Delete waypoint'
+      # Confirm dialog: title 'Delete waypoint', buttons Cancel / Delete.
+      - extendedWaitUntil:
+          visible: 'Cancel'
+          timeout: 8000
+      - tapOn: 'Delete'
+      - extendedWaitUntil:
+          notVisible: 'Cancel'
+          timeout: 8000
+- assertNotVisible: 'Waypoint \d+.*'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 15000

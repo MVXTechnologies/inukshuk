@@ -1,20 +1,21 @@
-import {
-  nearestPinAt,
-  projectablePins,
-  type PinCandidate,
-  type ProjectedPin,
-} from '@core/geo/pinHitTest';
 import type { PendingWaypoint } from '@state/recorderStore';
 import type { Waypoint } from '@core/models';
 import type { PinInput } from '@core/map/waypointPinStyle';
 
+import { waypointAtPoint, type WaypointTapMap } from './waypointTap';
+
 /** A drawn pin, tagged with the store it lives in (as MapScreen's `visiblePins`). */
 export type VisiblePin = ({ source: 'saved' } & Waypoint) | ({ source: 'live' } & PendingWaypoint);
+
+/** A drawn pin's key, as the layers name it (`saved-<id>`, `live-<id>`). */
+export function visiblePinKey(pin: Pick<VisiblePin, 'source' | 'id'>): string {
+  return `${pin.source}-${pin.id}`;
+}
 
 /** The drawn pins as the symbol layer's input (#675). Live pins take no style. */
 export function toPinInputs(pins: readonly VisiblePin[]): PinInput[] {
   return pins.map((w) => ({
-    key: `${w.source}-${w.id}`,
+    key: visiblePinKey(w),
     latitude: w.latitude,
     longitude: w.longitude,
     label: w.label,
@@ -29,34 +30,20 @@ export function toPinInputs(pins: readonly VisiblePin[]): PinInput[] {
   }));
 }
 
-/** What the hit-test needs from the map: its camera projection. */
-interface Projector {
-  project: (lngLat: [number, number]) => Promise<readonly [number, number] | null | undefined>;
-}
-
 /**
  * The pin under a long-press, or null (#676 long-press → Move). The same
- * rule as a tap (#343), with the tighter long-press disc: every pin is projected through the real camera, one
- * that cannot be projected is skipped, never fatal.
+ * rule as a tap (#343), with the tighter long-press disc: every pin is
+ * projected through the real camera, one that cannot be projected is
+ * skipped, never fatal. A pin folded into a cluster (#685) is not on screen
+ * and never starts a Move; neither does a long-press on a cluster.
  */
-export async function pinAtPoint<T extends PinCandidate>(
-  map: Projector,
+export async function pinAtPoint<T extends VisiblePin>(
+  map: WaypointTapMap,
   pins: readonly T[],
   point: readonly [number, number],
+  selectedKey: string | null = null,
 ): Promise<T | null> {
-  if (pins.length === 0) return null;
-  const projected: ProjectedPin[] = new Array<ProjectedPin>(pins.length).fill(null);
-  const results = await Promise.allSettled(
-    projectablePins(pins).map(async ({ index, lngLat }) => ({
-      index,
-      point: await map.project([lngLat[0], lngLat[1]]),
-    })),
-  );
-  for (const r of results) {
-    if (r.status === 'fulfilled' && r.value.point != null) {
-      projected[r.value.index] = [r.value.point[0], r.value.point[1]];
-    }
-  }
   // Long-press: the tight disc, so one next to a pin stays the coordinates chip.
-  return nearestPinAt(pins, projected, point, 'longPress');
+  const hit = await waypointAtPoint(map, pins, visiblePinKey, selectedKey, point, 'longPress');
+  return hit.kind === 'pin' ? hit.pin : null;
 }

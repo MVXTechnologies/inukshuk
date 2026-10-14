@@ -23,6 +23,7 @@ import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
 import { BetaFeaturesSection } from './BetaFeaturesSection';
 import { CoordinateFormatSetting } from './CoordinateFormatSetting';
 import { NavigationButtonsSetting } from './NavigationButtonsSetting';
+import { PinSizeSetting } from './PinSizeSetting';
 import { ExtensionsSection } from './ExtensionsSection';
 import Constants from 'expo-constants';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -371,6 +372,8 @@ export function SettingsScreen() {
                 </View>
                 {/* #677: one app-wide coordinate format (map chip, waypoint cards, copies). */}
                 <CoordinateFormatSetting />
+                {/* #686: every waypoint pin on the map at 75–150 %. */}
+                <PinSizeSetting />
                 <List.Item title="Theme" description="Follow the system, or force light / dark" />
                 <View style={styles.segment}>
                   <SegmentedButtons
