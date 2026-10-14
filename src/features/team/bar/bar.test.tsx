@@ -18,7 +18,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useTeamStore } from '@state/teamStore';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import { AppState, Vibration } from 'react-native';
+import { AppState, StyleSheet, Vibration } from 'react-native';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
 
 import { useTeamMapSelection } from '../map/TeamMapOverlay';
@@ -29,7 +29,7 @@ import { ALARM_MAX_MS, RESOUND_MS, SosAlarmBanner } from './SosAlarmBanner';
 import { SosButton } from './SosButton';
 import { TeamPanel } from './TeamPanel';
 import { TeamStatusBar, useTeamBarLayout } from './TeamStatusBar';
-import { UndoSnack } from './UndoSnack';
+import { UNDO_SNACK_LIFT, UndoSnack } from './UndoSnack';
 
 const mockPush = jest.fn();
 const mockNavigate = jest.fn();
@@ -548,6 +548,12 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
       expect(vibrate).toHaveBeenCalledTimes(2);
       expect(usePendingAlert.getState().pending?.kind).toBe('sos');
       expect(screen.getByTestId('team-undo-snack')).toBeTruthy();
+      // Clear of the ⓘ + scale row under it, not flush on it (QA 2.6.1).
+      expect(StyleSheet.flatten(screen.getByTestId('team-undo-snack').props.style)).toMatchObject({
+        marginBottom: 8,
+        marginHorizontal: 8,
+      });
+      expect(UNDO_SNACK_LIFT).toBe(8);
       expect(screen.getByText('Sends in 5 s')).toBeTruthy();
       await act(async () => {
         jest.advanceTimersByTime(4000);

@@ -24,7 +24,7 @@ import { create } from 'zustand';
 import { AlertBands } from '../bar/AlertBands';
 import { SosButton } from '../bar/SosButton';
 import { TeamPanel } from '../bar/TeamPanel';
-import { UndoSnack } from '../bar/UndoSnack';
+import { UNDO_SNACK_LIFT, UndoSnack } from '../bar/UndoSnack';
 import { usePendingAlert } from '../bar/pendingAlert';
 import { TEAM_TAP_LAYERS } from './layerIds';
 import { TeamSheetCard } from './TeamCards';
@@ -195,7 +195,9 @@ export function TeamMapOverlay({
           ]}
         />
       )}
-      {chromeFree && <SosButton bottom={pending ? fabBottom + 28 : fabBottom} here={here} />}
+      {chromeFree && (
+        <SosButton bottom={pending ? fabBottom + 28 + UNDO_SNACK_LIFT : fabBottom} here={here} />
+      )}
       {signal && !drawing && <UndoSnack style={snackStyle} />}
       {panel && <TeamPanel top={panelTop} here={here} focused={screenFocused} />}
       {draft !== null && (

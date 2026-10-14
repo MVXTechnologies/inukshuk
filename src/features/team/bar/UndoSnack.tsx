@@ -17,6 +17,12 @@ import { ProgressRing } from './parts';
 import { usePendingAlert } from './pendingAlert';
 
 const TICK_MS = 250;
+/**
+ * The bar's clearance above the map's bottom column (the ⓘ + scale row): it
+ * sat flush on it and read as covering the scale bar (QA 2.6.1). The SOS
+ * button lifts by the same amount while the bar is up.
+ */
+export const UNDO_SNACK_LIFT = 8;
 const ERROR_MS = 4000;
 
 export function UndoSnack({ style }: { style: StyleProp<ViewStyle> }) {
@@ -104,6 +110,8 @@ export function UndoSnack({ style }: { style: StyleProp<ViewStyle> }) {
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   snack: {
+    marginHorizontal: 8,
+    marginBottom: UNDO_SNACK_LIFT,
     minHeight: 56,
     borderRadius: 14,
     flexDirection: 'row',
