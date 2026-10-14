@@ -4,6 +4,7 @@ import { visibleRows } from './layout';
 import { DEFAULT_CURSOR, DEFAULT_STRIP, presetById } from './presets';
 import {
   INFO_STRIP_SCHEMA,
+  legacyShowCenterCursor,
   MAX_SAVED_STRIPS,
   MAX_STRIP_NAME,
   normaliseCursor,
@@ -155,5 +156,17 @@ describe('settings.infoStrip', () => {
       hideWhileFollowing: false,
     });
     expect(normaliseCursor({ color: '#123456' }).color).toBe(DEFAULT_CURSOR.color);
+  });
+});
+
+describe('legacyShowCenterCursor (rollback safety)', () => {
+  it("is on while the strip shows anything, as 2.5.1's switch meant", () => {
+    expect(legacyShowCenterCursor(DEFAULT_STRIP)).toBe(true);
+    const off = normaliseInfoStripSettings(undefined, { showCenterCursor: false }).current;
+    expect(legacyShowCenterCursor(off)).toBe(false);
+    expect(legacyShowCenterCursor({ ...off, rows: DEFAULT_STRIP.rows })).toBe(true);
+    expect(
+      legacyShowCenterCursor({ ...off, aids: { cursor: { ...DEFAULT_CURSOR, enabled: true } } }),
+    ).toBe(true);
   });
 });

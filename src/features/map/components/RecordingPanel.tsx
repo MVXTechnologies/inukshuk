@@ -7,6 +7,8 @@ import {
   DEFAULT_HERO_FIELDS,
   EXPANDED_FIELDS,
   expandPanel,
+  HERO_FIELD_LABEL,
+  heroFieldText,
   INITIAL_PANEL_STATE,
   panelAfterSwipe,
   type HeroField,
@@ -14,15 +16,7 @@ import {
 } from '@core/recording/panel';
 import { photoButtonLabel } from '@core/photos/capture';
 import { sparklinePoints } from '@core/recording/sparkline';
-import { msUntilSunset } from '@core/sun/sunTimes';
-import {
-  formatDistance,
-  formatDuration,
-  formatElevation,
-  formatElevationChange,
-  formatPace,
-  formatSpeed,
-} from '@state/formatters';
+import { formatDuration, formatElevation } from '@state/formatters';
 import { DisplaySheet } from '@features/display/DisplaySheet';
 import { ReceiverChipView } from '@features/gnss/ReceiverChipView';
 import { useReceiverChip } from '@features/gnss/useReceiverChip';
@@ -39,6 +33,7 @@ import { Icon, Switch, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Polyline } from 'react-native-svg';
 import { HoldButton } from './HoldButton';
+import { setStripRuntime, useStripRuntime } from '../infoStrip/stripRuntime';
 import { InukshukGlyph } from '@ui/components/InukshukGlyph';
 
 interface Props {
@@ -66,18 +61,6 @@ interface Props {
   /** Height the panel occupies above the screen bottom, so map chrome can stack above it. */
   onHeightChange?: (height: number) => void;
 }
-
-const FIELD_LABEL: Record<HeroField, string> = {
-  time: 'TIME',
-  distance: 'DISTANCE',
-  gain: 'GAIN',
-  speed: 'SPEED',
-  pace: 'PACE',
-  altitude: 'ALTITUDE',
-  descent: 'DESCENT',
-  moving: 'MOVING',
-  sunset: 'TO SUNSET',
-};
 
 /** Split "3.42 km" into value and unit so the unit can be set smaller (board). */
 function splitUnit(text: string): { value: string; unit: string } {
@@ -126,6 +109,24 @@ export function RecordingPanel(props: Props) {
   const [panel, setPanel] = useState<PanelState>(INITIAL_PANEL_STATE);
   const [fields, setFields] = useState<HeroField[]>([...DEFAULT_HERO_FIELDS]);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const units = useSettingsStore((s) => s.units);
+  // The info strip (#673): the metrics it shows (cycling skips them), and
+  // whether it sits on this panel (then it takes the rounded top).
+  const stripMetrics = useStripRuntime((s) => s.stripMetrics);
+  const stripOnTop = useStripRuntime((s) => s.onPanel);
+  // Tell the strip which metrics the hero row (and the expanded grid) owns:
+  // it drops those (one owner per metric). None while minimised.
+  useEffect(() => {
+    setStripRuntime({
+      heroFields:
+        panel === 'mini'
+          ? []
+          : panel === 'expanded'
+            ? [...new Set([...fields, ...EXPANDED_FIELDS])]
+            : fields,
+    });
+  }, [panel, fields]);
+  useEffect(() => () => setStripRuntime({ heroFields: [] }), []);
 
   const lastAccuracyM = useRecorderStore((s) => s.lastAccuracyM);
   const lastFixAt = useRecorderStore((s) => s.lastFixAt);
@@ -145,33 +146,25 @@ export function RecordingPanel(props: Props) {
   const receiverChip = useReceiverChip();
   const setReceiverSheetOpen = useGnssStore((s) => s.setSheetOpen);
 
-  const valueOf = (field: HeroField): string => {
-    switch (field) {
-      case 'time':
-        return formatDuration(elapsedS);
-      case 'distance':
-        return formatDistance(stats.distanceM);
-      case 'gain':
-        return formatElevationChange(stats.ascentM, 'up');
-      case 'speed':
-        return formatSpeed(liveSpeedMps);
-      case 'pace':
-        return stats.avgSpeedMps > 0 ? formatPace(stats.avgSpeedMps) : '—';
-      case 'altitude':
-        return typeof lastPoint?.altitude === 'number' ? formatElevation(lastPoint.altitude) : '—';
-      case 'descent':
-        return formatElevationChange(stats.descentM, 'down');
-      case 'moving':
-        return formatDuration(stats.movingTimeS);
-      case 'sunset': {
-        const left =
-          lastPoint === undefined
-            ? null
-            : msUntilSunset(now, lastPoint.latitude, lastPoint.longitude);
-        return left === null ? '—' : formatDuration(Math.round(left / 1000));
-      }
-    }
-  };
+  // One formatter for the panel and the info strip (`heroFieldText`), so the
+  // two can never disagree about the same metric.
+  const valueOf = (field: HeroField): string =>
+    heroFieldText(
+      field,
+      {
+        elapsedS,
+        distanceM: stats.distanceM,
+        ascentM: stats.ascentM,
+        descentM: stats.descentM,
+        movingTimeS: stats.movingTimeS,
+        avgSpeedMps: stats.avgSpeedMps,
+        liveSpeedMps,
+        altitudeM: typeof lastPoint?.altitude === 'number' ? lastPoint.altitude : null,
+        position: lastPoint ?? null,
+        nowMs: now,
+      },
+      units,
+    );
 
   const swipe = Gesture.Pan()
     .activeOffsetY([-12, 12])
@@ -219,7 +212,7 @@ export function RecordingPanel(props: Props) {
 
   const field = (f: HeroField, slot: number | null) => {
     const { value, unit } = splitUnit(valueOf(f));
-    const label = FIELD_LABEL[f];
+    const label = HERO_FIELD_LABEL[f];
     const body = (
       <>
         <Text
@@ -245,7 +238,7 @@ export function RecordingPanel(props: Props) {
     return (
       <Pressable
         key={`${slot}-${f}`}
-        onPress={() => setFields((fs) => cycleHeroField(fs, slot))}
+        onPress={() => setFields((fs) => cycleHeroField(fs, slot, stripMetrics))}
         disabled={gloveLocked}
         accessibilityRole="button"
         accessibilityLabel={`${a11y}. Tap to change field`}
@@ -271,6 +264,7 @@ export function RecordingPanel(props: Props) {
         accessibilityLabel="Recording instruments"
         style={[
           styles.sheet,
+          stripOnTop && styles.sheetUnderStrip,
           {
             backgroundColor: theme.colors.surface,
             paddingBottom: insets.bottom + 4,
@@ -694,6 +688,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -8 },
     elevation: 12,
   },
+  // The info strip sits on the panel and takes its rounded top: one surface.
+  sheetUnderStrip: { borderTopLeftRadius: 0, borderTopRightRadius: 0 },
   statusRow: {
     height: 52,
     flexDirection: 'row',

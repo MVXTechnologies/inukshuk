@@ -1,3 +1,6 @@
+import { DEFAULT_CURSOR, DEFAULT_STRIP } from '@core/infoStrip/presets';
+import { normaliseInfoStripSettings } from '@core/infoStrip/settings';
+import type { CursorSettings } from '@core/infoStrip/types';
 import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { darkScheme, lightScheme } from '@ui/tokens';
@@ -7,7 +10,7 @@ import { Profiler } from 'react';
 import { StyleSheet } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
-import { CenterCursor, CURSOR_DOT } from './CenterCursor';
+import { CenterCursor, CURSOR_DOT, DOT_DP } from './CenterCursor';
 
 async function renderCursor(suppressed = false, dark = false, commits?: { n: number }) {
   await render(
@@ -24,17 +27,32 @@ async function renderCursor(suppressed = false, dark = false, commits?: { n: num
   );
 }
 
-const dot = () => screen.queryByTestId('map-center-dot', { includeHiddenElements: true });
+/** Put a cursor on the current strip (as the editor does). */
+const setCursor = (patch: Partial<CursorSettings>) => {
+  const all = useSettingsStore.getState().infoStrip;
+  useSettingsStore.setState({
+    infoStrip: {
+      ...all,
+      current: {
+        ...all.current,
+        aids: { ...all.current.aids, cursor: { ...all.current.aids.cursor, ...patch } },
+      },
+    },
+  });
+};
 
-describe('CenterCursor (#677)', () => {
+const hidden = { includeHiddenElements: true };
+const dot = () => screen.queryByTestId('map-center-dot', hidden);
+
+describe('CenterCursor (#677, 2.6.0 map aid #673)', () => {
   beforeEach(() => {
-    useSettingsStore.setState({ showCenterCursor: true });
+    useSettingsStore.setState({ infoStrip: normaliseInfoStripSettings(undefined) });
     useMapStore.setState({ followUser: false, mapCenter: null });
   });
 
-  it('is on by default: a 7 dp dot, centred and touch-transparent', async () => {
+  it("is 2.5.1's dot by default: 7 dp, centred and touch-transparent", async () => {
     await renderCursor();
-    const host = screen.getByTestId('map-center-cursor', { includeHiddenElements: true });
+    const host = screen.getByTestId('map-center-cursor', hidden);
     expect(host).toHaveProp('pointerEvents', 'none');
     expect(StyleSheet.flatten(host.props.style as never)).toMatchObject({
       position: 'absolute',
@@ -46,23 +64,40 @@ describe('CenterCursor (#677)', () => {
       height: CURSOR_DOT,
     });
     expect(CURSOR_DOT).toBe(7);
-    expect(useSettingsStore.getInitialState().showCenterCursor).toBe(true);
+    expect(DEFAULT_STRIP.aids.cursor).toEqual(DEFAULT_CURSOR);
   });
 
-  it('hides while the camera follows the user (the puck marks the spot)', async () => {
+  it.each(['cross', 'reticle', 'ring', 'x'] as const)('draws the %s icon', async (kind) => {
+    setCursor({ kind, size: 'M' });
+    await renderCursor();
+    expect(screen.getByTestId(`map-center-${kind}`, hidden)).toBeTruthy();
+    expect(dot()).toBeNull();
+  });
+
+  it('sizes the dot S–XL', async () => {
+    setCursor({ size: 'XL' });
+    await renderCursor();
+    expect(StyleSheet.flatten(dot()?.props.style as never)).toMatchObject({
+      width: DOT_DP.XL,
+    });
+  });
+
+  it('hides while the camera follows the user, unless told to stay', async () => {
     await renderCursor();
     expect(dot()).not.toBeNull();
     await act(async () => useMapStore.setState({ followUser: true }));
     expect(dot()).toBeNull();
-    await act(async () => useMapStore.setState({ followUser: false }));
+    await act(async () => setCursor({ hideWhileFollowing: false }));
     expect(dot()).not.toBeNull();
   });
 
-  it('hides with the setting off', async () => {
-    useSettingsStore.setState({ showCenterCursor: false });
+  it('hides when switched off (and a 2.5.1 user who had it off)', async () => {
+    useSettingsStore.setState({
+      infoStrip: normaliseInfoStripSettings(undefined, { showCenterCursor: false }),
+    });
     await renderCursor();
     expect(dot()).toBeNull();
-    await act(async () => useSettingsStore.setState({ showCenterCursor: true }));
+    await act(async () => setCursor({ enabled: true }));
     expect(dot()).not.toBeNull();
   });
 
@@ -86,12 +121,22 @@ describe('CenterCursor (#677)', () => {
   it.each([
     ['light', false, lightScheme],
     ['dark', true, darkScheme],
-  ] as const)('draws a stone dot in a paper ring in %s', async (_n, dark, scheme) => {
+  ] as const)('draws a stone dot in a paper halo in %s', async (_n, dark, scheme) => {
     await renderCursor(false, dark);
     expect(StyleSheet.flatten(dot()?.props.style as never)).toMatchObject({
-      backgroundColor: scheme.map.cursor,
+      backgroundColor: DEFAULT_CURSOR.color,
     });
-    expect(scheme.map.cursor).toBe('#1E252C');
-    expect(scheme.map.cursorRing).toBe('#F2ECE0');
+    expect(DEFAULT_CURSOR.color).toBe(scheme.map.cursor);
+    expect(StyleSheet.flatten(dot()?.parent?.props.style as never)).toMatchObject({
+      backgroundColor: scheme.map.cursorRing,
+    });
+  });
+
+  it('drops the halo when asked', async () => {
+    setCursor({ halo: false });
+    await renderCursor();
+    expect(StyleSheet.flatten(dot()?.parent?.props.style as never)).toMatchObject({
+      backgroundColor: 'transparent',
+    });
   });
 });

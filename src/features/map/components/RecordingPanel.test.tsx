@@ -1,10 +1,12 @@
 import type { TrackStats } from '@core/models';
-import { fireEvent, render, screen } from '@testing-library/react-native';
-import { Animated } from 'react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Animated, StyleSheet } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSettingsStore } from '@state/settingsStore';
+import { EXPANDED_FIELDS } from '@core/recording/panel';
 import { RecordingPanel } from './RecordingPanel';
+import { resetStripRuntime, setStripRuntime, useStripRuntime } from '../infoStrip/stripRuntime';
 
 jest.mock('@data/storage', () => ({
   writeJson: jest.fn(),
@@ -177,5 +179,44 @@ describe('RecordingPanel', () => {
     await fireEvent.press(screen.getByLabelText('Display Night'));
     expect(useSettingsStore.getState().displayCondition).toBe('night');
     expect(screen.getByLabelText('All display options')).toBeOnTheScreen();
+  });
+
+  describe('with the info strip (#673)', () => {
+    beforeEach(() => resetStripRuntime());
+
+    it('tells the strip which metrics it owns: the hero row, the grid too when expanded, none when minimised', async () => {
+      await renderPanel();
+      expect(useStripRuntime.getState().heroFields).toEqual(['time', 'distance', 'gain']);
+      await fireEvent.press(screen.getByLabelText('Show more fields'));
+      expect([...useStripRuntime.getState().heroFields].sort()).toEqual(
+        [...new Set(['time', 'distance', 'gain', ...EXPANDED_FIELDS])].sort(),
+      );
+      await fireEvent.press(screen.getAllByLabelText('Show fewer fields')[0]!);
+      await fireEvent.press(screen.getByLabelText('Minimize to a small overlay'));
+      expect(useStripRuntime.getState().heroFields).toEqual([]);
+    });
+
+    it('cycling skips the metrics the strip already shows', async () => {
+      // Speed is next after Gain, but the strip shows it: Pace comes instead.
+      setStripRuntime({ stripMetrics: new Set(['speed']) });
+      await renderPanel();
+      await fireEvent.press(screen.getByLabelText(/^Gain .*Tap to change field$/));
+      expect(screen.queryByText('SPEED')).toBeNull();
+      expect(screen.getByText('PACE')).toBeOnTheScreen();
+    });
+
+    it('formats with the shared hero formatter (the strip prints the same text)', async () => {
+      await renderPanel();
+      expect(screen.getByLabelText(/^Distance 3\.42 km/)).toBeOnTheScreen();
+      expect(screen.getByLabelText(/^Gain \+268 m/)).toBeOnTheScreen();
+    });
+
+    it('squares its top while the strip sits on it', async () => {
+      await renderPanel();
+      const sheet = () => screen.getByLabelText('Recording instruments');
+      expect(StyleSheet.flatten(sheet().props.style).borderTopLeftRadius).toBe(24);
+      await act(async () => setStripRuntime({ onPanel: true }));
+      expect(StyleSheet.flatten(sheet().props.style).borderTopLeftRadius).toBe(0);
+    });
   });
 });

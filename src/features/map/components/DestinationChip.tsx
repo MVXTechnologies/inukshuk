@@ -1,42 +1,37 @@
-import type { DestinationReadout } from '@core/geo/destination';
+import { destinationName } from '@core/infoStrip/target';
+import { useLibraryStore } from '@state/libraryStore';
+import { useNavigationStore } from '@state/navigationStore';
+import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Icon, Text, TouchableRipple } from 'react-native-paper';
+
 import { weatherChrome as wc } from '../weather/weatherChrome';
 
 /**
- * The dropped-pin destination readout (#97): how far the pin is and which way
- * to walk, live off the GPS fix.
+ * The destination chip (#97; slimmed in 2.6.0, #673): what you are
+ * navigating to, by name, and the ✕ that ends it. The distance, bearing and
+ * ETE moved to the info strip and the compass tape, so the chip no longer
+ * repeats them.
  *
- * Top-centre, on the same fixed dark slab as the rest of the map's floating
- * chrome. It is a heads-up nav number, so it goes where nav apps put one —
- * and the two corners it could otherwise take are both spoken for (the
- * compass + scale stack on the left, the controls rail on the right), while
- * the bottom edge is a busy flex column (recording bar, legends, docks).
- *
- * NOT permanent chrome: it exists only while the user has a destination, and
- * the ✕ on it is the one-tap way out. Nothing about it is turn-by-turn —
- * routing, legs and ETAs are issue #95.
+ * Top-centre, on the fixed dark slab of the map's floating chrome. NOT
+ * permanent: it exists only while there is a destination. The name is the
+ * saved waypoint it was set on, else "Destination". Maestro keys on
+ * 'Clear destination'.
  */
-export function DestinationChip({
-  readout,
-  onClear,
-}: {
-  /** Null while there is no GPS fix yet — the pin is set, the numbers aren't. */
-  readout: DestinationReadout | null;
-  onClear: () => void;
-}) {
+export function DestinationChip({ onClear }: { onClear: () => void }) {
+  const destination = useNavigationStore((s) => s.destination);
+  const waypoints = useLibraryStore((s) => s.waypoints);
+  const name = useMemo(
+    () => (destination === null ? null : destinationName(destination, waypoints)),
+    [destination, waypoints],
+  );
+  if (name === null) return null;
   return (
-    <View style={styles.chip}>
+    <View style={styles.chip} accessible={false}>
       <Icon source="flag-variant" size={16} color={wc.accent} />
-      {readout === null ? (
-        <Text style={[styles.text, styles.muted]}>Destination · waiting for GPS</Text>
-      ) : (
-        <Text style={styles.text}>
-          {readout.distance}
-          <Text style={styles.muted}>{'  ·  '}</Text>
-          {readout.bearing}
-        </Text>
-      )}
+      <Text style={styles.text} numberOfLines={1} accessibilityLabel={`Navigating to ${name}`}>
+        {name}
+      </Text>
       <TouchableRipple
         onPress={onClear}
         style={styles.clear}
@@ -55,6 +50,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    maxWidth: '100%',
     backgroundColor: wc.panel,
     borderRadius: 15,
     paddingLeft: 10,
@@ -66,8 +62,7 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     fontWeight: '700',
     color: wc.ink,
-    fontVariant: ['tabular-nums'],
+    flexShrink: 1,
   },
-  muted: { fontWeight: '400', color: wc.inkMuted },
   clear: { borderRadius: 12, padding: 5 },
 });

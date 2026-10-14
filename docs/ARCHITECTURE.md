@@ -479,9 +479,34 @@ map aids (centre cursor, pointing line). The pure core is
 - Magnetic declination comes from `core/geo/wmm.ts`, WMM2025 in pure TS,
   checked against NOAA's published test values.
 
+- `deps.ts` (`stripNeeds`: the union of the placed fields' deps and the
+  clock they need), `compute.ts` (one tick: every field over one snapshot,
+  missing data steps aside), `edit.ts` (the editor's add / remove / move /
+  reorder, each refusing what would not fit, and `dropSlot`).
+
+The UI is `src/features/map/infoStrip/`:
+
+- `InfoStripHost` is the one leaf MapScreen mounts. `useStripSnapshot` is the
+  coordinator: it subscribes to exactly what the placed fields need (camera
+  settle, the DEM for the centre, a 4 Hz gated heading, the course tracker,
+  a 1 Hz or 1-minute clock, the moving-speed window), so none of its ticks
+  re-render MapScreen. `StripField` is the one renderer, memoised on the
+  value's content.
+- `stripRuntime` (a small store) carries the measured strip heights (MapScreen
+  lifts its bottom column by `bottomH`; `InfoStripInsets`, around the Map
+  route, adds `topH` to the safe-area top for the top dock), the recording
+  panel's hero fields (the de-dup) and the strip's metrics (the panel's
+  cycling skips them).
+- `editor/` is the in-place editor, a plain View sheet: rows with drag,
+  the picker, settings pages generated from each field's params, the centre
+  cursor, 2.5.1's pointing-line panel, presets and your own strips.
+- `settings.infoStrip` lives in `settingsStore` (`setInfoStrip` writes it
+  with the 2.5.1 `showCenterCursor` mirror in one write, for rollbacks).
+
 Adding a field: a descriptor in `fields/` with a pure `compute()` and its
 tests, and one line in `registry.ts`; the picker, search, settings page and
-presets pick it up.
+presets pick it up (and a glyph line in `infoStrip/glyphs.ts` if it has a
+new one).
 
 ## Error reporting ("no silent fails")
 

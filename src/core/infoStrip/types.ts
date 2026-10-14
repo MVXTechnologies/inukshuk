@@ -63,7 +63,7 @@ export interface InfoStrip {
   /** The built-in preset this strip started from (`'navigation'`), for "· edited". */
   basedOn?: string;
   dock: Dock;
-  /** At most {@link MAX_ROWS} rows of at most `ROW_SPACES` spaces; row 1 nearest the edge. */
+  /** At most {@link MAX_ROWS} rows of at most `ROW_SPACES` spaces; row 1 on top, in either dock (mockup §5: moving the dock never reshuffles). */
   rows: FieldRef[][];
   aids: MapAids;
   /** The strip's shared target: every target field follows it unless it picks its own. */

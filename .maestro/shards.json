@@ -28,6 +28,7 @@
       "waypoint-cluster.yaml",
       "navigate.yaml",
       "map-overlays.yaml",
+      "info-strip.yaml",
       "settings.yaml",
       "recording-check.yaml"
     ],

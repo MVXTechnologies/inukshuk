@@ -1,0 +1,135 @@
+# Info strip e2e (#673, 2.6.0): the docked strip that replaced 2.5.1's
+# coordinates chip. Open its editor from Map layers, add a field, apply the
+# Navigation preset, check the strip on the map, then reset it to Default
+# (from a long-press on the strip, its other entry) so later flows see the
+# shipped default.
+#
+# Portability notes:
+# - Per-platform launchApp permission values (#128).
+# - The strip and its fields are keyed by id: the coordinates keep 2.5.1's
+#   chip ids ('map-center-coords', 'map-coords-text'); other fields are
+#   'strip-field-<id>'. The editor's rows are 'strip-edit-field-<row>-<i>',
+#   its + 'strip-add-field-<row>', the picker's rows 'strip-pick-<id>', the
+#   preset cards 'strip-preset-<id>'.
+# - The editor is a plain View sheet (no Portal); 'Done editing the info
+#   strip' is its open-state sentinel. Guarded taps on the openers, so a
+#   retry never toggles an open sheet closed.
+# - The strip is PERSISTED: the flow ends on the Default preset whatever it
+#   found, and asserts nothing that depends on a GPS fix (declination reads
+#   the map centre without one).
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            notifications: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+# --- The default strip: the map centre's coordinates, docked at the bottom.
+- extendedWaitUntil:
+    visible:
+      id: 'map-center-coords'
+    timeout: 15000
+- assertVisible:
+    id: 'info-strip'
+# --- Open the editor from Map layers › Map › Customize info strip.
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Close overlays'
+          commands:
+            - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Close overlays'
+          timeout: 10000
+- tapOn: 'Map tab'
+- scrollUntilVisible:
+    element: 'Customize info strip'
+    direction: DOWN
+    timeout: 15000
+    centerElement: true
+- tapOn: 'Customize info strip'
+- extendedWaitUntil:
+    visible: 'Done editing the info strip'
+    timeout: 10000
+- assertNotVisible: 'Close overlays'
+# Start from Default whatever an earlier run left behind.
+- tapOn: 'Presets'
+- tapOn:
+    id: 'strip-preset-default'
+- tapOn: 'Back to info strip'
+# --- Add a field: Default's row has one free space (coordinates take 2).
+- tapOn:
+    id: 'strip-add-field-0'
+- extendedWaitUntil:
+    visible: 'Add to row 1'
+    timeout: 10000
+- tapOn:
+    id: 'strip-pick-speed'
+- extendedWaitUntil:
+    visible:
+      id: 'strip-edit-field-0-2'
+    timeout: 10000
+# Full row: no + any more.
+- assertNotVisible:
+    id: 'strip-add-field-0'
+# --- Apply the Navigation preset (three rows), then close the editor.
+- tapOn: 'Presets'
+- tapOn:
+    id: 'strip-preset-navigation'
+- tapOn: 'Back to info strip'
+- extendedWaitUntil:
+    visible:
+      id: 'strip-edit-field-2-0'
+    timeout: 10000
+- tapOn: 'Done editing the info strip'
+- extendedWaitUntil:
+    notVisible: 'Done editing the info strip'
+    timeout: 10000
+# --- The strip on the map: the declination (row 2, from the map centre)
+# and the coordinates (row 3).
+- extendedWaitUntil:
+    visible:
+      id: 'strip-field-declination'
+    timeout: 10000
+- assertVisible:
+    id: 'map-center-coords'
+# --- Reset to Default from a long-press on the strip.
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Done editing the info strip'
+          commands:
+            - longPressOn:
+                id: 'map-center-coords'
+      - extendedWaitUntil:
+          visible: 'Done editing the info strip'
+          timeout: 10000
+- tapOn: 'Presets'
+- tapOn:
+    id: 'strip-preset-default'
+- tapOn: 'Back to info strip'
+- tapOn: 'Done editing the info strip'
+- extendedWaitUntil:
+    notVisible:
+      id: 'strip-field-declination'
+    timeout: 10000
+- assertVisible:
+    id: 'map-center-coords'
+- assertVisible: 'Map actions'

@@ -119,13 +119,14 @@ describe('coffee mascot bubble', () => {
 
   it('sits above the measured bottom row, so it never covers the credit caption', () => {
     // The column and the row report their layout; the bubble's bottom is the
-    // row's top (from the column's bottom edge) plus a gap.
+    // row's top (from the column's bottom edge) plus a gap, over a
+    // bottom-docked info strip (#673) when there is one.
     expect(map).toMatch(/onLayout=\{\(e\) => setBottomColumnH\(e\.nativeEvent\.layout\.height\)\}/);
     expect(map).toMatch(
       /style=\{styles\.bottomRow\}[^>]*onLayout=\{\(e\) => setBottomRowY\(e\.nativeEvent\.layout\.y\)\}/,
     );
     expect(map).toMatch(
-      /bottom=\{rowLiftAboveColumnBottom\(bottomColumnH, bottomRowY\) \+ TIP_BUBBLE_GAP\}/,
+      /bottom=\{\s*stripLift \+ rowLiftAboveColumnBottom\(bottomColumnH, bottomRowY\) \+ TIP_BUBBLE_GAP\s*\}/,
     );
     // The row holds the credits ⓘ, the scale bar and the tip button.
     expect(map).toMatch(/styles\.bottomRow\}[^]*?<MapCreditsButton[^]*?<ScaleBar[^]*?<TipButton/);

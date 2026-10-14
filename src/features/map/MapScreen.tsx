@@ -132,12 +132,9 @@ import { ShownTrailLayers } from './longTrail/ShownTrailLayers';
 import { MapControlsRail } from './components/MapControlsRail';
 import { RenderingToasts } from './components/RenderingToasts';
 import { ScaleBar } from './components/ScaleBar';
-import {
-  CenterCoordinatesChip,
-  onChipRowLayout,
-  onTipSlotLayout,
-} from './components/CenterCoordinatesChip';
 import { CenterCursor } from './components/CenterCursor';
+import { InfoStripHost } from './infoStrip/InfoStripHost';
+import { useInfoStripBottomLift } from './infoStrip/stripRuntime';
 import { metersPerPixel } from '@core/geo/scaleBar';
 import { heatTapRadiusPx } from '@core/heat/heatStyle';
 import { RecordingPanel } from './components/RecordingPanel';
@@ -2689,6 +2686,8 @@ export function MapScreen() {
     !drawing.ownsBottom;
   // Where the bottom chrome column sits: on the drawing panel, a trail sheet
   // or the recording panel (same precedence as its style), else the edge.
+  // A bottom-docked info strip (#673) sits on that, and the column on the strip.
+  const stripLift = useInfoStripBottomLift();
   const bottomColumnLift =
     drawing.panelHeight > 0
       ? drawing.panelHeight
@@ -3482,7 +3481,7 @@ export function MapScreen() {
             style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
             pointerEvents="box-none"
           >
-            <DestinationChip readout={destReadout} onClear={() => setDestination(null)} />
+            <DestinationChip onClear={() => setDestination(null)} />
           </View>
         )}
         {follow !== null && !marineActive && (
@@ -3614,6 +3613,7 @@ export function MapScreen() {
             recordingPanelUp && { bottom: panelHeight },
             trailSheetUp && { bottom: trailSheetHeight },
             drawing.panelHeight > 0 && { bottom: drawing.panelHeight },
+            stripLift > 0 && { bottom: bottomColumnLift + stripLift },
           ]}
           pointerEvents="box-none"
           onLayout={(e) => setBottomColumnH(e.nativeEvent.layout.height)}
@@ -3669,13 +3669,8 @@ export function MapScreen() {
               {/* The tip button hides itself while recording, while a destination is
                 followed, and while a trail sheet, heat carousel or the coordinate
                 dialog is up. */}
-              {/* #677: both onLayouts tell the coordinates chip how much room it has. */}
-              <View
-                style={[styles.bottomSide, styles.bottomSideEnd]}
-                pointerEvents="box-none"
-                onLayout={onChipRowLayout}
-              >
-                <View pointerEvents="box-none" onLayout={onTipSlotLayout}>
+              <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="box-none">
+                <View pointerEvents="box-none">
                   <TipButton
                     navigating={destination !== null || follow !== null}
                     gestureActive={cameraMoving}
@@ -3693,12 +3688,6 @@ export function MapScreen() {
                     blocked={inspectId !== null || heatSelection !== null}
                   />
                 </View>
-                {/* #677: the centre's coordinates and altitude (yours while following). */}
-                <CenterCoordinatesChip
-                  you={followUser ? location : null}
-                  youAltitudeM={followUser ? (lastFix?.altitude ?? null) : null}
-                  onCopied={showSnack}
-                />
               </View>
             </View>
           )}
@@ -3843,6 +3832,19 @@ export function MapScreen() {
           </View>
         )}
 
+        {/* The info strip (#673): docked on the tab bar / recording panel (or
+          at the top), its own subscriptions in its leaf; it lifts the bottom
+          column by its measured height (stripLift above). */}
+        <InfoStripHost
+          location={location}
+          fix={lastFix}
+          follow={follow}
+          recording={recordingPanelUp ? { stats, elapsedS, liveSpeedMps } : null}
+          bottomLift={bottomColumnLift}
+          hidden={selecting || makeMapState !== null}
+          onCopied={showSnack}
+        />
+
         {/* Glove lock (revamp §3): a shield over the map and all its chrome;
           only the panel's hold-to-unlock stays live. */}
         {recordingPanelUp && gloveLocked && (
@@ -3915,7 +3917,7 @@ export function MapScreen() {
           a tapped teammate's or shared waypoint's card. */}
         {makeMapState === null && (
           <TeamMapOverlay
-            fabBottom={teamFabBottom(bottomColumnLift, bottomColumnH)}
+            fabBottom={teamFabBottom(bottomColumnLift + stripLift, bottomColumnH)}
             sosTop={insets.top + 8}
             onPointActions={(p, what) => {
               const at = { longitude: p[0], latitude: p[1] };
@@ -3984,7 +3986,9 @@ export function MapScreen() {
         {bottomColumnH !== null && bottomRowY !== null && (
           <TipBubble
             right={TIP_BUBBLE_RIGHT}
-            bottom={rowLiftAboveColumnBottom(bottomColumnH, bottomRowY) + TIP_BUBBLE_GAP}
+            bottom={
+              stripLift + rowLiftAboveColumnBottom(bottomColumnH, bottomRowY) + TIP_BUBBLE_GAP
+            }
             tailRight={TIP_BUBBLE_TAIL_RIGHT}
           />
         )}
@@ -4011,6 +4015,7 @@ export function MapScreen() {
               teamDrawing
                 ? drawCreditsSheetBottom(insets.bottom, recordingPanelUp ? panelHeight : 0)
                 : bottomColumnLift +
+                  stripLift +
                   (bottomColumnH !== null && bottomRowY !== null
                     ? rowLiftAboveColumnBottom(bottomColumnH, bottomRowY)
                     : 48) +

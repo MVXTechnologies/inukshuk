@@ -150,6 +150,15 @@ function fromLegacy(legacy: LegacyStripSettings): InfoStrip {
   return s;
 }
 
+/**
+ * What 2.5.1's `showCenterCursor` switch should read for this strip, written
+ * next to `infoStrip` on every change (rollback safety): a build that knows
+ * only the switch shows its chip and dot while the strip shows anything.
+ */
+export function legacyShowCenterCursor(s: InfoStrip): boolean {
+  return s.aids.cursor.enabled || s.rows.length > 0;
+}
+
 /** `settings.infoStrip` as read from disk → a valid state (see the module note). */
 export function normaliseInfoStripSettings(
   raw: unknown,

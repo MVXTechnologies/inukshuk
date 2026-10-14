@@ -4,6 +4,8 @@
  * may pick its own instead.
  */
 import { formatCoordinate } from '@core/convert/coordinateDisplay';
+import { haversineMeters } from '@core/geo/geomath';
+import type { LatLng } from '@core/models';
 
 import type { DepsSnapshot, FollowSnapshot, ResolvedTarget, Target } from './types';
 
@@ -53,4 +55,20 @@ function fromFollow(follow: FollowSnapshot): ResolvedTarget {
     glyph: 'route',
     alongTrailM: follow.targetDistanceM,
   };
+}
+
+/** A destination this close to a saved waypoint takes its name, metres. */
+export const DESTINATION_NAME_RADIUS_M = 2;
+
+/**
+ * The destination pin's name (the nav target's, and the slim destination
+ * chip's): the saved waypoint it was set on (Navigate from a waypoint's
+ * card), else "Destination".
+ */
+export function destinationName(
+  at: LatLng,
+  waypoints: readonly { latitude: number; longitude: number; label: string }[],
+): string {
+  const w = waypoints.find((p) => haversineMeters(p, at) <= DESTINATION_NAME_RADIUS_M);
+  return w === undefined ? 'Destination' : w.label;
 }

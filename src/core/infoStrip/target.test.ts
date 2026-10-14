@@ -1,4 +1,4 @@
-import { effectiveTarget, resolveTarget } from './target';
+import { destinationName, effectiveTarget, resolveTarget } from './target';
 import { QC, snapshot } from './testUtils';
 import type { FollowSnapshot } from './types';
 
@@ -67,5 +67,16 @@ describe('resolveTarget', () => {
       glyph: 'my_location',
       alongTrailM: null,
     });
+  });
+});
+
+describe('destinationName', () => {
+  const camp = { latitude: 46.82, longitude: -71.2, label: 'Camp lac' };
+  it("takes the saved waypoint's name it was set on, else Destination", () => {
+    expect(destinationName({ latitude: 46.82, longitude: -71.2 }, [camp])).toBe('Camp lac');
+    // ~1 m off still is that waypoint; ~11 m is not.
+    expect(destinationName({ latitude: 46.82001, longitude: -71.2 }, [camp])).toBe('Camp lac');
+    expect(destinationName({ latitude: 46.8201, longitude: -71.2 }, [camp])).toBe('Destination');
+    expect(destinationName(QC, [])).toBe('Destination');
   });
 });
