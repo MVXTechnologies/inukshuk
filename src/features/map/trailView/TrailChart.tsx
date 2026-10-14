@@ -1,12 +1,8 @@
+import { scrubRatio } from '@core/chart/scrub';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import {
-  PanResponder,
-  StyleSheet,
-  View,
-  type GestureResponderEvent,
-  type LayoutChangeEvent,
-} from 'react-native';
+import { Fragment, useMemo, useState, type ReactNode } from 'react';
+import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Text } from 'react-native-paper';
 import Svg, { Circle, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 
@@ -55,11 +51,31 @@ const PAD_Y = 6;
 const NONE: readonly never[] = [];
 
 /**
+ * Direction lock of the scrub (dp from touch-down). Sideways travel past
+ * SCRUB_ACTIVATE_X makes the drag a scrub for good; vertical travel past
+ * SCRUB_FAIL_Y first hands it to the page scroll. The 1:2 ratio keeps the
+ * old "a drag at least twice as tall as it is wide scrolls" rule, decided once
+ * at the start of the drag instead of re-judged on every frame.
+ */
+export const SCRUB_ACTIVATE_X = 8;
+export const SCRUB_FAIL_Y = 16;
+
+/**
  * One chart of the trail view (#511, board C2): a line over the trail's
  * distance with a shared cursor. Touch and drag anywhere on it to move the
  * cursor — the screen moves every chart's cursor, the map marker and the
  * readout with it. A drag that is mostly vertical is handed to the page
  * scroll instead, so the tab still scrolls over its charts.
+ *
+ * The drag is a gesture-handler Pan, direction-locked natively (see
+ * SCRUB_ACTIVATE_X). It used to be a PanResponder that let the page scroll
+ * take over (`onShouldBlockNativeResponder: false`): on Android the native
+ * ScrollView then intercepted the touch as soon as the finger drifted ~8 dp
+ * vertically from where it landed — however far it had scrubbed sideways —
+ * and the cursor froze mid-drag; on iOS the hand-over test compared the NET
+ * dx/dy, so scrubbing back towards the start (net dx ~ 0) yielded to the
+ * smallest vertical wobble. Once this Pan is active the gesture-handler root
+ * holds the touch, so neither scroll can take it back until the finger lifts.
  */
 export function TrailChart({
   title,
@@ -140,31 +156,30 @@ export function TrailChart({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values, distances, width, lo, hi, area, plotHeight, totalM]);
 
-  // Latest scrub handler and geometry, read by the long-lived responder.
-  const latest = useRef({ width, totalM, onScrub });
-  useEffect(() => {
-    latest.current = { width, totalM, onScrub };
-  }, [width, totalM, onScrub]);
-  const pan = useMemo(() => {
-    const at = (e: GestureResponderEvent) => {
-      const { width: w, totalM: tm, onScrub: cb } = latest.current;
-      if (w <= 0 || tm <= 0) return;
-      const ratio = Math.min(1, Math.max(0, e.nativeEvent.locationX / w));
-      cb(ratio * tm);
+  // Rebuilt when the handler or geometry changes: GestureDetector swaps the
+  // callbacks into the SAME native handler, so a drag in progress carries on.
+  const gestureId = `${testID ?? title}-scrub`;
+  const scrub = useMemo(() => {
+    // `x` is relative to the plot view the detector wraps, whatever SVG
+    // element is under the finger.
+    const at = ({ x }: { x: number }) => {
+      const ratio = totalM > 0 ? scrubRatio(x, 0, width) : null;
+      if (ratio !== null) onScrub(ratio * totalM);
     };
-    // The ref is read on touch events only, never during render.
-    // eslint-disable-next-line react-hooks/refs
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      // A mostly vertical drag is the page scrolling (the Charts tab can be
-      // taller than the screen): hand it over. Sideways drags keep scrubbing.
-      onPanResponderTerminationRequest: (_e, g) => Math.abs(g.dy) > 2 * Math.abs(g.dx),
-      onShouldBlockNativeResponder: () => false,
-      onPanResponderGrant: at,
-      onPanResponderMove: at,
-    });
-  }, []);
+    return (
+      Gesture.Pan()
+        .runOnJS(true)
+        .withTestId(gestureId)
+        .activeOffsetX([-SCRUB_ACTIVATE_X, SCRUB_ACTIVATE_X])
+        .failOffsetY([-SCRUB_FAIL_Y, SCRUB_FAIL_Y])
+        // Touch-down places the cursor (a tap, or a press held still)...
+        .onBegin(at)
+        // ...and once the drag is a scrub (onStart: the activating frame),
+        // it follows the finger.
+        .onStart(at)
+        .onUpdate(at)
+    );
+  }, [gestureId, width, totalM, onScrub]);
 
   const cx = cursorDistanceM !== null && width > 0 ? xFor(cursorDistanceM) : null;
 
@@ -203,86 +218,87 @@ export function TrailChart({
         </Text>
       </View>
       {above}
-      <View
-        style={{ height: plotHeight }}
-        onLayout={onLayout}
-        accessible
-        accessibilityRole="adjustable"
-        accessibilityLabel={`${title} chart`}
-        accessibilityValue={{ text: valueText }}
-        {...pan.panHandlers}
-      >
-        {width > 0 && (
-          <Svg width={width} height={plotHeight}>
-            {bands.map((b) => (
-              <Rect
-                key={`b${b.from}`}
-                x={0}
-                y={yFor(b.to)}
-                width={width}
-                height={Math.max(0, yFor(b.from) - yFor(b.to))}
-                fill={b.color}
-                opacity={b.opacity}
-              />
-            ))}
-            {guides.map((g, k) => {
-              const v = valueNear(g.distanceM);
-              const x = xFor(g.distanceM);
-              return (
-                <Line
-                  key={`g${k}`}
-                  x1={g.fromX ?? x}
-                  y1={0}
-                  x2={x}
-                  y2={v === null ? plotHeight : yFor(v)}
-                  stroke={g.strong ? t.ink : t.outline}
-                  strokeWidth={g.strong ? 1.5 : 0.75}
-                  opacity={g.strong ? 0.9 : 0.6}
+      <GestureDetector gesture={scrub}>
+        <View
+          style={{ height: plotHeight }}
+          onLayout={onLayout}
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel={`${title} chart`}
+          accessibilityValue={{ text: valueText }}
+        >
+          {width > 0 && (
+            <Svg width={width} height={plotHeight}>
+              {bands.map((b) => (
+                <Rect
+                  key={`b${b.from}`}
+                  x={0}
+                  y={yFor(b.to)}
+                  width={width}
+                  height={Math.max(0, yFor(b.from) - yFor(b.to))}
+                  fill={b.color}
+                  opacity={b.opacity}
                 />
-              );
-            })}
-            {area && paths.fill !== '' && <Path d={paths.fill} fill={color} opacity={0.18} />}
-            {paths.line !== '' && (
-              <Path d={paths.line} stroke={color} strokeWidth={2} fill="none" />
-            )}
-            {labelRows.map(({ m, x, right, row }) => (
-              <Fragment key={`m${m.distanceM}`}>
-                <Line
-                  x1={x}
-                  y1={0}
-                  x2={x}
-                  y2={plotHeight}
-                  stroke={t.outline}
-                  strokeWidth={1}
-                  strokeDasharray="3,3"
+              ))}
+              {guides.map((g, k) => {
+                const v = valueNear(g.distanceM);
+                const x = xFor(g.distanceM);
+                return (
+                  <Line
+                    key={`g${k}`}
+                    x1={g.fromX ?? x}
+                    y1={0}
+                    x2={x}
+                    y2={v === null ? plotHeight : yFor(v)}
+                    stroke={g.strong ? t.ink : t.outline}
+                    strokeWidth={g.strong ? 1.5 : 0.75}
+                    opacity={g.strong ? 0.9 : 0.6}
+                  />
+                );
+              })}
+              {area && paths.fill !== '' && <Path d={paths.fill} fill={color} opacity={0.18} />}
+              {paths.line !== '' && (
+                <Path d={paths.line} stroke={color} strokeWidth={2} fill="none" />
+              )}
+              {labelRows.map(({ m, x, right, row }) => (
+                <Fragment key={`m${m.distanceM}`}>
+                  <Line
+                    x1={x}
+                    y1={0}
+                    x2={x}
+                    y2={plotHeight}
+                    stroke={t.outline}
+                    strokeWidth={1}
+                    strokeDasharray="3,3"
+                  />
+                  <SvgText
+                    x={right ? x - 4 : x + 4}
+                    y={11 + row * 12}
+                    fontSize={10}
+                    fill={t.inkMuted}
+                    textAnchor={right ? 'end' : 'start'}
+                  >
+                    {m.label}
+                  </SvgText>
+                </Fragment>
+              ))}
+              {dots.map((d, k) => (
+                <Circle
+                  key={`d${k}`}
+                  cx={xFor(d)}
+                  cy={3}
+                  r={2.5}
+                  fill={t.inkVariant}
+                  opacity={0.75}
                 />
-                <SvgText
-                  x={right ? x - 4 : x + 4}
-                  y={11 + row * 12}
-                  fontSize={10}
-                  fill={t.inkMuted}
-                  textAnchor={right ? 'end' : 'start'}
-                >
-                  {m.label}
-                </SvgText>
-              </Fragment>
-            ))}
-            {dots.map((d, k) => (
-              <Circle
-                key={`d${k}`}
-                cx={xFor(d)}
-                cy={3}
-                r={2.5}
-                fill={t.inkVariant}
-                opacity={0.75}
-              />
-            ))}
-            {cx !== null && (
-              <Line x1={cx} y1={0} x2={cx} y2={plotHeight} stroke={t.ink} strokeWidth={2} />
-            )}
-          </Svg>
-        )}
-      </View>
+              ))}
+              {cx !== null && (
+                <Line x1={cx} y1={0} x2={cx} y2={plotHeight} stroke={t.ink} strokeWidth={2} />
+              )}
+            </Svg>
+          )}
+        </View>
+      </GestureDetector>
       {footnote ? <Text style={[styles.foot, { color: t.inkMuted }]}>{footnote}</Text> : null}
     </View>
   );

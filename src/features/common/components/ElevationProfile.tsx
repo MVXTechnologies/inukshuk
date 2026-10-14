@@ -456,6 +456,7 @@ export function ElevationProfile({
         style={[styles.chart, { backgroundColor: theme.colors.surfaceVariant }]}
         onLayout={onLayout}
         {...pan.panHandlers}
+        testID="elevation-profile-chart"
       >
         {width > 0 && (
           <Svg width={width} height={svgH}>
