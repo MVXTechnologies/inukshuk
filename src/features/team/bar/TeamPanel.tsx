@@ -15,6 +15,7 @@
  */
 import { STATUS_LABEL } from '@core/teamui/system';
 import { distanceText, panelMembers } from '@core/teamui/teamBar';
+import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 import { useSettingsStore } from '@state/settingsStore';
 import { useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
@@ -119,9 +120,16 @@ export function TeamPanel({
   ];
 
   return (
-    <>
+    // One elevation-free layer at the map's overlay order (as the 2.6.0 team
+    // button's, QA 09b): the panel's own elevation stays inside it, so Android
+    // stacks the whole panel by MAP_OVERLAY_Z, not by its shadow.
+    <View
+      style={[StyleSheet.absoluteFill, { zIndex: MAP_OVERLAY_Z.teamPanel }]}
+      pointerEvents="box-none"
+      testID="team-panel-layer"
+    >
       <Pressable
-        style={[StyleSheet.absoluteFill, styles.scrim, { backgroundColor: t.team.menuScrim }]}
+        style={[StyleSheet.absoluteFill, { backgroundColor: t.team.menuScrim }]}
         onPress={close}
         accessibilityLabel="Close the team panel"
         testID="team-panel-scrim"
@@ -315,7 +323,7 @@ export function TeamPanel({
           testID="team-panel-manage"
         />
       </View>
-    </>
+    </View>
   );
 }
 
@@ -401,7 +409,6 @@ function Row({
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   dim: { opacity: 0.62 },
-  scrim: { zIndex: 9 },
   panel: {
     position: 'absolute',
     left: 12,
@@ -409,7 +416,6 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
-    zIndex: 9,
     shadowOpacity: 0.34,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 12 },

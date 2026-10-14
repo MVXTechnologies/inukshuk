@@ -12,6 +12,7 @@
  * The ring redraws every {@link FRAME_MS} only while held: a leaf of the map.
  */
 import { holdProgress, holdTicks, SOS_HOLD_MS } from '@core/teamui/undo';
+import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 import { useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -101,7 +102,7 @@ export function SosButton({
       ? 'SOS about to be sent'
       : 'SOS. Hold for two seconds to alert the whole team';
   return (
-    <View style={[styles.dock, { bottom }]} pointerEvents="box-none">
+    <View style={[styles.dock, { bottom }]} pointerEvents="box-none" testID="team-sos-layer">
       {hint !== null && (
         <View
           style={[styles.hint, { backgroundColor: t.team.snack, shadowColor: palette.shadow }]}
@@ -159,7 +160,8 @@ export function SosButton({
 }
 
 const styles = StyleSheet.create({
-  dock: { position: 'absolute', right: 10, alignItems: 'center', zIndex: 8 },
+  // Under the bottom cards (QA 2.6.0, 09b); the button's elevation stays inside.
+  dock: { position: 'absolute', right: 10, alignItems: 'center', zIndex: MAP_OVERLAY_Z.teamButton },
   ringBox: {
     width: RING,
     height: RING,

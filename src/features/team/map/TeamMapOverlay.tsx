@@ -10,6 +10,7 @@
  */
 import { rangeAndBearing } from '@core/teamui/positions';
 import { useExtensionPrefs } from '@features/extensions/prefs';
+import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 import { formatDistance } from '@state/formatters';
 import { useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
@@ -283,5 +284,5 @@ const styles = StyleSheet.create({
   },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 4 },
   /** The strip-area band: left of the SOS button, above the bottom chrome. */
-  stripBand: { position: 'absolute', left: 16, right: 88, zIndex: 7 },
+  stripBand: { position: 'absolute', left: 16, right: 88, zIndex: MAP_OVERLAY_Z.teamButton },
 });

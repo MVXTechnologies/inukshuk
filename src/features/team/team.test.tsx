@@ -24,6 +24,7 @@ import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
 
 import { JoinScreen } from './JoinScreen';
 import { TeamMapOverlay, useTeamMapSelection } from './map/TeamMapOverlay';
+import { useTeamSheet } from './map/teamMode';
 import { TeamHubScreen } from './TeamHubScreen';
 
 const mockPush = jest.fn();
@@ -269,6 +270,12 @@ describe('the map card', () => {
     await act(() => useTeamMapSelection.getState().select(null));
     expect(screen.getByTestId('team-sos-button')).toBeTruthy();
     expect(screen.queryByTestId('team-fab')).toBeNull();
+    // Its layer sits under the bottom cards (QA 2.6.0, 09b); the panel's over them.
+    const z = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style).zIndex;
+    expect(z('team-sos-layer')).toBe(MAP_OVERLAY_Z.teamButton);
+    await act(() => useTeamSheet.getState().open({ kind: 'menu' }));
+    expect(z('team-panel-layer')).toBe(MAP_OVERLAY_Z.teamPanel);
+    await act(() => useTeamSheet.getState().close());
     await session.stopMesh();
   });
 });

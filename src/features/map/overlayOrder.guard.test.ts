@@ -95,7 +95,9 @@ describe('the info strip is the lowest overlay', () => {
       'src/features/recording/RecordingCheckPanel.tsx',
       'src/features/map/components/BackgroundLocationRationale.tsx',
       'src/features/map/infoStrip/editor/InfoStripEditor.tsx',
-      'src/features/team/map/TeamCards.tsx',
+      'src/features/team/bar/SosButton.tsx',
+      'src/features/team/bar/TeamPanel.tsx',
+      'src/features/team/map/TeamMapOverlay.tsx',
     ]) {
       const src = read(file);
       expect({ file, table: src.includes('MAP_OVERLAY_Z.') }).toEqual({ file, table: true });
@@ -111,10 +113,16 @@ describe('the info strip is the lowest overlay', () => {
   });
 });
 
-describe('the team button (QA 2.6.0, 09b)', () => {
-  it('closed, it sits under the bottom cards; open, its menu over them', () => {
+describe('the team button (QA 2.6.0, 09b) and the team bar (2.6.1, #707)', () => {
+  it('the SOS button and the strip band sit under the bottom cards; the panel over them', () => {
     expect(MAP_OVERLAY_Z.teamButton).toBeLessThan(MAP_OVERLAY_Z.waypointCard);
-    expect(MAP_OVERLAY_Z.teamMenu).toBeGreaterThan(MAP_OVERLAY_Z.waypointCard);
+    expect(MAP_OVERLAY_Z.teamPanel).toBeGreaterThan(MAP_OVERLAY_Z.waypointCard);
+    expect(read('src/features/team/bar/SosButton.tsx')).toMatch(
+      /dock: \{[^}]*zIndex: MAP_OVERLAY_Z\.teamButton/,
+    );
+    expect(read('src/features/team/map/TeamMapOverlay.tsx')).toMatch(
+      /stripBand: \{[^}]*zIndex: MAP_OVERLAY_Z\.teamButton/,
+    );
     expect(BOTTOM_LAYER.waypointCard.zIndex).toBe(MAP_OVERLAY_Z.waypointCard);
   });
 });
