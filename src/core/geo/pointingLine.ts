@@ -1,7 +1,7 @@
 import type { Units } from '@core/format';
 import {
   IMPERIAL_TICK_FT,
-  pointingLineLengthM,
+  pointingLineChoiceM,
   type PointingLineFixedTicks,
   type PointingLineLength,
   type PointingLineTicks,
@@ -240,9 +240,11 @@ export function resolveLengthM(
   bearingDeg: number,
   bounds: ViewBounds | null,
   units: Units = 'metric',
+  customLengthM?: number,
 ): number | null {
-  // A stop is a round distance in the user's units (500 ft, 0.5 mi in imperial).
-  if (length !== 'edge') return pointingLineLengthM(length, units);
+  // A stop is a round distance in the user's units (500 ft, 0.5 mi in imperial);
+  // Custom is the user's own distance (#703).
+  if (length !== 'edge') return pointingLineChoiceM(length, units, customLengthM);
   return bounds === null ? null : edgeDistanceM(origin, bearingDeg, bounds);
 }
 

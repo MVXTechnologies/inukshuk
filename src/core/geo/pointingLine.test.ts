@@ -230,6 +230,14 @@ describe('resolveLengthM', () => {
     const b = { west: -71.22, south: 46.8, east: -71.2, north: 46.82 };
     expect(resolveLengthM('edge', QC, 0, b)).toBeCloseTo((46.82 - QC.latitude) * DEG_M, 3);
   });
+
+  it('Custom (#703) is the typed distance, in either unit system, without bounds', () => {
+    expect(resolveLengthM('custom', QC, 0, null, 'metric', 1250)).toBe(1250);
+    expect(resolveLengthM('custom', QC, 0, null, 'imperial', 1250)).toBe(1250);
+    expect(resolveLengthM('custom', QC, 0, null)).toBe(750);
+    // A hand-edited out-of-range value is clamped, never drawn as is.
+    expect(resolveLengthM('custom', QC, 0, null, 'metric', 1e9)).toBe(50_000);
+  });
 });
 
 describe('pointingLineFeatures', () => {

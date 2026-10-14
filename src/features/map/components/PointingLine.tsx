@@ -141,7 +141,14 @@ function LivePointingLine({
 
   const data = useMemo(() => {
     if (bearingDeg === null) return null;
-    const lengthM = resolveLengthM(cfg.length, location, bearingDeg, bounds, units);
+    const lengthM = resolveLengthM(
+      cfg.length,
+      location,
+      bearingDeg,
+      bounds,
+      units,
+      cfg.customLengthM,
+    );
     if (lengthM === null || !(lengthM > 0)) return null;
     return pointingLineFeatures({
       origin: location,
@@ -156,6 +163,7 @@ function LivePointingLine({
     bearingDeg,
     cog,
     cfg.length,
+    cfg.customLengthM,
     cfg.ticks,
     cfg.labelEvery5th,
     location,

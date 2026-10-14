@@ -1,4 +1,10 @@
 import {
+  CUSTOM_LENGTH_MAX_M,
+  CUSTOM_LENGTH_MIN_M,
+  clampCustomLengthM,
+  customLengthInputText,
+  parseCustomLength,
+  pointingLineChoiceM,
   DEFAULT_POINTING_LINE,
   IMPERIAL_LENGTH_FT,
   POINTING_LINE_COLORS,
@@ -46,6 +52,7 @@ describe('sanitizePointingLine', () => {
       width: 'bold',
       ticks: 'auto',
       labelEvery5th: true,
+      customLengthM: 1234,
     } as const;
     expect(sanitizePointingLine(s)).toEqual(s);
   });
@@ -155,6 +162,7 @@ describe('imperial lengths (2.5.1 final QA)', () => {
       '1 mi',
       '2 mi',
       'Edge',
+      'Custom',
     ]);
     expect(pointingLineLengthLabels('metric')).toEqual([
       '100 m',
@@ -163,6 +171,7 @@ describe('imperial lengths (2.5.1 final QA)', () => {
       '1 km',
       '2 km',
       'Edge',
+      'Custom',
     ]);
   });
 
@@ -191,5 +200,69 @@ describe('imperial lengths (2.5.1 final QA)', () => {
     const s = sanitizePointingLine({ ...DEFAULT_POINTING_LINE, length: 250 });
     expect(pointingLineLengthText(s.length, 'imperial')).toBe('1000 ft');
     expect(pointingLineLengthText(s.length, 'metric')).toBe('250 m');
+  });
+});
+
+describe('Custom length (#703)', () => {
+  it('persists as the "custom" stop plus metres, sanitised on read', () => {
+    expect(DEFAULT_POINTING_LINE.customLengthM).toBe(750);
+    const s = sanitizePointingLine({ length: 'custom', customLengthM: 1250 });
+    expect(s).toMatchObject({ length: 'custom', customLengthM: 1250 });
+    // Junk falls back; out of range clamps.
+    expect(sanitizePointingLine({ customLengthM: 'far' }).customLengthM).toBe(750);
+    expect(sanitizePointingLine({ customLengthM: -3 }).customLengthM).toBe(750);
+    expect(sanitizePointingLine({ customLengthM: 2 }).customLengthM).toBe(CUSTOM_LENGTH_MIN_M);
+    expect(sanitizePointingLine({ customLengthM: 1e7 }).customLengthM).toBe(CUSTOM_LENGTH_MAX_M);
+    // A pre-#703 file (no customLengthM) keeps its preset.
+    expect(sanitizePointingLine({ length: 1000 })).toMatchObject({
+      length: 1000,
+      customLengthM: 750,
+    });
+  });
+
+  it('clamps to 10 m … 50 km', () => {
+    expect(clampCustomLengthM(5)).toBe(10);
+    expect(clampCustomLengthM(123.4)).toBe(123.4);
+    expect(clampCustomLengthM(60_000)).toBe(50_000);
+    expect(clampCustomLengthM(0)).toBeNull();
+    expect(clampCustomLengthM(NaN)).toBeNull();
+    expect(clampCustomLengthM(Infinity)).toBeNull();
+  });
+
+  it('parses typed text in metres, or feet in imperial', () => {
+    expect(parseCustomLength('1250', 'metric')).toBe(1250);
+    expect(parseCustomLength(' 12.5 ', 'metric')).toBe(12.5);
+    expect(parseCustomLength('12,5', 'metric')).toBe(12.5);
+    expect(parseCustomLength('1500', 'imperial')).toBeCloseTo(457.2, 9);
+    expect(parseCustomLength('', 'metric')).toBeNull();
+    expect(parseCustomLength('.', 'metric')).toBeNull();
+    expect(parseCustomLength('1.2.3', 'metric')).toBeNull();
+    expect(parseCustomLength('-5', 'metric')).toBeNull();
+    expect(parseCustomLength('0', 'metric')).toBeNull();
+    expect(parseCustomLength('3', 'metric')).toBe(10);
+  });
+
+  it('shows the stored metres back in the input unit, whole', () => {
+    expect(customLengthInputText(1250, 'metric')).toBe('1250');
+    expect(customLengthInputText(457.2, 'imperial')).toBe('1500');
+    expect(customLengthInputText(12.6, 'metric')).toBe('13');
+  });
+
+  it('reads as a distance in summaries, captions and the note', () => {
+    const s = { ...DEFAULT_POINTING_LINE, length: 'custom' as const, customLengthM: 1250 };
+    expect(pointingLineSummary(s)).toBe('1.25 km along your heading');
+    expect(pointingLineCaption(s, 'metric')).toBe(
+      'From you · heading · 1.25 km · ticks every 50 m',
+    );
+    expect(pointingLineLengthText('custom', 'metric', 640)).toBe('640 m');
+    expect(pointingLineLengthText('custom', 'imperial', 457.2)).toBe('1500 ft');
+    expect(pointingLineLengthText('custom', 'imperial', 3218.688)).toBe('2 mi');
+    expect(pointingLineGroundNote('custom', 'metric', 640)).toMatch(/so 640 m is 640 m on/);
+  });
+
+  it('draws the typed metres; Edge has none', () => {
+    expect(pointingLineChoiceM('custom', 'imperial', 1250)).toBe(1250);
+    expect(pointingLineChoiceM(500, 'metric', 1250)).toBe(500);
+    expect(pointingLineChoiceM('edge', 'metric', 1250)).toBeNull();
   });
 });

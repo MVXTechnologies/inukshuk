@@ -13,7 +13,10 @@ import {
   pointingLineCaption,
   pointingLineGroundNote,
   pointingLineLengthLabels,
-  pointingLineLengthM,
+  pointingLineChoiceM,
+  customLengthInputText,
+  customLengthInputUnit,
+  parseCustomLength,
   pointingLineCasing,
   pointingLineSummary,
   pointingLineTicksLabel,
@@ -105,7 +108,7 @@ function Preview({ cfg }: { cfg: PointingLineSettings }) {
   // The preview's ground length: the setting, or a nominal 1 km for Edge;
   // ticks as set (Auto: five), dropped when they would fuse.
   // In the user's units: 0.5 mi is drawn as 0.5 mi of ticks.
-  const lengthM = cfg.length === 'edge' ? 1000 : pointingLineLengthM(cfg.length, units);
+  const lengthM = pointingLineChoiceM(cfg.length, units, cfg.customLengthM) ?? 1000;
   const step = previewTickStep(cfg.ticks, lengthM, units);
   const px = step === null ? 0 : ((x1 - x0) * step.stepM) / lengthM;
   const ticks =
@@ -232,10 +235,62 @@ function BearingInput({ value, onChange }: { value: number; onChange: (deg: numb
 }
 
 /**
+ * The Custom length (#703), typed in metres (feet in imperial): committed as
+ * you type once it is a number, clamped to 10 m … 50 km; on leaving, the
+ * field shows the stored value (so a clamp is visible).
+ */
+function CustomLengthInput({
+  valueM,
+  onChange,
+}: {
+  valueM: number;
+  onChange: (m: number) => void;
+}) {
+  const tokens = useSchemeTokens();
+  const { accent } = useSheetAccent();
+  const units = useSettingsStore((s) => s.units);
+  const unit = customLengthInputUnit(units);
+  const [text, setText] = useState(() => customLengthInputText(valueM, units));
+  // A units switch while the panel is open re-reads the stored metres.
+  const [shownUnits, setShownUnits] = useState(units);
+  if (shownUnits !== units) {
+    setShownUnits(units);
+    setText(customLengthInputText(valueM, units));
+  }
+  return (
+    <View style={styles.bearingRow}>
+      <Text style={[styles.bearingLabel, { color: tokens.inkVariant }]}>Distance</Text>
+      <TextInput
+        value={text}
+        onChangeText={(t) => {
+          const clean = t.replace(/[^0-9.,]/g, '').slice(0, 7);
+          setText(clean);
+          const m = parseCustomLength(clean, units);
+          if (m !== null) onChange(m);
+        }}
+        onBlur={() => setText(customLengthInputText(valueM, units))}
+        keyboardType="decimal-pad"
+        returnKeyType="done"
+        maxLength={7}
+        selectTextOnFocus
+        accessibilityLabel={`Custom length in ${unit === 'ft' ? 'feet' : 'metres'}`}
+        testID="pointing-line-custom-length"
+        style={[
+          styles.bearingInput,
+          styles.lengthInput,
+          { color: tokens.ink, borderColor: accent, backgroundColor: tokens.surfaceVariant },
+        ]}
+      />
+      <Text style={[styles.bearingLabel, { color: tokens.inkVariant }]}>{unit}</Text>
+    </View>
+  );
+}
+
+/**
  * Map layers › Map › Pointing line (#681, mockup 2.6.0 §7 `cfgLine2`): the
  * switch, then where it starts (You; the centre cursor joins in 2.6.0), its
  * direction (Heading / Course / Fixed, with the bearing), its length (100 m
- * to the screen edge), nine colours, four widths, the tick marks and their
+ * to the screen edge, or a typed Custom distance, #703), nine colours, four widths, the tick marks and their
  * labels. Every option can be set while the line is off.
  */
 export function PointingLinePanel({
@@ -314,6 +369,12 @@ export function PointingLinePanel({
           tickColor={tokens.inkMuted}
         />
       </ControlRow>
+      {cfg.length === 'custom' && (
+        <CustomLengthInput
+          valueM={cfg.customLengthM}
+          onChange={(customLengthM) => update({ customLengthM })}
+        />
+      )}
       <SectionTitle>Colour</SectionTitle>
       <View style={styles.swatches} accessibilityRole="radiogroup" accessibilityLabel="Line colour">
         {POINTING_LINE_COLORS.map((c) => {
@@ -357,7 +418,9 @@ export function PointingLinePanel({
         value={cfg.labelEvery5th}
         onToggle={() => update({ labelEvery5th: !cfg.labelEvery5th })}
       />
-      <SheetNote icon="compass-outline">{pointingLineGroundNote(cfg.length, units)}</SheetNote>
+      <SheetNote icon="compass-outline">
+        {pointingLineGroundNote(cfg.length, units, cfg.customLengthM)}
+      </SheetNote>
     </>
   );
 }
@@ -386,6 +449,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
+  lengthInput: { minWidth: 92 },
   swatches: {
     flexDirection: 'row',
     flexWrap: 'wrap',
