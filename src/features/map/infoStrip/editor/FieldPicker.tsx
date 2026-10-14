@@ -129,7 +129,9 @@ export function FieldPicker({
                     <Text style={[styles.label, { color: t.ink }]} numberOfLines={1}>
                       {d.label}
                     </Text>
-                    <Text style={[styles.hint, { color: t.inkMuted }]} numberOfLines={1}>
+                    {/* Two lines: beside a wide preview one line cut the summary short
+                      ("Waypoint, trail target or nav tar…", QA 2.6.0). */}
+                    <Text style={[styles.hint, { color: t.inkMuted }]} numberOfLines={2}>
                       {d.summary}
                     </Text>
                   </View>

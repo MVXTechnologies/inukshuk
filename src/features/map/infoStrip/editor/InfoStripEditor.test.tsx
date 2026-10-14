@@ -131,6 +131,8 @@ describe('editing rows', () => {
     // Only fields that fit: coordinates (2 spaces) is not listed, and nothing is greyed.
     expect(screen.queryByTestId('strip-pick-coords')).toBeNull();
     expect(screen.getByText(/Row 1 has 1 space left/)).toBeOnTheScreen();
+    // A summary beside a wide preview wraps to a second line rather than being cut.
+    expect(screen.getByText('Waypoint, trail target or nav target').props.numberOfLines).toBe(2);
     await fireEvent.press(screen.getByTestId('strip-pick-speed'));
     expect(fields()).toEqual([['coords', 'elevation', 'speed']]);
     // Full now: no + in that row.
