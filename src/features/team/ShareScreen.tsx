@@ -9,6 +9,7 @@ import { loadTrackGeometry } from '@data/trackGeometry';
 import { reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
 import { teamService, useTeamStore } from '@state/teamStore';
+import { useCoordinateFormatter } from '@state/useCoordinateFormatter';
 import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
@@ -24,6 +25,7 @@ const km = (m: number) => (m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFix
 
 export function ShareScreen() {
   const t = useSchemeTokens();
+  const formatCoords = useCoordinateFormatter();
   const view = useTeamStore((s) => s.view);
   const shares = useTeamStore((s) => s.shares);
   const teamPhotos = useTeamStore((s) => s.photos);
@@ -127,7 +129,7 @@ export function ShareScreen() {
             <List.Item
               key={w.id}
               title={w.label}
-              description={w.note ?? `${w.latitude.toFixed(5)}, ${w.longitude.toFixed(5)}`}
+              description={w.note ?? formatCoords(w.latitude, w.longitude)}
               descriptionNumberOfLines={1}
               onPress={() =>
                 done(

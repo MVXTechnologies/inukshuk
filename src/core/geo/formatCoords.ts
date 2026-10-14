@@ -14,11 +14,11 @@ function split(value: number, positive: string, negative: string): [string, numb
 }
 
 /**
- * Five decimals ≈ 1.1 m at the equator — GPS-grade precision without noise —
- * and the "lat, lng" order pastes straight into every mapping app's search.
+ * Six decimals ≈ 0.11 m at the equator — the app-wide DD readout (#701) — and
+ * the "lat, lng" order pastes straight into every mapping app's search.
  */
 export function formatLatLng(latitude: number, longitude: number): string {
-  return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+  return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
 }
 
 /**

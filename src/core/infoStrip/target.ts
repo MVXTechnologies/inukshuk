@@ -38,9 +38,7 @@ export function resolveTarget(target: Target, data: DepsSnapshot): ResolvedTarge
       return {
         name:
           target.label ??
-          formatCoordinate(target.point.latitude, target.point.longitude, data.coordinateFormat, {
-            compact: true,
-          }),
+          formatCoordinate(target.point.latitude, target.point.longitude, data.coordinateFormat),
         point: target.point,
         glyph: 'my_location',
         alongTrailM: null,

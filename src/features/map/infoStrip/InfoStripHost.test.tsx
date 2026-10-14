@@ -134,7 +134,7 @@ describe('the default strip (2.5.1 chip, re-homed)', () => {
     async (_n, dark, scheme) => {
       await renderStrip({}, dark);
       await settle();
-      expect(screen.getByTestId('map-coords-text')).toHaveTextContent('46.81394, -71.20761');
+      expect(screen.getByTestId('map-coords-text')).toHaveTextContent('46.813940, -71.207610');
       expect(screen.getByTestId('map-coords-altitude')).toHaveTextContent('≈412 m');
       expect(StyleSheet.flatten(screen.getByTestId('info-strip').props.style)).toMatchObject({
         backgroundColor: scheme.surface,
@@ -157,7 +157,7 @@ describe('the default strip (2.5.1 chip, re-homed)', () => {
       location: { latitude: 46.8, longitude: -71.2 },
       fix: { altitude: 199.6, accuracy: 4 },
     });
-    expect(screen.getByTestId('map-coords-text')).toHaveTextContent('46.80000, -71.20000');
+    expect(screen.getByTestId('map-coords-text')).toHaveTextContent('46.800000, -71.200000');
     expect(screen.getByTestId('map-coords-altitude')).toHaveTextContent('200 m');
     // No DEM read for "you".
     expect(mockDem.calls).toBe(0);
@@ -168,8 +168,8 @@ describe('the default strip (2.5.1 chip, re-homed)', () => {
     await renderStrip({ onCopied });
     await settle();
     await fireEvent.press(screen.getByTestId('map-center-coords'));
-    expect(Clipboard.setStringAsync).toHaveBeenCalledWith('46.81394, -71.20761');
-    expect(onCopied).toHaveBeenCalledWith('Copied 46.81394, -71.20761', expect.any(Function));
+    expect(Clipboard.setStringAsync).toHaveBeenCalledWith('46.813940, -71.207610');
+    expect(onCopied).toHaveBeenCalledWith('Copied 46.813940, -71.207610', expect.any(Function));
   });
 
   it("the copy's confirmation keeps Convert reachable (2.5.1's long-press), on that point", async () => {
@@ -189,7 +189,7 @@ describe('the default strip (2.5.1 chip, re-homed)', () => {
   it('follows the Settings coordinate format', async () => {
     useSettingsStore.setState({ coordinateFormat: 'utm' });
     await renderStrip();
-    expect(screen.getByTestId('map-coords-text')).toHaveTextContent('19T 331586 5186854');
+    expect(screen.getByTestId('map-coords-text')).toHaveTextContent('19T 331586.0 5186854.5');
   });
 
   it('a long-press anywhere opens the editor', async () => {
@@ -247,7 +247,7 @@ describe('the default strip (2.5.1 chip, re-homed)', () => {
     // The first real settle: the centre and its ground, read once.
     await act(async () => useMapStore.getState().setMapCenter(QC));
     await flush();
-    expect(screen.getByTestId('map-coords-text')).toHaveTextContent('46.81394, -71.20761');
+    expect(screen.getByTestId('map-coords-text')).toHaveTextContent('46.813940, -71.207610');
     expect(screen.getByTestId('map-coords-altitude')).toHaveTextContent('≈412 m');
     expect(mockDem.calls).toBe(1);
   });
@@ -422,7 +422,6 @@ describe('recording: the strip stacks on the panel, one owner per metric', () =>
               point: 'centre',
               format: 'app',
               datum: 'wgs84',
-              showAccuracy: false,
               tapToCopy: true,
             },
           },

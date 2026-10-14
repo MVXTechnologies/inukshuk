@@ -26,12 +26,12 @@ afterEach(() => {
 it('defaults to decimal degrees, with the centre cursor on', () => {
   expect(useSettingsStore.getState().coordinateFormat).toBe('dd');
   expect(useSettingsStore.getState().showCenterCursor).toBe(true);
-  expect(formatCoordinateNow(46.81394, -71.20761)).toBe('46.81394, -71.20761');
+  expect(formatCoordinateNow(46.81394, -71.20761)).toBe('46.813940, -71.207610');
 });
 
 it('set("coordinateFormat") switches the formatter and persists', () => {
   useSettingsStore.getState().set('coordinateFormat', 'utm');
-  expect(formatCoordinateNow(46.81394, -71.20761)).toBe('19T 331586 5186854');
+  expect(formatCoordinateNow(46.81394, -71.20761)).toBe('19T 331586.0 5186854.5');
   expect(storage.writeJson).toHaveBeenCalledWith(
     'settings.json',
     expect.objectContaining({ coordinateFormat: 'utm' }),

@@ -21,7 +21,7 @@ describe('coords', () => {
   it('shows the map centre in the Settings format (2.5.1)', () => {
     expect(COORDS.compute(snapshot({ centre: QC }), P(), METRIC)).toEqual({
       glyph: 'filter_center_focus',
-      value: '46.81394, -71.20761',
+      value: '46.813940, -71.207610',
     });
     expect(
       COORDS.compute(snapshot({ centre: QC, coordinateFormat: 'mgrs' }), P(), METRIC)?.value,
@@ -30,7 +30,7 @@ describe('coords', () => {
 
   it('uses its own format when set (DDM, the owner reference)', () => {
     expect(COORDS.compute(snapshot({ centre: QC }), P({ format: 'ddm' }), METRIC)?.value).toBe(
-      '46°48.836′N, 71°12.457′W',
+      '46°48.8364′N, 71°12.4566′W',
     );
   });
 
@@ -38,7 +38,7 @@ describe('coords', () => {
     const data = snapshot({ centre: QC, followsUser: true, position: fix(YOU) });
     expect(COORDS.compute(data, P(), METRIC)).toEqual({
       glyph: 'my_location',
-      value: '46.81211, -71.20903',
+      value: '46.812110, -71.209030',
     });
   });
 
@@ -53,16 +53,13 @@ describe('coords', () => {
     expect(COORDS.compute(snapshot(), P(), METRIC)).toBeNull();
   });
 
-  it('shows the accuracy for you, never for the centre', () => {
+  it('never carries a ± next to the coordinates (#701), even with a saved 2.6.0 param', () => {
     const data = snapshot({ centre: QC, position: fix({ ...YOU, accuracyM: 0.02 }) });
-    expect(COORDS.compute(data, P({ point: 'you', showAccuracy: true }), METRIC)?.unit).toBe(
-      '±2.0 cm',
-    );
-    expect(COORDS.compute(data, P({ showAccuracy: true }), METRIC)?.unit).toBeUndefined();
-    const noAcc = snapshot({ position: fix({ accuracyM: null }) });
-    expect(
-      COORDS.compute(noAcc, P({ point: 'you', showAccuracy: true }), METRIC)?.unit,
-    ).toBeUndefined();
+    const legacy = { ...P({ point: 'you' }), showAccuracy: true } as ReturnType<typeof P>;
+    const out = COORDS.compute(data, legacy, METRIC);
+    expect(out?.unit).toBeUndefined();
+    expect(out?.value).not.toMatch(/±/);
+    expect('showAccuracy' in COORDS.params).toBe(false);
   });
 
   it("shows another datum's conversion with its tag, or WGS 84 tagged as such", () => {
@@ -76,7 +73,7 @@ describe('coords', () => {
     expect(COORDS.compute(data, P({ datum: 'csrs', format: 'dd' }), METRIC)).toEqual({
       glyph: 'filter_center_focus',
       tag: 'CSRS',
-      value: '46.81394, -71.20759',
+      value: '46.813935, -71.207595',
     });
     // No conversion for you: the WGS 84 value, never under the CSRS name.
     expect(COORDS.compute(data, P({ datum: 'csrs', point: 'you' }), METRIC)?.tag).toBe('WGS 84');

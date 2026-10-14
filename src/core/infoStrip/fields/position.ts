@@ -62,12 +62,14 @@ export type CoordsParams = {
   point: 'centre' | 'you';
   format: 'app' | CoordinateFormat;
   datum: 'wgs84' | 'csrs' | 'project';
-  showAccuracy: boolean;
   tapToCopy: boolean;
 };
 
 /**
- * Coordinates of the map centre or of you (2 spaces), in any display format.
+ * Coordinates of the map centre or of you (2 spaces), in any display format,
+ * and nothing else: the value is exactly what a tap copies (#701). The fix's
+ * accuracy is its own field (GPS accuracy); 2.6.0 builds' "Show accuracy"
+ * param is left in a saved strip, unread, so a rollback keeps it.
  * Another datum shows the platform's conversion and its tag; if it has none
  * (outside the datum's area, no engine yet) the WGS 84 value shows tagged
  * "WGS 84" — never a WGS 84 number under another datum's name.
@@ -106,18 +108,12 @@ export const COORDS = defineField<CoordsParams>({
         { value: 'project', label: 'Project' },
       ],
     },
-    showAccuracy: {
-      kind: 'toggle',
-      label: 'Show accuracy',
-      hint: '±2 cm with the GNSS receiver, ±4 m with the phone',
-    },
     tapToCopy: { kind: 'toggle', label: 'Tap to copy' },
   },
   defaults: {
     point: 'centre',
     format: 'app',
     datum: 'wgs84',
-    showAccuracy: false,
     tapToCopy: true,
   },
   deps: ['camera', 'position'],
@@ -143,11 +139,9 @@ export const COORDS = defineField<CoordsParams>({
       value: formatCoordinate(p.latitude, p.longitude, fmt),
     };
     if (tag !== undefined) out.tag = tag;
-    const acc = at.you ? data.position?.accuracyM : null;
-    if (params.showAccuracy && acc != null) out.unit = formatAccuracy(acc);
     return out;
   },
-  sample: { glyph: 'filter_center_focus', value: '46°48.836′N, 71°12.457′W' },
+  sample: { glyph: 'filter_center_focus', value: '46°48.8364′N, 71°12.4566′W' },
 });
 
 /**

@@ -30,7 +30,7 @@ describe('Settings › Display › Coordinates (#677)', () => {
       for (const label of ['DD', 'DMS', 'DDM', 'UTM', 'MGRS']) {
         expect(screen.getByText(label)).toBeOnTheScreen();
       }
-      expect(screen.getByText('Decimal degrees · 46.81394, -71.20761')).toBeOnTheScreen();
+      expect(screen.getByText('Decimal degrees · 46.813944, -71.207611')).toBeOnTheScreen();
       const checked = (id: string) =>
         (
           screen.getByTestId(`coordinate-format-${id}`).props.accessibilityState as {
@@ -48,16 +48,16 @@ describe('Settings › Display › Coordinates (#677)', () => {
       fireEvent.press(screen.getByTestId('coordinate-format-mgrs'));
     });
     expect(useSettingsStore.getState().coordinateFormat).toBe('mgrs');
-    expect(screen.getByText('MGRS · 19T CM 31586 86854')).toBeOnTheScreen();
+    expect(screen.getByText('MGRS · 19T CM 31585 86854')).toBeOnTheScreen();
   });
 
   it('describes every format with its name and a sample', () => {
     expect(coordinateFormatDescription('dms')).toBe(
-      'Degrees, minutes, seconds · 46°48′50.2″N, 71°12′27.4″W',
+      'Degrees, minutes, seconds · 46°48′50.20″N, 71°12′27.40″W',
     );
     expect(coordinateFormatDescription('ddm')).toBe(
-      'Degrees, decimal minutes · 46°48.836′N, 71°12.457′W',
+      'Degrees, decimal minutes · 46°48.8366′N, 71°12.4567′W',
     );
-    expect(coordinateFormatDescription('utm')).toBe('UTM · 19T 331586 5186854');
+    expect(coordinateFormatDescription('utm')).toBe('UTM · 19T 331585.9 5186854.9');
   });
 });

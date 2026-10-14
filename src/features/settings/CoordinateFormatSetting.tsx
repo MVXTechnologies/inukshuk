@@ -17,9 +17,9 @@ const OPTIONS = COORDINATE_FORMATS.map((f) => ({
 }));
 
 /** A point near Québec City, written in each format as the row's live sample. */
-const SAMPLE = { latitude: 46.81394, longitude: -71.20761 };
+const SAMPLE = { latitude: 46.813944, longitude: -71.207611 };
 
-/** "Decimal degrees · 46.81394, -71.20761": the format's name and a sample in it. */
+/** "Decimal degrees · 46.813944, -71.207611": the format's name and a sample in it. */
 export function coordinateFormatDescription(fmt: CoordinateFormat): string {
   const name = COORDINATE_FORMATS.find((f) => f.value === fmt)?.name ?? '';
   return `${name} · ${formatCoordinate(SAMPLE.latitude, SAMPLE.longitude, fmt)}`;

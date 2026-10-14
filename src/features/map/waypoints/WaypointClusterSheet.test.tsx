@@ -64,7 +64,7 @@ describe('the cluster list sheet (#685)', () => {
       expect(screen.getByLabelText(`Open ${name}`)).toBeOnTheScreen();
     }
     expect(screen.queryByText('Elsewhere')).toBeNull();
-    expect(screen.getAllByText('46.81394, -71.20761')).toHaveLength(3);
+    expect(screen.getAllByText('46.813940, -71.207610')).toHaveLength(3);
     const t = schemeTokens(dark);
     const card = StyleSheet.flatten(screen.getByTestId('waypoint-cluster-sheet').props.style) as {
       backgroundColor?: string;
