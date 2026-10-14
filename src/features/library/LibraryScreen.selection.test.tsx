@@ -442,6 +442,8 @@ describe('Show on map, Merge, Share', () => {
       'accessibilityLabel',
       'Hide from map',
     );
+    // It wraps rather than being cut to "Hide from m…" on a 360 dp phone (#711).
+    expect(view.getByText('Hide from map')).toHaveProp('numberOfLines', 2);
     await press(view.getByTestId('library-action-show'));
     expect(useLibraryStore.getState().activeTrackIds).toEqual([]);
   });

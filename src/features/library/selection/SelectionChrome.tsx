@@ -136,7 +136,13 @@ export function SelectionActionBar({
             >
               <Icon source={slot.icon} size={24} color={ink} />
             </View>
-            <Text numberOfLines={1} style={[styles.slotLabel, { color: ink }]}>
+            {/* Two lines: "Hide from map" is wider than a fifth of a 360 dp
+              phone and was cut to "Hide from m…" (QA 2.6.1, #711). */}
+            <Text
+              numberOfLines={SLOT_LABEL_LINES}
+              maxFontSizeMultiplier={1.3}
+              style={[styles.slotLabel, { color: ink }]}
+            >
               {label}
             </Text>
           </Pressable>
@@ -215,6 +221,9 @@ export function UndoBar({
 /** The bar's height above the bottom inset. */
 export const BAR_HEIGHT = 64;
 
+/** An action label may wrap once ("Hide from / map") rather than be cut. */
+export const SLOT_LABEL_LINES = 2;
+
 const styles = StyleSheet.create({
   header: {
     minHeight: 58,
@@ -265,7 +274,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  slotLabel: { fontSize: 12, lineHeight: 14, fontWeight: '700', textAlign: 'center' },
+  slotLabel: {
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingHorizontal: 2,
+  },
   tip: {
     position: 'absolute',
     left: space.lg,
