@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-14T06:02:54.429Z",
+  "generatedAt": "2026-10-14T07:27:39.990Z",
   "sources": [
     {
       "id": "cartes-plein-air",
@@ -980,14 +980,14 @@
       "id": "river-n40w080",
       "category": "river",
       "path": "shards/river-n40w080.json",
-      "itemCount": 262,
+      "itemCount": 260,
       "bbox": [
         -79.7862,
         44.0872,
         -64.073,
         52.7
       ],
-      "byteSize": 171731
+      "byteSize": 170449
     },
     {
       "id": "river-n50w060",
@@ -4684,12 +4684,12 @@
   ],
   "search": {
     "path": "search.json",
-    "byteSize": 776011,
-    "tokenCount": 36967
+    "byteSize": 775860,
+    "tokenCount": 36957
   },
   "facets": {
     "path": "facets.json",
-    "byteSize": 48459
+    "byteSize": 48423
   },
   "collections": {
     "path": "collections.json",
@@ -4697,25 +4697,23 @@
   },
   "categoryCounts": {
     "topo": 67983,
-    "river": 368,
+    "river": 366,
     "forest": 11485
   },
   "kindCounts": {
     "topo": 79468,
-    "trail": 368
+    "river": 366
   },
   "activityCounts": {
     "hiking": 27849,
-    "paddling": 28249,
-    "fishing": 21861,
-    "climbing": 2163,
-    "camping": 5,
-    "hunting": 1
+    "paddling": 28247,
+    "fishing": 21859,
+    "climbing": 2163
   },
   "terrainCounts": {
-    "mountains": 27985,
-    "coast": 6666,
-    "water": 22113,
+    "mountains": 27984,
+    "coast": 6665,
+    "water": 22112,
     "glacier": 2168
   }
 }
