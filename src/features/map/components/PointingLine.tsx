@@ -15,6 +15,8 @@ import {
   choosePointingBearing,
   createCourseTracker,
   createHeadingGate,
+  POINTING_LINE_HEADING_DEADBAND_DEG,
+  POINTING_LINE_HEADING_INTERVAL_MS,
   type CourseSample,
 } from '@core/nav';
 import { teamLabelFont } from '@features/team/map/TeamMapLayers';
@@ -58,7 +60,7 @@ export interface PointingLineProps {
  *
  * Cost: off (the default) it renders nothing and subscribes to nothing. On,
  * it owns the heading subscription, so a heading tick re-renders this leaf
- * only, never MapScreen — gated to 4 Hz with a 1° dead-band (a held turn is
+ * only, never MapScreen — gated to 10 Hz with a 0.75° dead-band (a held turn is
  * flushed on a timer, so the last position of a turn is never lost). Each
  * accepted tick rebuilds the feature collection: O(ticks) trig, one end
  * point plus one destination per tick (capped), then one native source
@@ -90,12 +92,15 @@ function LivePointingLine({
   const { mapInk, mapHalo } = tokens.team;
   const font = teamLabelFont(glyphs);
 
-  // The compass, only while the line follows it: 4 Hz, ≥ 1° turns.
+  // The compass, only while the line follows it: 10 Hz, ≥ 0.75° turns.
   const wantsCompass = cfg.direction === 'heading';
   const [compassDeg, setCompassDeg] = useState<number | null>(null);
   useEffect(() => {
     if (!wantsCompass) return;
-    const gate = createHeadingGate();
+    const gate = createHeadingGate(
+      POINTING_LINE_HEADING_INTERVAL_MS,
+      POINTING_LINE_HEADING_DEADBAND_DEG,
+    );
     let timer: ReturnType<typeof setTimeout> | null = null;
     const unsubscribe = subscribeHeading(({ headingDeg }) => {
       const r = gate.push(headingDeg, Date.now());
