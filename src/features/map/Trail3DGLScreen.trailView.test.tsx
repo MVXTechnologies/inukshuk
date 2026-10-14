@@ -26,6 +26,7 @@ jest.mock('@maplibre/maplibre-react-native', () => {
   return {
     Map: forwardRef((props: Props, _ref) => props.children ?? null),
     Camera: forwardRef(() => null),
+    Images: () => null,
     GeoJSONSource: passthrough,
     Marker: passthrough,
     Layer: () => null,

@@ -13,7 +13,7 @@ import { DEFAULT_INVITE } from '@core/teamui/invites';
 import { lifetimeMs } from '@core/teamui/lifetime';
 import { DRAW_LAYERS } from '@core/teamdraw/mapStyle';
 import * as penModule from '@core/teamdraw/pen';
-import { penBody, toleranceM, type Stroke } from '@core/teamdraw/pen';
+import { PEN_INTERVAL_MS, penBody, toleranceM, type Stroke } from '@core/teamdraw/pen';
 import { defaultPrefs, penStyle } from '@core/teamdraw/style';
 import { NEAR, QC } from '@core/teamdraw/testUtils';
 import { resetAppTeamServiceForTests } from '@data/team/appTeam';
@@ -23,7 +23,7 @@ import { TeamService } from '@data/team/teamService';
 import type { CreatedInvite } from '@data/team/teamSession';
 import { useSettingsStore } from '@state/settingsStore';
 import { useTeamDrawStore } from '@state/teamDrawStore';
-import { useTeamStore, wireTeamStore } from '@state/teamStore';
+import { settleTeamStoreForTests, useTeamStore, wireTeamStore } from '@state/teamStore';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { useState, type ReactNode } from 'react';
 import { Alert, BackHandler, StyleSheet, View } from 'react-native';
@@ -38,16 +38,22 @@ import { drawLayerStats, TeamDrawLayers } from './TeamDrawLayers';
 import { TeamDrawingsRow } from './TeamDrawingsRow';
 import { BOTTOM_LAYER } from '../../map/bottomLayers';
 import { TeamDrawMode } from './TeamDrawMode';
+import { BASE_MAP_IMAGES } from '../../map/MapImages';
+import { DRAW_IMAGES } from './drawImages';
 
 type Props = Record<string, unknown> & { children?: ReactNode };
 const mockLayers: Props[] = [];
 const mockSources: Props[] = [];
+const mockImages: Props[] = [];
 jest.mock('@maplibre/maplibre-react-native', () => ({
   GeoJSONSource: (props: Props) => {
     mockSources.push(props);
     return props.children ?? null;
   },
-  Images: () => null,
+  Images: (props: Props) => {
+    mockImages.push(props);
+    return null;
+  },
   Layer: (props: Props) => {
     mockLayers.push(props);
     return null;
@@ -100,7 +106,36 @@ const phone = () =>
     disk: new MemoryTeamDisk(),
     transport: hub.createTransport(),
     tickMs: 0,
+    // The injected clock reads Date.now at each call, so a test on jest's fake
+    // clock moves the replica's time too (the default binds the real one).
+    now: () => Date.now(),
   });
+
+/**
+ * Jest's clock until {@link realClock} (afterEach calls it too): timers,
+ * animation frames and Date.now move together, and only when the test
+ * advances them. The promise queues stay real, so the team service's async
+ * work still settles.
+ */
+let faked = false;
+function fakeClock(): void {
+  jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
+  faked = true;
+}
+/**
+ * Back to the real clock. Pending fake timers run first: a timer or frame
+ * scheduled on jest's clock never fires on the real one, and the team store's
+ * once-per-frame guards (module state) would then wait forever in later tests.
+ */
+async function realClock(): Promise<void> {
+  if (!faked) return;
+  await act(async () => {
+    jest.runOnlyPendingTimers();
+    settleTeamStoreForTests();
+  });
+  jest.useRealTimers();
+  faked = false;
+}
 
 async function until(cond: () => boolean, what = 'condition'): Promise<void> {
   for (let i = 0; i < 1600 && !cond(); i++) {
@@ -149,6 +184,7 @@ let app: TeamService;
 beforeEach(async () => {
   mockLayers.length = 0;
   mockSources.length = 0;
+  mockImages.length = 0;
   mockPush.mockReset();
   const d = defaultExtensionPrefs();
   useSettingsStore.setState({
@@ -176,6 +212,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  await realClock();
   await app.active?.stopMesh();
 });
 
@@ -480,22 +517,25 @@ describe('drawing mode', () => {
 
   it('a long pencil stroke builds the pen body only when the throttle lets one go', async () => {
     const { canvas } = await open();
+    // One clock for the throttle and its timer: jest's (Date.now included), never the wall's.
+    fakeClock();
     const built = jest.spyOn(penModule, 'penBody');
-    const now = jest.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
     await fireEvent(canvas, 'responderGrant', ev(touch(1, 20, 400)));
     for (let i = 1; i <= 120; i++) {
       await fireEvent(canvas, 'responderMove', ev(touch(1, 20 + i * 3, 400 + (i % 5))));
     }
     // 120 moves inside one throttle interval: the first real stroke went, the rest wait.
     expect(built).toHaveBeenCalledTimes(1);
-    now.mockReturnValue(1_800_000_000_000 + 300);
     await act(async () => {
-      await new Promise((res) => setTimeout(res, 300));
+      jest.advanceTimersByTime(PEN_INTERVAL_MS - 1);
+    });
+    expect(built).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      jest.advanceTimersByTime(1);
     });
     // The interval passed: one more body, the latest stroke (all 121 points so far).
     expect(built).toHaveBeenCalledTimes(2);
     expect(built.mock.calls[1]![0].pts.length).toBe(121);
-    now.mockRestore();
     await fireEvent(canvas, 'responderRelease', ev());
     built.mockRestore();
   });
@@ -552,13 +592,13 @@ describe('drawing mode', () => {
     await act(() => useTeamStore.getState().refresh());
     const key = `${d.shapes()[0]!.owner}:m1`;
     for (const dark of [false, true]) {
-      jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
+      fakeClock();
       const { canvas, r } = await open(dark, key);
       await fireEvent(canvas, 'responderGrant', ev(touch(1, 200, 400)));
       await act(async () => {
         jest.advanceTimersByTime(600);
       });
-      jest.useRealTimers();
+      await realClock();
       await until(() => useTeamDrawStore.getState().menu === key, 'menu');
       await fireEvent(canvas, 'responderRelease', ev());
       expect(screen.getByTestId('team-draw-menu-left').props.children).toMatch(
@@ -592,10 +632,11 @@ describe('a shape’s menu', () => {
     expect(d.finish(arrow('t1'), 1, 5 * 60_000)).toBeNull();
     await act(() => useTeamStore.getState().refresh());
     const shape = d.shapes()[0]!;
+    fakeClock();
     await render(wrap(<ShapeMenu shape={shape} place={{ top: 70 }} onClose={jest.fn()} />));
     const first = screen.getByTestId('team-draw-menu-left').props.children as string;
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 1_150));
+      jest.advanceTimersByTime(1_150);
     });
     const later = screen.getByTestId('team-draw-menu-left').props.children as string;
     expect(later).not.toBe(first);
@@ -694,14 +735,19 @@ describe('Manage team › Drawings', () => {
 
   it('counts only what is still on the map: an expired drawing drops out on its own (2.5.2 QA)', async () => {
     const d = app.active!.draw;
+    fakeClock();
     d.finish(arrow('k1'), 1, null);
     d.finish(arrow('s1'), 1, 400);
     await act(() => useTeamStore.getState().refresh());
     await render(wrap(<TeamDrawingsRow />));
     expect(screen.getByText('2 on the map')).toBeTruthy();
+    await act(async () => {
+      jest.advanceTimersByTime(399);
+    });
+    expect(screen.getByText('2 on the map')).toBeTruthy();
     // No data op arrives: the store's snapshot still holds the expired one.
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 600));
+      jest.advanceTimersByTime(201);
     });
     expect(useTeamStore.getState().drawings).toHaveLength(2);
     expect(screen.getByText('1 on the map')).toBeTruthy();
@@ -759,6 +805,30 @@ describe('the map layers', () => {
     expect(new Set(mockLayers.map((l) => l.id)).has(DRAW_LAYERS.sym)).toBe(false);
   });
 
+  it('leaving drawing mode leaves every map sprite in place: the layer owns none (2.5.2 QA)', async () => {
+    // Pin icons and a cluster's count pill went missing after Done: an
+    // <Images> that unmounts removes every name it holds from the style. The
+    // drawing layer mounts and unmounts with its drawings, so it holds none;
+    // its arrowheads and pills are on the map's one registration.
+    for (const name of Object.keys(DRAW_IMAGES)) expect(BASE_MAP_IMAGES).toContain(name);
+    const d = app.active!.draw;
+    d.finish(arrow('g1'), 1, null);
+    await act(() => useTeamStore.getState().refresh());
+    useTeamDrawStore.getState().enter();
+    const r = await render(
+      wrap(<TeamDrawLayers glyphs="https://x/fonts/{fontstack}/{range}.pbf" zoom={15} />),
+    );
+    expect(mockSources.length).toBeGreaterThan(0);
+    // Done, and the drawing cleared: the layer goes, nothing else may.
+    await act(async () => {
+      useTeamDrawStore.getState().exit();
+      d.clearMine();
+      useTeamStore.getState().refresh();
+    });
+    await r.unmount();
+    expect(mockImages).toEqual([]);
+  });
+
   it('draws nothing without drawings or with the team extension hidden', async () => {
     await render(wrap(<TeamDrawLayers glyphs={undefined} zoom={null} />));
     expect(mockSources).toHaveLength(0);
@@ -804,9 +874,8 @@ describe('the render budget', () => {
         </>,
       ),
     );
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 400));
-    });
+    // From a settled store: the join's debounced refresh runs now, not after a sleep.
+    await act(async () => settleTeamStoreForTests());
     const store0 = storeRenders;
     const builds0 = drawLayerStats.builds;
     const tol = toleranceM(16, QC[1]);
@@ -818,11 +887,9 @@ describe('the render budget', () => {
         style,
       };
       session.draw.sendPen(penBody(s, tol)!);
-      await act(async () => {
-        await new Promise((r) => setTimeout(r, 250));
-      });
+      // Each update lands before the next goes (a pen's 250 ms pace, without the clock).
+      await until(() => useTeamDrawStore.getState().live[0]?.pts.length === n, `update ${n}`);
     }
-    await until(() => useTeamDrawStore.getState().live[0]?.pts.length === 9, 'all 8 updates');
     // Two seconds of drawing: the layer rebuilt per update (merged per frame), the map never.
     expect(storeRenders).toBe(store0);
     expect(drawLayerStats.builds - builds0).toBeGreaterThanOrEqual(4);

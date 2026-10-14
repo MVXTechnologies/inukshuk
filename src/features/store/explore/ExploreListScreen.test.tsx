@@ -87,6 +87,21 @@ it('filters by publisher and by type', async () => {
   expect(shown(byKind)).toEqual(['Jacques-Cartier trails']);
 });
 
+it('inside a collection, offers only the types, activities and terrain it holds (2.5.2 QA)', async () => {
+  const view = await list({ sourceId: 'chs-charts' });
+  await fireEvent.press(view.getByLabelText('Filter by type'));
+  // The catalog's topographic sheet and park map are another publisher's.
+  expect(view.queryByLabelText(/^Topographic, /)).toBeNull();
+  expect(view.queryByLabelText(/^Park/)).toBeNull();
+  const options = view.getAllByLabelText(/, \d+ maps?/);
+  expect(options).toHaveLength(1);
+  // Every count offered is what tapping it lists.
+  await fireEvent.press(options[0]!);
+  expect(shown(view)).toEqual(['Saguenay Fjord chart']);
+  await fireEvent.press(view.getByLabelText('Filter by terrain'));
+  expect(view.queryByLabelText(/^Mountains, /)).toBeNull();
+});
+
 it('rows open the detail screen; the header pushes the map with the same filter', async () => {
   const view = await list({ activity: 'hiking' });
   await fireEvent.press(view.getByText('Québec — Lac-Beauport'));

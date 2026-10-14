@@ -17,7 +17,7 @@ import { DRAW_LAYERS, DRAW_SOURCE, drawLayerStyles } from '@core/teamdraw/mapSty
 import { smoothShapes } from '@core/teamdraw/smooth';
 import { useExtensionPrefs } from '@features/extensions/prefs';
 import { teamLabelFont } from '@features/team/map/TeamMapLayers';
-import { GeoJSONSource, Images, type ImageEntry, Layer } from '@maplibre/maplibre-react-native';
+import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useTeamDrawStore } from '@state/teamDrawStore';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { drawMapColors } from '@ui/teamDrawTokens';
@@ -25,14 +25,8 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { useTheme } from 'react-native-paper';
 
-import { DRAW_IMAGES } from './drawImages';
-
 /** Source rebuilds, for the render-budget tests (measure, don't assert). */
 export const drawLayerStats = { builds: 0, ticks: 0 };
-
-const IMAGES: Record<string, ImageEntry> = Object.fromEntries(
-  Object.entries(DRAW_IMAGES).map(([name, source]) => [name, { source, sdf: true }]),
-);
 
 /** The drawing clock: the replica's HLC, never behind the phone's. */
 function drawNow(): number {
@@ -130,10 +124,12 @@ export const TeamDrawLayers = memo(function TeamDrawLayers({
   }, [t, dark, selected, fontKey]);
 
   if (installedAt === 0 || !show || view === null || data.features.length === 0) return null;
-  return [
-    <Images key="draw-images" images={IMAGES} />,
-    <GeoJSONSource key="draw-source" id={DRAW_SOURCE} data={data as never}>
+  // Its sprites (arrowheads, pointers, badge pills) are on the map's one
+  // registration (`MapImages`), never here: this layer mounts and unmounts
+  // with the drawings, and an unmounting <Images> takes its names with it.
+  return (
+    <GeoJSONSource id={DRAW_SOURCE} data={data as never}>
       {layers}
-    </GeoJSONSource>,
-  ];
+    </GeoJSONSource>
+  );
 });

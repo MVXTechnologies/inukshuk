@@ -311,7 +311,10 @@ function DrawModeBody({
     dueTimer.current = setTimeout(
       () => {
         dueTimer.current = null;
-        sendLatest();
+        // A timer is no clock: one that fires early (a busy JS thread, a clock
+        // step) waits again rather than building a body the throttle refuses.
+        if (clockNow() < throttle.current.readyAt()) armDue();
+        else sendLatest();
       },
       Math.max(0, throttle.current.readyAt() - clockNow()),
     );

@@ -198,6 +198,7 @@ import { useWaypointQuickActions } from './waypoints/useWaypointQuickActions';
 import { WaypointEditorSheet, type WaypointStylePatch } from './waypoints/WaypointEditorSheet';
 import { WaypointScreenReaderList } from './waypoints/WaypointScreenReaderList';
 import { WaypointPinLayers } from './waypoints/WaypointPinLayers';
+import { MapImages } from './MapImages';
 import { useWaypointMoveStore } from '@state/waypointMoveStore';
 import { ActionSnackbar } from '../common/ActionSnackbar';
 import {
@@ -2934,6 +2935,9 @@ export function MapScreen() {
               onMapLayout(e);
             }}
           >
+            {/* The shared sprites, registered once and first: never moved or
+              unmounted while the map lives (2.5.2 QA, see MapImages). */}
+            <MapImages />
             <Camera
               ref={cameraRef}
               // A cold launch mounts <Map>/<Camera> fresh;

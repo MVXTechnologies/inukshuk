@@ -18,6 +18,7 @@ import { shouldAcceptFix } from '@core/geo/track/gpsFilter';
 import { mergeTrackPoints } from '@core/geo/track/mergePoints';
 import { APPROXIMATE_ACCURACY_M } from '@core/geo/track/recordingHealth';
 import { findCategory } from '@core/library/categories';
+import { timeOfDay } from '@core/library/timeOfDay';
 import { materializePendingPhotos, type PendingPhoto } from '@core/photos/capture';
 import {
   deleteCapturedPhoto,
@@ -173,15 +174,6 @@ function defaultName(now: number): string {
   return `Trail ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${d
     .toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
     .replace(/\s/g, '')}`;
-}
-
-/** "Morning" / "Afternoon" / "Evening" / "Night" for the auto title. */
-function timeOfDay(ms: number): string {
-  const h = new Date(ms).getHours();
-  if (h >= 5 && h < 12) return 'Morning';
-  if (h < 17) return 'Afternoon';
-  if (h < 21) return 'Evening';
-  return 'Night';
 }
 
 /**

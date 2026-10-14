@@ -1,6 +1,7 @@
 import type { TrackNote, TrackPoint } from '@core/models';
 import type { TrackPhoto } from '@core/photos/model';
 import { TrailPhotoLayers } from '../photos/TrailPhotoLayers';
+import { MapImages } from './MapImages';
 import type { TrackPointAt } from '@core/geo/track';
 import { splitSegments } from '@core/geo/track/segments';
 import { numberNotesOnTrack } from '@core/library/notes';
@@ -240,6 +241,8 @@ export function Trail2DView({
       onRegionDidChange={(e) => tilt.onSettledPitch(e.nativeEvent.pitch)}
       onPress={onMapPress}
     >
+      {/* The photo stacks' count pills and ring: one registration, never moved. */}
+      <MapImages />
       <Camera ref={cameraRef} />
       {tilt.layer}
       <GeoJSONSource id="trail-2d" data={lineFeature}>

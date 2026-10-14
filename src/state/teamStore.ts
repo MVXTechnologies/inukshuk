@@ -159,6 +159,23 @@ let wired: TeamService | null = null;
 let unwire: (() => void) | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 
+/**
+ * Tests: run the pending debounced refresh and live-stroke frame now, so a
+ * test measures from a settled store instead of sleeping past the debounce.
+ */
+export function settleTeamStoreForTests(): void {
+  if (timer !== null) {
+    clearTimeout(timer);
+    timer = null;
+    useTeamStore.getState().refresh();
+  }
+  if (liveFrame !== null) {
+    cancelAnimationFrame(liveFrame);
+    liveFrame = null;
+    refreshLive();
+  }
+}
+
 /** Connect the store to the service (once, from `TeamHost`). Returns the service. */
 export function wireTeamStore(): TeamService | null {
   const service = appTeamService();

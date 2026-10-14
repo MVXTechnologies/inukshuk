@@ -97,6 +97,28 @@ export function countFacets(items: readonly CatalogItem[], facetsOf: FacetsOf): 
 }
 
 /**
+ * The filter bar's counts under a filter (2.5.2 QA). Inside a collection (a
+ * publisher, `sourceId`) the Type, Activity and Terrain counts are that
+ * collection's only: "Topographic · 1,758" over the whole catalog, in a list
+ * of 366 river routes, led to "No maps like this". The Source counts stay
+ * over everything loaded, so switching publisher still says what each holds.
+ */
+export function scopedFacetCounts(
+  items: readonly CatalogItem[],
+  filter: ExploreFilter,
+  facetsOf: FacetsOf,
+): FacetCounts {
+  const all = countFacets(items, facetsOf);
+  const sourceId = filter.sourceId;
+  if (sourceId == null) return all;
+  const inScope = countFacets(
+    items.filter((item) => item.sourceId === sourceId),
+    facetsOf,
+  );
+  return { ...inScope, sources: all.sources };
+}
+
+/**
  * The kind a legacy `category` implies, for items published before the
  * manifests carried `kind`. Everything maps somewhere, so an old manifest
  * still fills the explorer's "Type" filter.

@@ -9,6 +9,7 @@ import { PaperProvider } from 'react-native-paper';
 import { darkTheme, lightTheme } from '@ui/theme';
 import { schemeTokens } from '@ui/tokens';
 
+import { MapImages, resetMapImagesForTests } from '../MapImages';
 import { WAYPOINT_PIN_LAYERS, WAYPOINT_PIN_SOURCE, WaypointPinLayers } from './WaypointPinLayers';
 import { useWaypointClusterSheet, waypointClusterSource } from './waypointTap';
 
@@ -55,6 +56,7 @@ beforeEach(() => {
   mockSources.length = 0;
   mockImages.length = 0;
   mockMounts.length = 0;
+  resetMapImagesForTests();
   useSettingsStore.setState({ pinScale: 100 });
 });
 
@@ -168,20 +170,34 @@ describe('WaypointPinLayers (#675, #685)', () => {
     expect(waypointClusterSource.current).toEqual({ id: WAYPOINT_PIN_SOURCE });
   });
 
-  it('registers the SDF body, the photo badge, the glyphs in use and the small count pills', async () => {
-    await render(<Tree p={pins(500)} />);
-    const images = mockImages[0]?.images as Record<string, unknown>;
+  it("registers the SDF body, the photo badge, the glyphs in use and the small count pills on the map's one <Images>", async () => {
+    await render(
+      <>
+        <MapImages />
+        <Tree p={pins(500)} />
+      </>,
+    );
+    const images = mockImages[mockImages.length - 1]?.images as Record<string, unknown>;
     expect(images['wp-pin']).toMatchObject({ sdf: true });
     expect(images[`wpg-${WAYPOINT_ICONS[0]?.id}`]).toMatchObject({ sdf: true });
     expect(images['wp-photo']).not.toHaveProperty('sdf');
-    // 5 icons in use + the inukshuk + body + badge + pills 2…10.
-    expect(Object.keys(images)).toHaveLength(8 + 9);
+    // 5 icons in use + the inukshuk, and the base set (body, badge, pills 2…10, ring, drawing sprites).
+    for (const icon of WAYPOINT_ICONS.slice(0, 5)) expect(images[`wpg-${icon.id}`]).toBeDefined();
+    expect(images['wpg-default']).toBeDefined();
     expect(images['ph-count-2']).toBeDefined();
     expect(images['ph-count-23']).toBeUndefined();
+    // The layer itself never registers sprites: one <Images>, the map's.
+    // (only the map's carries the drawing sprites too).
+    for (const m of mockImages) expect(m.images).toHaveProperty('draw-pill');
   });
 
   it('adds a larger count pill when a cluster first asks for it, and nothing else', async () => {
-    await render(<Tree p={pins(3)} />);
+    await render(
+      <>
+        <MapImages />
+        <Tree p={pins(3)} />
+      </>,
+    );
     const onMissing = mockImages[mockImages.length - 1]?.onImageMissing as (e: unknown) => void;
     await act(async () => onMissing({ nativeEvent: { image: 'ph-count-23' } }));
     await act(async () => onMissing({ nativeEvent: { image: 'someone-elses' } }));

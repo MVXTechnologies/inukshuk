@@ -1,4 +1,8 @@
-import { countFacets, isExploreFilterEmpty, type ExploreFilter } from '@core/catalog/exploreFacets';
+import {
+  isExploreFilterEmpty,
+  scopedFacetCounts,
+  type ExploreFilter,
+} from '@core/catalog/exploreFacets';
 import type { PlaceFacetCounts } from '@core/catalog/explorePoints';
 import type { CatalogItem, CatalogSource } from '@core/catalog/schema';
 import {
@@ -61,7 +65,7 @@ export function ExploreFilterBar({
   onChange,
   items,
   sources,
-  placeCounts,
+  placeCounts: allPlaceCounts,
 }: {
   filter: ExploreFilter;
   onChange: (next: ExploreFilter) => void;
@@ -72,7 +76,16 @@ export function ExploreFilterBar({
   placeCounts?: PlaceFacetCounts | undefined;
 }) {
   const [open, setOpen] = useState<Facet | null>(null);
-  const counts = useMemo(() => countFacets(items, itemFacets), [items]);
+  // Inside a collection the counts are the collection's (2.5.2 QA): a value
+  // offered with a count must list that many when tapped.
+  const sourceId = filter.sourceId ?? null;
+  const counts = useMemo(
+    () => scopedFacetCounts(items, { sourceId }, itemFacets),
+    [items, sourceId],
+  );
+  // Link-out places belong to no publisher and carry no terrain
+  // (`matchesPlaceFilter`): under either filter they are not on offer.
+  const placeCounts = sourceId !== null || filter.terrain != null ? undefined : allPlaceCounts;
 
   const valueLabel = (facet: Facet): string | null => {
     if (facet === 'kind' && filter.kind != null) return CATALOG_KIND_LABELS[filter.kind];

@@ -7,6 +7,7 @@ import {
   isExploreFilterEmpty,
   kindFromCategory,
   matchesExploreFilter,
+  scopedFacetCounts,
   type FacetsOf,
   type ItemFacets,
 } from './exploreFacets';
@@ -102,5 +103,36 @@ describe('formatting', () => {
     expect(formatMapCount(1)).toBe('1 map');
     expect(formatMapCount(14200)).toBe('14 200 maps');
     expect(formatMapCount(0)).toBe('0 maps');
+  });
+});
+
+describe('scopedFacetCounts (2.5.2 QA: Type counts inside a collection)', () => {
+  it('without a collection, counts everything loaded', () => {
+    expect(scopedFacetCounts(items, {}, facetsOf)).toEqual(countFacets(items, facetsOf));
+  });
+
+  it('inside a collection, Type, Activity and Terrain count only its maps', () => {
+    const c = scopedFacetCounts(items, { sourceId: 'sepaq' }, facetsOf);
+    expect(c.kinds).toEqual({ park: 1 });
+    expect(c.activities).toEqual({ hiking: 1 });
+    expect(c.terrains).toEqual({ water: 1 });
+    // A count offered is a count listed: tapping each value lists exactly that many.
+    for (const [kind, n] of Object.entries(c.kinds)) {
+      expect(
+        filterExploreItems(items, { sourceId: 'sepaq', kind: kind as never }, facetsOf),
+      ).toHaveLength(n);
+    }
+  });
+
+  it('keeps the Source counts over everything, so another publisher still says what it holds', () => {
+    const c = scopedFacetCounts(items, { sourceId: 'sepaq' }, facetsOf);
+    expect(c.sources).toEqual({ nrcan: 2, sepaq: 1 });
+  });
+
+  it('a collection with nothing loaded yet offers no values', () => {
+    const c = scopedFacetCounts(items, { sourceId: 'cartes-plein-air' }, facetsOf);
+    expect(c.kinds).toEqual({});
+    expect(c.activities).toEqual({});
+    expect(c.terrains).toEqual({});
   });
 });

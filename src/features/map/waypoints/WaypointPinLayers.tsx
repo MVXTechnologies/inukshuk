@@ -20,8 +20,6 @@ import {
   selectedPin,
 } from '@core/map/waypointClusters';
 import {
-  PHOTO_IMAGE,
-  PIN_IMAGE,
   PIN_LABEL_MIN_ZOOM,
   glyphImagesInUse,
   pinFeatureCollection,
@@ -34,22 +32,14 @@ import {
   pinPhotoLayoutScaled,
   type PinInput,
 } from '@core/map/waypointPinStyle';
-import { PHOTO_BADGE_IMAGES } from '@features/photos/photoBadgeImages';
 import { teamLabelFont } from '@features/team/map/TeamMapLayers';
-import {
-  GeoJSONSource,
-  type GeoJSONSourceRef,
-  Images,
-  type ImageEntry,
-  Layer,
-} from '@maplibre/maplibre-react-native';
+import { GeoJSONSource, type GeoJSONSourceRef, Layer } from '@maplibre/maplibre-react-native';
 import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import type { NativeSyntheticEvent } from 'react-native';
+import { memo, useCallback, useEffect, useMemo, type ReactElement } from 'react';
 
+import { useMapImages } from '../MapImages';
 import { useWaypointClusterSheet, waypointClusterSource } from './waypointTap';
-import { WAYPOINT_PIN_IMAGES } from './waypointPinImages';
 
 /** Layer ids (stable: e2e and the tap code may name them). */
 export const WAYPOINT_PIN_LAYERS = {
@@ -71,9 +61,6 @@ export const WAYPOINT_PIN_LAYERS = {
 /** The clustered source, and the selected pin's own. */
 export const WAYPOINT_PIN_SOURCE = 'waypoint-pins';
 export const WAYPOINT_SELECTED_SOURCE = 'waypoint-pin-selected';
-
-/** Count pills registered up front (the common small stacks); the rest on demand. */
-const PRIMED_COUNTS = Array.from({ length: 9 }, (_, i) => `ph-count-${i + 2}`);
 
 interface Props {
   pins: readonly PinInput[];
@@ -142,29 +129,10 @@ export const WaypointPinLayers = memo(function WaypointPinLayers({
     [sizes, k],
   );
 
-  const [counts, setCounts] = useState<string[]>(PRIMED_COUNTS);
-  const inUse = glyphImagesInUse(pins).join('|');
-  const images = useMemo(() => {
-    const out: Record<string, ImageEntry> = {};
-    const add = (name: string, sdf: boolean) => {
-      const source = WAYPOINT_PIN_IMAGES[name];
-      if (source !== undefined) out[name] = sdf ? { source, sdf: true } : source;
-    };
-    add(PIN_IMAGE, true);
-    add(PHOTO_IMAGE, false);
-    for (const name of inUse.split('|')) add(name, true);
-    for (const name of counts) {
-      const source = PHOTO_BADGE_IMAGES[name];
-      if (source !== undefined) out[name] = source;
-    }
-    return out;
-  }, [inUse, counts]);
-  // A cluster of more than 10 asks for its pill when it first draws.
-  const onImageMissing = useCallback((e: NativeSyntheticEvent<{ image: string }>) => {
-    const name = e.nativeEvent.image;
-    if (!name.startsWith('ph-count-') || PHOTO_BADGE_IMAGES[name] === undefined) return;
-    setCounts((prev) => (prev.includes(name) ? prev : [...prev, name]));
-  }, []);
+  // The glyphs these pins draw, on the map's one sprite registration
+  // (`MapImages`): the pin body, its photo badge and the count pills are
+  // always there; a cluster of more than 10 gets its pill on demand.
+  useMapImages(useMemo(() => glyphImagesInUse(pins), [pins]));
 
   const font = teamLabelFont(glyphs);
   const { mapInk, mapHalo } = useSchemeTokens().team;
@@ -283,7 +251,7 @@ export const WaypointPinLayers = memo(function WaypointPinLayers({
   }, []);
 
   if (pins.length === 0) return null;
-  const out = [<Images key="images" images={images} onImageMissing={onImageMissing} />];
+  const out: ReactElement[] = [];
   if (clustered.features.length > 0) {
     out.push(
       <GeoJSONSource
