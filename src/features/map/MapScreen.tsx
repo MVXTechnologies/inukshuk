@@ -134,6 +134,7 @@ import { RenderingToasts } from './components/RenderingToasts';
 import { ScaleBar } from './components/ScaleBar';
 import { CenterCursor } from './components/CenterCursor';
 import { InfoStripHost } from './infoStrip/InfoStripHost';
+import { useMapBack, useStoreBackLayers } from './useMapBack';
 import type { TargetOpen } from '@core/infoStrip/target';
 import { useInfoStripBottomLift, useStripEditorOpen } from './infoStrip/stripRuntime';
 import { metersPerPixel } from '@core/geo/scaleBar';
@@ -1922,6 +1923,24 @@ export function MapScreen() {
   );
   // The strip's editor is modal: the map behind it leaves the screen reader's reach.
   const stripEditorOpen = useStripEditorOpen();
+
+  // Android Back closes what is open on the map, topmost first, before it may
+  // leave the app (QA 2.6.0: Back over the point popup exited). `useMapBack`.
+  const storeBackLayers = useStoreBackLayers();
+  useMapBack(isFocused, [
+    { open: railMenuOpen, close: () => setRailMenuOpen(false) },
+    { open: creditsOpen, close: () => setCreditsOpen(false) },
+    { open: modelSheetOpen, close: () => setModelSheetOpen(false) },
+    { open: pickingCategory, close: () => setPickingCategory(false) },
+    { open: forecastAt !== null, close: () => setForecastAt(null) },
+    ...storeBackLayers,
+    { open: extensionHit !== null, close: () => setExtensionHit(null) },
+    { open: viewWp !== null, close: () => setViewWp(null) },
+    { open: pointAt !== null, close: () => setPointAt(null) },
+    { open: heatSelection !== null, close: () => setHeatSelection(null) },
+    { open: !!inspectId, close: () => inspect(null) },
+    { open: compactControlsOpen, close: () => setCompactControlsOpen(false) },
+  ]);
 
   // Team mode (#589): "show on the map" from a task or a pin notification.
   const teamFocus = useTeamMapFocus((s) => s.target);
