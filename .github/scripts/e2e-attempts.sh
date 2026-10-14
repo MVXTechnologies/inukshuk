@@ -306,11 +306,21 @@ adb shell content call --uri content://media --method scan_volume --arg external
 # runs stayed green. Stalls and provider kills stay warnings: they are the
 # emulator's, a SIGSEGV in our process is ours. Each crashed attempt keeps its
 # logcat (logcat-crash-*.txt, uploaded) and is named by signature when known.
+#
+# A use-after-free that did NOT crash fails the shard the same way (#697):
+# libgui's "freeAllBuffers: N buffers were freed while being dequeued!" in an
+# app process is the window losing a buffer an EGL surface still holds, the
+# step before the emulator EGL's deferred destroy cancels that freed buffer.
+# GWP-ASan turns it into a SIGSEGV only when it sampled that buffer (1 crash
+# in ~60 stress launches), so the line itself is counted: deterministic, not
+# luck. Only processes of the app that started inside this logcat count.
 NATIVE_CRASHES=0
 CRASH_NOTES=()
 crash_signature() {
   if grep -q 'android_unsafe_frame_pointer_chase' <<< "$1" && grep -q 'hoost_make_fcontext' <<< "$1"; then
     echo "#648 GWP-ASan frame-pointer walk off a Hermes fiber stack"
+  elif grep -q 'Surface::cancelBuffer' <<< "$1" && grep -q 'egl_window_surface_t' <<< "$1"; then
+    echo "#697 MapLibre GL surface destroyed while current (emulator EGL use-after-free)"
   elif grep -q 'Failed to allocate in guarded pool allocator memory' <<< "$1"; then
     echo "GWP-ASan pool could not map a slot (stress settings too large?)"
   else
@@ -318,7 +328,7 @@ crash_signature() {
   fi
 }
 launch_health() {
-  local log stalls crashes kills sig file
+  local log stalls crashes kills sig file uaf pid n
   HEALTH=
   log=$(adb logcat -d 2>/dev/null || true)
   stalls=$(grep -c 'Timed out waiting for animations to complete' <<< "$log" || true)
@@ -326,6 +336,18 @@ launch_health() {
   kills=$(grep -E 'Killing [0-9]+:com\.inukshuk\.app/' <<< "$log" | grep -c 'depends on provider' || true)
   if [ "${stalls:-0}" -gt 0 ] || [ "${kills:-0}" -gt 0 ]; then
     echo "::warning title=E2E launch health ($SHARD)::$1: $stalls window-animation stall(s), $kills provider kill(s) in logcat"
+  fi
+  uaf=0
+  for pid in $(grep -oE 'Start proc [0-9]+:com\.inukshuk\.app/' <<< "$log" | grep -oE '[0-9]+' | sort -u); do
+    n=$(grep -cE "^[0-9-]+ [0-9:.]+ +$pid +[0-9]+ E Surface *: freeAllBuffers: [0-9]+ buffers were freed while being dequeued" <<< "$log" || true)
+    uaf=$((uaf + ${n:-0}))
+  done
+  if [ "$uaf" -gt 0 ]; then
+    NATIVE_CRASHES=$((NATIVE_CRASHES + uaf))
+    file="logcat-uaf-$(tr -c 'A-Za-z0-9._-' '_' <<< "$1" | sed 's/_*$//').txt"
+    printf '%s\n' "$log" > "$file"
+    CRASH_NOTES+=("$1: $uaf EGL buffer use-after-free(s), #697")
+    echo "::error title=E2E use-after-free ($SHARD)::$1: $uaf buffer(s) freed while an EGL surface held them (#697, MapLibre surface destroyed while current); logcat in $file."
   fi
   if [ "${crashes:-0}" -gt 0 ]; then
     NATIVE_CRASHES=$((NATIVE_CRASHES + crashes))

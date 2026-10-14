@@ -17,6 +17,18 @@
 #   the open sheet. The sheet mounts fresh (scrolled to the top) on each open.
 # - Guarded-tap idiom on the opener (tap only while 'Close overlays' is not
 #   visible) so a retry can never toggle an open sheet closed.
+# - Never act on a state the app has not drawn yet. The CI emulator renders
+#   at seconds per frame, and Maestro calls a screen settled when nothing
+#   changes, so a tap's re-render can land well after the tap "completes".
+#   Two rules follow (2.5.2 run 38521047124 broke both):
+#   * A persisted switch is driven as: bring it to a known state, waiting
+#     for the hint to follow, then flip it and WAIT (extendedWaitUntil) for
+#     the hint. Never "tap, then tap again if the hint still shows": under
+#     lag the second tap undoes the first once both are drawn.
+#   * After a tab tap, wait for that tab's own content before any swipe.
+#     The sheet reopens on its last tab, and the Sports tab is one row: a
+#     swipe from the screen centre made while that short sheet is still
+#     drawn starts on the backdrop, and a backdrop press closes the sheet.
 # - Terrain and Live layers sit below the fold: scrollUntilVisible swipes at
 #   the screen centre, which is inside the sheet. The slope window is a
 #   two-thumb range slider (its thumbs' a11y labels are asserted, not dragged
@@ -68,19 +80,31 @@ appId: com.inukshuk.app
 # --- 'PDF maps' master switch (#233), first section. It is a switch row (a11y
 # label 'PDF maps', trailing .* for iOS merged strings) whose OFF state is
 # explained by a 'Hidden on the map' hint under the label. The switch is
-# PERSISTED, so it starts at whatever a previous run left it at: tap once,
-# and if the hint now shows the switch went OFF — prove it, then tap again so
-# the run ends with the maps ON (a later flow must never inherit a map with
-# its sheets hidden). If the hint does not show, the switch was OFF and the
-# tap turned it on — also the state to leave behind.
-- assertVisible: 'PDF maps.*'
-- tapOn: 'PDF maps.*'
+# PERSISTED, so it starts at whatever a previous run left it at: bring it ON,
+# turn it OFF and prove the hint, then back ON so the run ends with the maps
+# shown (a later flow must never inherit a map with its sheets hidden). Each
+# flip waits for the hint (see the header's lag rules).
+- extendedWaitUntil:
+    visible: 'PDF maps.*'
+    timeout: 10000
+# The hint is drawn with its row, so this reads a settled state: if the maps
+# are OFF, turn them on and wait until the hint is gone.
 - runFlow:
     when:
       visible: 'Hidden on the map.*'
     commands:
       - tapOn: 'PDF maps.*'
-- assertNotVisible: 'Hidden on the map.*'
+      - extendedWaitUntil:
+          notVisible: 'Hidden on the map.*'
+          timeout: 10000
+- tapOn: 'PDF maps.*'
+- extendedWaitUntil:
+    visible: 'Hidden on the map.*'
+    timeout: 10000
+- tapOn: 'PDF maps.*'
+- extendedWaitUntil:
+    notVisible: 'Hidden on the map.*'
+    timeout: 10000
 - assertVisible: 'PDF maps.*'
 # --- PDF maps' sub-panel (#670): its round accessory ('Options for PDF
 # maps', never starting with the row's label, so 'PDF maps.*' above still
@@ -110,15 +134,18 @@ appId: com.inukshuk.app
     visible: 'Show pointing line.*'
     timeout: 10000
 - assertNotVisible: 'Terrain tab'
-- tapOn: 'Show pointing line.*'
 - runFlow:
     when:
       visible: 'Hidden on the map.*'
     commands:
       - tapOn: 'Show pointing line.*'
-- assertNotVisible: 'Hidden on the map.*'
+      - extendedWaitUntil:
+          notVisible: 'Hidden on the map.*'
+          timeout: 10000
 - tapOn: 'Show pointing line.*'
-- assertVisible: 'Hidden on the map.*'
+- extendedWaitUntil:
+    visible: 'Hidden on the map.*'
+    timeout: 10000
 - tapOn: 'Back to overlays'
 - extendedWaitUntil:
     visible: 'Terrain tab'
@@ -128,7 +155,9 @@ appId: com.inukshuk.app
 # window. The cards are asserted, not tapped: switching to Satellite would
 # leave imagery (network tiles) for later flows.
 - tapOn: 'Terrain tab'
-- assertVisible: 'Map, Trails, contours, names.*'
+- extendedWaitUntil:
+    visible: 'Map, Trails, contours, names.*'
+    timeout: 10000
 - assertVisible: 'Satellite, Aerial imagery.*'
 - tapOn: 'Options for Satellite'
 - extendedWaitUntil:
@@ -173,10 +202,10 @@ appId: com.inukshuk.app
 # no row at all on the Sports tab (no greyed "Coming soon" rows, 2.5.1).
 # The heatmap row is the tab's last row: once it is up, the whole tab is.
 - tapOn: 'Sports tab'
-- scrollUntilVisible:
-    element: 'Personal heatmap.*'
-    direction: DOWN
-    timeout: 15000
+# One row, never below the fold: wait for it, never swipe (see the header).
+- extendedWaitUntil:
+    visible: 'Personal heatmap.*'
+    timeout: 10000
 - assertNotVisible: 'Weather.*'
 - assertNotVisible: 'Marine.*'
 - assertNotVisible: '.*[Cc]oming soon.*'
@@ -198,6 +227,10 @@ appId: com.inukshuk.app
           visible: 'Close overlays'
           timeout: 10000
 - tapOn: 'Terrain tab'
+# It reopened on the one-row Sports tab: wait for the Terrain tab to be drawn.
+- extendedWaitUntil:
+    visible: 'Satellite, Aerial imagery.*'
+    timeout: 10000
 - scrollUntilVisible:
     element: 'Slope'
     direction: DOWN

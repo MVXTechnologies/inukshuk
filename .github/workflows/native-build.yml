@@ -121,6 +121,11 @@ jobs:
       - name: Verify team mesh transport (Kotlin host tests)
         run: sh modules/inukshuk-mesh/scripts/test-android.sh
 
+      # The map EGL guard (#697): MapLibre's surface teardown order, which
+      # keeps the emulator's EGL from a use-after-free (plain JVM).
+      - name: Verify map EGL guard core (Kotlin)
+        run: sh modules/inukshuk-map-egl/scripts/test-android.sh
+
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
       # Gradle's dependency caches live in ~/.gradle regardless of the
