@@ -1,7 +1,15 @@
 import { formatCoordinate } from '@core/convert/coordinateDisplay';
 import { IMPERIAL, METRIC, NAUTICAL } from '@core/format';
 
-import { activeAlerts, bandModel, bandStack, gatherEtas, MAX_STACKED_BANDS } from './alertBands';
+import {
+  activeAlerts,
+  alertBandPlace,
+  bandModel,
+  bandStack,
+  gatherEtas,
+  MAX_STACKED_BANDS,
+  stripBandLayout,
+} from './alertBands';
 import type { TeamRally, TeamSos } from './field';
 
 const NOW = 1_800_000_000_000;
@@ -212,5 +220,37 @@ describe('bandStack', () => {
     const open = bandStack(four, true);
     expect(open.shown).toHaveLength(MAX_STACKED_BANDS);
     expect(open.more).toBe(1);
+  });
+});
+
+describe('where the active band shows (QA 2.6.1, #708)', () => {
+  it('in the bar while it shows, else in the strip area; never nowhere in team mode', () => {
+    expect(alertBandPlace({ teamMode: true, barShown: true })).toBe('bar');
+    // Draw mode, an area being drawn, a shown trail…: the bar is away.
+    expect(alertBandPlace({ teamMode: true, barShown: false })).toBe('strip');
+    expect(alertBandPlace({ teamMode: false, barShown: false })).toBe('none');
+    expect(alertBandPlace({ teamMode: false, barShown: true })).toBe('none');
+  });
+
+  it('sits above the bottom chrome, beside the SOS button only when it shows', () => {
+    const base = { fabBottom: 120, drawChromeTop: 300 };
+    expect(stripBandLayout({ ...base, drawMode: false, sosButtonShown: true })).toEqual({
+      bottom: 128,
+      right: 88,
+      overDraw: false,
+    });
+    // A card or an area being drawn hides the SOS button: the band takes the width.
+    expect(stripBandLayout({ ...base, drawMode: false, sosButtonShown: false }).right).toBe(16);
+  });
+
+  it('in Draw mode: above the tool bar and its ⓘ, over the canvas', () => {
+    expect(
+      stripBandLayout({
+        fabBottom: 120,
+        drawChromeTop: 300,
+        drawMode: true,
+        sosButtonShown: false,
+      }),
+    ).toEqual({ bottom: 308, right: 16, overDraw: true });
   });
 });

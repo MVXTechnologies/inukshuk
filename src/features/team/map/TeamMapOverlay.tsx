@@ -8,6 +8,7 @@
  * for the card (paper-surface-ios-flex-collapse); its own state store so
  * MapScreen only routes the tap.
  */
+import { stripBandLayout, type AlertBandPlace } from '@core/teamui/alertBands';
 import { rangeAndBearing } from '@core/teamui/positions';
 import { useExtensionPrefs } from '@features/extensions/prefs';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
@@ -92,7 +93,8 @@ export function TeamMapOverlay({
   fabBottom,
   panelTop,
   snackStyle,
-  bandInStrip = false,
+  bandPlace = 'none',
+  drawChromeTop = 0,
   onNavigate,
   onPointActions,
   screenFocused = true,
@@ -108,10 +110,12 @@ export function TeamMapOverlay({
   /** Where the undo snackbar docks (the map's snackbar lane). */
   snackStyle: StyleProp<ViewStyle>;
   /**
-   * The bar's column is not on screen (the top slot is busy): the active
-   * SOS / gather band shows in the strip area instead (#708).
+   * Where the active SOS / gather band shows (`alertBandPlace`): `strip`
+   * while the bar's column is not on screen, whatever else is up (#708).
    */
-  bandInStrip?: boolean;
+  bandPlace?: AlertBandPlace;
+  /** In team Draw mode: the top of the tool bar's ⓘ, where the strip band sits. */
+  drawChromeTop?: number;
   onNavigate: (latitude: number, longitude: number) => void;
   /** Long-press menu's secondary row: Navigate here / Coordinates / Convert. */
   onPointActions: (at: [number, number], what: 'navigate' | 'coordinates' | 'convert') => void;
@@ -163,6 +167,12 @@ export function TeamMapOverlay({
     hit === null &&
     photoCard === null &&
     !card;
+  const strip = stripBandLayout({
+    drawMode: drawing,
+    fabBottom,
+    drawChromeTop,
+    sosButtonShown: chromeFree,
+  });
 
   return (
     <>
@@ -171,13 +181,18 @@ export function TeamMapOverlay({
           <TrailEditBar style={{}} />
         </KeyboardLifted>
       )}
-      {/* The active SOS / gather in the strip area while the bar's column is away (#708). */}
-      {bandInStrip && chromeFree && !panel && (
+      {/* The active SOS / gather in the strip area while the bar's column is
+        away (#708): always, even in Draw mode or with a card up (QA 2.6.1). */}
+      {bandPlace === 'strip' && (
         <AlertBands
           here={here}
           onNavigate={onNavigate}
           variant="strip"
-          style={[styles.stripBand, { bottom: fabBottom + 8 }]}
+          style={[
+            styles.stripBand,
+            { bottom: strip.bottom, right: strip.right },
+            strip.overDraw && styles.stripBandOverDraw,
+          ]}
         />
       )}
       {chromeFree && <SosButton bottom={pending ? fabBottom + 28 : fabBottom} here={here} />}
@@ -285,4 +300,6 @@ const styles = StyleSheet.create({
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 4 },
   /** The strip-area band: left of the SOS button, above the bottom chrome. */
   stripBand: { position: 'absolute', left: 16, right: 88, zIndex: MAP_OVERLAY_Z.teamButton },
+  /** In Draw mode, over the canvas (which would take its taps). */
+  stripBandOverDraw: { zIndex: MAP_OVERLAY_Z.overDrawMode },
 });

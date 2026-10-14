@@ -28,7 +28,8 @@
  * | teamButton       | 6      | the SOS button (#707) and the strip-area SOS / gather  |
  * |                  |        | band (#708): UNDER the bottom cards (QA 2.6.0: the     |
  * |                  |        | team button hid a cluster row's chevron); by tree      |
- * |                  |        | order over the panel, which they never overlap         |
+ * |                  |        | order over the panel, which they never overlap; in     |
+ * |                  |        | Draw mode the band goes up to overDrawMode (QA 2.6.1)  |
  * | waypointCard     | 7      | the bottom cards: a waypoint's, a cluster's list       |
  * |                  |        | (2.5.2), a team point's, a photo's, an extension's;    |
  * |                  |        | docked ON a bottom strip (`waypointCardDockStyle`)     |

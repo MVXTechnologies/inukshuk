@@ -25,6 +25,7 @@ import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
 import { JoinScreen } from './JoinScreen';
 import { TeamMapOverlay, useTeamMapSelection } from './map/TeamMapOverlay';
 import { useTeamSheet } from './map/teamMode';
+import { useTeamDrawStore } from '@state/teamDrawStore';
 import { TeamHubScreen } from './TeamHubScreen';
 
 const mockPush = jest.fn();
@@ -277,5 +278,64 @@ describe('the map card', () => {
     expect(z('team-panel-layer')).toBe(MAP_OVERLAY_Z.teamPanel);
     await act(() => useTeamSheet.getState().close());
     await session.stopMesh();
+  });
+});
+
+describe('the active SOS band while the bar is away (QA 2.6.1, #708)', () => {
+  it('stays in the strip area in Draw mode (over the canvas) and with a card up', async () => {
+    const session = await app.createTeam({
+      name: 'Ridge crew',
+      myName: 'Marc',
+      lifetimeMs: lifetimeMs('14d'),
+    });
+    expect(session.raiseSos(-71.2, 46.8)).toBeNull();
+    await act(() => useTeamStore.getState().refresh());
+    await render(
+      wrap(
+        <TeamMapOverlay
+          here={{ latitude: 46.8, longitude: -71.2 }}
+          cardSlotFree
+          cardStyle={{}}
+          fabBottom={72}
+          panelTop={0}
+          snackStyle={{}}
+          bandPlace="strip"
+          drawChromeTop={200}
+          onNavigate={jest.fn()}
+          onPointActions={jest.fn()}
+        />,
+      ),
+    );
+    const bands = () => StyleSheet.flatten(screen.getByTestId('team-alert-bands').props.style);
+    expect(screen.getByTestId('team-band-sos')).toBeTruthy();
+    expect(bands()).toMatchObject({ bottom: 80, right: 88, zIndex: MAP_OVERLAY_Z.teamButton });
+    // Draw mode hides the bar and the SOS button, never the band.
+    await act(() => useTeamDrawStore.getState().enter());
+    expect(screen.queryByTestId('team-sos-button')).toBeNull();
+    expect(screen.getByTestId('team-band-sos')).toBeTruthy();
+    expect(bands()).toMatchObject({ bottom: 208, right: 16, zIndex: MAP_OVERLAY_Z.overDrawMode });
+    await act(() => useTeamDrawStore.getState().exit());
+    // A teammate's card (or any card) hides the SOS button, never the band.
+    await act(() => useTeamMapSelection.getState().select({ kind: 'member', id: 'someone' }));
+    expect(screen.queryByTestId('team-sos-button')).toBeNull();
+    expect(screen.getByTestId('team-band-sos')).toBeTruthy();
+    await act(() => useTeamMapSelection.getState().select(null));
+    // With the bar on screen the band is the bar's, not the strip's.
+    await screen.rerender(
+      wrap(
+        <TeamMapOverlay
+          here={{ latitude: 46.8, longitude: -71.2 }}
+          cardSlotFree
+          cardStyle={{}}
+          fabBottom={72}
+          panelTop={0}
+          snackStyle={{}}
+          bandPlace="bar"
+          onNavigate={jest.fn()}
+          onPointActions={jest.fn()}
+        />,
+      ),
+    );
+    expect(screen.queryByTestId('team-alert-bands')).toBeNull();
   });
 });

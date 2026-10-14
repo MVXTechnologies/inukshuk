@@ -231,3 +231,50 @@ export function bandStack(
   const n = expanded ? Math.min(MAX_STACKED_BANDS, alerts.length) : Math.min(1, alerts.length);
   return { shown: alerts.slice(0, n), more: alerts.length - n };
 }
+
+/**
+ * Where the active SOS / gather band shows on the map (#708, owner's rule):
+ * in the team bar's column while the bar is on screen, else in the strip
+ * area. Never nowhere while team mode is on: a card, a sheet, Draw mode or
+ * an area being drawn hides the bar or the SOS button, never the band
+ * (QA 2.6.1: an active SOS vanished in Draw mode).
+ */
+export type AlertBandPlace = 'bar' | 'strip' | 'none';
+
+export function alertBandPlace(i: {
+  /** The map's top slot is the team's (team mode, I am an active member). */
+  teamMode: boolean;
+  /** The team status bar is drawn in that slot right now. */
+  barShown: boolean;
+}): AlertBandPlace {
+  if (!i.teamMode) return 'none';
+  return i.barShown ? 'bar' : 'strip';
+}
+
+/** Gap above the strip-area anchor, dp. */
+export const STRIP_BAND_GAP = 8;
+/** The strip band's right edge clears the SOS button (its ring and margin), dp. */
+export const STRIP_BAND_RIGHT_BESIDE_SOS = 88;
+export const STRIP_BAND_RIGHT = 16;
+
+/**
+ * The strip-area band's place: above the bottom chrome (the SOS button's
+ * baseline), or, in team Draw mode, above the drawing tool bar and its ⓘ —
+ * and then over the drawing canvas, so its buttons still answer a tap. It
+ * leaves room for the SOS button only while that button is shown.
+ */
+export function stripBandLayout(i: {
+  /** Team drawing mode owns the screen. */
+  drawMode: boolean;
+  /** Where the SOS button sits (above the bottom column). */
+  fabBottom: number;
+  /** In Draw mode: the top of the tool bar's ⓘ (`drawCreditsSheetBottom`). */
+  drawChromeTop: number;
+  sosButtonShown: boolean;
+}): { bottom: number; right: number; overDraw: boolean } {
+  return {
+    bottom: (i.drawMode ? i.drawChromeTop : i.fabBottom) + STRIP_BAND_GAP,
+    right: i.sosButtonShown ? STRIP_BAND_RIGHT_BESIDE_SOS : STRIP_BAND_RIGHT,
+    overDraw: i.drawMode,
+  };
+}

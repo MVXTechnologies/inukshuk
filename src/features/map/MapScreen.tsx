@@ -4,6 +4,7 @@ import { fnv1a32 } from '@core/encoding/fnv1a';
 import { isWebUrl } from '@core/links/externalUrl';
 import { unprojectablePins } from '@core/geo/pinHitTest';
 import type { WaypointTapRoute } from '@core/map/waypointClusters';
+import { alertBandPlace } from '@core/teamui/alertBands';
 import {
   chipSurvivesHit,
   pointChipAfterBareTap,
@@ -4037,7 +4038,11 @@ export function MapScreen() {
             fabBottom={teamFabBottom(bottomColumnLift + stripLift, bottomColumnH)}
             panelTop={insets.top + 4}
             snackStyle={liftedSnackbarStyle(bottomColumnLift + stripLift, bottomColumnH)}
-            bandInStrip={searchSlot === 'team' && !teamBarShown}
+            bandPlace={alertBandPlace({ teamMode: searchSlot === 'team', barShown: teamBarShown })}
+            drawChromeTop={drawCreditsSheetBottom(
+              insets.bottom,
+              recordingPanelUp ? panelHeight : 0,
+            )}
             onPointActions={(p, what) => {
               const at = { longitude: p[0], latitude: p[1] };
               // Navigate starts navigating (compass + destination chip), as the
