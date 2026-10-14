@@ -1,3 +1,4 @@
+import { formatCoordinate } from '@core/convert/coordinateDisplay';
 import { IMPERIAL, METRIC, NAUTICAL } from '@core/format';
 
 import { activeAlerts, bandModel, bandStack, gatherEtas, MAX_STACKED_BANDS } from './alertBands';
@@ -48,6 +49,7 @@ describe('activeAlerts: ranking', () => {
       me: 'me',
       names,
       positions: [],
+      coordinateFormat: 'dd',
     });
     expect(list.map((a) => a.entity)).toEqual([
       'sos:sam:s2',
@@ -66,10 +68,30 @@ describe('activeAlerts: ranking', () => {
       me: 'me',
       names,
       positions: [{ id: 'julie', lat: 46.9, lon: -71.3 }],
+      coordinateFormat: 'dd',
     });
     expect(s).toMatchObject({ lat: 46.9, lng: -71.3 });
     // The app-wide 6-decimal readout (#701).
     expect(g).toMatchObject({ place: '46.812345, -71.204560', ownerName: 'A teammate' });
+  });
+
+  it("an unnamed gather's coordinates follow the user's coordinate format", () => {
+    const place = (coordinateFormat: 'dd' | 'dms' | 'ddm' | 'utm' | 'mgrs') =>
+      activeAlerts({
+        soses: [],
+        rally: rally('x', { text: '', lat: 46.812345, lng: -71.20456 }),
+        me: 'me',
+        names,
+        positions: [],
+        coordinateFormat,
+      })[0]?.place;
+    // The same `formatCoordinate` the coordinates readout uses.
+    expect(place('dms')).toBe('46°48′44.44″N, 71°12′16.42″W');
+    expect(place('ddm')).toBe('46°48.7407′N, 71°12.2736′W');
+    expect(place('utm')).toBe('19T 331813.7 5186670.7');
+    expect(place('mgrs')).toBe('19T CM 31813 86670');
+    for (const f of ['dd', 'dms', 'ddm', 'utm', 'mgrs'] as const)
+      expect(place(f)).toBe(formatCoordinate(46.812345, -71.20456, f));
   });
 });
 
@@ -87,6 +109,7 @@ describe('bandModel', () => {
     me: 'me',
     names,
     positions: [],
+    coordinateFormat: 'dd',
   });
 
   it('others’ SOS: name, distance and direction, age; Navigate and Centre', () => {
@@ -179,6 +202,7 @@ describe('bandStack', () => {
     me: 'me',
     names,
     positions: [],
+    coordinateFormat: 'dd',
   });
   it('collapsed: one band and +N; expanded: up to three, the rest left to the panel', () => {
     expect(bandStack([], false)).toEqual({ shown: [], more: 0 });

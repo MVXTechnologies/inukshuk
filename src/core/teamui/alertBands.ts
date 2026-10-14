@@ -15,7 +15,7 @@
  *   "You called it · 4 of 5 received".
  */
 import type { Units } from '@core/format';
-import { formatLatLng } from '@core/geo/formatCoords';
+import { formatCoordinate, type CoordinateFormat } from '@core/convert/coordinateDisplay';
 
 import { rallyArrivals, type TeamRally, type TeamSos } from './field';
 import { rallyEntity, sosEntity } from './alertLedger';
@@ -38,7 +38,7 @@ export interface ActiveAlert {
   lng: number;
   /** When it was raised or called (wall ms). */
   since: number;
-  /** A gather's place: its text, else its coordinates. */
+  /** A gather's place: its text, else its coordinates in the user's format. */
   place: string;
 }
 
@@ -49,6 +49,13 @@ export interface AlertInputs {
   names: ReadonlyMap<string, string>;
   /** Teammates' live positions (an SOS follows its raiser). */
   positions: readonly { id: string; lat: number; lon: number }[];
+  /**
+   * The user's coordinate format (Settings), for an unnamed gather's place:
+   * the same `formatCoordinate` the coordinates readout uses, so a rally
+   * point reads "46°48'44.44\"N, …" or "19T 345678.9 …" when that is the
+   * user's choice, not always decimal degrees.
+   */
+  coordinateFormat: CoordinateFormat;
 }
 
 /** Every active SOS and gather, ranked (see the module doc). */
@@ -85,7 +92,7 @@ export function activeAlerts(i: AlertInputs): ActiveAlert[] {
       lat: r.lat,
       lng: r.lng,
       since: r.at,
-      place: r.text.trim() || formatLatLng(r.lat, r.lng),
+      place: r.text.trim() || formatCoordinate(r.lat, r.lng, i.coordinateFormat),
     });
   }
   return out;

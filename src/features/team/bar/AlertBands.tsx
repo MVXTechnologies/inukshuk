@@ -53,11 +53,12 @@ export function useActiveAlerts(): ActiveAlert[] {
   const rally = useTeamStore((s) => s.rally);
   const view = useTeamStore((s) => s.view);
   const positions = useTeamStore((s) => s.positions);
+  const coordinateFormat = useSettingsStore((s) => s.coordinateFormat);
   return useMemo(() => {
     if (view === null || !view.active) return [];
     const names = new Map(view.members.map((m) => [m.id, m.name]));
-    return activeAlerts({ soses, rally, me: view.me, names, positions });
-  }, [soses, rally, view, positions]);
+    return activeAlerts({ soses, rally, me: view.me, names, positions, coordinateFormat });
+  }, [soses, rally, view, positions, coordinateFormat]);
 }
 
 export function AlertBands({
