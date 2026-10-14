@@ -53,6 +53,7 @@ export function NameDialog({
           <TextInput
             key={`${visible}-${initialValue}`}
             label={label}
+            testID="name-dialog-input"
             defaultValue={initialValue}
             onChangeText={(t) => {
               typedRef.current = t;

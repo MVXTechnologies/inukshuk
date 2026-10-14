@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, PanResponder, Platform, StatusBar, type View } from 'react-native';
 
 export interface DragItem {
-  kind: 'map' | 'track' | 'waypoint';
+  kind: 'map' | 'track' | 'waypoint' | 'area';
   id: string;
   label: string;
 }

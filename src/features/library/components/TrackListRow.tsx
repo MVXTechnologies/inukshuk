@@ -52,6 +52,8 @@ export interface TrackListRowProps {
   nowMs: number;
   selecting: boolean;
   selected: boolean;
+  /** Just moved: the brief sage wash (#711). */
+  flash?: boolean;
   menuOpen: boolean;
   /** Elevation peek: undefined = closed, null = loading, else the trail. */
   elevation: ElevationPreviewTrack | null | undefined;
@@ -75,6 +77,7 @@ export const TrackListRow = memo(function TrackListRow({
   nowMs,
   selecting,
   selected,
+  flash,
   menuOpen,
   elevation,
   grip,
@@ -136,7 +139,8 @@ export const TrackListRow = memo(function TrackListRow({
         accessibilityLabel="Elevation profile"
         onPress={run(actions.toggleElevation)}
       />
-      <Menu.Item leadingIcon="share-variant" title="Share GPX" onPress={run(actions.share)} />
+      {/* The Share sheet (#711): says what goes (the .gpx, its size) first. */}
+      <Menu.Item leadingIcon="share-variant" title="Share" onPress={run(actions.share)} />
       {stravaConnected && (
         <Menu.Item
           leadingIcon="cloud-upload-outline"
@@ -152,8 +156,8 @@ export const TrackListRow = memo(function TrackListRow({
         />
       )}
       <Menu.Item leadingIcon="content-cut" title="Trim" onPress={run(actions.trim)} />
-      {/* Enters the multi-select mode (the one long-press opens) with this
-          trail pre-selected; the user then taps the others and confirms. */}
+      {/* Enters select mode (the one long-press opens) with this trail
+          picked; the user then taps the others and Merge in the bar. */}
       <Menu.Item leadingIcon="call-merge" title="Merge" onPress={run(actions.merge)} />
       <Menu.Item
         leadingIcon="tag-outline"
@@ -182,17 +186,18 @@ export const TrackListRow = memo(function TrackListRow({
         category={category}
         stats={stats}
         caption={caption}
-        // Long-press enters trail selection (for merging); while selecting,
-        // taps toggle membership instead of opening the trail.
+        // Long-press enters select mode (#711); while selecting, taps toggle
+        // the row instead of opening the trail.
         accessibilityLabel={
           selecting
-            ? `${t.name} — ${selected ? 'deselect' : 'select'} for merge`
+            ? `${t.name} — ${selected ? 'selected, tap to deselect' : 'tap to select'}`
             : `${spoken} — open trail view, long-press to select`
         }
         onPress={() => actions.press(t)}
         onLongPress={() => actions.longPress(t)}
         selecting={selecting}
         selected={selected}
+        flash={flash}
         sourceMark={t.origin ? sourceLabel(t.origin.source) : undefined}
         leading={
           grip ? (
