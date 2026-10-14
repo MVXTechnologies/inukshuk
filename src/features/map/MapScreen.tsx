@@ -100,6 +100,7 @@ import { DestinationMarkerPin } from './components/DestinationMarkerPin';
 import { MapCreditsButton, MapCreditsSheet } from './components/MapCredits';
 import { mapCredits } from '@core/map/mapCredits';
 import { bareTapAfterFocus } from '@core/map/mapTap';
+import { centreCursorPoint } from '@core/map/centreCursor';
 import { HeadingCone } from './components/HeadingCone';
 import { PointingLine } from './components/PointingLine';
 import { MapSearchPill } from './components/MapSearchPill';
@@ -1971,7 +1972,8 @@ export function MapScreen() {
     },
     snack: mapSnacks.action,
   });
-  const onAddWaypoint = wpQuick.addAtFix;
+  const { addAtCursor } = wpQuick;
+  const onAddWaypoint = useCallback(() => void addAtCursor(), [addAtCursor]);
 
   // Every waypoint pin currently drawn on the 2D map (live pins only exist
   // while a recording session is up), tagged with its source for tap handling.
@@ -2831,8 +2833,12 @@ export function MapScreen() {
                 // waypoint, Convert); it no longer drops a destination by itself.
                 // Following would recentre on every fix and slide the chip out
                 // from under the finger reaching for Convert (CI 2026-10-08).
-                if (useMapStore.getState().followUser) setFollowUser(false);
-                setPointAt(at);
+                // #709: the bubble opens at the centre cursor, not the finger
+                // (the finger's point only before the map has a centre).
+                const { mapCenter, followUser: following } = useMapStore.getState();
+                const cursor = centreCursorPoint(mapCenter, following, location);
+                if (following) setFollowUser(false);
+                setPointAt(cursor ?? at);
               };
               // #676 — a long-press on a saved pin is Move's shortcut. Projecting
               // the pins is async, so everything else waits for "no pin here".
@@ -3600,8 +3606,9 @@ export function MapScreen() {
               status === 'idle' && !selecting && !pickingCategory && !drawing.active
                 ? {
                     onRecord: () => setPickingCategory(true),
+                    onPinMyLocation: wpQuick.addAtFix,
+                    pinMyLocationHint: wpQuick.addHint,
                     onAddWaypoint,
-                    addWaypointHint: wpQuick.addHint,
                     // A second download would stop the first's loopback server.
                     onDownload:
                       downloadProgress !== null

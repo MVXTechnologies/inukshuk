@@ -89,6 +89,56 @@ describe('one-tap Add waypoint (#671)', () => {
   });
 });
 
+describe('one-tap Add waypoint at the centre cursor (#709)', () => {
+  const CENTRE = { latitude: 46.815, longitude: -71.205 };
+
+  it('saves at the centre read from the camera, with EDIT and UNDO', async () => {
+    useMapStore.setState({ followUser: false });
+    const { result } = await setup({ getCenter: jest.fn(async () => CENTRE) });
+    await act(async () => result.current.addAtCursor());
+    expect(waypoints()[0]).toMatchObject({ ...CENTRE, label: 'Waypoint 1' });
+    const snack = result.current.snack.current;
+    expect(snack?.message).toBe('Waypoint 1 added at the map centre');
+    expect(snack?.actions.map((a) => a.label)).toEqual(['Edit', 'Undo']);
+    await act(async () => result.current.snack.current?.actions[1]?.onPress());
+    expect(waypoints()).toHaveLength(0);
+  });
+
+  it('needs no GPS fix', async () => {
+    useMapStore.setState({ followUser: false });
+    const { result } = await setup({ location: null, getCenter: jest.fn(async () => CENTRE) });
+    await act(async () => result.current.addAtCursor());
+    expect(waypoints()[0]).toMatchObject(CENTRE);
+  });
+
+  it('falls back to the settled centre when the camera cannot be read', async () => {
+    useMapStore.setState({ followUser: false, mapCenter: CENTRE });
+    const { result } = await setup({ getCenter: jest.fn(async () => Promise.reject(new Error())) });
+    await act(async () => result.current.addAtCursor());
+    expect(waypoints()[0]).toMatchObject(CENTRE);
+  });
+
+  it('before any camera: says so and saves nothing', async () => {
+    useMapStore.setState({ followUser: false, mapCenter: null });
+    const { result } = await setup();
+    await act(async () => result.current.addAtCursor());
+    expect(waypoints()).toHaveLength(0);
+    expect(result.current.snack.current?.message).toBe(
+      'The map is still loading. Try again in a moment.',
+    );
+  });
+
+  it('while the map follows you, the cursor is you: the same drop as Pin my location', async () => {
+    useMapStore.setState({ followUser: true });
+    const getCenter = jest.fn(async () => CENTRE);
+    const { result } = await setup({ getCenter });
+    await act(async () => result.current.addAtCursor());
+    expect(waypoints()[0]).toMatchObject(FIX);
+    expect(result.current.snack.current?.message).toBe('Waypoint 1 added at your position');
+    expect(getCenter).not.toHaveBeenCalled();
+  });
+});
+
 describe('Move (#676)', () => {
   async function withWaypoint() {
     const id = useLibraryStore.getState().addWaypoint(FIX.latitude, FIX.longitude, 'Camp lac');
