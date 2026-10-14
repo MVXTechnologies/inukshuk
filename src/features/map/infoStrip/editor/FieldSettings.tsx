@@ -1,5 +1,6 @@
 import { formatCoordinate } from '@core/convert/coordinateDisplay';
-import { formatDistance, type Units } from '@core/format';
+import type { Units } from '@core/format';
+import { formatDistanceFrom } from '@core/trails/format';
 import { cellOf, LIST_CELL_DEG } from '@core/infoStrip/cell';
 import type { Slot } from '@core/infoStrip/edit';
 import { fieldDescriptor } from '@core/infoStrip/registry';
@@ -251,7 +252,8 @@ function StationParam({
     rows.push({
       key: stationKey(n.station),
       name: n.station.name,
-      hint: formatDistance(n.distanceM, units),
+      // "18 km", "2 km", "850 m": how far a station is, never "17.99 km" (QA 2.6.0).
+      hint: formatDistanceFrom(n.distanceM, units),
     });
   }
   return (

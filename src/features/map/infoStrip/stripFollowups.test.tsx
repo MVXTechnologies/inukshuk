@@ -391,7 +391,10 @@ describe('#695: tide fields read a station', () => {
       expect(nearest).toHaveTextContent(/Nearest.*Anse-Fictive/);
       // Live gauges only, nearest first; the prediction-only port is not listed.
       expect(screen.getByTestId('strip-station-100:00001')).toHaveTextContent(/Anse-Fictive/);
-      expect(screen.getByTestId('strip-station-100:00003')).toBeOnTheScreen();
+      // Its distance as the app writes one ("120 km"), never "119.87 km" (QA 2.6.0).
+      expect(screen.getByTestId('strip-station-100:00003')).toHaveTextContent(
+        /Cap-Imaginaire\s*\d+ km$/,
+      );
       expect(screen.queryByTestId('strip-station-100:00002')).toBeNull();
       await fireEvent.press(screen.getByTestId('strip-station-100:00003'));
       expect(currentStrip().rows[0]![0]!.params.station).toBe('100:00003');
