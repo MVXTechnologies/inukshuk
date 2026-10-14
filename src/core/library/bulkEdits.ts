@@ -87,6 +87,8 @@ export interface RemovedItems {
   activeTrackIds: string[];
   /** The active map, when it was removed. */
   activeMapId: string | null;
+  /** The store's purge-journal entry for this delete (`@core/library/pendingPurges`). */
+  purgeId?: string;
 }
 
 function split<T extends { id: string }>(

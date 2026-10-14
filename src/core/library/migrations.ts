@@ -15,6 +15,7 @@ import { isStorableWaypointIconId } from './waypointIcons';
 import { normalizeWaypointStyle } from './waypointStyle';
 import { normalizeArea } from './areas';
 import { sanitizeRoutePlan } from '@core/draw/serialize';
+import { sanitizePendingPurges, type PendingPurge } from './pendingPurges';
 
 /**
  * Versioned migrations for Inukshuk's persisted JSON documents (`library.json`
@@ -55,6 +56,13 @@ export interface LibraryIndex {
   customCategories: CustomCategory[];
   /** Areas drawn on the map (#503). */
   areas: Area[];
+  /**
+   * Undo-able deletes whose files are not purged yet (#711), written in the
+   * same write as the delete; a launch purges what is left
+   * (`@core/library/pendingPurges`). Absent when empty, so an older build
+   * reading the index simply drops it.
+   */
+  pendingPurges?: PendingPurge[];
 }
 
 type RawDoc = Record<string, unknown>;
@@ -381,7 +389,8 @@ function recordsWithId<T extends { id: string }>(value: unknown): T[] {
 /**
  * Apply `map` to every stored file path in an index — the maps' `fileUri`, the
  * trails' `fileUri`, their notes' `photoUri`, and standalone waypoints'
- * `photoUri`, and drawn areas' `photoUris`. **This is the complete list of persisted paths in
+ * `photoUri`, drawn areas' `photoUris`, and the purge journal's `fileUris`
+ * (#711). **This is the complete list of persisted paths in
  * `library.json`**; anything new that stores a path must be added here, or it
  * will go stale on the next iOS container rotation (#247).
  *
@@ -412,6 +421,14 @@ export function mapLibraryIndexPaths(
     areas: index.areas.map((a) =>
       a.photoUris === undefined ? a : { ...a, photoUris: a.photoUris.map(map) },
     ),
+    ...(index.pendingPurges === undefined
+      ? {}
+      : {
+          pendingPurges: index.pendingPurges.map((p) => ({
+            ...p,
+            fileUris: p.fileUris.map(map),
+          })),
+        }),
   };
 }
 
@@ -460,6 +477,7 @@ export function migrateLibraryIndex(raw: unknown, documentDir?: string): Library
       };
     });
   const activeMapId = typeof doc.activeMapId === 'string' ? doc.activeMapId : null;
+  const pendingPurges = sanitizePendingPurges(doc.pendingPurges);
   const index: LibraryIndex = {
     schemaVersion: LIBRARY_SCHEMA_VERSION,
     maps,
@@ -488,6 +506,7 @@ export function migrateLibraryIndex(raw: unknown, documentDir?: string): Library
     areas: asArray(doc.areas)
       .map(normalizeArea)
       .filter((a): a is Area => a !== null),
+    ...(pendingPurges.length > 0 ? { pendingPurges } : {}),
   };
   // #247 — runs on EVERY load, not just the v5→v6 step: the population that
   // needs healing is already at v5/v6 with absolute paths burned in, and the

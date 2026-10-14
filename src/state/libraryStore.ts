@@ -23,6 +23,12 @@ import {
   type FolderSnapshot,
   type RemovedItems,
 } from '@core/library/bulkEdits';
+import {
+  launchPurgePlan,
+  pendingPurgeOf,
+  withoutPurge,
+  type PendingPurge,
+} from '@core/library/pendingPurges';
 import type { FolderMove, ItemRef } from '@core/library/selection';
 import type { CustomCategory } from '@core/library/categories';
 import {
@@ -331,6 +337,10 @@ function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolea
     customCategories: state.customCategories,
     waypoints: state.waypoints,
     areas: state.areas,
+    // The purge journal (#711) rides in the same write as the delete it covers.
+    ...(state.pendingPurges !== undefined && state.pendingPurges.length > 0
+      ? { pendingPurges: state.pendingPurges }
+      : {}),
   };
   // #247 — the store holds ABSOLUTE uris (every consumer, from <Image> to
   // Sharing to the GPX reader, wants one), but the index on disk must hold
@@ -350,22 +360,54 @@ function persistAndDelete(
 ): void {
   // Nothing was committed: the files are still referenced by the index on disk.
   if (!persist(state)) return;
-  for (const uri of orphanedUris) {
-    if (!uri) continue;
+  // A deleted trail's photos (#587) go with it: copies and sidecar.
+  deleteFilesAndPhotoFolders(
+    orphanedUris.filter((uri): uri is string => !!uri),
+    deletedTrackIds,
+  );
+}
+
+/** Best-effort file and trail-photo-folder deletes: an orphan never surfaces as an error. */
+function deleteFilesAndPhotoFolders(
+  fileUris: readonly string[],
+  trackIds: readonly string[],
+): void {
+  for (const uri of fileUris) {
     try {
       storage.deleteFileAt(uri);
     } catch {
-      // Metadata is committed: keep memory consistent even if an orphan remains.
+      // Metadata is committed: an orphan file must not surface as an error.
     }
   }
-  // A deleted trail's photos (#587) go with it: copies and sidecar.
-  for (const id of deletedTrackIds) {
+  for (const id of trackIds) {
     try {
       deleteTrailPhotoFolder(id);
     } catch {
-      // Same as above: an orphan folder must not undo a committed delete.
+      // Same as above.
     }
   }
+}
+
+/**
+ * The launch half of the purge journal (#711): Undo-able deletes the app was
+ * killed inside (their Undo can no longer be pressed) stand. Their files and
+ * photo folders go now, except any the live index names; the journal is then
+ * cleared. Returns the index to publish (unchanged when nothing was pending).
+ */
+function purgeLeftovers<T extends Omit<LibraryIndex, 'schemaVersion'>>(index: T): T {
+  const journal: readonly PendingPurge[] = index.pendingPurges ?? [];
+  if (journal.length === 0) return index;
+  const plan = launchPurgePlan(journal, index);
+  deleteFilesAndPhotoFolders(plan.fileUris, plan.trackIds);
+  const { pendingPurges: _done, ...rest } = index;
+  const cleared = rest as T;
+  try {
+    // A kill before this write re-runs the (idempotent) purge next launch.
+    persist({ ...cleared, hydrated: true });
+  } catch (error) {
+    reportError(error, 'library-purge-journal');
+  }
+  return cleared;
 }
 
 /**
@@ -485,9 +527,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         // unversioned indexes are normalized, junk is dropped, never throws.
         // The ladder also relativises stored paths (#247), healing an index
         // written under a container UUID iOS has since rotated away.
-        const { schemaVersion: _v, ...index } = resolveStoredPaths(
+        const { schemaVersion: _v, ...loaded } = resolveStoredPaths(
           migrateLibraryIndex(raw, storage.documentDirUri()),
         );
+        const index = purgeLeftovers(loaded);
         let pdfRecoveryNotice: string | null = null;
         if (interrupted) {
           const map = index.maps.find(
@@ -916,10 +959,19 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     }),
 
   removeItemsForUndo: (refs) => {
-    const { next: edited, removed } = removeItems(get(), refs);
-    if (isEmptyRemoval(removed)) return removed;
+    const { next: edited, removed: taken } = removeItems(get(), refs);
+    if (isEmptyRemoval(taken)) return taken;
+    // The journal entry goes in the SAME write as the delete (#711): a kill
+    // inside the Undo window leaves no file behind unnamed; the next launch
+    // purges it (`purgeLeftovers`).
+    const purgeId = storage.newId();
+    const removed: RemovedItems = { ...taken, purgeId };
     set((s) => {
-      const next = { ...s, ...edited };
+      const next = {
+        ...s,
+        ...edited,
+        pendingPurges: [...(s.pendingPurges ?? []), pendingPurgeOf(purgeId, removed)],
+      };
       persist(next);
       return next;
     });
@@ -929,7 +981,12 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   restoreRemovedItems: (removed) =>
     set((s) => {
       if (isEmptyRemoval(removed)) return s;
-      const next = { ...s, ...restoreItems(s, removed) };
+      // Back in the index and out of the journal, in one write.
+      const next = {
+        ...s,
+        ...restoreItems(s, removed),
+        pendingPurges: withoutPurge(s.pendingPurges, removed.purgeId),
+      };
       persist(next);
       return next;
     }),
@@ -937,20 +994,19 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   purgeRemovedItems: (removed) => {
     // The index no longer names them (it was written at the delete); an item
     // put back by Undo is never purged, as Undo cancels this call.
-    for (const uri of removedFileUris(removed)) {
-      try {
-        storage.deleteFileAt(uri);
-      } catch {
-        // Metadata is committed: an orphan file must not surface as an error.
-      }
-    }
-    for (const { item } of removed.tracks) {
-      try {
-        deleteTrailPhotoFolder(item.id);
-      } catch {
-        // Same as above.
-      }
-    }
+    deleteFilesAndPhotoFolders(
+      removedFileUris(removed),
+      removed.tracks.map((r) => r.item.id),
+    );
+    // Files gone: the journal entry goes. A kill before this write only
+    // means the launch purge finds nothing left to delete.
+    if (removed.purgeId === undefined) return;
+    set((s) => {
+      if (!(s.pendingPurges ?? []).some((p) => p.id === removed.purgeId)) return s;
+      const next = { ...s, pendingPurges: withoutPurge(s.pendingPurges, removed.purgeId) };
+      persist(next);
+      return next;
+    });
   },
 
   removeFolderForUndo: (id) => {
