@@ -7,10 +7,13 @@
  *   Navigate and Centre (an admin: Resolve). A tap on the words centres.
  * - My SOS: "Your SOS is active" / "3 of 5 received · 1 min", Resolve,
  *   confirmed inline ("Resolve for everyone?").
- * - A gather (amber, dark ink): "Gather · Lac-Delage" / "1.2 km · by Noé",
+ * - A gather (amber, dark ink): "Gather · Lac-Delage" (unnamed: "Gather
+ *   point") / "1.2 km · by Noé" (its creator: "By you · 3 of 5 received"),
  *   Navigate; its creator (or an admin) End, confirmed inline. A tap on its
- *   words expands who gets there when under it (name, distance, ETA,
- *   nearest to arrive first; "—" without a recent position).
+ *   words expands where it is (its coordinates, in full) and who gets there
+ *   when (name, distance, ETA, nearest to arrive first; "—" without a
+ *   recent position). The detail line may wrap to a second line on a narrow
+ *   phone rather than cut its receipts off (QA 2.6.1).
  * - SOS outranks; "+1" expands to stacked bands (up to three).
  *
  * Ranking and texts are `@core/teamui/alertBands`; receipts come from the
@@ -253,18 +256,21 @@ function Band({
           <Icon source={sos ? 'alert-octagon' : 'flag-variant'} size={22} color={ink} />
         </View>
         <View style={styles.flex}>
-          <Text style={[styles.l1, { color: ink }]} numberOfLines={1}>
-            {m.title}
-          </Text>
+          {/* The fold chevron rides the title line: the detail line keeps the width. */}
+          <View style={styles.titleRow}>
+            <Text style={[styles.l1, styles.shrink, { color: ink }]} numberOfLines={1}>
+              {m.title}
+            </Text>
+            {etaToggle && (
+              <Icon source={etasOpen ? 'chevron-up' : 'chevron-down'} size={18} color={ink} />
+            )}
+          </View>
           {!compact && (
-            <Text style={[styles.l2, { color: ink }]} numberOfLines={1}>
+            <Text style={[styles.l2, { color: ink }]} numberOfLines={2}>
               {m.sub}
             </Text>
           )}
         </View>
-        {etaToggle && (
-          <Icon source={etasOpen ? 'chevron-up' : 'chevron-down'} size={20} color={ink} />
-        )}
       </Pressable>
       {more !== 0 && (
         <Pressable
@@ -291,7 +297,7 @@ function Band({
   return (
     <View style={styles.column} pointerEvents="box-none">
       {band}
-      <GatherEtaList here={here} />
+      <GatherEtaList here={here} coords={alert.coords} />
     </View>
   );
 }
@@ -301,7 +307,14 @@ function Band({
  * distance and ETA to the rally point, nearest to arrive first; "—" without
  * a recent position (`gatherEtas`). Redraws with team changes only.
  */
-function GatherEtaList({ here }: { here: { latitude: number; longitude: number } | null }) {
+function GatherEtaList({
+  here,
+  coords,
+}: {
+  here: { latitude: number; longitude: number } | null;
+  /** The gather's coordinates in the user's format, in full. */
+  coords: string;
+}) {
   const t = useSchemeTokens();
   const rally = useTeamStore((s) => s.rally);
   const view = useTeamStore((s) => s.view);
@@ -316,6 +329,14 @@ function GatherEtaList({ here }: { here: { latitude: number; longitude: number }
       style={[styles.etas, { backgroundColor: t.surface, borderColor: t.team.gather }, shadow]}
       testID="team-gather-etas"
     >
+      <Text
+        style={[styles.etaPlace, { color: t.inkMuted }]}
+        selectable
+        accessibilityLabel={`At ${coords}`}
+        testID="team-gather-coords"
+      >
+        {coords}
+      </Text>
       {rows.map((r) => (
         <View
           key={r.id}
@@ -395,6 +416,9 @@ const styles = StyleSheet.create({
   etaDist: { fontSize: 13, fontWeight: '700', minWidth: 56, textAlign: 'right' },
   etaEta: { fontSize: 13.5, fontWeight: '800', minWidth: 64, textAlign: 'right' },
   flex: { flex: 1, minWidth: 0 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 2, minWidth: 0 },
+  shrink: { flexShrink: 1, minWidth: 0 },
+  etaPlace: { fontSize: 13, fontWeight: '700', paddingTop: 6, paddingBottom: 2 },
   band: {
     minHeight: 56,
     borderRadius: 18,

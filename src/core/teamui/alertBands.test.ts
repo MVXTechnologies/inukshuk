@@ -150,9 +150,32 @@ describe('bandModel', () => {
     });
     expect(bandModel(gather!, { ...opts, isAdmin: true }).actions).toEqual(['navigate', 'end']);
     expect(bandModel({ ...gather!, mine: true }, { ...opts, receipts: 'Sent' })).toMatchObject({
-      sub: 'You called it · Sent',
+      sub: 'By you · Sent',
       actions: ['end'],
     });
+  });
+
+  it('an unnamed gather: a short title; the coordinates only where there is room (QA 2.6.1)', () => {
+    const [unnamed] = activeAlerts({
+      soses: [],
+      rally: rally('me', { text: '', lat: 46.802998, lng: -71.216574 }),
+      me: 'me',
+      names,
+      positions: [],
+      coordinateFormat: 'dd',
+    });
+    const m = bandModel(unnamed!, { ...opts, receipts: '3 of 3 received' });
+    // The band's lines stay short on a 360 dp phone: no coordinates in them.
+    expect(m.title).toBe('Gather point');
+    expect(m.sub).toBe('By you · 3 of 3 received');
+    expect(m.title.length).toBeLessThanOrEqual(24);
+    expect(m.sub.length).toBeLessThanOrEqual(24);
+    // The full coordinates: the screen-reader label and the expanded list.
+    expect(m.a11y).toBe('Gather at 46.802998, -71.216574, By you · 3 of 3 received');
+    expect(unnamed).toMatchObject({ named: false, coords: '46.802998, -71.216574' });
+    // A named one keeps its name and still knows its coordinates.
+    expect(gather).toMatchObject({ named: true, place: 'Lac-Delage' });
+    expect(bandModel(gather!, opts).a11y).toBe('Gather at Lac-Delage, 1.1 km · by Noé');
   });
 
   it('distances in the user’s units (#702)', () => {

@@ -12,7 +12,10 @@
  * - **Texts:** others' SOS "SOS · Julie Tremblay" / "640 m NE · 2 min"; my
  *   own "Your SOS is active" / "3 of 5 received · 1 min"; a gather
  *   "Gather · Lac-Delage" / "1.2 km · by Noé", its creator's
- *   "You called it · 4 of 5 received".
+ *   "By you · 4 of 5 received". An unnamed gather is "Gather point": its
+ *   coordinates (a long string in any format) go in the expanded list and
+ *   the screen-reader label, never in the band's one-line title, which they
+ *   overflowed on a phone (QA 2.6.1).
  */
 import type { Units } from '@core/format';
 import { formatCoordinate, type CoordinateFormat } from '@core/convert/coordinateDisplay';
@@ -40,6 +43,10 @@ export interface ActiveAlert {
   since: number;
   /** A gather's place: its text, else its coordinates in the user's format. */
   place: string;
+  /** Whether the place is a name (its text), not coordinates. */
+  named: boolean;
+  /** Its coordinates in the user's format (the expanded list shows them). */
+  coords: string;
 }
 
 export interface AlertInputs {
@@ -76,12 +83,15 @@ export function activeAlerts(i: AlertInputs): ActiveAlert[] {
         lng: live ? live.lon : s.lng,
         since: s.at,
         place: s.text,
+        named: s.text.trim() !== '',
+        coords: formatCoordinate(s.lat, s.lng, i.coordinateFormat),
       };
     });
   sos.sort((a, b) => Number(a.mine) - Number(b.mine) || b.since - a.since);
   const out = [...sos];
   const r = i.rally;
   if (r !== null) {
+    const coords = formatCoordinate(r.lat, r.lng, i.coordinateFormat);
     out.push({
       kind: 'gather',
       entity: rallyEntity(r),
@@ -92,7 +102,9 @@ export function activeAlerts(i: AlertInputs): ActiveAlert[] {
       lat: r.lat,
       lng: r.lng,
       since: r.at,
-      place: r.text.trim() || formatCoordinate(r.lat, r.lng, i.coordinateFormat),
+      place: r.text.trim() || coords,
+      named: r.text.trim() !== '',
+      coords,
     });
   }
   return out;
@@ -148,10 +160,11 @@ export function bandModel(
       actions: o.isAdmin ? ['navigate', 'resolve'] : ['navigate', 'centre'],
     };
   }
-  const title = `Gather · ${a.place}`;
+  const title = a.named ? `Gather · ${a.place}` : 'Gather point';
+  const said = `Gather at ${a.place}`;
   if (a.mine) {
-    const sub = `You called it · ${o.receipts}`;
-    return { title, sub, a11y: `${title}, ${sub}`, actions: ['end'] };
+    const sub = `By you · ${o.receipts}`;
+    return { title, sub, a11y: `${said}, ${sub}`, actions: ['end'] };
   }
   const sub = [rb ? distanceText(rb.meters, o.units) : null, `by ${first}`]
     .filter(Boolean)
@@ -159,7 +172,7 @@ export function bandModel(
   return {
     title,
     sub,
-    a11y: `${title}, ${sub}`,
+    a11y: `${said}, ${sub}`,
     actions: o.isAdmin ? ['navigate', 'end'] : ['navigate'],
   };
 }

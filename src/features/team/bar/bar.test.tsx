@@ -332,6 +332,10 @@ describe('the alert bands (#708)', () => {
       expect(screen.queryByTestId('team-gather-etas')).toBeNull();
       await fireEvent.press(screen.getByTestId('team-band-gather-text'));
       expect(screen.getByTestId('team-gather-etas')).toBeTruthy();
+      // Where it is, in full, heads the expanded list (QA 2.6.1).
+      expect(screen.getByTestId('team-gather-coords').props.children).toMatch(
+        /^\d+\.\d{6}, -\d+\.\d{6}$/,
+      );
       const rows = screen
         .queryAllByTestId(/^team-gather-eta-/)
         .map((n) => n.props.testID as string)
