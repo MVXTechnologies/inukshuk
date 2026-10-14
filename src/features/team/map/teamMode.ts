@@ -6,8 +6,11 @@
  *
  * One small store says which compact team card is up (one at a time).
  */
+import { searchSlotMode, type SearchSlotMode } from '@core/teamui/searchSlot';
 import { useExtensionPrefs } from '@features/extensions/prefs';
+import { useSettingsStore } from '@state/settingsStore';
 import { useTeamStore } from '@state/teamStore';
+import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 
 import type { TeamMarkHit } from './TeamMapMarks';
@@ -16,6 +19,42 @@ export function useTeamSignalMode(): boolean {
   const { installedAt, show } = useExtensionPrefs('team');
   const active = useTeamStore((s) => s.view !== null && s.view.active);
   return installedAt !== 0 && show && active;
+}
+
+/** The longest the map's top slot waits for team mode to be known, ms. */
+export const SEARCH_SLOT_MAX_WAIT_MS = 4000;
+
+/**
+ * What the map's top slot shows (#707, `@core/teamui/searchSlot`): `search`
+ * (the place search pill), `team` (team mode: the team status bar's slot),
+ * or `pending` — draw nothing yet. Settles once per launch; a reopen that
+ * hangs or fails falls back to `search` after {@link SEARCH_SLOT_MAX_WAIT_MS}.
+ */
+export function useSearchSlotMode(): SearchSlotMode {
+  const settingsHydrated = useSettingsStore((s) => s.hydrated);
+  const { installedAt, show } = useExtensionPrefs('team');
+  const teamAvailable = useTeamStore((s) => s.available);
+  const teamsLoaded = useTeamStore((s) => s.loaded);
+  const teamCount = useTeamStore((s) => s.teams.length);
+  const sessionOpen = useTeamStore((s) => s.view !== null);
+  const memberActive = useTeamStore((s) => s.view !== null && s.view.active);
+  const mode = searchSlotMode({
+    settingsHydrated,
+    teamEnabled: installedAt !== 0 && show,
+    teamAvailable,
+    teamsLoaded,
+    teamCount,
+    sessionOpen,
+    memberActive,
+  });
+  const [waitedOut, setWaitedOut] = useState(false);
+  const pending = mode === 'pending';
+  useEffect(() => {
+    if (!pending || waitedOut) return;
+    const timer = setTimeout(() => setWaitedOut(true), SEARCH_SLOT_MAX_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [pending, waitedOut]);
+  return pending && waitedOut ? 'search' : mode;
 }
 
 export type TeamSheet =

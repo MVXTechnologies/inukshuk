@@ -159,7 +159,7 @@ import {
 } from '@features/team/map/TeamMapMarks';
 import { useTeamMapFocus } from '@features/team/map/teamMapFocus';
 import { TeamTrailPhotos } from '@features/team/map/TeamTrailPhotos';
-import { useTeamSheet, useTeamSignalMode } from '@features/team/map/teamMode';
+import { useSearchSlotMode, useTeamSheet, useTeamSignalMode } from '@features/team/map/teamMode';
 import { TeamPickOverlay, useTeamPick } from '@features/team/map/TeamPick';
 import {
   hitTestTeamTrail,
@@ -535,6 +535,8 @@ export function MapScreen() {
   }, []);
   // Team signal mode (#589): taps on the map signal the team.
   const teamSignal = useTeamSignalMode();
+  // The top slot: search, team (its bar goes here), or nothing until known (#707).
+  const searchSlot = useSearchSlotMode();
   const teamSignalRef = useRef(teamSignal);
   useEffect(() => {
     teamSignalRef.current = teamSignal;
@@ -3523,7 +3525,7 @@ export function MapScreen() {
                 <ShownTrailPill shown={shownTrail} />
               ) : (
                 !searchOpen &&
-                !teamSignal && <MapSearchPill onPress={() => void openPlaceSearch()} />
+                searchSlot === 'search' && <MapSearchPill onPress={() => void openPlaceSearch()} />
               )}
             </View>
           )}
