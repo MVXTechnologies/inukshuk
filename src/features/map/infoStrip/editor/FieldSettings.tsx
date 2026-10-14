@@ -35,7 +35,7 @@ import {
 } from '../../components/mapSheet';
 import { StripField } from '../StripField';
 import { useLiveTideStations } from '../useStripTides';
-import { previewValue } from './preview';
+import { previewCaptions, previewValue } from './preview';
 
 /** A choice with more options than this is a list of rows, not a segmented control. */
 const SEGMENTED_MAX = 4;
@@ -81,6 +81,7 @@ export function FieldSettings({
   if (f === undefined || d === undefined) return null;
   const params = f.params as Params;
   const set = (key: string, value: ParamValue) => onParams({ ...params, [key]: value });
+  const captions = previewCaptions(strip.rows, data, ctx);
 
   return (
     <View>
@@ -98,7 +99,13 @@ export function FieldSettings({
                 i === at.index && { borderColor: t.ink },
               ]}
             >
-              <StripField value={pv.value} shrink={pv.descriptor.spaces > 1} muted={!pv.live} fit />
+              <StripField
+                value={pv.value}
+                shrink={pv.descriptor.spaces > 1}
+                muted={!pv.live}
+                fit
+                caption={captions[at.row]?.[i] ?? false}
+              />
             </View>
           );
         })}

@@ -20,8 +20,15 @@ import {
   splitUnit,
   type DistanceUnit,
 } from '../format';
-import { effectiveTarget, resolveTarget } from '../target';
-import type { ComputeContext, DepsSnapshot, ResolvedTarget, Target } from '../types';
+import { effectiveTarget, resolveTarget, targetSubject } from '../target';
+import type {
+  ComputeContext,
+  DepsSnapshot,
+  ResolvedTarget,
+  StripSubject,
+  StripValue,
+  Target,
+} from '../types';
 import { defineField, REFERENCE_PARAM, TARGET_PARAM, type NorthReference } from './define';
 import { declinationHere } from './position';
 
@@ -68,6 +75,17 @@ export function timeToTarget(
 
 type TargetOnly = { target: Target | null };
 
+/**
+ * The presets' made-up target (a sample is never shown as live): the
+ * miniatures show what the map will, a name or the target's icon.
+ */
+export const SAMPLE_SUBJECT: StripSubject = { key: 'sample', name: 'Camp lac', glyph: 'flag' };
+
+/** A reading to `t`: it carries its target, so its cell can say to what. */
+function to(t: ResolvedTarget, v: StripValue): StripValue {
+  return { ...v, subject: targetSubject(t) };
+}
+
 const TARGET_DEPS = ['navTarget', 'follow', 'waypoints'] as const;
 
 export const TARGET_NAME = defineField<TargetOnly>({
@@ -83,9 +101,11 @@ export const TARGET_NAME = defineField<TargetOnly>({
   tick: 'position',
   compute(data, params, ctx) {
     const t = targetOf(data, params.target, ctx);
-    return t === null ? null : { glyph: t.glyph, value: t.name };
+    return t === null
+      ? null
+      : { glyph: t.glyph, value: t.name, subject: targetSubject(t), namesSubject: true };
   },
-  sample: { glyph: 'flag', value: 'Camp lac' },
+  sample: { glyph: 'flag', value: 'Camp lac', subject: SAMPLE_SUBJECT, namesSubject: true },
 });
 
 export type TargetDistanceParams = {
@@ -97,6 +117,7 @@ export type TargetDistanceParams = {
 export const TARGET_DISTANCE = defineField<TargetDistanceParams>({
   id: 'targetDistance',
   label: 'Distance to target',
+  spokenTo: 'Distance to',
   summary: 'Straight line, or along the trail when following',
   synonyms: ['range', 'far', 'km', 'miles', 'how far'],
   group: 'navigation',
@@ -129,10 +150,12 @@ export const TARGET_DISTANCE = defineField<TargetDistanceParams>({
   compute(data, params, ctx) {
     const t = targetOf(data, params.target, ctx);
     const d = t === null ? null : targetDistance(data, t, params.measure === 'trail');
-    return d === null ? null : splitUnit(formatDistanceIn(d.m, params.unit, ctx.units));
+    return t === null || d === null
+      ? null
+      : to(t, splitUnit(formatDistanceIn(d.m, params.unit, ctx.units)));
   },
-  sample: { value: '1.23', unit: 'km' },
-  sampleIn: (units) => splitUnit(formatDistance(1230, units)),
+  sample: { value: '1.23', unit: 'km', subject: SAMPLE_SUBJECT },
+  sampleIn: (units) => ({ ...splitUnit(formatDistance(1230, units)), subject: SAMPLE_SUBJECT }),
   placeholder: { glyph: 'straighten' },
 });
 
@@ -142,6 +165,7 @@ export type TargetBearingParams = { target: Target | null; reference: NorthRefer
 export const TARGET_BEARING = defineField<TargetBearingParams>({
   id: 'targetBearing',
   label: 'Bearing to target',
+  spokenTo: 'Bearing to',
   summary: 'True or magnetic, your choice',
   synonyms: ['direction', 'azimuth', 'course', 'heading to'],
   group: 'navigation',
@@ -157,15 +181,16 @@ export const TARGET_BEARING = defineField<TargetBearingParams>({
     // A fix is in hand, so the declination is too; narrowed rather than asserted.
     const decl = params.reference === 'magnetic' ? declinationHere(data) : null;
     const deg = decl === null ? trueDeg : trueToMagnetic(trueDeg, decl);
-    return { glyph: 'explore', ...bearingValue(deg, decl !== null) };
+    return to(t, { glyph: 'explore', ...bearingValue(deg, decl !== null) });
   },
-  sample: { glyph: 'explore', value: '042°', unit: 'NE' },
+  sample: { glyph: 'explore', value: '042°', unit: 'NE', subject: SAMPLE_SUBJECT },
 });
 
 /** Time to the target (ETE), "H:MM"; "≈" for a straight-line estimate; "—" when unknown. */
 export const ETE = defineField<TargetOnly>({
   id: 'ete',
   label: 'Time to target (ETE)',
+  spokenTo: 'Time to',
   summary: 'From your moving speed over the last 10 min',
   synonyms: ['eta', 'time left', 'remaining', 'duration'],
   group: 'navigation',
@@ -178,16 +203,17 @@ export const ETE = defineField<TargetOnly>({
     const t = targetOf(data, params.target, ctx);
     if (t === null) return null;
     const ete = timeToTarget(data, t);
-    if (ete === null) return { tag: 'ETE', value: '—' };
-    return { tag: 'ETE', value: `${ete.straight ? '≈' : ''}${formatHoursMinutes(ete.s)}` };
+    if (ete === null) return to(t, { tag: 'ETE', value: '—' });
+    return to(t, { tag: 'ETE', value: `${ete.straight ? '≈' : ''}${formatHoursMinutes(ete.s)}` });
   },
-  sample: { tag: 'ETE', value: '0:21' },
+  sample: { tag: 'ETE', value: '0:21', subject: SAMPLE_SUBJECT },
 });
 
 /** Arrival clock time (ETA) at your moving speed; "≈" for a straight-line estimate. */
 export const ETA = defineField<TargetOnly>({
   id: 'eta',
   label: 'Arrival (ETA)',
+  spokenTo: 'Arrival at',
   summary: 'Clock time at your moving speed over the last 10 min',
   synonyms: ['arrival', 'time', 'when'],
   group: 'navigation',
@@ -200,11 +226,11 @@ export const ETA = defineField<TargetOnly>({
     const t = targetOf(data, params.target, ctx);
     if (t === null) return null;
     const ete = timeToTarget(data, t);
-    if (ete === null) return { tag: 'ETA', value: '—' };
+    if (ete === null) return to(t, { tag: 'ETA', value: '—' });
     const at = formatArrival(data.nowMs + Math.ceil(ete.s / 60) * 60_000, data.nowMs);
-    return { tag: 'ETA', value: `${ete.straight ? '≈' : ''}${at}` };
+    return to(t, { tag: 'ETA', value: `${ete.straight ? '≈' : ''}${at}` });
   },
-  sample: { tag: 'ETA', value: '14:32' },
+  sample: { tag: 'ETA', value: '14:32', subject: SAMPLE_SUBJECT },
   sampleClockMin: 14 * 60 + 32,
 });
 
@@ -215,6 +241,7 @@ export const ETA = defineField<TargetOnly>({
 export const OFF_TRAIL = defineField<Record<string, never>>({
   id: 'offTrail',
   label: 'Off trail',
+  spokenTo: 'Distance back to',
   summary: 'Distance back to the followed trail',
   synonyms: ['on trail', 'deviation', 'cross track', 'xte'],
   group: 'navigation',
@@ -227,8 +254,10 @@ export const OFF_TRAIL = defineField<Record<string, never>>({
     const f = data.follow;
     if (f === null) return null;
     if (f.onTrail) return { glyph: 'check_circle', value: 'On trail', tone: 'ok' };
+    // Off: the distance back to THE followed trail, which it names (#673 QA).
     const { value, unit } = splitUnit(formatDistance(f.crossTrackM, units));
-    return { glyph: 'wrong_location', value: `Off ${value}`, unit, tone: 'warn' };
+    const subject: StripSubject = { key: 'trail', name: f.trailName ?? 'Trail', glyph: 'route' };
+    return { glyph: 'wrong_location', value: `Off ${value}`, unit, tone: 'warn', subject };
   },
   sample: { glyph: 'check_circle', value: 'On trail', tone: 'ok' },
   placeholder: { glyph: 'route' },

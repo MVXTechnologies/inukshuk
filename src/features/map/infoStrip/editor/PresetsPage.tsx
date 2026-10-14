@@ -3,6 +3,7 @@ import { extensionBasics } from '@core/extensions/registry';
 import { stripTitle } from '@core/infoStrip/edit';
 import { isEditedPreset, missingExtensions, PRESETS, type Preset } from '@core/infoStrip/presets';
 import { sampleValue } from '@core/infoStrip/preview';
+import { captionPlan } from '@core/infoStrip/subject';
 import { fieldDescriptor } from '@core/infoStrip/registry';
 import type { InfoStrip } from '@core/infoStrip/types';
 import { useSettingsStore } from '@state/settingsStore';
@@ -24,18 +25,37 @@ function Miniature({
 }) {
   const t = useSchemeTokens();
   const units = useSettingsStore((s) => s.units);
+  const shown = (f: InfoStrip['rows'][number][number]) => {
+    const d = fieldDescriptor(f.field);
+    return d === undefined || (d.requires !== undefined && !installed.has(d.requires))
+      ? undefined
+      : d;
+  };
+  // The samples' target named once, as the strip names a live one.
+  const captions = captionPlan(
+    strip.rows.map((row) =>
+      row.map((f) => {
+        const d = shown(f);
+        return d === undefined ? null : sampleValue(d, units);
+      }),
+    ),
+  );
   return (
     <View style={[styles.mini, { backgroundColor: t.surfaceVariant }]}>
       {strip.rows.map((row, r) => (
         <View key={r} style={styles.miniRow}>
           {row.map((f, i) => {
-            const d = fieldDescriptor(f.field);
-            if (d === undefined || (d.requires !== undefined && !installed.has(d.requires))) {
-              return null;
-            }
+            const d = shown(f);
+            if (d === undefined) return null;
             return (
               <View key={`${f.field}-${i}`} style={[styles.miniCell, { flex: d.spaces }]}>
-                <StripField value={sampleValue(d, units)} shrink muted fit />
+                <StripField
+                  value={sampleValue(d, units)}
+                  shrink
+                  muted
+                  fit
+                  caption={captions[r]?.[i] ?? false}
+                />
               </View>
             );
           })}
