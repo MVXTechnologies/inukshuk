@@ -7,17 +7,27 @@
  * (`src/core/catalog/schema`) and refuses to write anything those parsers would
  * warn about — the generator and the client cannot drift.
  *
- * Two documents come out:
+ * Three catalogs come out:
  *
- * - **`docs/catalog/v2/`** — the world catalog: a small `index.json` (sources,
- *   per-category totals, shard directory) plus `shards/<id>.json`, planned by
- *   the shared `planCatalogShards` so shard ids are identical on both sides.
- *   Alongside them, `search.json` — the token -> shard digest that lets a query
- *   reach a sheet on the other side of the world without pulling the catalog —
- *   `facets.json` (per-shard kind/activity/terrain counts for the explorer)
- *   and `collections.json` (link-out collections such as Parcs Québec, from
- *   the hand-curated `scripts/catalog/collections/*.json`).
- *   This is what current clients read.
+ * - **`docs/catalog/v2/`** — the world catalog every installed app reads: a
+ *   small `index.json` (sources, per-category totals, shard directory) plus
+ *   `shards/<id>.json`, planned by the shared `planCatalogShards` so shard ids
+ *   are identical on both sides. Alongside them, `search.json` — the token ->
+ *   shard digest that lets a query reach a sheet on the other side of the
+ *   world without pulling the catalog — `facets.json` (per-shard
+ *   kind/activity/terrain counts for the explorer) and `collections.json`
+ *   (link-out collections such as Parcs Québec, from the hand-curated
+ *   `scripts/catalog/collections/*.json`). It leaves out every source whose
+ *   terms need credit rendering (`needsCreditRendering`: Cartes Plein-air),
+ *   which apps before 2.5.2 cannot show.
+ * - **`docs/catalog/v3/`** — the credited edition 2.5.2+ reads: everything,
+ *   in the same layout, but each shard byte-identical to a v2 one is
+ *   referenced as `../v2/shards/<id>.json` instead of copied
+ *   (`@core/catalog/editions`, docs/CATALOG.md §7).
+ *
+ * An index whose content did not change keeps its `generatedAt`, so a rebuild
+ * that only moves v3 (the weekly Cartes Plein-air crawl) leaves v2 and v1
+ * byte-identical.
  *
  * Every item is **classified** on the way through (`@core/catalog/classify`):
  * `kind`, evidence-based `activities`, the source's `scale`, and — from open
@@ -35,36 +45,30 @@
  *   npx tsx scripts/catalog/build-manifest.ts [--no-terrain]
  *
  * The Pages site serves docs/ as its root, so this publishes at
- * /catalog/v2/index.json once pushed.
+ * /catalog/v2/index.json and /catalog/v3/index.json once pushed.
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  CATALOG_INDEX_SCHEMA_VERSION,
   CATALOG_SCHEMA_VERSION,
-  parseCatalogIndex,
   parseCatalogManifest,
-  parseCatalogShard,
-  type CatalogCategory,
   type CatalogItem,
-  type CatalogShardRef,
   type CatalogSource,
 } from '../../src/core/catalog/schema';
-import {
-  buildCatalogSearchDigest,
-  parseCatalogSearchDigest,
-} from '../../src/core/catalog/searchDigest';
-import { planCatalogShards } from '../../src/core/catalog/shard';
 import { classifyActivities, classifyKind } from '../../src/core/catalog/classify';
 import { parseLinkOutCollections, placeActivities } from '../../src/core/catalog/collections';
 import {
-  buildCatalogFacets,
-  countFacets,
-  parseCatalogFacets,
-  serializeCatalogFacets,
-} from '../../src/core/catalog/facets';
+  buildCatalogEdition,
+  CREDITED_EDITION,
+  LEGACY_EDITION,
+  serializeWithStableTimestamp,
+  splitCatalogEditions,
+  type CatalogEditionOutput,
+  type SiblingEdition,
+} from '../../src/core/catalog/editions';
+import { countFacets } from '../../src/core/catalog/facets';
 import { CATALOG_ACTIVITIES, type LinkOutCollection } from '../../src/core/catalog/taxonomy';
 import { computeTerrain } from './terrain';
 
@@ -160,7 +164,7 @@ function readFragments(dir: string): { sources: CatalogSource[]; items: CatalogI
 }
 
 /** The legacy flat manifest: one fragment set, one file, schema v1. */
-function writeLegacyManifest(dir: string, outPath: string): void {
+function writeLegacyManifest(dir: string, outPath: string, now: string): void {
   const sources: CatalogSource[] = [];
   const items: CatalogItem[] = [];
   for (const file of readdirSync(dir).sort()) {
@@ -174,19 +178,61 @@ function writeLegacyManifest(dir: string, outPath: string): void {
     return;
   }
   items.sort((a, b) => a.id.localeCompare(b.id));
-  const manifest = {
-    schemaVersion: CATALOG_SCHEMA_VERSION,
-    generatedAt: new Date().toISOString(),
-    sources,
-    items,
-  };
-  const { manifest: parsed, warnings } = parseCatalogManifest(manifest);
+  const body = serializeWithStableTimestamp(
+    (generatedAt) =>
+      `${JSON.stringify({ schemaVersion: CATALOG_SCHEMA_VERSION, generatedAt, sources, items }, null, 2)}\n`,
+    readIfExists(outPath),
+    now,
+  );
+  const { manifest: parsed, warnings } = parseCatalogManifest(JSON.parse(body));
   if (parsed === null || warnings.length > 0) {
     throw new Error(`legacy manifest failed validation:\n  ${warnings.join('\n  ')}`);
   }
   mkdirSync(dirname(outPath), { recursive: true });
-  writeFileSync(outPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  writeFileSync(outPath, body);
   console.log(`wrote ${outPath} (v1, ${parsed.items.length} items — legacy clients)`);
+}
+
+function readIfExists(path: string): string | undefined {
+  return existsSync(path) ? readFileSync(path, 'utf8') : undefined;
+}
+
+/** Side documents an edition may publish; one it no longer has is removed. */
+const SIDE_DOCUMENTS = ['index.json', 'search.json', 'facets.json', 'collections.json'];
+
+/**
+ * Write one edition. Its shard directory is rewritten from scratch: a shard
+ * that no longer exists must not linger and serve items the index no longer
+ * lists. Unchanged files are rewritten with identical bytes.
+ */
+function writeEdition(dir: string, name: string, edition: CatalogEditionOutput): void {
+  const shardsDir = join(dir, 'shards');
+  rmSync(shardsDir, { recursive: true, force: true });
+  mkdirSync(shardsDir, { recursive: true });
+  for (const doc of SIDE_DOCUMENTS) {
+    if (!edition.files.has(doc)) rmSync(join(dir, doc), { force: true });
+  }
+  let shardBytes = 0;
+  for (const [path, body] of edition.files) {
+    writeFileSync(join(dir, path), body);
+    if (path.startsWith('shards/')) shardBytes += Buffer.byteLength(body);
+  }
+  const indexBody = edition.files.get('index.json') ?? '';
+  const searchBody = edition.files.get('search.json') ?? '';
+  const facetsBody = edition.files.get('facets.json') ?? '';
+  console.log(
+    `wrote ${name}: ${edition.itemCount} items in ${edition.refs.length} shards ` +
+      `(${edition.refs.length - edition.sharedShardCount} here, ` +
+      `${(shardBytes / 1024 / 1024).toFixed(2)} MB; ${edition.sharedShardCount} shared), ` +
+      `index ${(indexBody.length / 1024).toFixed(1)} KB, search ${(searchBody.length / 1024).toFixed(1)} KB ` +
+      `(${edition.tokenCount} tokens), facets ${(facetsBody.length / 1024).toFixed(1)} KB`,
+  );
+  const biggest = [...edition.refs].sort((a, b) => (b.byteSize ?? 0) - (a.byteSize ?? 0))[0];
+  if (biggest !== undefined) {
+    console.log(
+      `  largest shard: ${biggest.id} — ${biggest.itemCount} items, ${((biggest.byteSize ?? 0) / 1024).toFixed(0)} KB`,
+    );
+  }
 }
 
 async function main(): Promise<void> {
@@ -194,8 +240,6 @@ async function main(): Promise<void> {
   const fragmentsDir = join(scriptDir, 'fragments');
   const withTerrain = !process.argv.includes('--no-terrain');
   const docsDir = join(scriptDir, '..', '..', 'docs', 'catalog');
-  const v2Dir = join(docsDir, 'v2');
-  const shardsDir = join(v2Dir, 'shards');
 
   const { sources, items } = readFragments(fragmentsDir);
 
@@ -226,125 +270,45 @@ async function main(): Promise<void> {
     console.log('--no-terrain: items keep whatever terrain their fragment carries');
   }
   const facetTotals = countFacets(unique);
-
-  const planned = planCatalogShards(unique);
-  const categoryCounts: Partial<Record<CatalogCategory, number>> = {};
-  for (const item of unique) {
-    categoryCounts[item.category] = (categoryCounts[item.category] ?? 0) + 1;
-  }
-
-  // Rewrite the shard directory from scratch: a shard that no longer exists
-  // must not linger and serve items the index no longer lists.
-  rmSync(shardsDir, { recursive: true, force: true });
-  mkdirSync(shardsDir, { recursive: true });
-
-  const refs: CatalogShardRef[] = [];
-  for (const shard of planned) {
-    // Shards are minified: they are machine-read only, and at world scale the
-    // indentation would be several megabytes of whitespace in git and on the
-    // wire. The index below stays pretty-printed — it is small and reviewed.
-    const body = `${JSON.stringify({ id: shard.id, items: shard.items })}\n`;
-    // Every shard must survive the client's own parser before it is published.
-    const { items: reparsed, warnings } = parseCatalogShard(JSON.parse(body), sourceIds);
-    if (warnings.length > 0 || reparsed.length !== shard.items.length) {
-      throw new Error(`shard ${shard.id} failed validation:\n  ${warnings.join('\n  ')}`);
-    }
-    writeFileSync(join(shardsDir, `${shard.id}.json`), body);
-    refs.push({
-      id: shard.id,
-      category: shard.category,
-      path: `shards/${shard.id}.json`,
-      itemCount: shard.items.length,
-      ...(shard.bbox !== undefined ? { bbox: shard.bbox } : {}),
-      byteSize: Buffer.byteLength(body),
-    });
-  }
-
-  // The search digest: which shards could match a query, anywhere in the world.
-  // Published as its OWN document, not folded into the index — the index is
-  // fetched on every cold start and first paint depends on it staying small,
-  // while the digest is only ever paid for by someone who actually types.
-  const digest = buildCatalogSearchDigest(planned);
-  const digestBody = `${JSON.stringify(digest)}\n`;
-  const { digest: reparsedDigest, warnings: digestWarnings } = parseCatalogSearchDigest(
-    JSON.parse(digestBody),
-  );
-  if (reparsedDigest === null || digestWarnings.length > 0) {
-    throw new Error(`search digest failed validation:\n  ${digestWarnings.join('\n  ')}`);
-  }
-  const digestPath = join(v2Dir, 'search.json');
-  writeFileSync(digestPath, digestBody);
-  const tokenCount = Object.keys(digest.tokens).length;
-  console.log(
-    `wrote ${digestPath} (${tokenCount} tokens over ${digest.shardIds.length} shards, ` +
-      `${(digestBody.length / 1024).toFixed(1)} KB)`,
-  );
-
-  // Per-shard facet counts: which shards hold glacier maps, paddling maps…
-  const facetsBody = `${JSON.stringify(serializeCatalogFacets(buildCatalogFacets(planned)))}\n`;
-  const { facets: reparsedFacets, warnings: facetWarnings } = parseCatalogFacets(
-    JSON.parse(facetsBody),
-  );
-  if (reparsedFacets === null || facetWarnings.length > 0) {
-    throw new Error(`facets failed validation:\n  ${facetWarnings.join('\n  ')}`);
-  }
-  writeFileSync(join(v2Dir, 'facets.json'), facetsBody);
-  console.log(`wrote facets.json (${(facetsBody.length / 1024).toFixed(1)} KB)`);
-
-  const collections = readCollections(join(scriptDir, 'collections'));
-  const collectionsPath = join(v2Dir, 'collections.json');
-  let collectionsRef: { path: string; byteSize: number } | undefined;
-  if (collections.length > 0) {
-    const body = `${JSON.stringify(collections, null, 2)}\n`;
-    writeFileSync(collectionsPath, body);
-    collectionsRef = { path: 'collections.json', byteSize: Buffer.byteLength(body) };
-    console.log(
-      `wrote collections.json (${collections.map((c) => `${c.id}: ${c.places.length} places`).join(', ')})`,
-    );
-  } else {
-    rmSync(collectionsPath, { force: true });
-  }
-
-  const index = {
-    schemaVersion: CATALOG_INDEX_SCHEMA_VERSION,
-    generatedAt: new Date().toISOString(),
-    sources,
-    shards: refs,
-    search: { path: 'search.json', byteSize: Buffer.byteLength(digestBody), tokenCount },
-    facets: { path: 'facets.json', byteSize: Buffer.byteLength(facetsBody) },
-    ...(collectionsRef !== undefined ? { collections: collectionsRef } : {}),
-    categoryCounts,
-    kindCounts: facetTotals.kinds,
-    activityCounts: facetTotals.activities,
-    terrainCounts: facetTotals.terrain,
-  };
-  const { index: parsedIndex, warnings } = parseCatalogIndex(index);
-  if (parsedIndex === null || warnings.length > 0) {
-    throw new Error(`catalog index failed validation:\n  ${warnings.join('\n  ')}`);
-  }
-  if (refs.length === 0)
-    throw new Error('catalog has zero shards — refusing to publish an empty store');
-
-  const indexPath = join(v2Dir, 'index.json');
-  const indexBody = `${JSON.stringify(index, null, 2)}\n`;
-  writeFileSync(indexPath, indexBody);
-
-  const shardBytes = refs.reduce((sum, ref) => sum + (ref.byteSize ?? 0), 0);
   console.log(`kinds: ${JSON.stringify(facetTotals.kinds)}`);
   console.log(`activities: ${JSON.stringify(facetTotals.activities)}`);
   console.log(`terrain: ${JSON.stringify(facetTotals.terrain)}`);
-  console.log(
-    `wrote ${indexPath} (v2, ${unique.length} items in ${refs.length} shards, ` +
-      `index ${(indexBody.length / 1024).toFixed(1)} KB, shards ${(shardBytes / 1024 / 1024).toFixed(2)} MB)`,
-  );
-  const biggest = [...refs].sort((a, b) => (b.byteSize ?? 0) - (a.byteSize ?? 0))[0];
-  if (biggest !== undefined) {
+
+  const collections = readCollections(join(scriptDir, 'collections'));
+  if (collections.length > 0) {
     console.log(
-      `largest shard: ${biggest.id} — ${biggest.itemCount} items, ${((biggest.byteSize ?? 0) / 1024).toFixed(0)} KB`,
+      `collections: ${collections.map((c) => `${c.id}: ${c.places.length} places`).join(', ')}`,
     );
   }
 
-  writeLegacyManifest(fragmentsDir, join(docsDir, 'v1', 'manifest.json'));
+  // Build both editions in memory first: nothing is written unless both pass.
+  const now = new Date().toISOString();
+  const split = splitCatalogEditions(sources, unique);
+  console.log(
+    `credited-only sources (${CREDITED_EDITION} only): ${split.creditedOnlySourceIds.join(', ') || 'none'}`,
+  );
+  const legacy = buildCatalogEdition({
+    ...split.legacy,
+    collections,
+    now,
+    previousIndex: readIfExists(join(docsDir, LEGACY_EDITION, 'index.json')),
+  });
+  const sibling: SiblingEdition = {
+    prefix: `../${LEGACY_EDITION}/`,
+    shardBodies: legacy.shardBodies,
+  };
+  const credited = buildCatalogEdition({
+    ...split.credited,
+    collections,
+    now,
+    previousIndex: readIfExists(join(docsDir, CREDITED_EDITION, 'index.json')),
+    sibling,
+  });
+
+  writeEdition(join(docsDir, LEGACY_EDITION), LEGACY_EDITION, legacy);
+  writeEdition(join(docsDir, CREDITED_EDITION), CREDITED_EDITION, credited);
+
+  writeLegacyManifest(fragmentsDir, join(docsDir, 'v1', 'manifest.json'), now);
 }
 
 main().catch((err: unknown) => {

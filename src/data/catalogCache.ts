@@ -41,9 +41,19 @@ import * as storage from './storage';
  * The URL is overridable via `extra.catalogManifestUrl` (same idiom as
  * `errorReportEndpoint`) so e2e builds can point at a loopback fixture server —
  * CI must never depend on NRCan, NOAA or USGS being up.
+ *
+ * **Editions (#680).** This build reads `/catalog/v3/`, the credited edition:
+ * everything in v2 plus the sources whose terms need the author and "free at"
+ * lines only 2.5.2+ renders (Cartes Plein-air). Older apps keep reading v2 and
+ * never see those maps. v3 shares v2's unchanged shards (`../v2/shards/…`), so
+ * documents resolve against the index they were listed in
+ * ({@link catalogIndexBaseUrl}), and a missing or broken v3 falls back to v2:
+ * the store then lists what an older app lists, never nothing.
  */
 
-const DEFAULT_INDEX_URL = 'https://inukshuk.mvxtechnologies.com/catalog/v2/index.json';
+const DEFAULT_INDEX_URL = 'https://inukshuk.mvxtechnologies.com/catalog/v3/index.json';
+/** The edition every older app reads; this build's fallback when v3 is unreachable. */
+const LEGACY_INDEX_URL = 'https://inukshuk.mvxtechnologies.com/catalog/v2/index.json';
 const CACHE_FILE = 'catalog.json';
 const SEARCH_CACHE_FILE = 'catalog-search.json';
 const FACETS_CACHE_FILE = 'catalog-facets.json';
@@ -56,6 +66,33 @@ const FETCH_TIMEOUT_MS = 15_000;
 export function catalogManifestUrl(): string {
   const value: unknown = Constants.expoConfig?.extra?.catalogManifestUrl;
   return typeof value === 'string' && value !== '' ? value : DEFAULT_INDEX_URL;
+}
+
+/**
+ * Index URLs to try, in order: this build's edition, then the legacy edition.
+ * An override (e2e fixture, dev catalog) is the only candidate: a fixture run
+ * must never quietly read production.
+ */
+export function catalogIndexUrls(): string[] {
+  const primary = catalogManifestUrl();
+  return primary === DEFAULT_INDEX_URL ? [DEFAULT_INDEX_URL, LEGACY_INDEX_URL] : [primary];
+}
+
+/** The URL of the index the store is browsing; null until one has loaded. */
+let loadedIndexUrl: string | null = null;
+
+/**
+ * What shard, digest and collection paths resolve against: the index the
+ * store actually loaded (v3, or v2 after a fallback), else this build's own.
+ * Resolving against the wrong edition would ask v2 for v3's river shards.
+ */
+export function catalogIndexBaseUrl(): string {
+  return loadedIndexUrl ?? catalogManifestUrl();
+}
+
+/** Test hook: forget which index loaded. */
+export function resetCatalogIndexBaseUrl(): void {
+  loadedIndexUrl = null;
 }
 
 /** Persisted shape of a cached document (raw JSON + fetch bookkeeping). */
@@ -165,37 +202,50 @@ function writeCached(file: string, url: string, raw: unknown): void {
 export async function loadCatalogManifest(options?: {
   force?: boolean;
 }): Promise<CatalogLoadResult | null> {
-  const url = catalogManifestUrl();
-  const { current, superseded } = await readCached(CACHE_FILE, url);
+  const [primary = catalogManifestUrl(), ...fallbacks] = catalogIndexUrls();
+  const { current, superseded } = await readCached(CACHE_FILE, primary);
   const cacheFresh = current !== null && Date.now() - current.fetchedAt < CACHE_TTL_MS;
 
+  // Only this build's own edition is served from cache without asking: a v2
+  // copy written while v3 was unreachable is retried for v3 on the next load.
   if (current !== null && cacheFresh && options?.force !== true) {
     const { index, warnings } = parseCatalogIndex(current.raw);
     // A cached copy that no longer parses (schema drift) falls through to the
     // network below rather than bricking the store until the TTL expires.
-    if (index !== null) return { index, fromCache: true, warnings };
+    if (index !== null) return loaded(primary, { index, fromCache: true, warnings });
   }
 
-  try {
-    const raw = await fetchJson(url);
-    const { index, warnings } = parseCatalogIndex(raw);
-    if (index === null) throw new Error(warnings[0] ?? 'unusable catalog index');
-    // Writing under the new URL migrates a superseded entry away: the very
-    // first successful v2 load replaces the v1 copy in the same cache file.
-    writeCached(CACHE_FILE, url, raw);
-    return { index, fromCache: false, warnings };
-  } catch {
-    // `parseCatalogIndex` accepts a v1 flat manifest too, which is what makes
-    // the superseded copy usable at all — it adapts to an index with every
-    // item inline and no shards, so the store browses exactly what the
-    // previous build showed.
-    for (const fallback of [current, superseded]) {
-      if (fallback === null) continue;
-      const { index, warnings } = parseCatalogIndex(fallback.raw);
-      if (index !== null) return { index, fromCache: true, warnings };
+  for (const url of [primary, ...fallbacks]) {
+    try {
+      const raw = await fetchJson(url);
+      const { index, warnings } = parseCatalogIndex(raw);
+      if (index === null) throw new Error(warnings[0] ?? 'unusable catalog index');
+      // Writing under the new URL migrates a superseded entry away: the very
+      // first successful load replaces an older edition's copy in the same file.
+      writeCached(CACHE_FILE, url, raw);
+      return loaded(url, { index, fromCache: false, warnings });
+    } catch {
+      // Next edition; then the on-device copy below.
     }
-    return null;
   }
+
+  // `parseCatalogIndex` accepts a v1 flat manifest too, which is what makes a
+  // superseded copy usable at all — it adapts to an index with every item
+  // inline and no shards, so the store browses exactly what the previous
+  // build showed. A superseded v2 copy keeps its own URL as the base, so its
+  // shard paths still resolve (and hit the shard cache an older build wrote).
+  for (const fallback of [current, superseded]) {
+    if (fallback === null) continue;
+    const { index, warnings } = parseCatalogIndex(fallback.raw);
+    if (index !== null) return loaded(fallback.url, { index, fromCache: true, warnings });
+  }
+  return null;
+}
+
+/** Record which index the store is browsing, so its paths resolve against it. */
+function loaded(url: string, result: CatalogLoadResult): CatalogLoadResult {
+  loadedIndexUrl = url;
+  return result;
 }
 
 /**
@@ -208,7 +258,7 @@ export async function loadCatalogSearchDigest(
   ref: CatalogSearchRef,
   options?: { force?: boolean },
 ): Promise<CatalogSearchDigestLoadResult | null> {
-  const url = resolveCatalogUrl(catalogManifestUrl(), ref.path);
+  const url = resolveCatalogUrl(catalogIndexBaseUrl(), ref.path);
   if (url === null) return null;
 
   const { current, superseded } = await readCached(SEARCH_CACHE_FILE, url);
@@ -246,7 +296,7 @@ export async function loadCatalogFacets(
   ref: CatalogDocumentRef,
   options?: { force?: boolean },
 ): Promise<CatalogFacetsLoadResult | null> {
-  const url = resolveCatalogUrl(catalogManifestUrl(), ref.path);
+  const url = resolveCatalogUrl(catalogIndexBaseUrl(), ref.path);
   if (url === null) return null;
 
   const { current, superseded } = await readCached(FACETS_CACHE_FILE, url);
@@ -289,7 +339,7 @@ export async function loadCatalogShard(
   sourceIds: ReadonlySet<string>,
   options?: { force?: boolean },
 ): Promise<CatalogShardLoadResult | null> {
-  const url = resolveCatalogUrl(catalogManifestUrl(), shard.path);
+  const url = resolveCatalogUrl(catalogIndexBaseUrl(), shard.path);
   if (url === null) return null;
 
   const file = shardCacheFile(shard.id);

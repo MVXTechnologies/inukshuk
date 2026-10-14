@@ -256,6 +256,10 @@ Licence"`.
   `bboxPrecision: 'river'`, anything else falls back to the regions' extent
   (`'region'`). The detail page labels both "approximate area". A sample of
   31 rivers matched 28 by name; the rest were ambiguous or unnamed.
+- **Published in `/catalog/v3/` only** (CATALOG.md §7). Apps before 2.5.2
+  read `/catalog/v2/` and cannot show the credit or the "free at" line, so
+  they never see these maps; 2.5.2+ reads v3. `publishedEditions.test.ts`
+  fails if any v2 file mentions the source, an author or `freeAt`.
 - **Georeferencing.** None in 2.5.2: the maps download and open as PDFs
   ("Not placed on the map yet"), without a GPS position. Placing a map with
   control points is a separate feature (#694); we ship no control points of

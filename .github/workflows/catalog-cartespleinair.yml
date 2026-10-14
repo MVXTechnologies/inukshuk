@@ -16,7 +16,9 @@ name: Catalog — Cartes Plein-air
 # republished. A maintainer reviews it, merges it, and publishes with
 # `npx tsx scripts/catalog/build-manifest.ts` (docs/CATALOG.md §4) — the
 # publish step needs the other sources' fragments and the DEM cache, which
-# live on the maintainer's machine, not here.
+# live on the maintainer's machine, not here. The source needs credit
+# rendering, so that publish changes docs/catalog/v3/ only: v2, which apps
+# before 2.5.2 read, stays byte-identical (docs/CATALOG.md §7).
 #
 # A crawl that would withdraw more than a fifth of the maps at once (a broken
 # or redesigned listing page) fails instead of opening a PR; ci-health then

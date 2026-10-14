@@ -1,5 +1,7 @@
 /**
- * Recover missing catalog fragments from the published `docs/catalog/v2/`.
+ * Recover missing catalog fragments from the published catalog: the credited
+ * edition `docs/catalog/v3/` (everything; its shared shards are read from v2
+ * through their `../v2/` paths), or `docs/catalog/v2/` before v3 existed.
  *
  * `build-manifest.ts` rebuilds the WHOLE catalog from
  * `scripts/catalog/fragments/*.json`. The bulk fragments (US Topo, FSTopo) are
@@ -21,7 +23,7 @@
  *
  * It never deletes anything and never touches the network.
  */
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -48,6 +50,9 @@ function compareExisting(fragmentRows: Row[], publishedRows: Row[]): string[] {
       continue;
     }
     for (const [key, value] of Object.entries(row)) {
+      // A fragment may seed a generator field (Cartes Plein-air rows carry
+      // kind and activities); the build adds to it, so it is not compared.
+      if (GENERATOR_FIELDS.has(key)) continue;
       if (JSON.stringify(pub[key]) !== JSON.stringify(value)) {
         problems.push(`"${id}".${key}: fragment ${JSON.stringify(value)} ≠ published`);
       }
@@ -64,18 +69,21 @@ function compareExisting(fragmentRows: Row[], publishedRows: Row[]): string[] {
 function main(): void {
   const scriptDir = dirname(fileURLToPath(import.meta.url));
   const fragmentsDir = join(scriptDir, 'fragments');
-  const v2Dir = join(scriptDir, '..', '..', 'docs', 'catalog', 'v2');
-  const shardsDir = join(v2Dir, 'shards');
+  const catalogDir = join(scriptDir, '..', '..', 'docs', 'catalog');
+  const indexDir = existsSync(join(catalogDir, 'v3', 'index.json'))
+    ? join(catalogDir, 'v3')
+    : join(catalogDir, 'v2');
 
-  const rawIndex = JSON.parse(readFileSync(join(v2Dir, 'index.json'), 'utf8')) as unknown;
+  const rawIndex = JSON.parse(readFileSync(join(indexDir, 'index.json'), 'utf8')) as {
+    shards?: { id?: unknown; path?: unknown }[];
+  };
   const rawShards = new Map<string, unknown>();
-  for (const file of readdirSync(shardsDir).sort()) {
-    if (!file.endsWith('.json')) continue;
-    rawShards.set(
-      file.slice(0, -'.json'.length),
-      JSON.parse(readFileSync(join(shardsDir, file), 'utf8')),
-    );
+  for (const ref of rawIndex.shards ?? []) {
+    if (typeof ref.id !== 'string' || typeof ref.path !== 'string') continue;
+    // `join` normalizes a shared shard's `../v2/shards/<id>.json`.
+    rawShards.set(ref.id, JSON.parse(readFileSync(join(indexDir, ref.path), 'utf8')));
   }
+  console.log(`reading ${indexDir}`);
 
   const { fragments, total } = recoverFragmentsFromPublished(rawIndex, rawShards);
   console.log(`published: ${total} items in ${rawShards.size} shards`);

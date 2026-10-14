@@ -5,10 +5,13 @@ import {
 } from '@core/catalog/schema';
 import Constants from 'expo-constants';
 import {
+  catalogIndexBaseUrl,
+  catalogIndexUrls,
   catalogManifestUrl,
   loadCatalogFacets,
   loadCatalogManifest,
   loadCatalogShard,
+  resetCatalogIndexBaseUrl,
 } from './catalogCache';
 import * as storage from './storage';
 
@@ -56,6 +59,7 @@ beforeEach(() => {
   fetchMock = jest.fn();
   global.fetch = fetchMock as unknown as typeof fetch;
   readJson.mockResolvedValue(null);
+  resetCatalogIndexBaseUrl();
 });
 
 describe('catalogManifestUrl', () => {
@@ -363,5 +367,148 @@ describe('loadCatalogFacets (#474)', () => {
   it('returns null when unusable and uncached', async () => {
     fetchMock.mockResolvedValue(okResponse({ schemaVersion: 99, shards: {} }));
     expect(await loadCatalogFacets(ref)).toBeNull();
+  });
+});
+
+// #680: 2.5.2 reads the credited edition (v3), which shares v2's unchanged
+// shards through `../v2/` paths. Apps before 2.5.2 keep reading v2 and never
+// see Cartes Plein-air. A missing or broken v3 must leave the store working on
+// v2, never empty.
+describe('catalog editions: v3 first, v2 as the fallback', () => {
+  const V3 = 'https://inukshuk.mvxtechnologies.com/catalog/v3/index.json';
+  const V2 = 'https://inukshuk.mvxtechnologies.com/catalog/v2/index.json';
+  const HOST = 'https://inukshuk.mvxtechnologies.com/catalog';
+  beforeEach(() => setManifestUrl(''));
+  afterEach(() => setManifestUrl('https://test.example/manifest.json'));
+
+  const shardRef = (id: string, path: string) => ({
+    id,
+    category: id.split('-')[0] ?? 'topo',
+    path,
+    itemCount: 1,
+    bbox: [-80, 40, -70, 50],
+  });
+  const v3Index = {
+    schemaVersion: CATALOG_INDEX_SCHEMA_VERSION,
+    sources: validManifest.sources,
+    shards: [
+      shardRef('topo-n40w080', '../v2/shards/topo-n40w080.json'),
+      shardRef('river-n40w080', 'shards/river-n40w080.json'),
+    ],
+    categoryCounts: { topo: 1, river: 1 },
+  };
+  const v2Index = {
+    ...v3Index,
+    shards: [shardRef('topo-n40w080', 'shards/topo-n40w080.json')],
+    categoryCounts: { topo: 1 },
+  };
+  const notFound = { ok: false, status: 404 } as unknown as Response;
+  const shardBody = { id: 'topo-n40w080', items: validManifest.items };
+  const sourceIds = new Set(['s1']);
+
+  /** Route fetches by URL; anything unrouted is a network failure. */
+  function serve(routes: Record<string, Response>): void {
+    fetchMock.mockImplementation(async (url: string) => {
+      const response = routes[url];
+      if (response === undefined) throw new Error(`offline: ${url}`);
+      return response;
+    });
+  }
+  const fetchedUrls = () => fetchMock.mock.calls.map((call: unknown[]) => call[0]);
+
+  it('tries v3, then v2, and only those (no override)', () => {
+    expect(catalogIndexUrls()).toEqual([V3, V2]);
+  });
+
+  it('an override (e2e fixture) is the only candidate: never production v2', async () => {
+    setManifestUrl('http://127.0.0.1:8787/index.json');
+    expect(catalogIndexUrls()).toEqual(['http://127.0.0.1:8787/index.json']);
+    serve({});
+    expect(await loadCatalogManifest()).toBeNull();
+    expect(fetchedUrls()).toEqual(['http://127.0.0.1:8787/index.json']);
+  });
+
+  it('loads v3 and resolves shared shards to the very URL v2 uses (one cache entry)', async () => {
+    serve({
+      [V3]: okResponse(v3Index),
+      [`${HOST}/v2/shards/topo-n40w080.json`]: okResponse(shardBody),
+    });
+    const result = await loadCatalogManifest();
+    expect(result?.index.shards.map((s) => s.id)).toEqual(['topo-n40w080', 'river-n40w080']);
+    expect(fetchedUrls()).toEqual([V3]);
+    expect(catalogIndexBaseUrl()).toBe(V3);
+
+    const shared = result?.index.shards[0];
+    if (shared === undefined) throw new Error('no shard');
+    expect((await loadCatalogShard(shared, sourceIds))?.items).toHaveLength(1);
+    expect(fetchedUrls()[1]).toBe(`${HOST}/v2/shards/topo-n40w080.json`);
+    expect(writeJson).toHaveBeenCalledWith(
+      'catalog-shard-topo-n40w080.json',
+      expect.objectContaining({ url: `${HOST}/v2/shards/topo-n40w080.json` }),
+    );
+  });
+
+  it('resolves a v3-only shard under v3', async () => {
+    serve({ [V3]: okResponse(v3Index), [`${HOST}/v3/shards/river-n40w080.json`]: notFound });
+    const result = await loadCatalogManifest();
+    const river = result?.index.shards[1];
+    if (river === undefined) throw new Error('no shard');
+    await loadCatalogShard(river, sourceIds);
+    expect(fetchedUrls()[1]).toBe(`${HOST}/v3/shards/river-n40w080.json`);
+  });
+
+  it.each([
+    ['missing (404)', notFound],
+    ['unparseable', okResponse({ schemaVersion: 99 })],
+  ])('falls back to v2 when v3 is %s, and resolves against v2', async (_label, v3Response) => {
+    serve({
+      [V3]: v3Response,
+      [V2]: okResponse(v2Index),
+      [`${HOST}/v2/shards/topo-n40w080.json`]: okResponse(shardBody),
+    });
+    const result = await loadCatalogManifest();
+    expect(result?.fromCache).toBe(false);
+    expect(result?.index.shards.map((s) => s.id)).toEqual(['topo-n40w080']);
+    expect(fetchedUrls()).toEqual([V3, V2]);
+    expect(catalogIndexBaseUrl()).toBe(V2);
+    expect(writeJson).toHaveBeenCalledWith('catalog.json', expect.objectContaining({ url: V2 }));
+
+    const shard = result?.index.shards[0];
+    if (shard === undefined) throw new Error('no shard');
+    expect((await loadCatalogShard(shard, sourceIds))?.items).toHaveLength(1);
+    expect(fetchedUrls()[2]).toBe(`${HOST}/v2/shards/topo-n40w080.json`);
+  });
+
+  it('retries v3 even when a fresh v2 copy is cached (v3 deployed since)', async () => {
+    readJson.mockResolvedValue({ fetchedAt: Date.now() - 1000, url: V2, raw: v2Index });
+    serve({ [V3]: okResponse(v3Index) });
+    const result = await loadCatalogManifest();
+    expect(result?.fromCache).toBe(false);
+    expect(result?.index.shards).toHaveLength(2);
+    expect(catalogIndexBaseUrl()).toBe(V3);
+  });
+
+  it('serves a fresh v3 copy without touching the network', async () => {
+    readJson.mockResolvedValue({ fetchedAt: Date.now() - 1000, url: V3, raw: v3Index });
+    const result = await loadCatalogManifest();
+    expect(result?.fromCache).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(catalogIndexBaseUrl()).toBe(V3);
+  });
+
+  it('offline right after the update: the v2 copy 2.5.1 cached still browses, against v2', async () => {
+    readJson.mockResolvedValue({ fetchedAt: Date.now() - 60_000, url: V2, raw: v2Index });
+    serve({});
+    const result = await loadCatalogManifest();
+    expect(result?.fromCache).toBe(true);
+    expect(result?.index.shards.map((s) => s.path)).toEqual(['shards/topo-n40w080.json']);
+    expect(fetchedUrls()).toEqual([V3, V2]);
+    expect(catalogIndexBaseUrl()).toBe(V2);
+  });
+
+  it('returns null when neither edition is reachable and nothing is cached', async () => {
+    serve({ [V3]: notFound, [V2]: notFound });
+    expect(await loadCatalogManifest()).toBeNull();
+    expect(catalogIndexBaseUrl()).toBe(V3);
   });
 });

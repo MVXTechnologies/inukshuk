@@ -207,6 +207,35 @@ describe('resolveCatalogUrl', () => {
   it('refuses a base URL with no path to hang the shard off', () => {
     expect(resolveCatalogUrl('https://example.test', 'shards/a.json')).toBeNull();
   });
+
+  // The v3 edition reuses v2's shards rather than publishing a second copy.
+  describe('a sibling edition (../v<N>/)', () => {
+    const v3 = 'https://inukshuk.mvxtechnologies.com/catalog/v3/index.json';
+
+    it('resolves to the normalized sibling URL, the one the v2 index also yields', () => {
+      expect(resolveCatalogUrl(v3, '../v2/shards/topo-n40w080.json')).toBe(
+        resolveCatalogUrl(index, 'shards/topo-n40w080.json'),
+      );
+      expect(resolveCatalogUrl(`${v3}?x=1`, '../v2/search.json')).toBe(
+        'https://inukshuk.mvxtechnologies.com/catalog/v2/search.json',
+      );
+    });
+
+    it('refuses to climb above the host root', () => {
+      expect(resolveCatalogUrl('https://example.test/index.json', '../v2/a.json')).toBeNull();
+      expect(resolveCatalogUrl('http://127.0.0.1:8787/index.json', '../v2/a.json')).toBeNull();
+    });
+
+    it('allows exactly one climb, into a version directory, and nothing else', () => {
+      expect(resolveCatalogUrl(v3, '../../v2/a.json')).toBeNull();
+      expect(resolveCatalogUrl(v3, '../v2/../secret.json')).toBeNull();
+      expect(resolveCatalogUrl(v3, '../private/a.json')).toBeNull();
+      expect(resolveCatalogUrl(v3, '../v2/')).toBeNull();
+      expect(resolveCatalogUrl(v3, '../v2//evil.test/a.json')).toBeNull();
+      expect(resolveCatalogUrl(v3, '..\\v2\\a.json')).toBeNull();
+      expect(resolveCatalogUrl(v3, 'shards\\a.json')).toBeNull();
+    });
+  });
 });
 
 describe('sameCatalogOrigin', () => {

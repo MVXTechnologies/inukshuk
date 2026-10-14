@@ -472,15 +472,34 @@ function isShardId(value: unknown): value is string {
   return typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(value);
 }
 
+/**
+ * A sibling catalog edition's directory, the one way a path may leave its own:
+ * `../v2/shards/topo-n40w080.json` from `/catalog/v3/index.json` reuses the v2
+ * shard instead of publishing a second copy (docs/CATALOG.md §7).
+ */
+const SIBLING_EDITION_PREFIX = /^\.\.\/v[0-9]{1,3}\//;
+
+/**
+ * Catalog document paths are relative to the index and stay inside the
+ * catalog: no scheme, no leading slash, and no `..` except one leading
+ * `../v<N>/` into a sibling edition. Shared by the parser and
+ * `resolveCatalogUrl`, the two locks on the same door.
+ */
+export function isCatalogRelativePath(value: unknown): value is string {
+  if (typeof value !== 'string' || value === '') return false;
+  const rest = value.replace(SIBLING_EDITION_PREFIX, '');
+  return (
+    rest !== '' &&
+    !rest.startsWith('/') &&
+    !rest.includes('..') &&
+    !rest.includes('\\') &&
+    !/^[a-z][a-z0-9+.-]*:/i.test(rest)
+  );
+}
+
 /** Shard paths are relative and must not climb out of the catalog directory. */
 function isShardPath(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    value !== '' &&
-    !value.startsWith('/') &&
-    !value.includes('..') &&
-    !/^[a-z][a-z0-9+.-]*:/i.test(value)
-  );
+  return isCatalogRelativePath(value);
 }
 
 function parseShardRef(raw: unknown): CatalogShardRef | string {

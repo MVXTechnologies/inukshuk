@@ -1,7 +1,13 @@
 import { haversineMeters } from '@core/geo/geomath';
 import type { LatLng } from '@core/models';
 import { bboxCenter } from './nearest';
-import type { CatalogBbox, CatalogCategory, CatalogItem, CatalogShardRef } from './schema';
+import {
+  isCatalogRelativePath,
+  type CatalogBbox,
+  type CatalogCategory,
+  type CatalogItem,
+  type CatalogShardRef,
+} from './schema';
 
 /**
  * Catalog sharding — the pure geometry behind `/catalog/v2/`.
@@ -246,14 +252,21 @@ export function planCatalogShards(
  * rejects those, this is the second lock on the same door).
  */
 export function resolveCatalogUrl(indexUrl: string, path: string): string | null {
-  if (path === '' || path.startsWith('/') || path.includes('..')) return null;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(path)) return null;
+  if (!isCatalogRelativePath(path)) return null;
   const withoutQuery = indexUrl.split(/[?#]/)[0] ?? '';
   const lastSlash = withoutQuery.lastIndexOf('/');
   // Guard against a base with no path of its own ("https://example.test"),
   // where the last slash is still the scheme's own "//".
-  if (lastSlash < 0 || lastSlash <= withoutQuery.indexOf('//') + 1) return null;
-  return `${withoutQuery.slice(0, lastSlash + 1)}${path}`;
+  const pathStart = withoutQuery.indexOf('//') + 2;
+  if (lastSlash < 0 || lastSlash < pathStart) return null;
+  const dir = withoutQuery.slice(0, lastSlash + 1);
+  if (!path.startsWith('../')) return `${dir}${path}`;
+  // A sibling edition (`../v2/…`): drop the index's own directory, which must
+  // be a real one below the host root. The result is normalized, so a shard
+  // shared by two editions has ONE url (and one on-device cache entry).
+  const parentSlash = dir.lastIndexOf('/', dir.length - 2);
+  if (parentSlash < pathStart) return null;
+  return `${dir.slice(0, parentSlash + 1)}${path.slice('../'.length)}`;
 }
 
 /** `scheme://host[:port]` of an absolute http(s) URL, lowercased; null if not one. */
