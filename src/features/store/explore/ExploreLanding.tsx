@@ -1,3 +1,4 @@
+import { itemCredit, sourceFreeLine } from '@core/catalog/credit';
 import { countFacets, formatMapCount, kindFromCategory } from '@core/catalog/exploreFacets';
 import { formatDistanceShort } from '@core/catalog/exploreFormat';
 import { pointBbox } from '@core/catalog/footprintThumb';
@@ -52,6 +53,7 @@ import { LongTrailsSection } from '../trails/LongTrailsSection';
 import { indexFacetCounts, itemFacets } from './facetsAdapter';
 import { OrganisationMapsCta } from './OrganisationMapsCta';
 import { useLinkOutCollections } from './useLinkOutCollections';
+import { useCreditLanguage } from '../useCreditLanguage';
 import { openExternalLink } from '@lib/openLink';
 
 /**
@@ -134,8 +136,15 @@ function sourceTotal(index: CatalogIndex, sourceId: string): number | null {
   return null;
 }
 
-/** "Topographic · NRCan CanTopo · 5.2 MB" */
-function cardMeta(item: CatalogItem, source: CatalogSource | undefined): string {
+/**
+ * "Topographic · NRCan CanTopo · 5.2 MB", or for a map credited to its author
+ * (#680) "Charles Leduc · 2023 · Cartes Plein-air": the author comes first.
+ */
+export function cardMeta(item: CatalogItem, source: CatalogSource | undefined): string {
+  const credit = itemCredit(item);
+  if (credit !== undefined) {
+    return [credit, source?.name].filter((p): p is string => p !== undefined).join(' · ');
+  }
   const kind = itemFacets(item).kind;
   return [
     kind !== null ? CATALOG_KIND_LABELS[kind] : undefined,
@@ -160,6 +169,7 @@ export function ExploreLanding({
   const position = useSettingsStore((s) => s.lastKnownPosition);
   const units = useSettingsStore((s) => s.units);
   const linkOut = useLinkOutCollections();
+  const creditLang = useCreditLanguage();
 
   const sourcesById = useMemo(
     () => new Map<string, CatalogSource>(index.sources.map((s) => [s.id, s])),
@@ -240,6 +250,7 @@ export function ExploreLanding({
                     id={card.item.id}
                     title={card.item.title}
                     meta={cardMeta(card.item, sourcesById.get(card.item.sourceId))}
+                    note={sourceFreeLine(sourcesById.get(card.item.sourceId), creditLang)}
                     distance={formatDistanceShort(card.distanceMeters, units)}
                     thumbnailUrl={card.item.thumbnailUrl}
                     bbox={card.item.bbox}
@@ -343,7 +354,12 @@ export function ExploreLanding({
             <CollectionRow
               key={`source-${source.id}`}
               name={source.name}
-              meta={[total !== null ? formatMapCount(total) : null, source.licence]
+              // A publisher that gives its maps away (#680) says so here
+              // instead of a licence line.
+              meta={[
+                total !== null ? formatMapCount(total) : null,
+                sourceFreeLine(source, creditLang) ?? source.licence,
+              ]
                 .filter((p): p is string => p !== null && p !== '')
                 .join(' · ')}
               badge={{ kind: 'source', id: source.id }}

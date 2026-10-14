@@ -30,13 +30,16 @@
  * 3. The heading cone, then the pointing line: directions from you, under
  *    the pins they point across.
  * 4. The team: the rally area and shared trails (lines and areas first),
- *    the rally flag, shared waypoints, the chat/task marks, then teammates
- *    over them.
+ *    the team's drawings (#683), the rally flag, shared waypoints, the
+ *    chat/task marks, then teammates over them.
  * 5. Move mode's dashed line and old spot, under the pins.
  * 6. Trail photos (#587: thumbnails, stacks and their counts, the selected
- *    photo on its ring), then the waypoint pins, their photo badges and their
- *    names: above every line and area, so a pin is never hidden by them, and
- *    a pin over a photo (a pin also wins the tap there).
+ *    photo on its ring), then the waypoint clusters (#685: disc, inukshuk,
+ *    count), the waypoint pins, their glyphs, photo badges and names, and
+ *    the selected pin with its badge and name: above every line and area, so
+ *    a pin is never hidden by them, and a pin over a photo (a pin also wins
+ *    the tap there). The selected pin is never clustered and draws over
+ *    every other pin and cluster.
  * 7. A teammate's SOS: over every pin and photo, under only…
  * 8. The puck's ring and dot, on top of everything: where YOU are must never
  *    be covered (2.5.1 QA: standing on a photo spot, its circle hid the dot).
@@ -78,6 +81,15 @@ export const LIVE_LAYER_ORDER = [
   'team-trl-line',
   'team-trl-vertex',
   'team-trl-who',
+  // Team drawings (#683): over the trails and areas, under the flag, the
+  // pins and the teammates (a tap on both goes to the teammate or the pin).
+  // Heads turn with the map; badges, notes and the pen tip stay upright.
+  'team-draw-fill',
+  'team-draw-casing',
+  'team-draw-line',
+  'team-draw-dash',
+  'team-draw-head',
+  'team-draw-sym',
   'team-rally-dot',
   'team-rally-label',
   'team-waypoint-dot',
@@ -100,14 +112,22 @@ export const LIVE_LAYER_ORDER = [
   'waypoint-move-from-halo',
   'waypoint-move-from',
   // 6. Trail photos (#587; one anchor per kind, shared by every instance),
-  // then the waypoint pins (#675).
+  // then the waypoint clusters (#685), the waypoint pins (#675), and the
+  // selected pin on top of them all (never clustered).
   'trail-photos',
   'trail-photos-count',
   'trail-photos-selected-ring',
   'trail-photos-selected',
+  'waypoint-cluster',
+  'waypoint-cluster-glyph',
+  'waypoint-cluster-count',
   'waypoint-pin',
+  'waypoint-pin-glyph',
   'waypoint-pin-photo',
   'waypoint-pin-label',
+  'waypoint-pin-selected',
+  'waypoint-pin-selected-photo',
+  'waypoint-pin-selected-label',
   // 7. A teammate's SOS.
   'team-sos-halo',
   'team-sos-dot',

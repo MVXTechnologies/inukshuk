@@ -77,6 +77,43 @@ export function fixtureIndex(extra: Record<string, unknown> = {}): CatalogIndex 
   } as CatalogIndex;
 }
 
+/** A Cartes Plein-air source and map (#680): credited, free, a plain PDF. */
+export const cpaSource = {
+  id: 'cartes-plein-air',
+  name: 'Cartes Plein-air',
+  licence: '© each map’s author · linked with permission, never copied',
+  attribution: 'Published on cartespleinair.org; each map is credited to its own author',
+  homepage: 'https://cartespleinair.org/cartes',
+  freeAt: 'cartespleinair.org',
+};
+export const cpaMap = fixtureItem('cpa-41ad13f6', 'Aigle-Désert', 46.5, -76.1, {
+  sourceId: 'cartes-plein-air',
+  category: 'river',
+  kind: 'river',
+  activities: ['paddling'],
+  format: 'pdf',
+  packaging: 'none',
+  url: 'https://assets.cartespleinair.org/maps/aigle-desert-x-2022-e06f583d13bd.pdf',
+  pageUrl: 'https://cartespleinair.org/cartes/aigle-desert-x-2022',
+  author: 'Auteur Exemple',
+  year: 2022,
+  version: 'v2',
+  bboxPrecision: 'river',
+  sizeBytes: 2156252,
+  updatedAt: '2026-05-25',
+});
+
+/** {@link fixtureIndex} plus the Cartes Plein-air source and map. */
+export function cpaIndex(): CatalogIndex {
+  const base = fixtureIndex();
+  return {
+    ...base,
+    sources: [...base.sources, cpaSource],
+    items: [...base.items, cpaMap],
+    categoryCounts: { ...base.categoryCounts, river: 1 },
+  };
+}
+
 /** Put the catalog store straight into a loaded state. */
 export function seedCatalog(index: CatalogIndex, over: Record<string, unknown> = {}): void {
   useCatalogStore.setState({

@@ -2,12 +2,8 @@ import { MapAreaBottomContext, useWindowEdge } from './mapAreaBottom';
 import { reportError } from '@lib/errorReporting';
 import { fnv1a32 } from '@core/encoding/fnv1a';
 import { isWebUrl } from '@core/links/externalUrl';
-import {
-  nearestPinAt,
-  projectablePins,
-  unprojectablePins,
-  type ProjectedPin,
-} from '@core/geo/pinHitTest';
+import { unprojectablePins } from '@core/geo/pinHitTest';
+import type { WaypointTapRoute } from '@core/map/waypointClusters';
 import {
   chipSurvivesHit,
   pointChipAfterBareTap,
@@ -148,6 +144,14 @@ import { RecordingPanel } from './components/RecordingPanel';
 import { ReceiverFollow } from '@features/gnss/ReceiverFollow';
 import { ReceiverMapOverlay } from '@features/gnss/ReceiverMapOverlay';
 import { TeamMapLayers } from '@features/team/map/TeamMapLayers';
+import { TeamDrawLayers } from '@features/team/draw/TeamDrawLayers';
+import {
+  drawCreditsSheetBottom,
+  TeamDrawMode,
+  useTeamDrawActive,
+} from '@features/team/draw/TeamDrawMode';
+import { hitTestTeamDraw } from '@features/team/draw/hitTestDraw';
+import { useTeamDrawStore } from '@state/teamDrawStore';
 import {
   clusterExpansionZoom,
   clusterMarks,
@@ -183,15 +187,23 @@ import { TipBubble } from '@features/support/TipBubble';
 import { WaypointViewerCard } from './components/WaypointViewerCard';
 import { MoveWaypointLayers } from './waypoints/MoveWaypointLayers';
 import { MoveWaypointOverlay } from './waypoints/MoveWaypointOverlay';
-import { pinAtPoint, toPinInputs } from './waypoints/pinHit';
+import { pinAtPoint, toPinInputs, visiblePinKey } from './waypoints/pinHit';
+import { WaypointClusterSheet } from './waypoints/WaypointClusterSheet';
+import {
+  openWaypointCluster,
+  useWaypointClusterSheet,
+  waypointAtPoint,
+} from './waypoints/waypointTap';
 import { useWaypointQuickActions } from './waypoints/useWaypointQuickActions';
 import { WaypointEditorSheet, type WaypointStylePatch } from './waypoints/WaypointEditorSheet';
 import { WaypointScreenReaderList } from './waypoints/WaypointScreenReaderList';
 import { WaypointPinLayers } from './waypoints/WaypointPinLayers';
+import { MapImages } from './MapImages';
 import { useWaypointMoveStore } from '@state/waypointMoveStore';
 import { ActionSnackbar } from '../common/ActionSnackbar';
 import {
   BOTTOM_LAYER,
+  teamFabBottom,
   liftedSnackbarStyle,
   rowLiftAboveColumnBottom,
   snackbarWrapperStyle,
@@ -1035,6 +1047,9 @@ export function MapScreen() {
   const teamField = useTeamFieldLayers(style.glyphs);
   const teamTrailLayers = useTeamTrailLayers(style.glyphs);
   const teamMenuOpen = useTeamSheet((s) => s.sheet?.kind === 'menu');
+  // Team drawing mode (#683) owns the screen: the rail, search and bottom row step aside.
+  const teamDrawing = useTeamDrawActive();
+  const teamOwnsRail = teamMenuOpen || teamDrawing;
 
   // Native 3D terrain (docs/plans/native-terrain.md): with "3D relief" on and
   // a binary that ships the module, tilting past ~25° grows real relief out of
@@ -1732,6 +1747,7 @@ export function MapScreen() {
     inspecting: inspectTrack !== null,
     editingWaypoint: editWaypoint !== null,
     drawing: drawing.active,
+    teamDrawing,
   });
 
   const saveWaypoint = () => {
@@ -1990,6 +2006,8 @@ export function MapScreen() {
       photoTapRef.current = null;
       const map = mapRef.current;
       if (!map) return;
+      // Any tap closes the waypoint cluster list (#685); a cluster tap reopens it.
+      useWaypointClusterSheet.getState().close();
       // #232 — the chip's action row already took this touch (see
       // chipTouchAtRef); the map must not act on it a second time.
       if (Date.now() - chipTouchAtRef.current < CHIP_ACTION_TOUCH_MS) return;
@@ -2106,6 +2124,7 @@ export function MapScreen() {
       };
 
       let best: (typeof visiblePins)[number] | null = null;
+      let wpHit: WaypointTapRoute<(typeof visiblePins)[number]> | null = null;
       if (visiblePins.length > 0) {
         // One bad pin must never cost the whole tap (#343). This used to
         // project every pin with `Promise.all` and `return` on rejection, so a
@@ -2127,23 +2146,34 @@ export function MapScreen() {
             'map-tap',
           );
         }
-        const projected: ProjectedPin[] = new Array<ProjectedPin>(visiblePins.length).fill(null);
-        const results = await Promise.allSettled(
-          projectablePins(visiblePins).map(async ({ index, lngLat }) => ({
-            index,
-            point: await map.project(lngLat),
-          })),
+        // Pins folded into a cluster (#685) are not candidates; a cluster
+        // under the finger is its own hit (see waypoints/waypointTap).
+        wpHit = await waypointAtPoint(
+          map,
+          visiblePins,
+          visiblePinKey,
+          viewWp ? `${viewWp.source}-${viewWp.id}` : null,
+          [px, py],
+          'tap',
         );
-        for (const result of results) {
-          if (result.status !== 'fulfilled') continue;
-          const { index, point } = result.value;
-          if (point != null) projected[index] = point;
-        }
-        best = nearestPinAt(visiblePins, projected, [px, py], 'tap');
+        if (wpHit.kind === 'pin') best = wpHit.pin;
       }
       const route = routeMapTap(chipHit, best);
       if (route.kind === 'chip' && pointAt !== null) {
         runPointChipHit(route.hit, pointAt);
+        return;
+      }
+      if (wpHit?.kind === 'cluster') {
+        // #685: glide to where the cluster splits, or list its pins. The open
+        // card closes only once the cluster is resolved (its ids churn then).
+        drawingRef.current.closeAreaCard();
+        setExtensionHit(null);
+        void openWaypointCluster(
+          wpHit.cluster,
+          getMapZoom().catch(() => null),
+          zoomMapTo,
+          () => setViewWp(null),
+        );
         return;
       }
       if (route.kind === 'pin') {
@@ -2222,12 +2252,27 @@ export function MapScreen() {
       // Team mode (#589): a teammate's dot or a shared waypoint, above the
       // map extensions (they are what the user is looking for on a team map).
       const teamHit = await hitTestTeam(map, px, py);
-      if (teamHit !== null) {
+      // A team drawing (#683): its card; a teammate on it wins the tap. Either
+      // takes the bottom slot, so the other cards there close (one card at a time).
+      const closeOtherCards = () => {
         drawingRef.current.closeAreaCard();
         setPointAt(null);
         setViewWp(null);
         setForecastAt(null);
         setExtensionHit(null);
+      };
+      if (teamHit === null) {
+        const drawKey = await hitTestTeamDraw(map, px, py);
+        if (drawKey !== null) {
+          closeOtherCards();
+          useTeamMapSelection.getState().select(null);
+          useTeamDrawStore.getState().openCard(drawKey);
+          return;
+        }
+      }
+      useTeamDrawStore.getState().openCard(null);
+      if (teamHit !== null) {
+        closeOtherCards();
         useTeamMapSelection.getState().select(teamHit);
         return;
       }
@@ -2400,6 +2445,8 @@ export function MapScreen() {
       pointAt,
       pointChip.shiftX,
       runPointChipHit,
+      viewWp,
+      getMapZoom,
     ],
   );
   // A tapped survey mark (an extension whose card recentres) slides into the
@@ -2763,7 +2810,13 @@ export function MapScreen() {
                 bareLongPress();
                 return;
               }
-              void pinAtPoint(map, savedPins, pressPoint)
+              void pinAtPoint(
+                map,
+                savedPins,
+                pressPoint,
+                viewWp ? `${viewWp.source}-${viewWp.id}` : null,
+                visiblePins.length,
+              )
                 .catch(() => null)
                 .then((pin) => {
                   if (pin) wpQuick.startMove(pin.id);
@@ -2882,6 +2935,9 @@ export function MapScreen() {
               onMapLayout(e);
             }}
           >
+            {/* The shared sprites, registered once and first: never moved or
+              unmounted while the map lives (2.5.2 QA, see MapImages). */}
+            <MapImages />
             <Camera
               ref={cameraRef}
               // A cold launch mounts <Map>/<Camera> fresh;
@@ -2908,7 +2964,8 @@ export function MapScreen() {
               // this whole module exists to tame, so the map would shake even
               // while the needle sat still. "default" (CameraMode.TRACKING) keeps
               // the centre-on-user behaviour and leaves the bearing to us.
-              bearing={headingForCamera}
+              // Drawing mode (#683) turns the map with two fingers: no heading.
+              bearing={teamDrawing ? undefined : headingForCamera}
               {...(headingForCamera !== undefined
                 ? { duration: 150, easing: 'linear' as const }
                 : {})}
@@ -3267,6 +3324,8 @@ export function MapScreen() {
             )}
             {/* Team mode (#589): teammates' positions, shared waypoints and trails. */}
             <TeamMapLayers glyphs={style.glyphs} />
+            {/* Team drawings (#683): their own subscriber, never this screen. */}
+            <TeamDrawLayers glyphs={style.glyphs} zoom={scaleAt?.zoom ?? null} />
             {/* Team mode (#589): teammates' trail photos (the trail-photo
               layers), then comment bubbles, pins and tasks (visual Markers,
               hit-tested in onMapPress). */}
@@ -3358,6 +3417,7 @@ export function MapScreen() {
             heatSelection === null &&
             !selecting &&
             !drawing.active &&
+            !teamDrawing &&
             movingWp === null &&
             editWaypoint === null
           }
@@ -3377,6 +3437,7 @@ export function MapScreen() {
           heatSelection === null &&
           !selecting &&
           !drawing.active &&
+          !teamDrawing &&
           movingWp === null && (
             <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
               {/* A shown long-distance trail takes the pill's place (#467). */}
@@ -3442,7 +3503,7 @@ export function MapScreen() {
           would again leave hidden nodes in the a11y tree; it comes back the
           instant the carousel closes (heatSelection back to null). */}
         {/* Also hidden while the team menu runs down the same edge. */}
-        {makeMapState === null && heatSelection === null && !teamMenuOpen && movingWp === null && (
+        {makeMapState === null && heatSelection === null && !teamOwnsRail && movingWp === null && (
           <MapControlsRail
             top={insets.top + 8}
             viewToggle={
@@ -3590,7 +3651,7 @@ export function MapScreen() {
           {/* Not while the region selector or the map maker owns the bottom
             edge: their sheets sit in this column's footprint, and the row
             would draw over their Cancel / Download / Next buttons. */}
-          {!selecting && makeMapState === null && (
+          {!selecting && makeMapState === null && !teamDrawing && (
             <View
               style={styles.bottomRow}
               pointerEvents="box-none"
@@ -3854,7 +3915,7 @@ export function MapScreen() {
           a tapped teammate's or shared waypoint's card. */}
         {makeMapState === null && (
           <TeamMapOverlay
-            fabBottom={(recordingPanelUp ? panelHeight : 0) + 72}
+            fabBottom={teamFabBottom(bottomColumnLift, bottomColumnH)}
             sosTop={insets.top + 8}
             onPointActions={(p, what) => {
               const at = { longitude: p[0], latitude: p[1] };
@@ -3869,8 +3930,18 @@ export function MapScreen() {
             cardSlotFree={cardSlotFree && viewWaypoint === null && extensionHit === null}
             cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight)}
             onNavigate={(latitude, longitude) => setDestination({ latitude, longitude })}
+            screenFocused={isFocused}
           />
         )}
+        {/* Team drawing mode (#683): its canvas, top bar and tool bar. */}
+        <TeamDrawMode
+          mapRef={mapRef}
+          cameraRef={cameraRef}
+          focused={isFocused}
+          bottomInset={recordingPanelUp ? panelHeight : 0}
+          locked={gloveLocked}
+          onCredits={setCreditsOpen}
+        />
         <TeamPickOverlay
           top={insets.top + 8}
           cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight)}
@@ -3937,12 +4008,15 @@ export function MapScreen() {
               extensions: shownExtensions,
             })}
             bottom={
-              bottomColumnLift +
-              (bottomColumnH !== null && bottomRowY !== null
-                ? rowLiftAboveColumnBottom(bottomColumnH, bottomRowY)
-                : 48) +
-              TIP_BUBBLE_GAP
+              teamDrawing
+                ? drawCreditsSheetBottom(insets.bottom, recordingPanelUp ? panelHeight : 0)
+                : bottomColumnLift +
+                  (bottomColumnH !== null && bottomRowY !== null
+                    ? rowLiftAboveColumnBottom(bottomColumnH, bottomRowY)
+                    : 48) +
+                  TIP_BUBBLE_GAP
             }
+            {...(teamDrawing ? { layer: BOTTOM_LAYER.overDrawMode } : {})}
             onClose={() => setCreditsOpen(false)}
           />
         )}
@@ -3978,7 +4052,7 @@ export function MapScreen() {
           panel, the save/edit sheets, and a tapped area's card. */}
         {drawing.chrome}
 
-        {cardSlotFree && viewWaypoint !== null && (
+        {cardSlotFree && movingWp === null && viewWaypoint !== null && (
           <View
             style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
             pointerEvents="box-none"
@@ -4025,6 +4099,21 @@ export function MapScreen() {
               onMove={viewWp?.source === 'saved' ? () => wpQuick.startMove(viewWp.id) : undefined}
               onDelete={deleteViewedWaypoint}
               onClose={() => setViewWp(null)}
+            />
+          </View>
+        )}
+
+        {/* A cluster's pins at the camera's cap (#685): pick one to open its card. */}
+        {cardSlotFree && movingWp === null && (
+          <View
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+            pointerEvents="box-none"
+          >
+            <WaypointClusterSheet
+              pins={visiblePins}
+              suppressed={viewWaypoint !== null}
+              floating={recordingPanelUp}
+              onOpen={(pin) => setViewWp({ source: pin.source, id: pin.id })}
             />
           </View>
         )}

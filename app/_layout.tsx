@@ -11,6 +11,7 @@ import { PdfPrerenderWorker } from '@features/map/PdfPrerenderWorker';
 import { PdfRasterizerProvider } from '@features/map/PdfRasterizer';
 import { PdfRecoverySnackbar } from '@features/map/PdfRecoverySnackbar';
 import { installStravaAutoImport } from '@features/import/autoImport';
+import { installCatalogProvenanceBackfill } from '@features/store/provenanceBackfill';
 import { ImportFeedbackSnackbar } from '@features/share/ImportFeedbackSnackbar';
 import { StravaPushPrompt } from '@features/strava/StravaPushPrompt';
 import { GnssHost } from '@features/gnss/GnssHost';
@@ -104,6 +105,10 @@ export default function RootLayout() {
   // Strava auto-import (#432): quietly fetch new activities on launch and on
   // each return to the foreground (at most every 15 minutes).
   useEffect(() => installStravaAutoImport(), []);
+
+  // Catalog credits (#680) a rollback to 2.5.1 stripped from downloaded maps
+  // come back from the catalog as their items load (2.5.2 review).
+  useEffect(() => installCatalogProvenanceBackfill(), []);
 
   // Tips (#476) are consumables: one left unfinished by a killed session, or
   // an Android payment that cleared while the app was closed, is consumed

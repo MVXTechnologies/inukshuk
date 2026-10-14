@@ -14,6 +14,7 @@ import {
   PIN_HIT_SLOP_PX,
   PIN_MIN_TAP_RADIUS_PX,
   nearestPinAt,
+  nearestPinHitAt,
   pinHitArea,
   projectablePins,
   unprojectablePins,
@@ -174,5 +175,68 @@ describe('nearestPinAt', () => {
   it('prefers the nearer of two pins under the tap', () => {
     const hit = nearestPinAt(GOOD, projected([110, 100], [102, 100]), [100, 100], 'tap');
     expect(hit?.id).toBe('b');
+  });
+});
+
+/** Settings › Display › Pin size (#686): the hit disc follows the drawn head. */
+describe('hit-testing at each Pin size step', () => {
+  const SCALES = [0.75, 1, 1.25, 1.5] as const;
+
+  it.each(SCALES)('at %p×, centres every size on its scaled head', (scale) => {
+    for (const size of WAYPOINT_SIZES) {
+      const d = WAYPOINT_PIN_DIAMETER[size] * scale;
+      for (const gesture of ['tap', 'longPress'] as const) {
+        const area = pinHitArea(size, gesture, scale);
+        expect(area.headOffsetPx).toBeCloseTo(pinGeometry(d).headCenterY, 9);
+        expect(area.headRadiusPx).toBeCloseTo(d / 2, 9);
+        const slack = d / 2 + PIN_HIT_SLOP_PX[gesture];
+        expect(area.radiusPx).toBe(
+          gesture === 'tap' ? Math.max(PIN_MIN_TAP_RADIUS_PX, slack) : slack,
+        );
+      }
+    }
+  });
+
+  it('keeps the finger’s slack and the 48 dp floor whatever the scale', () => {
+    for (const scale of SCALES) {
+      for (const size of WAYPOINT_SIZES) {
+        const a = pinHitArea(size, 'tap', scale);
+        expect(a.radiusPx).toBeGreaterThanOrEqual(PIN_MIN_TAP_RADIUS_PX);
+        expect(a.radiusPx - a.headRadiusPx).toBeGreaterThanOrEqual(PIN_HIT_SLOP_PX.tap - 1e-9);
+      }
+    }
+  });
+
+  it.each(SCALES)('at %p×, a tap on the head hits and one past the disc misses', (scale) => {
+    const tip: ProjectedPin[] = [[200, 300]];
+    const pins = [{ id: 'xl', longitude: 0, latitude: 0, size: 'XL' as const }];
+    const { headOffsetPx, radiusPx } = pinHitArea('XL', 'tap', scale);
+    const head: [number, number] = [200, 300 - headOffsetPx];
+    expect(nearestPinAt(pins, tip, head, 'tap', scale)?.id).toBe('xl');
+    expect(nearestPinAt(pins, tip, [head[0] + radiusPx - 0.5, head[1]], 'tap', scale)?.id).toBe(
+      'xl',
+    );
+    expect(nearestPinAt(pins, tip, [head[0] + radiusPx + 0.5, head[1]], 'tap', scale)).toBeNull();
+  });
+
+  it('a 150 % pin is hit where only the larger head reaches', () => {
+    const tip: ProjectedPin[] = [[200, 300]];
+    const pins = [{ id: 'm', longitude: 0, latitude: 0, size: 'M' as const }];
+    // Right of the 150 % head's centre, past the 100 % disc's edge.
+    const at150 = pinHitArea('M', 'tap', 1.5);
+    const tap: [number, number] = [200 + at150.radiusPx - 1, 300 - at150.headOffsetPx];
+    expect(nearestPinAt(pins, tip, tap, 'tap', 1.5)?.id).toBe('m');
+    expect(nearestPinAt(pins, tip, tap, 'tap', 1)).toBeNull();
+  });
+
+  it('reports whether the tap landed on the head itself (nearestPinHitAt)', () => {
+    const tip: ProjectedPin[] = [[0, 0]];
+    const pins = [{ id: 'a', longitude: 0, latitude: 0 }];
+    const { headOffsetPx, headRadiusPx } = pinHitArea('M', 'tap');
+    const on = nearestPinHitAt(pins, tip, [headRadiusPx - 1, -headOffsetPx], 'tap');
+    const slack = nearestPinHitAt(pins, tip, [headRadiusPx + 5, -headOffsetPx], 'tap');
+    expect(on).toMatchObject({ onHead: true });
+    expect(on?.distancePx).toBeCloseTo(headRadiusPx - 1, 9);
+    expect(slack).toMatchObject({ onHead: false });
   });
 });

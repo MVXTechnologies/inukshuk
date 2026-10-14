@@ -5,6 +5,7 @@ import {
   chipAltitudeText,
   chipChromeDp,
   estimateChipTextDp,
+  isRealCenter,
 } from './coordinatesChip';
 
 describe('chipAltitudeText', () => {
@@ -68,5 +69,17 @@ describe('altitudeFits', () => {
   it('360 dp without the tip button: the compact coordinates keep their altitude', () => {
     // 360 − 32 − (24 + 6 + 94) − 6 = 198 dp of row.
     expect(altitudeFits(198, compact, alt, false)).toBe(true);
+  });
+});
+
+describe('isRealCenter (2.5.2 QA: "0.00000, 0.00000 · ≈-9838 m" on first launch)', () => {
+  it('refuses no centre, null island, and junk; takes any real place', () => {
+    expect(isRealCenter(null)).toBe(false);
+    expect(isRealCenter({ latitude: 0, longitude: 0 })).toBe(false);
+    expect(isRealCenter({ latitude: Number.NaN, longitude: 10 })).toBe(false);
+    expect(isRealCenter({ latitude: 91, longitude: 10 })).toBe(false);
+    expect(isRealCenter({ latitude: 10, longitude: 181 })).toBe(false);
+    expect(isRealCenter({ latitude: 46.81, longitude: -71.2 })).toBe(true);
+    expect(isRealCenter({ latitude: 0, longitude: 9.5 })).toBe(true);
   });
 });

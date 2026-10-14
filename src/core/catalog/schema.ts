@@ -88,7 +88,17 @@ export interface CatalogSource {
   /** Attribution line shown in the item detail, e.g. "Natural Resources Canada". */
   attribution: string;
   homepage?: string;
+  /**
+   * Where the publisher gives its maps away, e.g. "cartespleinair.org". Set
+   * when the publisher's terms require the app to say the maps are free there
+   * (`@core/catalog/credit`): every card and detail page then carries
+   * "Available free at <host>" (or "Disponible gratuitement sur <host>").
+   */
+  freeAt?: string;
 }
+
+/** How well a bbox locates the map (absent = the map's own extent). */
+export type CatalogBboxPrecision = 'river' | 'region';
 
 /** WGS84 [west, south, east, north]. */
 export type CatalogBbox = [number, number, number, number];
@@ -127,6 +137,26 @@ export interface CatalogItem {
   terrain?: CatalogTerrain[];
   /** Map scale denominator, e.g. 24000 for a 1:24 000 quad. */
   scale?: number;
+  /**
+   * The map's own author(s), verbatim as the publisher credits them. Shown on
+   * every card and detail page of a map that has one; the source's
+   * attribution never stands in for it.
+   */
+  author?: string;
+  /** The year the author made or revised the map. */
+  year?: number;
+  /** The map's page on the publisher's site (the link the credit points at). */
+  pageUrl?: string;
+  /**
+   * The publisher's file version (an ETag or content hash). A Library copy
+   * downloaded at another version shows "A newer version is available".
+   */
+  version?: string;
+  /**
+   * The bbox is not the sheet's extent but the river's (`river`) or the
+   * administrative region's (`region`): the detail page says "approximate".
+   */
+  bboxPrecision?: CatalogBboxPrecision;
 }
 
 export interface CatalogManifest {
@@ -159,6 +189,14 @@ function isHttpUrl(value: unknown): value is string {
   return typeof value === 'string' && /^https?:\/\/\S+$/.test(value);
 }
 
+/** A bare host name ("cartespleinair.org"): no scheme, path or spaces. */
+function isHost(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(value)
+  );
+}
+
 function parseBbox(value: unknown): CatalogBbox | undefined {
   if (!Array.isArray(value) || value.length !== 4) return undefined;
   const [w, s, e, n] = value;
@@ -178,12 +216,14 @@ function parseSource(raw: unknown): CatalogSource | null {
     return null;
   }
   const homepage = optionalString(raw.homepage);
+  const freeAt = isHost(raw.freeAt) ? raw.freeAt : undefined;
   return {
     id: raw.id,
     name: raw.name,
     licence: raw.licence,
     attribution: raw.attribution,
     ...(homepage !== undefined ? { homepage } : {}),
+    ...(freeAt !== undefined ? { freeAt } : {}),
   };
 }
 
@@ -221,6 +261,20 @@ function parseItem(raw: unknown, sourceIds: ReadonlySet<string>): CatalogItem | 
     typeof raw.scale === 'number' && Number.isFinite(raw.scale) && raw.scale >= 1
       ? Math.round(raw.scale)
       : undefined;
+  const author = optionalString(raw.author)?.trim();
+  const year =
+    typeof raw.year === 'number' &&
+    Number.isInteger(raw.year) &&
+    raw.year >= 1800 &&
+    raw.year <= 2200
+      ? raw.year
+      : undefined;
+  const pageUrl = isHttpUrl(raw.pageUrl) ? raw.pageUrl : undefined;
+  const version = optionalString(raw.version);
+  const bboxPrecision =
+    bbox !== undefined && (raw.bboxPrecision === 'river' || raw.bboxPrecision === 'region')
+      ? raw.bboxPrecision
+      : undefined;
   return {
     id,
     sourceId: raw.sourceId,
@@ -240,6 +294,11 @@ function parseItem(raw: unknown, sourceIds: ReadonlySet<string>): CatalogItem | 
     ...(activities !== undefined ? { activities } : {}),
     ...(terrain !== undefined ? { terrain } : {}),
     ...(scale !== undefined ? { scale } : {}),
+    ...(author !== undefined ? { author } : {}),
+    ...(year !== undefined ? { year } : {}),
+    ...(pageUrl !== undefined ? { pageUrl } : {}),
+    ...(version !== undefined ? { version } : {}),
+    ...(bboxPrecision !== undefined ? { bboxPrecision } : {}),
   };
 }
 
@@ -413,15 +472,34 @@ function isShardId(value: unknown): value is string {
   return typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(value);
 }
 
+/**
+ * A sibling catalog edition's directory, the one way a path may leave its own:
+ * `../v2/shards/topo-n40w080.json` from `/catalog/v3/index.json` reuses the v2
+ * shard instead of publishing a second copy (docs/CATALOG.md §7).
+ */
+const SIBLING_EDITION_PREFIX = /^\.\.\/v[0-9]{1,3}\//;
+
+/** What a catalog path may be made of: no `%` (an encoded `..` or `/`), `?`, `#`, `:` or `\\`. */
+const CATALOG_PATH_CHARS = /^[A-Za-z0-9._/-]+$/;
+
+/**
+ * Catalog document paths are relative to the index and stay inside the
+ * catalog: plain characters only (`[A-Za-z0-9._/-]`, so no scheme, no query,
+ * and no percent-encoding: `%2e%2e/` is `../` to the server), no leading
+ * slash, no empty, `.` or `..` segment, except one leading `../v<N>/` into a
+ * sibling edition. Shared by the parser and `resolveCatalogUrl`, the two
+ * locks on the same door.
+ */
+export function isCatalogRelativePath(value: unknown): value is string {
+  if (typeof value !== 'string' || value === '') return false;
+  const rest = value.replace(SIBLING_EDITION_PREFIX, '');
+  if (rest === '' || !CATALOG_PATH_CHARS.test(rest) || rest.includes('..')) return false;
+  return rest.split('/').every((segment) => segment !== '' && segment !== '.');
+}
+
 /** Shard paths are relative and must not climb out of the catalog directory. */
 function isShardPath(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    value !== '' &&
-    !value.startsWith('/') &&
-    !value.includes('..') &&
-    !/^[a-z][a-z0-9+.-]*:/i.test(value)
-  );
+  return isCatalogRelativePath(value);
 }
 
 function parseShardRef(raw: unknown): CatalogShardRef | string {

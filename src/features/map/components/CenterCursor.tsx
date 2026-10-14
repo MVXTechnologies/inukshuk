@@ -19,6 +19,12 @@ export const CURSOR_RING = 1.5;
  * Hidden while the camera follows the user — the puck marks that spot, and
  * the chip shows the user's position instead — and while `suppressed` (the
  * region selector or map maker owns the screen).
+ *
+ * Over the pins and clusters, on purpose (2.5.2 QA decision): it is not a map
+ * feature but the aim of the coordinates chip, and an aim that hides under
+ * the thing it is on reads the wrong point. A view over the GL map cannot go
+ * between GL layers anyway; it is 7 dp, so a pin or disc under it stays
+ * readable, and a tap goes through it (`pointerEvents="none"`).
  */
 export const CenterCursor = memo(function CenterCursor({ suppressed }: { suppressed: boolean }) {
   const on = useSettingsStore((s) => s.showCenterCursor);

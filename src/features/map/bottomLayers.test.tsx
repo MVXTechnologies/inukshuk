@@ -9,6 +9,8 @@ import {
   liftedSnackbarStyle,
   rowLiftAboveColumnBottom,
   snackbarWrapperStyle,
+  TEAM_FAB_GAP,
+  teamFabBottom,
   waypointCardDockStyle,
 } from './bottomLayers';
 import { RecordingPanel } from './components/RecordingPanel';
@@ -166,5 +168,18 @@ describe('what sits above the ⓘ + scale row, in either column order', () => {
   it('the 8 s EDIT / UNDO bar clears the whole column in both orders', () => {
     expect(liftedSnackbarStyle(0, ROW + PAD).bottom).toBe(ROW + PAD);
     expect(liftedSnackbarStyle(0, ROW + GAP + TAPE + PAD).bottom).toBe(ROW + GAP + TAPE + PAD);
+  });
+});
+
+describe('the team button and the bottom column (2.5.2 QA)', () => {
+  it('sits above the whole column, compass tape included, wherever the column sits', () => {
+    // At rest: a 56 dp row → 72 dp, where it always was.
+    expect(teamFabBottom(0, 56)).toBe(72);
+    // Following a trail: the tape under the row makes the column 150 dp tall.
+    expect(teamFabBottom(0, 150)).toBe(150 + TEAM_FAB_GAP);
+    // On the recording panel.
+    expect(teamFabBottom(240, 150)).toBe(240 + 150 + TEAM_FAB_GAP);
+    // Before the column's first layout.
+    expect(teamFabBottom(0, null)).toBe(72);
   });
 });

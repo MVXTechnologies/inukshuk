@@ -9,10 +9,15 @@ import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { fireEvent } from '@testing-library/react-native';
-import { Linking } from 'react-native';
+import { schemeTokens } from '@ui/tokens';
+import { Linking, StyleSheet } from 'react-native';
+import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
+import { openMapPdf } from '@features/library/openMapPdf';
 
 import { CatalogDetailScreen } from './CatalogDetailScreen';
 import {
+  cpaIndex,
+  cpaMap,
   fixtureIndex,
   lacBeauport,
   mountWithProviders,
@@ -42,6 +47,11 @@ jest.mock('@data/catalogCache', () => ({
   loadCatalogSearchDigest: jest.fn(),
 }));
 jest.mock('@data/diskSpace', () => ({ assessFreeSpaceForWrite: () => null }));
+jest.mock('@features/library/openMapPdf', () => ({
+  openMapPdf: jest.fn(() => Promise.resolve('viewer')),
+  openMapPdfMessage: () => null,
+}));
+jest.mock('../../map/search/deviceLanguage', () => ({ deviceSearchLanguage: () => 'en' }));
 
 const installed = (updatedAt: string): MapDocument =>
   ({
@@ -49,7 +59,9 @@ const installed = (updatedAt: string): MapDocument =>
     name: 'Lac-Beauport',
     sourceItemId: lacBeauport.id,
     sourceUpdatedAt: updatedAt,
-  }) as MapDocument;
+    // A GeoPDF: it has a georeference, so it opens on the map.
+    georeferences: [{ pageIndex: 0 }],
+  }) as unknown as MapDocument;
 
 beforeEach(() => {
   seedCatalog(fixtureIndex());
@@ -120,6 +132,82 @@ it('a running download shows progress and cancels', async () => {
   expect(view.queryByText('Download · Free')).toBeNull();
   await fireEvent.press(view.getByText('Cancel download'));
   expect(cancelCatalogDownload).toHaveBeenCalledWith(lacBeauport.id);
+});
+
+describe('a Cartes Plein-air map (#680)', () => {
+  beforeEach(() => seedCatalog(cpaIndex()));
+
+  it.each([false, true])(
+    'credits the author, says it is free, and links the map’s page (dark: %s)',
+    async (dark) => {
+      const view = await mountWithProviders(
+        <PaperProvider theme={dark ? MD3DarkTheme : MD3LightTheme}>
+          <CatalogDetailScreen id={cpaMap.id} />
+        </PaperProvider>,
+      );
+      expect(view.getByText('Auteur Exemple · 2022 · Cartes Plein-air')).toBeTruthy();
+      const free = view.getByText('Available free at cartespleinair.org');
+      expect(StyleSheet.flatten(free.props.style).color).toBe(schemeTokens(dark).explore.accent);
+      expect(view.getByText('Author')).toBeTruthy();
+      expect(view.getByText('Not placed yet')).toBeTruthy();
+      expect(view.getByText('PDF · works offline')).toBeTruthy();
+      expect(view.getByText(/^Approximate area \(the river\) · /)).toBeTruthy();
+      expect(view.getByText(/opens as a PDF, without your position/)).toBeTruthy();
+      expect(view.getByText('Download · Free')).toBeTruthy();
+      expect(view.queryByText(/\$|Buy|Purchase/)).toBeNull();
+
+      const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+      await fireEvent.press(free);
+      expect(open).toHaveBeenCalledWith('https://cartespleinair.org/cartes/aigle-desert-x-2022');
+      await fireEvent.press(view.getByLabelText('Open on cartespleinair.org'));
+      expect(open).toHaveBeenLastCalledWith(
+        'https://cartespleinair.org/cartes/aigle-desert-x-2022',
+      );
+      await fireEvent.press(view.getByLabelText('Open cartespleinair.org'));
+      expect(open).toHaveBeenLastCalledWith('https://cartespleinair.org/cartes');
+    },
+  );
+
+  it('installed, it opens as a PDF, never on the map', async () => {
+    const setActiveMap = jest.fn();
+    useLibraryStore.setState({
+      setActiveMap,
+      maps: [
+        {
+          id: 'map-cpa',
+          name: 'Aigle-Désert',
+          fileUri: 'maps/map-cpa.pdf',
+          georeferences: [],
+          sourceItemId: cpaMap.id,
+          sourceVersion: 'v2',
+        } as unknown as MapDocument,
+      ],
+    });
+    const view = await mountWithProviders(<CatalogDetailScreen id={cpaMap.id} />);
+    expect(view.queryByText('Open on map')).toBeNull();
+    await fireEvent.press(view.getByText('Open PDF'));
+    expect(openMapPdf).toHaveBeenCalledWith(expect.objectContaining({ id: 'map-cpa' }));
+    expect(setActiveMap).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('a republished file says a newer version is available', async () => {
+    useLibraryStore.setState({
+      maps: [
+        {
+          id: 'map-cpa',
+          name: 'Aigle-Désert',
+          georeferences: [],
+          sourceItemId: cpaMap.id,
+          sourceVersion: 'v1',
+        } as unknown as MapDocument,
+      ],
+    });
+    const view = await mountWithProviders(<CatalogDetailScreen id={cpaMap.id} />);
+    expect(view.getByText('A newer version is available')).toBeTruthy();
+    expect(view.getByText('Update')).toBeTruthy();
+    expect(view.getByText('Open PDF')).toBeTruthy();
+  });
 });
 
 it('says so when the map is not in the loaded catalog', async () => {

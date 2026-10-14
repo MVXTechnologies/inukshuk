@@ -2,6 +2,7 @@ import type { TrackPhoto } from '@core/photos/model';
 import { act, render } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
+import { BASE_MAP_IMAGES } from '../map/MapImages';
 import { TrailPhotoLayers } from './TrailPhotoLayers';
 
 type Props = Record<string, unknown> & { children?: ReactNode };
@@ -94,20 +95,23 @@ it('draws own visible photos, clustered, with prefixed ids', async () => {
   expect(mockLayers.every((l) => l.minzoom === 12)).toBe(true);
 });
 
-it('registers sprites at 3 px per point plus the bundled badges, and loads missing ones', async () => {
+it('registers its own sprites at 3 px per point, never the badges it shares (2.5.2 QA)', async () => {
   await render(<TrailPhotoLayers id="m" photos={PHOTOS} />);
   const images = mockImages.current!.images as Record<string, unknown>;
   const sprite = Object.entries(images).find(([k]) => k.endsWith('-0'));
   expect(sprite?.[1]).toEqual({ source: { uri: 'file:///doc/photos/t1/a.map.png', scale: 3 } });
-  expect(images).toHaveProperty('ph-count-2');
-  expect(images).toHaveProperty('ph-selected-ring');
-  expect(images).not.toHaveProperty('ph-count-40');
+  // The count pills and the ring are the waypoint clusters' too: the map's one
+  // registration owns them (MapImages), so this instance unmounting with its
+  // trail can never take them off the map.
+  expect(Object.keys(images).filter((k) => BASE_MAP_IMAGES.includes(k))).toEqual([]);
+  expect(images).not.toHaveProperty('ph-count-2');
+  expect(images).not.toHaveProperty('ph-selected-ring');
   await act(async () =>
     (mockImages.current!.onImageMissing as (e: unknown) => void)({
       nativeEvent: { image: 'ph-count-40' },
     }),
   );
-  expect(mockImages.current!.images).toHaveProperty('ph-count-40');
+  expect(mockImages.current!.images).not.toHaveProperty('ph-count-40');
 });
 
 it("names a registered image for every drawn photo, and a bundled badge for a stack's count", async () => {
@@ -131,7 +135,8 @@ it("names a registered image for every drawn photo, and a bundled badge for a st
   // Stacks of 2-10 find their badge registered up front (larger ones load on demand, above).
   const countImage = (count.layout as Record<string, unknown>)['icon-image'] as unknown[];
   expect(countImage.slice(0, 2)).toEqual(['concat', 'ph-count-']);
-  for (let n = 2; n <= 10; n++) expect(images).toHaveProperty([`ph-count-${n}`]);
+  for (let n = 2; n <= 10; n++) expect(BASE_MAP_IMAGES).toContain(`ph-count-${n}`);
+  expect(BASE_MAP_IMAGES).toContain('ph-selected-ring');
 });
 
 it('draws nothing without photos to draw', async () => {

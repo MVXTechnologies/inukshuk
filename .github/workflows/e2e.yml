@@ -433,6 +433,7 @@ jobs:
             ~/.maestro/tests
             logcat-failure-*.txt
             logcat-crash-*.txt
+            logcat-uaf-*.txt
             logcat-system-server-restart-*.txt
             pdf-overlays-map-*.png
           retention-days: 7

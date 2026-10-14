@@ -1,0 +1,17 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.inukshukmapegl'
+version = '1.0.0'
+
+android {
+  namespace 'expo.modules.inukshukmapegl'
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+    // The guard reaches MapLibre's surface factory field by name.
+    consumerProguardFiles 'consumer-rules.pro'
+  }
+}

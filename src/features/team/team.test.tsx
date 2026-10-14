@@ -255,9 +255,11 @@ describe('the map card', () => {
     expect(screen.queryByTestId('team-fab')).toBeNull();
     await act(() => useTeamMapSelection.getState().select(null));
     expect(screen.getByTestId('team-fab')).toBeTruthy();
-    // Its menu: exactly six entries, in the owner's order (2026-10-07).
+    // Its menu: the owner's six (2026-10-07) and "Draw on map" after Rally (#683).
     await fireEvent.press(screen.getByTestId('team-fab'));
-    const ids = ['sos', 'status', 'rally', 'tasks', 'chat', 'manage'].map((x) => `team-fab-${x}`);
+    const ids = ['sos', 'status', 'rally', 'draw', 'tasks', 'chat', 'manage'].map(
+      (x) => `team-fab-${x}`,
+    );
     const shown = screen
       .queryAllByTestId(/^team-fab-/)
       .map((n) => n.props.testID as string)

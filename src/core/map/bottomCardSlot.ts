@@ -13,8 +13,10 @@ export interface BottomCardSlotInput {
   inspecting: boolean;
   editingWaypoint: boolean;
   drawing: boolean;
+  /** Team drawing mode (#683): it owns the whole screen, bottom edge included. */
+  teamDrawing: boolean;
 }
 
 export function bottomCardSlotFree(s: BottomCardSlotInput): boolean {
-  return !s.railMenuOpen && !s.inspecting && !s.editingWaypoint && !s.drawing;
+  return !s.railMenuOpen && !s.inspecting && !s.editingWaypoint && !s.drawing && !s.teamDrawing;
 }

@@ -11,6 +11,9 @@ import type { CatalogItem } from './schema';
 
 export type InstallStatus = 'not-installed' | 'installed' | 'update-available';
 
+/** What a downloaded map says when the publisher has replaced its file (#680). */
+export const NEWER_VERSION_NOTICE = 'A newer version is available';
+
 /** The Library map downloaded from this catalog item, if any. */
 export function findInstalledMap(
   maps: readonly MapDocument[],
@@ -28,15 +31,43 @@ function isNewerDate(a: string | undefined, b: string | undefined): boolean {
 }
 
 /**
- * Where this item stands relative to the Library. `update-available` only when
- * both revision dates parse and the manifest's is strictly newer — a map
- * downloaded before revisions were tracked (no `sourceUpdatedAt`) stays plain
- * `installed` rather than nagging for a re-download.
+ * Where this item stands relative to the Library.
+ *
+ * - When both the item and the Library copy carry a publisher file `version`
+ *   (an ETag or content hash, #680), any difference is an update: the
+ *   publisher replaced the file, whatever the dates say.
+ * - Otherwise `update-available` only when both revision dates parse and the
+ *   manifest's is strictly newer — a map downloaded before revisions were
+ *   tracked (no `sourceUpdatedAt`) stays plain `installed` rather than nagging
+ *   for a re-download.
  */
 export function installStatusFor(item: CatalogItem, maps: readonly MapDocument[]): InstallStatus {
   const installed = findInstalledMap(maps, item.id);
   if (installed === undefined) return 'not-installed';
+  if (item.version !== undefined && installed.sourceVersion !== undefined) {
+    return item.version !== installed.sourceVersion ? 'update-available' : 'installed';
+  }
   return isNewerDate(installed.sourceUpdatedAt, item.updatedAt) ? 'update-available' : 'installed';
+}
+
+/**
+ * Library maps whose catalog item (among those loaded) has a newer file:
+ * the Library row says {@link NEWER_VERSION_NOTICE}. One pass over each list.
+ * A map whose item is not loaded right now is simply not reported.
+ */
+export function mapsWithNewerVersion(
+  maps: readonly MapDocument[],
+  items: readonly CatalogItem[],
+): Set<string> {
+  const out = new Set<string>();
+  if (items.length === 0) return out;
+  const byId = new Map(items.map((i) => [i.id, i]));
+  for (const m of maps) {
+    if (m.sourceItemId === undefined) continue;
+    const item = byId.get(m.sourceItemId);
+    if (item !== undefined && installStatusFor(item, [m]) === 'update-available') out.add(m.id);
+  }
+  return out;
 }
 
 /**

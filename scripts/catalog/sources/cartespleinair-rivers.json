@@ -1,0 +1,4479 @@
+{
+  "_comment": "River locations for the Cartes Plein-air maps, by the site’s river id: each river’s single matching feature in the Canadian Geographical Names Database (NRCan, OGL-Canada 2.0), or no `match` when none or several matched (the map is then located by region). Written by fetch-cartespleinair.ts; edit a `match` by hand to correct it.",
+  "rivers": {
+    "00680ae6-6c6d-4237-8946-57e6dbca9544": {
+      "name": "Mistassibi",
+      "regions": [
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -72.2321,
+          48.8767,
+          -71.9064,
+          51.1373
+        ],
+        "evidence": "CGNDB feature 11bfb119be3c11d892e2080020a0f4c9 \"Rivière Mistassibi\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "01b7d456-f484-412e-be37-6250ea89ec64": {
+      "name": "Noire (Roxton Falls)",
+      "regions": [
+        "qc:05",
+        "qc:16"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "01bfbde1-511e-409f-be8e-9c3ff44ecbd4": {
+      "name": "Du Poste",
+      "regions": [
+        "qc:14"
+      ],
+      "match": {
+        "bbox": [
+          -73.8989,
+          46.8618,
+          -73.7894,
+          47.0575
+        ],
+        "evidence": "CGNDB feature 1e0e2b47be4711d892e2080020a0f4c9 \"Rivière du Poste\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "03145398-8aa6-4fb3-810a-682266e56f11": {
+      "name": "Vachon",
+      "regions": [
+        "qc:10"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "03906b75-3038-43ca-8f15-89aef3edae12": {
+      "name": "Aux Éclairs",
+      "regions": [
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -72.1806,
+          47.3661,
+          -72.1405,
+          47.4062
+        ],
+        "evidence": "CGNDB feature c56033aebe1011d892e2080020a0f4c9 \"Rivière aux Éclairs\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "04d99fcc-5fd1-47f1-8aa4-95644a14c09e": {
+      "name": "Ouareau",
+      "regions": [
+        "qc:14"
+      ],
+      "match": {
+        "bbox": [
+          -73.7371,
+          46.0231,
+          -73.6962,
+          46.0531
+        ],
+        "evidence": "CGNDB feature 75965e71be4111d892e2080020a0f4c9 \"Rivière Ouareau\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "0517ab3f-6ac0-4298-9e23-aac80073e2c1": {
+      "name": "Du Chêne",
+      "regions": [
+        "qc:12",
+        "qc:17"
+      ],
+      "match": {
+        "bbox": [
+          -72.0329,
+          46.307,
+          -71.3718,
+          46.5867
+        ],
+        "evidence": "CGNDB feature 9f85e6e3bbef11d892e2080020a0f4c9 \"Rivière du Chêne\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "069e3123-04bb-4b2f-82ac-eadfde76483f": {
+      "name": "Lac du Poisson blanc",
+      "regions": [
+        "qc:07",
+        "qc:15"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "07c61096-3d81-4dd5-90ed-5550d7f6c5b3": {
+      "name": "Du Sud-Ouest",
+      "regions": [
+        "qc:01"
+      ],
+      "match": {
+        "bbox": [
+          -68.9984,
+          48.1827,
+          -68.7567,
+          48.3833
+        ],
+        "evidence": "CGNDB feature f19ae1a1be5011d892e2080020a0f4c9 \"Rivière du Sud-Ouest\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "0a041049-ad57-4812-8ef9-d09a00738627": {
+      "name": "Morialice",
+      "regions": [
+        "qc:14"
+      ],
+      "match": {
+        "bbox": [
+          -74.2025,
+          47.3588,
+          -74.1624,
+          47.3989
+        ],
+        "evidence": "CGNDB feature c1ee28a1be3e11d892e2080020a0f4c9 \"Rivière Morialice\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "0a0ab200-a57d-44c0-9b14-233981a62007": {
+      "name": "Osgood",
+      "regions": [
+        "qc:12",
+        "qc:17"
+      ],
+      "match": {
+        "bbox": [
+          -71.4337,
+          46.1154,
+          -71.2502,
+          46.3077
+        ],
+        "evidence": "CGNDB feature 0cb2fdd1849c20c3ad440db82a6c5984 \"Rivière Osgood\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "0a491eac-27bc-45da-9b42-afcb345aaa94": {
+      "name": "Mistassibi Nord-Est",
+      "regions": [
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -72.024,
+          49.5045,
+          -71.6851,
+          51.0077
+        ],
+        "evidence": "CGNDB feature 11c7794abe3c11d892e2080020a0f4c9 \"Rivière Mistassibi Nord-Est\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "0aa55207-f87e-47e4-bf27-c4de7f860671": {
+      "name": "Mitis",
+      "regions": [
+        "qc:01"
+      ],
+      "match": {
+        "bbox": [
+          -68.2005,
+          48.2851,
+          -67.893,
+          48.6403
+        ],
+        "evidence": "CGNDB feature 1a739fd7be3c11d892e2080020a0f4c9 \"Rivière Mitis\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "0b0e9c61-86e0-427b-9c5f-0d21f6b260e9": {
+      "name": "Du Sourd",
+      "regions": [
+        "qc:15",
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -75.5109,
+          45.9223,
+          -75.191,
+          46.2322
+        ],
+        "evidence": "CGNDB feature 19c3255bbe5011d892e2080020a0f4c9 \"Rivière du Sourd\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "0bc28b43-fece-4243-9f89-dc4d4b63d15d": {
+      "name": "Victoria",
+      "regions": [
+        "qc:05"
+      ],
+      "match": {
+        "bbox": [
+          -71.0832,
+          45.4773,
+          -70.9888,
+          45.5427
+        ],
+        "evidence": "CGNDB feature e7abc043be5511d892e2080020a0f4c9 \"Rivière Victoria\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "0d1968e2-ecd8-4958-a91f-1fd97ab199c9": {
+      "name": "Tom (lac Cinconsine)",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -73.0366,
+          47.4428,
+          -72.92,
+          47.595
+        ],
+        "evidence": "CGNDB feature 6d84b970be5211d892e2080020a0f4c9 \"Rivière Tom\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "0e5f569a-3a79-43a9-8fb4-b212616b698c": {
+      "name": "Charest (ruisseau)",
+      "regions": [
+        "qc:03",
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -72.9372,
+          46.2289,
+          -72.9219,
+          46.247
+        ],
+        "evidence": "CGNDB feature 43b17228bbef11d892e2080020a0f4c9 \"Ruisseau Charest\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "0fc364b7-8cbf-4bc4-9c06-c0b8823f0497": {
+      "name": "Rupert",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -78.7823,
+          50.9998,
+          -73.6904,
+          51.8172
+        ],
+        "evidence": "CGNDB feature d695c3d0d1e311d892e2080020a0f4c9 \"Rivière Rupert\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "10a636c9-a4b6-4eb4-8597-34f9269a9c0b": {
+      "name": "Sakami",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -76.7661,
+          52.8686,
+          -71.7731,
+          53.5272
+        ],
+        "evidence": "CGNDB feature e89ef390be4d11d892e2080020a0f4c9 \"Rivière Sakami\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "119a10e0-f5a6-424a-91f0-52f678612c32": {
+      "name": "Bell",
+      "regions": [
+        "qc:08",
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -77.6993,
+          48.2955,
+          -76.862,
+          49.9364
+        ],
+        "evidence": "CGNDB feature aed873ccbbe711d892e2080020a0f4c9 \"Rivière Bell\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "1216ddaa-5a14-4497-a524-5cd83bf2b64c": {
+      "name": "Dalesville",
+      "regions": [
+        "qc:15"
+      ],
+      "match": {
+        "bbox": [
+          -74.4215,
+          45.6528,
+          -74.3657,
+          45.7704
+        ],
+        "evidence": "CGNDB feature 759dcb15be0c11d892e2080020a0f4c9 \"Rivière Dalesville\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "12cb31a7-d336-42b7-a118-96a7990f8a8a": {
+      "name": "Aux Rats",
+      "regions": [
+        "qc:04"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "14450543-bb4a-4d44-b32e-3ab55c19a7a8": {
+      "name": "Prévost-Gilbert",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -71.251,
+          46.12,
+          -70.9258,
+          46.1846
+        ],
+        "evidence": "CGNDB feature 715ed7c9d1e011d892e2080020a0f4c9 \"Rivière Prévost-Gilbert\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "14d34fc6-19cd-4eec-8280-981043faa96c": {
+      "name": "Picanoc",
+      "regions": [
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -76.545,
+          45.8605,
+          -76.0394,
+          46.0837
+        ],
+        "evidence": "CGNDB feature aa10acfdbe4511d892e2080020a0f4c9 \"Rivière Picanoc\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "1594af3b-e950-4a63-aaff-8992a5a681d4": {
+      "name": "Causapscal",
+      "regions": [
+        "qc:01"
+      ],
+      "match": {
+        "bbox": [
+          -67.2578,
+          48.3426,
+          -66.8464,
+          48.5789
+        ],
+        "evidence": "CGNDB feature c8d45aa8bbee11d892e2080020a0f4c9 \"Rivière Causapscal\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "16bb8bb3-51c5-4168-b2dc-81cf6e597022": {
+      "name": "Koroc",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -65.8094,
+          58.556,
+          -63.5477,
+          58.8702
+        ],
+        "evidence": "CGNDB feature f4561441be2c11d892e2080020a0f4c9 \"Rivière Koroc\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "1729b912-c679-4f56-b6f5-a7ef95b33d20": {
+      "name": "Gens de Terre",
+      "regions": [
+        "qc:07",
+        "qc:15"
+      ],
+      "match": {
+        "bbox": [
+          -76.518,
+          46.7871,
+          -75.8553,
+          47.4693
+        ],
+        "evidence": "CGNDB feature cbca7ddcbe1711d892e2080020a0f4c9 \"Rivière Gens de Terre\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "18dd909d-043c-4a61-b946-6622cc4dc585": {
+      "name": "Ulverton",
+      "regions": [
+        "qc:05",
+        "qc:17"
+      ],
+      "match": {
+        "bbox": [
+          -72.2753,
+          45.5472,
+          -72.221,
+          45.6978
+        ],
+        "evidence": "CGNDB feature dc177f75be5311d892e2080020a0f4c9 \"Rivière Ulverton\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "18fa277e-ba21-4ffe-bbc4-6e0432db08db": {
+      "name": "À la Pêche",
+      "regions": [
+        "qc:04"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "197e71dd-a131-4f52-b186-1b2c2117cde7": {
+      "name": "Petite rivière Bostonnais (Wayagamac)",
+      "regions": [
+        "qc:04"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "1a5bef43-b473-4518-b6e9-731a70f936f8": {
+      "name": "Aux Pommes",
+      "regions": [
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -71.694,
+          46.7244,
+          -71.5705,
+          46.8098
+        ],
+        "evidence": "CGNDB feature d9bdc3fcbe4611d892e2080020a0f4c9 \"Rivière aux Pommes\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "1ab487b6-bd8f-4917-a5e7-f7cb499a5bcf": {
+      "name": "Bras Saint-Nicolas Nord-Est",
+      "regions": [
+        "qc:12"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "1b15213f-2a9a-4ce4-bf0e-43a747bd8e50": {
+      "name": "Barvilier",
+      "regions": [
+        "qc:10"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "1b1c9d31-10e5-4167-b039-f807a44c43fc": {
+      "name": "Jeannotte",
+      "regions": [
+        "qc:04",
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -72.4352,
+          47.2467,
+          -72.2583,
+          47.5279
+        ],
+        "evidence": "CGNDB feature 3d6bb653be2b11d892e2080020a0f4c9 \"Rivière Jeannotte\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "1c8b1e24-8ece-40e4-82bb-c3d45cb49411": {
+      "name": "De Pas",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -65.9657,
+          54.8563,
+          -64.6712,
+          55.9995
+        ],
+        "evidence": "CGNDB feature 371c4024be0d11d892e2080020a0f4c9 \"Rivière De Pas\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "1d08a8d7-b206-4b55-9b0c-3bce7892e7a9": {
+      "name": "Lusignan (ruisseau)",
+      "regions": [
+        "qc:14"
+      ],
+      "match": {
+        "bbox": [
+          -74.1231,
+          46.6123,
+          -74.0886,
+          46.6437
+        ],
+        "evidence": "CGNDB feature e9504f8ebe3811d892e2080020a0f4c9 \"Ruisseau Lusignan\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "1d44cb74-3a26-4868-b842-b525969d1a71": {
+      "name": "Bullard",
+      "regions": [
+        "qc:12",
+        "qc:17"
+      ],
+      "match": {
+        "bbox": [
+          -71.4911,
+          46.1234,
+          -71.3855,
+          46.2078
+        ],
+        "evidence": "CGNDB feature 86db8908bbec11d892e2080020a0f4c9 \"Ruisseau Bullard\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "1f478d61-e833-442a-a0b2-1bb98aa139b9": {
+      "name": "Natashquan Est",
+      "regions": [
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -62.0988,
+          51.3304,
+          -61.4466,
+          52.4941
+        ],
+        "evidence": "CGNDB feature c1144e82ba2111d892e2080020a0f4c9 \"Rivière Natashquan Est\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "2074e3e0-3e86-4f2c-a705-2be7cf0fb882": {
+      "name": "Du Berger",
+      "regions": [
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -71.3321,
+          46.8049,
+          -71.2862,
+          46.8766
+        ],
+        "evidence": "CGNDB feature 564bd05dbbea11d892e2080020a0f4c9 \"Rivière du Berger\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "20feef43-e643-4228-ab34-db92ea04e814": {
+      "name": "Charpentier",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -73.5067,
+          57.2359,
+          -73.2754,
+          57.2947
+        ],
+        "evidence": "CGNDB feature 5ab6d986bbef11d892e2080020a0f4c9 \"Rivière Charpentier\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "22f84757-8474-4347-8800-22c2ab331974": {
+      "name": "Missisquoi Nord",
+      "regions": [
+        "qc:05"
+      ],
+      "match": {
+        "bbox": [
+          -72.4061,
+          45.065,
+          -72.3156,
+          45.309
+        ],
+        "evidence": "CGNDB feature 0d9d7e97be3c11d892e2080020a0f4c9 \"Rivière Missisquoi Nord\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "24dc5b5e-535f-4f41-b1be-ee53e8e4dab2": {
+      "name": "De Maurès",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -73.9334,
+          51.0147,
+          -73.8933,
+          51.0548
+        ],
+        "evidence": "CGNDB feature aea1f5cdbe3a11d892e2080020a0f4c9 \"Rivière De Maurès\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "2508c1a7-bd80-42e5-a760-4ba647d0594e": {
+      "name": "Mitchinamécus",
+      "regions": [
+        "qc:14",
+        "qc:15"
+      ],
+      "match": {
+        "bbox": [
+          -75.2704,
+          47.0468,
+          -74.596,
+          47.8847
+        ],
+        "evidence": "CGNDB feature 67772e10d1e111d892e2080020a0f4c9 \"Rivière Mitchinamecus\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "26537af1-26f7-48c6-957c-93b51a910a08": {
+      "name": "Muskeg (ruisseau)",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -73.8153,
+          47.107,
+          -73.7752,
+          47.1471
+        ],
+        "evidence": "CGNDB feature 209396c3be3f11d892e2080020a0f4c9 \"Ruisseau Muskeg\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "272aeda9-2b4f-4c21-846b-856a5296099d": {
+      "name": "Sault-aux-Cochons",
+      "regions": [
+        "qc:02",
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -70.3063,
+          48.6256,
+          -69.0564,
+          49.4095
+        ],
+        "evidence": "CGNDB feature 9a90d911be4e11d892e2080020a0f4c9 \"Rivière du Sault aux Cochons\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "27569ded-8a81-4b05-b462-ae11526b5113": {
+      "name": "Joseph",
+      "regions": [
+        "qc:15",
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -75.8787,
+          46.3526,
+          -75.6268,
+          46.5229
+        ],
+        "evidence": "CGNDB feature e42508efbf0a11d892e2080020a0f4c9 \"Rivière Joseph\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "276e95b8-7087-4a74-bc08-8ca5be36226b": {
+      "name": "Métascouac",
+      "regions": [
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -71.8536,
+          47.7373,
+          -71.8336,
+          47.7618
+        ],
+        "evidence": "CGNDB feature 98cd78e7be3b11d892e2080020a0f4c9 \"Rivière Métascouac\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "285b45f3-ecdc-4edb-8490-a1d0180422c4": {
+      "name": "Saint-Jean",
+      "regions": [
+        "qc:11"
+      ],
+      "match": {
+        "bbox": [
+          -65.5694,
+          48.6001,
+          -64.4309,
+          48.9109
+        ],
+        "evidence": "CGNDB feature 78c1b6e5be4d11d892e2080020a0f4c9 \"Rivière Saint-Jean\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "285bae56-09f5-4ae7-9b72-67d2d0b11878": {
+      "name": "Chibougamau",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -76.0099,
+          49.5581,
+          -74.3379,
+          50.0995
+        ],
+        "evidence": "CGNDB feature bee8df99bbef11d892e2080020a0f4c9 \"Rivière Chibougamau\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "28a98a79-016b-43a5-847f-58bfe73dc2dc": {
+      "name": "Noire",
+      "regions": [
+        "qc:03"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "2938f4b1-4bcc-4aaf-a9a8-535771b0c5ed": {
+      "name": "Mazana",
+      "regions": [
+        "qc:15"
+      ],
+      "match": {
+        "bbox": [
+          -74.9001,
+          47.0235,
+          -74.5447,
+          47.1921
+        ],
+        "evidence": "CGNDB feature bdafdfa8be3a11d892e2080020a0f4c9 \"Rivière Mazana\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "29f9c5bc-d72c-4a83-ba2b-21cb55112ada": {
+      "name": "Mistassini",
+      "regions": [
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -72.8169,
+          48.6774,
+          -72.1903,
+          50.8903
+        ],
+        "evidence": "CGNDB feature 13e88494be3c11d892e2080020a0f4c9 \"Rivière Mistassini\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "2a737b0a-ba00-4e8f-89b5-e66fe5bea988": {
+      "name": "Ashuapmushuan",
+      "regions": [
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -73.5054,
+          48.5122,
+          -72.3013,
+          49.366
+        ],
+        "evidence": "CGNDB feature 6688f29cd1e011d892e2080020a0f4c9 \"Rivière Ashuapmushuan\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "2a7b411d-61b5-4e97-9343-6890ca9a0709": {
+      "name": "Aux Mélèzes",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -73.4398,
+          56.7562,
+          -69.4404,
+          57.7672
+        ],
+        "evidence": "CGNDB feature fe2f1af6be3a11d892e2080020a0f4c9 \"Rivière aux Mélèzes\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "2b9b68e1-b69f-46ab-b500-53a4404f2319": {
+      "name": "Saint-Jean (06)",
+      "regions": [
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -70.5577,
+          48.1276,
+          -70.1967,
+          48.2522
+        ],
+        "evidence": "CGNDB feature 78a5f184be4d11d892e2080020a0f4c9 \"Rivière Saint-Jean\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "2bd8b0eb-1ed9-4b9c-81df-d5b0fa84d924": {
+      "name": "Assomption",
+      "regions": [
+        "qc:14"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "2bf4bb80-3fc9-4bb3-bc3e-5902a1335d74": {
+      "name": "Métabeskéga",
+      "regions": [
+        "qc:14"
+      ],
+      "match": {
+        "bbox": [
+          -74.449,
+          47.102,
+          -74.3303,
+          47.2028
+        ],
+        "evidence": "CGNDB feature 95edff9abe3b11d892e2080020a0f4c9 \"Rivière Métabeskéga\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "2bfdd9ca-c1e7-408f-80bc-28953831940d": {
+      "name": "Du Gué",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -72.8247,
+          56.4411,
+          -70.6869,
+          57.3522
+        ],
+        "evidence": "CGNDB feature 6010fdaebe1011d892e2080020a0f4c9 \"Rivière Du Gué\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "2d1a19fe-aeb4-43a6-846c-d3774e92a9d4": {
+      "name": "Ruban",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -74.4451,
+          47.8189,
+          -74.2577,
+          47.958
+        ],
+        "evidence": "CGNDB feature 73b037f3be4c11d892e2080020a0f4c9 \"Rivière Ruban\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "2f3377a4-d971-491d-85d8-878f907d7752": {
+      "name": "Des Hurons",
+      "regions": [
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -71.4193,
+          46.9436,
+          -71.2283,
+          47.1189
+        ],
+        "evidence": "CGNDB feature 3f111f44be2a11d892e2080020a0f4c9 \"Rivière des Hurons\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "2f4c134a-6b2a-4563-ba27-ab7e83625cc8": {
+      "name": "Aux Araignées",
+      "regions": [
+        "qc:05"
+      ],
+      "match": {
+        "bbox": [
+          -70.7606,
+          45.3799,
+          -70.6688,
+          45.4556
+        ],
+        "evidence": "CGNDB feature 2f353e32bf1011d892e2080020a0f4c9 \"Rivière aux Araignées\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "2fef2c2c-4f30-4c17-a8ed-524d93a9ccd7": {
+      "name": "Joir",
+      "regions": [
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -60.2972,
+          51.9096,
+          -59.7071,
+          52.6746
+        ],
+        "evidence": "CGNDB feature 3e6457ddba2111d892e2080020a0f4c9 \"Rivière Joir\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "30077d4b-f8f6-46b3-975b-8ed3d91d348c": {
+      "name": "Samaqua",
+      "regions": [
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -72.7224,
+          49.145,
+          -72.4026,
+          50.1901
+        ],
+        "evidence": "CGNDB feature 24ce5ce4be4e11d892e2080020a0f4c9 \"Rivière Samaqua\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "3019b791-8502-4703-b2cf-56f699ac7930": {
+      "name": "Malbaie",
+      "regions": [
+        "qc:03",
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -71.0482,
+          47.5722,
+          -70.1423,
+          48.0492
+        ],
+        "evidence": "CGNDB feature 5db73310be3911d892e2080020a0f4c9 \"Rivière Malbaie\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "33a80a76-22b7-45cf-8fd6-ec8b4709f0c0": {
+      "name": "Ouasiemsca",
+      "regions": [
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -73.3039,
+          48.8872,
+          -72.4705,
+          50.4466
+        ],
+        "evidence": "CGNDB feature 759e4db2be4111d892e2080020a0f4c9 \"Rivière Ouasiemsca\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "34417a8e-e495-415d-a2eb-664c795cdb89": {
+      "name": "Manicouagan Ouest (réservoir)",
+      "regions": [
+        "qc:09"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "34843b77-8567-459c-833c-997e91953563": {
+      "name": "Cascapédia",
+      "regions": [
+        "qc:01",
+        "qc:11"
+      ],
+      "match": {
+        "bbox": [
+          -66.4136,
+          48.1676,
+          -65.8613,
+          48.9218
+        ],
+        "evidence": "CGNDB feature 507dc60bbbee11d892e2080020a0f4c9 \"Rivière Cascapédia\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "34f079bb-7569-43c3-93ab-0e35d95abd2a": {
+      "name": "Cuvillier",
+      "regions": [
+        "qc:08"
+      ],
+      "match": {
+        "bbox": [
+          -76.9152,
+          48.9184,
+          -76.6289,
+          48.9682
+        ],
+        "evidence": "CGNDB feature 3d450d28be0c11d892e2080020a0f4c9 \"Rivière Cuvillier\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "3547a638-2f9d-4ff7-bdde-ec450cc1368b": {
+      "name": "Bras Saint-Nicolas",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -70.2682,
+          46.9131,
+          -70.2519,
+          46.9287
+        ],
+        "evidence": "CGNDB feature a83d52a1be4d11d892e2080020a0f4c9 \"Bras Saint-Nicolas\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "37bda2ad-0deb-4c72-b38d-79bb31f1205d": {
+      "name": "Maison-de-Pierre",
+      "regions": [
+        "qc:15"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "387b128f-238c-49ec-a50e-2a6270f0959c": {
+      "name": "Mistigougèche",
+      "regions": [
+        "qc:01"
+      ],
+      "match": {
+        "bbox": [
+          -68.1132,
+          48.0049,
+          -67.7786,
+          48.2818
+        ],
+        "evidence": "CGNDB feature 15e42d8abe3c11d892e2080020a0f4c9 \"Rivière Mistigougèche\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "389f61d4-e196-46a9-b39f-5296a5ced124": {
+      "name": "Sans Bout",
+      "regions": [
+        "qc:14",
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -73.5718,
+          46.6005,
+          -73.5127,
+          46.6897
+        ],
+        "evidence": "CGNDB feature 428a3624be4e11d892e2080020a0f4c9 \"Rivière Sans Bout\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "390da06d-4058-4074-91ab-5975e23ba8c2": {
+      "name": "Yamaska",
+      "regions": [
+        "qc:05",
+        "qc:16",
+        "qc:17"
+      ],
+      "match": {
+        "bbox": [
+          -73.3245,
+          45.0779,
+          -72.5021,
+          46.1319
+        ],
+        "evidence": "CGNDB feature 16362b6fbf0511d892e2080020a0f4c9 \"Rivière Yamaska\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "394c422f-fb70-422d-8ea5-10b5c1b14bec": {
+      "name": "Lenoir",
+      "regions": [
+        "qc:15"
+      ],
+      "match": {
+        "bbox": [
+          -74.6181,
+          46.8193,
+          -74.4556,
+          46.9241
+        ],
+        "evidence": "CGNDB feature df3738bebe3211d892e2080020a0f4c9 \"Rivière Lenoir\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "396c21c5-b967-4ff8-8a1f-2a75d590acca": {
+      "name": "Guyaumar (Batiscan)",
+      "regions": [
+        "qc:03"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "39d13901-b2e6-4b48-80d0-c8e81f2aeade": {
+      "name": "Mouchalagane",
+      "regions": [
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -69.8659,
+          51.4921,
+          -69.1086,
+          52.8926
+        ],
+        "evidence": "CGNDB feature e016f4a8be3e11d892e2080020a0f4c9 \"Rivière Mouchalagane\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "3a489251-e86a-4c66-a30f-560e31bc5725": {
+      "name": "Du Diable",
+      "regions": [
+        "qc:14",
+        "qc:15"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "3c958312-86bf-42b2-98fa-dff2e4741026": {
+      "name": "Mégiscane",
+      "regions": [
+        "qc:04",
+        "qc:08"
+      ],
+      "match": {
+        "bbox": [
+          -77.1578,
+          48.0861,
+          -75.4632,
+          48.7209
+        ],
+        "evidence": "CGNDB feature f5882385be3a11d892e2080020a0f4c9 \"Rivière Mégiscane\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "3ca1720c-8521-4610-9c88-76e32afe6041": {
+      "name": "Du Milieu",
+      "regions": [
+        "qc:14"
+      ],
+      "match": {
+        "bbox": [
+          -74.3678,
+          46.7352,
+          -73.9333,
+          47.0101
+        ],
+        "evidence": "CGNDB feature d9cf9f7dbe3b11d892e2080020a0f4c9 \"Rivière du Milieu\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "3d62587c-6449-4738-a027-ff21fed90720": {
+      "name": "Tomasine",
+      "regions": [
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -76.5196,
+          46.6405,
+          -76.2444,
+          46.8868
+        ],
+        "evidence": "CGNDB feature 6fec6aa7be5211d892e2080020a0f4c9 \"Rivière Tomasine\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "3e22730d-f72b-4b6f-972d-5a392a485325": {
+      "name": "Aux Ecorces",
+      "regions": [
+        "qc:03",
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -71.7576,
+          47.6645,
+          -71.4817,
+          48.2911
+        ],
+        "evidence": "CGNDB feature cda7f41dbe1011d892e2080020a0f4c9 \"Rivière aux Écorces\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "3e42ce6f-26dc-4b09-b69d-131c9f3bd845": {
+      "name": "Des Perdrix",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -70.5277,
+          46.8424,
+          -70.3021,
+          47.0525
+        ],
+        "evidence": "CGNDB feature cff50fe7be4311d892e2080020a0f4c9 \"Rivière des Perdrix\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "3f1ac808-77fc-485b-88d2-ba63f57ecbc1": {
+      "name": "Clinton",
+      "regions": [
+        "qc:05"
+      ],
+      "match": {
+        "bbox": [
+          -70.9862,
+          45.351,
+          -70.8583,
+          45.4507
+        ],
+        "evidence": "CGNDB feature c6760c97bbf011d892e2080020a0f4c9 \"Rivière Clinton\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "3f7b5bdc-e311-465b-8e03-132d8f23b842": {
+      "name": "Shawinigan",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -73.0399,
+          46.5327,
+          -72.7436,
+          46.6988
+        ],
+        "evidence": "CGNDB feature 92c6907bbe4f11d892e2080020a0f4c9 \"Rivière Shawinigan\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "40312a4c-5a5b-4de1-a309-99cdbbe26a13": {
+      "name": "Kinojévis",
+      "regions": [
+        "qc:08"
+      ],
+      "match": {
+        "bbox": [
+          -79.0551,
+          47.9031,
+          -78.3496,
+          48.6821
+        ],
+        "evidence": "CGNDB feature d9e19eeabe2c11d892e2080020a0f4c9 \"Rivière Kinojévis\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "403408e5-d1c7-47f6-8884-a6be767b8fc6": {
+      "name": "De l'Ouest",
+      "regions": [
+        "qc:15"
+      ],
+      "match": {
+        "bbox": [
+          -74.5164,
+          45.6544,
+          -74.3513,
+          45.8568
+        ],
+        "evidence": "CGNDB feature 810cc9a1be4111d892e2080020a0f4c9 \"Rivière de l'Ouest\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "41158231-beb3-4a03-9911-533216fa285a": {
+      "name": "Perronel",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -75.9164,
+          59.2875,
+          -75.8763,
+          59.3275
+        ],
+        "evidence": "CGNDB feature 0341ffbfbe4411d892e2080020a0f4c9 \"Rivière Perronel\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "423d0140-5b1e-4245-a00e-312c067ab589": {
+      "name": "Octave",
+      "regions": [
+        "qc:08",
+        "qc:10"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "42f16366-d838-4dfc-9d15-090f612d2eba": {
+      "name": "Mastigouche",
+      "regions": [
+        "qc:14"
+      ],
+      "match": {
+        "bbox": [
+          -73.7309,
+          46.3735,
+          -73.4021,
+          46.571
+        ],
+        "evidence": "CGNDB feature 8e171ef3be3a11d892e2080020a0f4c9 \"Rivière Mastigouche\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "42fd5025-efe7-4415-abae-5c580a3253db": {
+      "name": "Des Prairies",
+      "regions": [
+        "qc:06",
+        "qc:13",
+        "qc:14"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "4465bec1-a75e-493c-82b3-89247e320888": {
+      "name": "Chochocouane",
+      "regions": [
+        "qc:08"
+      ],
+      "match": {
+        "bbox": [
+          -76.8952,
+          47.8062,
+          -76.517,
+          48.0815
+        ],
+        "evidence": "CGNDB feature 43c4b759bbf011d892e2080020a0f4c9 \"Rivière Chochocouane\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "44d2cfb7-7fce-4159-aac1-beb45680e023": {
+      "name": "Témiscamie",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -73.1477,
+          50.7864,
+          -71.4679,
+          52.2203
+        ],
+        "evidence": "CGNDB feature cdf05ed5be5111d892e2080020a0f4c9 \"Rivière Témiscamie\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "45a4cdcb-a115-4f63-a174-1cff9e7a7e34": {
+      "name": "Verreau (ruisseau)",
+      "regions": [
+        "qc:10",
+        "qc:02",
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -74.5415,
+          48.8112,
+          -74.4318,
+          48.8938
+        ],
+        "evidence": "CGNDB feature 9547ae2fbe5511d892e2080020a0f4c9 \"Ruisseau Verreau\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "46177895-041f-49bc-be58-cd7bb7b1a10f": {
+      "name": "Petite Péribonka",
+      "regions": [
+        "qc:02"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "4783e060-967e-4f11-ad2e-067424740d5e": {
+      "name": "Trois Saumons",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -70.3085,
+          47.1351,
+          -70.1462,
+          47.1937
+        ],
+        "evidence": "CGNDB feature 7c191053be5311d892e2080020a0f4c9 \"Rivière Trois Saumons\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "47a97340-ff78-4b2d-ae3b-b5745d17a82a": {
+      "name": "La Chevrotière",
+      "regions": [
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -72.0062,
+          46.6047,
+          -71.9661,
+          46.6448
+        ],
+        "evidence": "CGNDB feature ea3c9d8fd1e011d892e2080020a0f4c9 \"Rivière La Chevrotière\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "485699d8-8957-476d-bf70-71cbeafc9bee": {
+      "name": "Sainte-Anne (Portneuf)",
+      "regions": [
+        "qc:03",
+        "qc:04"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "48b2453d-e395-4c3a-b92e-837753fe28af": {
+      "name": "Boyer",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -71.0413,
+          46.6369,
+          -70.8455,
+          46.9044
+        ],
+        "evidence": "CGNDB feature ed247de8bbeb11d892e2080020a0f4c9 \"Rivière Boyer\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "48d055cc-0521-4127-af0d-73497cf6cdbd": {
+      "name": "Bostonnais",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -72.8331,
+          47.4234,
+          -72.2352,
+          47.9626
+        ],
+        "evidence": "CGNDB feature 6093b14bbbeb11d892e2080020a0f4c9 \"Rivière Bostonnais\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "49671a36-3e8f-44a5-bea1-aab9850de459": {
+      "name": "Noire Nord-Ouest",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -70.1579,
+          46.7328,
+          -70.1431,
+          46.7463
+        ],
+        "evidence": "CGNDB feature 22b6a908be4011d892e2080020a0f4c9 \"Rivière Noire Nord-Ouest\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "4977550e-c8b7-48b4-a43b-ba78144299d5": {
+      "name": "Morigeau",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -70.6814,
+          46.858,
+          -70.5229,
+          46.9111
+        ],
+        "evidence": "CGNDB feature c20d9786be3e11d892e2080020a0f4c9 \"Rivière Morigeau\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "4a0e070f-2d53-4661-a809-128fe5c9faca": {
+      "name": "Kiamika",
+      "regions": [
+        "qc:15"
+      ],
+      "match": {
+        "bbox": [
+          -74.8695,
+          46.8706,
+          -74.8501,
+          46.8898
+        ],
+        "evidence": "CGNDB feature 4e40fda0be2c11d892e2080020a0f4c9 \"Rivière Kiamika\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "4b1cff96-dbed-48cf-b298-1809430a875e": {
+      "name": "Wapus",
+      "regions": [
+        "qc:07",
+        "qc:15"
+      ],
+      "match": {
+        "bbox": [
+          -75.9131,
+          47.2886,
+          -75.7549,
+          47.4048
+        ],
+        "evidence": "CGNDB feature a99afa73bf0411d892e2080020a0f4c9 \"Rivière Wapus\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "4c68ebab-bab4-4834-bf04-ac9c1a1b78b2": {
+      "name": "Hébert (ruisseau)",
+      "regions": [
+        "qc:07",
+        "ca:on"
+      ],
+      "match": {
+        "bbox": [
+          -75.0899,
+          45.5902,
+          -75.0498,
+          45.6303
+        ],
+        "evidence": "CGNDB feature 306d0036bf9d11d892e2080020a0f4c9 \"Ruisseau Hébert\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "4c69c96e-864f-40ec-8ae3-398dcba1fda4": {
+      "name": "Duhamel",
+      "regions": [
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -71.1023,
+          50.1938,
+          -70.8709,
+          50.4429
+        ],
+        "evidence": "CGNDB feature 63dad6fbbe1011d892e2080020a0f4c9 \"Rivière Duhamel\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "4f986e44-3cbc-49e2-8226-61afecc7dea1": {
+      "name": "Pouliot",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -70.9179,
+          46.3262,
+          -70.8101,
+          46.3516
+        ],
+        "evidence": "CGNDB feature c04d15f6bf9111d892e2080020a0f4c9 \"Rivière Pouliot\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "508a4f66-240f-4c9b-b945-a09009bbc3ee": {
+      "name": "Boulé (Archambault)",
+      "regions": [
+        "qc:15"
+      ],
+      "match": {
+        "bbox": [
+          -73.7948,
+          46.2705,
+          -73.7305,
+          46.3594
+        ],
+        "evidence": "CGNDB feature 874d53c4bbeb11d892e2080020a0f4c9 \"Rivière de la Boule\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "50a653ce-151f-4528-b8ca-00a806dccda7": {
+      "name": "Du Moulin",
+      "regions": [
+        "qc:12"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "51285d83-2f57-4406-a788-3544968db9d2": {
+      "name": "Le Renne",
+      "regions": [
+        "qc:05",
+        "qc:16"
+      ],
+      "match": {
+        "bbox": [
+          -72.6028,
+          45.5543,
+          -72.3059,
+          45.72
+        ],
+        "evidence": "CGNDB feature 3bc5acabbe4911d892e2080020a0f4c9 \"Rivière le Renne\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "51642865-6c04-4a84-baaf-e512c7db7e5a": {
+      "name": "Shipshaw",
+      "regions": [
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -71.3168,
+          48.4383,
+          -70.9038,
+          49.3568
+        ],
+        "evidence": "CGNDB feature a3ee599dbe4f11d892e2080020a0f4c9 \"Rivière Shipshaw\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "51f693fd-88fe-4ea7-aca9-49b018668979": {
+      "name": "Moisie",
+      "regions": [
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -66.8759,
+          50.1919,
+          -65.9618,
+          52.4979
+        ],
+        "evidence": "CGNDB feature 2d9f0145be3c11d892e2080020a0f4c9 \"Rivière Moisie\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "52b7ba5f-d97c-428b-84ef-03008ba34736": {
+      "name": "Bazin",
+      "regions": [
+        "qc:04",
+        "qc:14",
+        "qc:15",
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -75.3791,
+          47.3581,
+          -74.4265,
+          48.0903
+        ],
+        "evidence": "CGNDB feature dc7903b9bbe611d892e2080020a0f4c9 \"Rivière Bazin\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "5388b51b-61a0-41ed-8194-82e407fba09d": {
+      "name": "Bryson (ruisseau)",
+      "regions": [
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -77.0784,
+          46.5416,
+          -77.063,
+          46.5561
+        ],
+        "evidence": "CGNDB feature 77034b47bbec11d892e2080020a0f4c9 \"Ruisseau Bryson\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "5486c527-2b81-474c-a806-146ab95fac73": {
+      "name": "Arnold",
+      "regions": [
+        "qc:05"
+      ],
+      "match": {
+        "bbox": [
+          -70.9325,
+          45.249,
+          -70.822,
+          45.4631
+        ],
+        "evidence": "CGNDB feature 925e7b59bbe511d892e2080020a0f4c9 \"Rivière Arnold\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "54f6debd-e172-4969-ab5f-5bfe9851a907": {
+      "name": "Yamaska Nord",
+      "regions": [
+        "qc:05"
+      ],
+      "match": {
+        "bbox": [
+          -72.7567,
+          45.3522,
+          -72.4882,
+          45.4497
+        ],
+        "evidence": "CGNDB feature 163df3a0bf0511d892e2080020a0f4c9 \"Rivière Yamaska Nord\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "55a1d8b9-a4be-4adf-9a70-78c91f35c1f0": {
+      "name": "Petite rivière de la Trinité",
+      "regions": [
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -67.427,
+          49.6345,
+          -67.4011,
+          49.656
+        ],
+        "evidence": "CGNDB feature 60e9884dbe5311d892e2080020a0f4c9 \"Petite rivière de la Trinité\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "55a39414-dda1-4d74-89c4-5b498d0c55b2": {
+      "name": "Chicoutimi (Pikauba)",
+      "regions": [
+        "qc:03",
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -71.515,
+          47.65,
+          -71.0075,
+          48.4359
+        ],
+        "evidence": "CGNDB feature ca7bac5cbbef11d892e2080020a0f4c9 \"Rivière Chicoutimi\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "55c7a019-32dc-423a-8396-71346330c7cc": {
+      "name": "Béthoulat (ruisseau)",
+      "regions": [
+        "qc:10"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "57dbee35-d531-47b7-a844-201c458b1418": {
+      "name": "Du Gouffre",
+      "regions": [
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -70.58,
+          47.43,
+          -70.3914,
+          47.8647
+        ],
+        "evidence": "CGNDB feature 869ce086be1811d892e2080020a0f4c9 \"Rivière du Gouffre\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "586b8aa7-c8fd-491f-94cd-1ee1d3d56694": {
+      "name": "Henri",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -71.7999,
+          46.417,
+          -71.3497,
+          46.5041
+        ],
+        "evidence": "CGNDB feature af9d7cedbe2911d892e2080020a0f4c9 \"Rivière Henri\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "58bf8bfc-5434-4382-9754-eed63f17ae7d": {
+      "name": "Du Capri (ruisseau)",
+      "regions": [
+        "qc:15"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "591afee9-f72c-4cbc-a312-011bf4316a4f": {
+      "name": "Madeleine",
+      "regions": [
+        "qc:11"
+      ],
+      "match": {
+        "bbox": [
+          -65.9962,
+          48.7585,
+          -65.2247,
+          49.2542
+        ],
+        "evidence": "CGNDB feature 2657a1cebe3911d892e2080020a0f4c9 \"Rivière Madeleine\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "596d21a4-271c-45c7-b0d5-53bff6fceef4": {
+      "name": "Petite Nation",
+      "regions": [
+        "qc:15",
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -75.1487,
+          45.5804,
+          -74.9414,
+          46.3662
+        ],
+        "evidence": "CGNDB feature 7841f951be4511d892e2080020a0f4c9 \"Rivière de la Petite Nation\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "59c2b106-72c0-4dd6-a717-205cb6e09aa0": {
+      "name": "À la Baleine",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -67.9205,
+          55.3541,
+          -65.3554,
+          58.2911
+        ],
+        "evidence": "CGNDB feature 372c457fbbe611d892e2080020a0f4c9 \"Rivière à la Baleine\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "5af4adcc-08e1-4ee2-af3c-b9a453100ddd": {
+      "name": "Bonniebrook",
+      "regions": [
+        "qc:15"
+      ],
+      "match": {
+        "bbox": [
+          -74.2044,
+          45.7222,
+          -74.0804,
+          45.8188
+        ],
+        "evidence": "CGNDB feature 499aa600bbeb11d892e2080020a0f4c9 \"Ruisseau Bonniebrook\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "5b49b3b1-7f78-4ed6-882e-f58cee57099c": {
+      "name": "Beaurivage",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -71.4155,
+          46.3697,
+          -71.1779,
+          46.7008
+        ],
+        "evidence": "CGNDB feature 30aa7928bf1011d892e2080020a0f4c9 \"Rivière Beaurivage\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "5b5469f6-5732-42cd-86ce-7586da0c85f0": {
+      "name": "Palmer Est",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -71.279,
+          46.2578,
+          -71.1424,
+          46.317
+        ],
+        "evidence": "CGNDB feature 2976a57fbe4211d892e2080020a0f4c9 \"Rivière Palmer Est\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "5c15c54f-1116-4977-9c75-98138618ac58": {
+      "name": "À l'Eau Morte (ruisseau)",
+      "regions": [
+        "qc:14"
+      ],
+      "match": {
+        "bbox": [
+          -74.0394,
+          46.5946,
+          -73.9591,
+          46.6444
+        ],
+        "evidence": "CGNDB feature b299af92be1011d892e2080020a0f4c9 \"Ruisseau à l'Eau Morte\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "5cfc09dc-b6dd-4954-9b8a-6f585008c3eb": {
+      "name": "Bonaventure Ouest",
+      "regions": [
+        "qc:11"
+      ],
+      "match": {
+        "bbox": [
+          -65.8075,
+          48.3928,
+          -65.4947,
+          48.9081
+        ],
+        "evidence": "CGNDB feature 21d70d11bbeb11d892e2080020a0f4c9 \"Rivière Bonaventure Ouest\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "5d101724-21ab-4797-9c89-9b6ead824474": {
+      "name": "Palmer (Labrador)",
+      "regions": [
+        "ca:nl"
+      ],
+      "match": {
+        "bbox": [
+          -64.1704,
+          58.7508,
+          -63.8512,
+          58.9882
+        ],
+        "evidence": "CGNDB feature 0c1611b6849c20c3a347064079a49931 \"Palmer River\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "5d34f602-2794-4732-9d90-35b1af81d6bb": {
+      "name": "Inuaqnaqtuq",
+      "regions": [
+        "qc:10"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "5d8062b2-ac02-4c27-831c-3f49649abdc8": {
+      "name": "Eastmain",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -78.5257,
+          51.7265,
+          -70.8053,
+          52.5751
+        ],
+        "evidence": "CGNDB feature a7c7258ebe1011d892e2080020a0f4c9 \"Rivière Eastmain\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "5da58751-edae-41d3-9bd1-e909a190ae35": {
+      "name": "Mégiscane (05)",
+      "regions": [
+        "qc:08",
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -77.1578,
+          48.0861,
+          -75.4632,
+          48.7209
+        ],
+        "evidence": "CGNDB feature f5882385be3a11d892e2080020a0f4c9 \"Rivière Mégiscane\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "5fbd1c8a-7347-4649-b807-378ef4e2d552": {
+      "name": "Rimouski",
+      "regions": [
+        "ca:nb",
+        "qc:01"
+      ],
+      "match": {
+        "bbox": [
+          -68.6996,
+          47.8265,
+          -68.1247,
+          48.4531
+        ],
+        "evidence": "CGNDB feature 5cc04af7ba2211d892e2080020a0f4c9 \"Rivière Rimouski\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "5fc12ae2-aa23-48fc-9eea-67c9d6ca8efd": {
+      "name": "Du Chef",
+      "regions": [
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -73.85,
+          49.2924,
+          -73.2786,
+          50.2898
+        ],
+        "evidence": "CGNDB feature 9626ea19bbef11d892e2080020a0f4c9 \"Rivière du Chef\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "61635b81-5c34-4371-b23f-b442428f42bb": {
+      "name": "Aigle",
+      "regions": [
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -76.3542,
+          46.1178,
+          -76.0404,
+          46.5188
+        ],
+        "evidence": "CGNDB feature 965bb62fbbe411d892e2080020a0f4c9 \"Rivière de l'Aigle\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "62841efa-a45a-4203-8ca6-97cbdcac2bcf": {
+      "name": "Mékinac",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -72.7856,
+          46.8341,
+          -72.7455,
+          46.8742
+        ],
+        "evidence": "CGNDB feature f9b32fa9be3a11d892e2080020a0f4c9 \"Rivière Mékinac\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "62d42d30-6cd5-42fd-b93c-122c2fc591fb": {
+      "name": "Petite-Nation (canal)",
+      "regions": [
+        "qc:07",
+        "ca:on"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "631ba5a4-af1e-47e1-88c1-8c03bef35a9b": {
+      "name": "Daniel",
+      "regions": [
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -72.3376,
+          50.5972,
+          -72.2319,
+          50.8958
+        ],
+        "evidence": "CGNDB feature 922ac160be0c11d892e2080020a0f4c9 \"Rivière Daniel\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "649efd2d-8ba8-41c0-b723-d946a4b2a84f": {
+      "name": "Bulstrode",
+      "regions": [
+        "qc:12",
+        "qc:17"
+      ],
+      "match": {
+        "bbox": [
+          -72.2681,
+          45.943,
+          -71.5534,
+          46.218
+        ],
+        "evidence": "CGNDB feature 891350a3bbec11d892e2080020a0f4c9 \"Rivière Bulstrode\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "662cc3fc-a53c-4627-a810-aaae20cc48c8": {
+      "name": "Linière (du Loup)",
+      "regions": [
+        "qc:05",
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -70.6575,
+          45.6865,
+          -70.3581,
+          46.1475
+        ],
+        "evidence": "CGNDB feature 7bbe9e7abf9211d892e2080020a0f4c9 \"Rivière Linière\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "6725d72c-9f91-45e6-92ae-507a55168ae2": {
+      "name": "Saguenay (aval)",
+      "regions": [
+        "qc:02",
+        "qc:09",
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -71.6378,
+          48.1113,
+          -69.6665,
+          48.5889
+        ],
+        "evidence": "CGNDB feature 51ec742dba2011d892e2080020a0f4c9 \"Saguenay River\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "6825ef09-26ec-4475-80c8-977e728fe65b": {
+      "name": "Jean-Venne",
+      "regions": [
+        "qc:14"
+      ],
+      "match": {
+        "bbox": [
+          -73.9713,
+          46.0965,
+          -73.8485,
+          46.1418
+        ],
+        "evidence": "CGNDB feature 3fa5eef2be2b11d892e2080020a0f4c9 \"Rivière Jean-Venne\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "69cc4859-d529-49a4-a595-0358eb3ce534": {
+      "name": "Des Anglais",
+      "regions": [
+        "qc:16"
+      ],
+      "match": {
+        "bbox": [
+          -73.8741,
+          44.9711,
+          -73.6374,
+          45.2235
+        ],
+        "evidence": "CGNDB feature 22f228d4bbe511d892e2080020a0f4c9 \"Rivière des Anglais\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "69d523a8-41d7-46df-92d5-8bea7f02c08a": {
+      "name": "Saint-Adolphe",
+      "regions": [
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -71.1966,
+          47.0049,
+          -71.1565,
+          47.045
+        ],
+        "evidence": "CGNDB feature 5b2445b4d1e111d892e2080020a0f4c9 \"Rivière Saint-Adolphe\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "6a1ace0b-7737-4e85-b803-9edba7f2eb28": {
+      "name": "Roullié",
+      "regions": [
+        "qc:14"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "6b1374b1-0768-4722-991d-1d803029f0de": {
+      "name": "Maskinongé (Rouge)",
+      "regions": [
+        "qc:15",
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -74.8962,
+          45.7907,
+          -74.6717,
+          46.1459
+        ],
+        "evidence": "CGNDB feature 5855d410be3a11d892e2080020a0f4c9 \"Rivière Maskinongé\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "6c393fb5-4766-46ef-80cd-eca22bfb0668": {
+      "name": "Boisvert",
+      "regions": [
+        "qc:02"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "6cabe5d0-d03a-46cf-bcf8-750017f788f7": {
+      "name": "Du Pin",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -70.5213,
+          46.6188,
+          -70.3704,
+          46.7689
+        ],
+        "evidence": "CGNDB feature f3e39a29be4511d892e2080020a0f4c9 \"Rivière du Pin\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "6e2f8945-dc0f-4708-93f7-4ad88bb1d6e8": {
+      "name": "Gatineau",
+      "regions": [
+        "qc:04",
+        "qc:08",
+        "qc:07",
+        "qc:15"
+      ],
+      "match": {
+        "bbox": [
+          -76.2364,
+          45.4367,
+          -75.2047,
+          48.1732
+        ],
+        "evidence": "CGNDB feature 7d42945fbe1711d892e2080020a0f4c9 \"Rivière Gatineau\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "6f03c0f6-8b07-4ab3-bdd7-3437ecc0c2c3": {
+      "name": "Calway",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -70.8409,
+          46.2616,
+          -70.7162,
+          46.364
+        ],
+        "evidence": "CGNDB feature 26db020fbbed11d892e2080020a0f4c9 \"Rivière Calway\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "6f5e9760-90c1-4645-aa72-4dfa17a70dcb": {
+      "name": "Chaudière",
+      "regions": [
+        "qc:05",
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -71.3022,
+          45.5667,
+          -70.5034,
+          46.8757
+        ],
+        "evidence": "CGNDB feature 836d8461bbef11d892e2080020a0f4c9 \"Rivière Chaudière\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "7174364c-8a42-44fd-a621-a1a0ea3faeb9": {
+      "name": "Corneille",
+      "regions": [
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -77.1094,
+          46.5084,
+          -76.6992,
+          46.9191
+        ],
+        "evidence": "CGNDB feature 8476b80dbe0b11d892e2080020a0f4c9 \"Rivière de la Corneille\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "73f91346-c885-466a-882d-8863b6c0084b": {
+      "name": "Wessonneau",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -73.2641,
+          47.0336,
+          -72.8812,
+          47.2236
+        ],
+        "evidence": "CGNDB feature 62f513adbf1011d892e2080020a0f4c9 \"Rivière Wessonneau\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "7463b33f-6abe-4077-96a1-f843382aa757": {
+      "name": "À la Marte",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -76.404,
+          50.9664,
+          -75.3168,
+          51.3555
+        ],
+        "evidence": "CGNDB feature 38c0ced2be3a11d892e2080020a0f4c9 \"Rivière à la Marte\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "770de830-1ce4-43f5-ae02-f380b9acd31c": {
+      "name": "Manouane (05)",
+      "regions": [
+        "qc:14",
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -74.2073,
+          47.4033,
+          -73.7116,
+          47.9369
+        ],
+        "evidence": "CGNDB feature b1c069e3be3911d892e2080020a0f4c9 \"Rivière Manouane\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "781f4516-734c-4fdd-8925-7ea19242311f": {
+      "name": "Broadback",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -78.8937,
+          51.0628,
+          -76.8266,
+          51.3613
+        ],
+        "evidence": "CGNDB feature 31506d87bbec11d892e2080020a0f4c9 \"Rivière Broadback\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "78374c68-54cf-44a5-860c-2baf03f8b2d0": {
+      "name": "York",
+      "regions": [
+        "qc:11"
+      ],
+      "match": {
+        "bbox": [
+          -65.5332,
+          48.7008,
+          -64.4839,
+          48.9913
+        ],
+        "evidence": "CGNDB feature 2cec12febf0511d892e2080020a0f4c9 \"Rivière York\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "7a30e691-bf79-4667-945b-281a77035519": {
+      "name": "Assemetquagan",
+      "regions": [
+        "qc:11",
+        "qc:01"
+      ],
+      "match": {
+        "bbox": [
+          -67.1113,
+          48.0479,
+          -66.9463,
+          48.3776
+        ],
+        "evidence": "CGNDB feature aed68a38bbe511d892e2080020a0f4c9 \"Rivière Assemetquagan\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "7a5c18a3-7821-43ad-a80d-d81ee2b0e1e3": {
+      "name": "Tamarac",
+      "regions": [
+        "qc:08",
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -75.4786,
+          48.015,
+          -75.4487,
+          48.0835
+        ],
+        "evidence": "CGNDB feature 87c962bbbe5111d892e2080020a0f4c9 \"Rivière Tamarac\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "7a9afda9-e9e6-4d43-9f43-2c558977c26c": {
+      "name": "Francoeur (ruisseau)",
+      "regions": [
+        "qc:17",
+        "qc:05"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "7b79fe58-80d4-4e43-a832-eace4b1d53f2": {
+      "name": "Ford",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -65.8202,
+          57.6865,
+          -64.3385,
+          58.2123
+        ],
+        "evidence": "CGNDB feature ea29b469be1211d892e2080020a0f4c9 \"Rivière Ford\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "7de8ddc4-6043-4167-a251-c753b37475cf": {
+      "name": "Sainte-Anne Nord-Est",
+      "regions": [
+        "qc:11"
+      ],
+      "match": {
+        "bbox": [
+          -66.1487,
+          48.9283,
+          -66.1086,
+          48.9684
+        ],
+        "evidence": "CGNDB feature 0cd9827fbe4d11d892e2080020a0f4c9 \"Rivière Sainte-Anne Nord-Est\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "7f268071-2307-4f81-9e1c-45f8c9e9fe05": {
+      "name": "Au Saumon (Lac Brompton)",
+      "regions": [
+        "qc:05"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "808294d2-6ed2-496e-89c5-c082ea3581e6": {
+      "name": "Koksoak",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -69.5158,
+          57.4231,
+          -67.9993,
+          58.5493
+        ],
+        "evidence": "CGNDB feature f1976966be2c11d892e2080020a0f4c9 \"Rivière Koksoak\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "81432f5a-0a42-4007-a3b4-a9a4e3882d85": {
+      "name": "Batiscan",
+      "regions": [
+        "qc:04",
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -72.4723,
+          46.5102,
+          -72.1262,
+          47.6154
+        ],
+        "evidence": "CGNDB feature cdaa45acbbe611d892e2080020a0f4c9 \"Rivière Batiscan\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "81a3a2a0-31d3-4cd0-8793-3b63ba9400e4": {
+      "name": "Coaticook",
+      "regions": [
+        "qc:05"
+      ],
+      "match": {
+        "bbox": [
+          -71.918,
+          45.0041,
+          -71.7374,
+          45.3378
+        ],
+        "evidence": "CGNDB feature d90aac3fbbf011d892e2080020a0f4c9 \"Rivière Coaticook\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "829ef5d6-9106-46ae-ac58-05f1b7e180da": {
+      "name": "Bonaventure",
+      "regions": [
+        "qc:11"
+      ],
+      "match": {
+        "bbox": [
+          -65.6305,
+          48.0212,
+          -65.4284,
+          48.9116
+        ],
+        "evidence": "CGNDB feature 21c99f8fbbeb11d892e2080020a0f4c9 \"Rivière Bonaventure\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "82e9516a-d96e-4a2e-86f6-de1e84e74f7b": {
+      "name": "Des Abénaquis (Famine)",
+      "regions": [
+        "qc:12"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "82fd6716-19c6-4875-8ae7-8f94697c9e59": {
+      "name": "Villiers",
+      "regions": [
+        "qc:14"
+      ],
+      "match": {
+        "bbox": [
+          -73.8523,
+          46.9858,
+          -73.8122,
+          47.0259
+        ],
+        "evidence": "CGNDB feature 1331cde7be5811d892e2080020a0f4c9 \"Rivière Villiers\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "835a3225-0d50-4e92-9365-be735b747f19": {
+      "name": "Yamachiche",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -72.9806,
+          46.2641,
+          -72.7144,
+          46.5544
+        ],
+        "evidence": "CGNDB feature 16170aaabf0511d892e2080020a0f4c9 \"Rivière Yamachiche\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "837f364f-f009-4f2a-8810-c19750aecb69": {
+      "name": "Arnaud (Payne)",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -73.8163,
+          58.7028,
+          -69.7508,
+          60.7594
+        ],
+        "evidence": "CGNDB feature 13a26947d1e011d892e2080020a0f4c9 \"Rivière Arnaud\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "84617334-5da6-46a0-bd3d-0b8870294684": {
+      "name": "Branche du Lac",
+      "regions": [
+        "qc:01"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "8494e5cb-0c41-41df-a984-ab1c2a36d8ed": {
+      "name": "Petite Cascapédia Est",
+      "regions": [
+        "qc:11"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "86c1b79d-fdb6-412d-bb72-e8607b37676f": {
+      "name": "Wabano",
+      "regions": [
+        "qc:02",
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -74.1535,
+          48.3377,
+          -73.6281,
+          48.7514
+        ],
+        "evidence": "CGNDB feature a450e955bf0411d892e2080020a0f4c9 \"Rivière Wabano\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "886679af-8719-4b88-a037-5b784e78f504": {
+      "name": "Aux Outardes",
+      "regions": [
+        "qc:02",
+        "qc:09"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "8ab26d31-c426-4a40-afea-01855d680eb9": {
+      "name": "Noire (Portneuf)",
+      "regions": [
+        "qc:03"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "8d1aa51f-72eb-4645-b36c-1231cb4c03de": {
+      "name": "Jacques-Cartier",
+      "regions": [
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -71.8436,
+          46.5979,
+          -71.0805,
+          47.7081
+        ],
+        "evidence": "CGNDB feature 08e70b54be2b11d892e2080020a0f4c9 \"Rivière Jacques-Cartier\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "8d77e12f-e5f6-4487-8934-6961ce20e46a": {
+      "name": "Sanningajuq (Ford)",
+      "regions": [
+        "qc:10"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "8f8236aa-701d-4efa-8929-51abc6170c91": {
+      "name": "Kedgwick",
+      "regions": [
+        "qc:01",
+        "ca:nb"
+      ],
+      "match": {
+        "bbox": [
+          -68.0964,
+          47.9006,
+          -67.8646,
+          48.1222
+        ],
+        "evidence": "CGNDB feature 548fd990ba2111d892e2080020a0f4c9 \"Rivière Kedgwick\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "8fb9af53-aef2-4860-8943-4407b75b8aa2": {
+      "name": "Sainte-Marguerite Nord-Est",
+      "regions": [
+        "qc:02",
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -70.4839,
+          48.2407,
+          -69.7897,
+          48.785
+        ],
+        "evidence": "CGNDB feature 28fc6b57be4d11d892e2080020a0f4c9 \"Rivière Sainte-Marguerite Nord-Est\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "9061d913-7fa6-4427-b8ba-fdfeb7e3864f": {
+      "name": "Rupert (Haute)",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -78.7823,
+          50.9998,
+          -73.6904,
+          51.8172
+        ],
+        "evidence": "CGNDB feature d695c3d0d1e311d892e2080020a0f4c9 \"Rivière Rupert\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "9120c2d8-bdc5-47d4-9c3f-488e0ab65849": {
+      "name": "Natashquan",
+      "regions": [
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -63.4785,
+          50.0479,
+          -61.0602,
+          52.9959
+        ],
+        "evidence": "CGNDB feature b7abdc01ba2111d892e2080020a0f4c9 \"Rivière Natashquan\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "9194bf1f-82cc-4626-95d4-5ea709ca2f3f": {
+      "name": "Mac Donald",
+      "regions": [
+        "qc:09"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "9318be44-3ee7-4351-bc3c-95df52f8c7d5": {
+      "name": "Pin Rouge",
+      "regions": [
+        "qc:15"
+      ],
+      "match": {
+        "bbox": [
+          -74.8926,
+          47.2333,
+          -74.8449,
+          47.356
+        ],
+        "evidence": "CGNDB feature 050744b5be4611d892e2080020a0f4c9 \"Rivière du Pin Rouge\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "93b6ee12-f6f7-4054-b1a8-15dc168c7291": {
+      "name": "Bélinge",
+      "regions": [
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -76.0384,
+          47.4143,
+          -76.0246,
+          47.4281
+        ],
+        "evidence": "CGNDB feature a6b9982ebbe711d892e2080020a0f4c9 \"Rivière Bélinge\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "94e49545-898d-444f-8ab5-df6a5ea24859": {
+      "name": "Mastigouche Nord",
+      "regions": [
+        "qc:14"
+      ],
+      "match": {
+        "bbox": [
+          -73.4736,
+          46.446,
+          -73.3607,
+          46.5358
+        ],
+        "evidence": "CGNDB feature 8e26af54be3a11d892e2080020a0f4c9 \"Rivière Mastigouche Nord\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "9544d332-abd7-4677-9b7f-88a6efbfc1a1": {
+      "name": "Coulonge",
+      "regions": [
+        "qc:07",
+        "qc:08"
+      ],
+      "match": {
+        "bbox": [
+          -77.323,
+          45.7863,
+          -76.6495,
+          47.2063
+        ],
+        "evidence": "CGNDB feature b1d9ad30be0b11d892e2080020a0f4c9 \"Rivière Coulonge\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "965a349e-6261-4e43-b478-d7178499be3a": {
+      "name": "Achigan",
+      "regions": [
+        "qc:15",
+        "qc:14"
+      ],
+      "match": {
+        "bbox": [
+          -73.9207,
+          45.8445,
+          -73.8536,
+          45.9344
+        ],
+        "evidence": "CGNDB feature 6f63ab22bbe411d892e2080020a0f4c9 \"Rivière de l'Achigan\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "9678de92-2314-4bb4-a621-56ee4d74e240": {
+      "name": "Sainte-Anne (Gaspésie)",
+      "regions": [
+        "qc:11"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "976c9fa5-f910-4751-8625-0d93b10e1681": {
+      "name": "Montmorency",
+      "regions": [
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -71.2163,
+          46.8803,
+          -71.0481,
+          47.5808
+        ],
+        "evidence": "CGNDB feature 02f0af8bbe3d11d892e2080020a0f4c9 \"Rivière Montmorency\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "97b883ba-5cc0-4e1e-8e35-260baf3e010c": {
+      "name": "Kogaluc",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -77.621,
+          58.4936,
+          -74.1256,
+          59.9135
+        ],
+        "evidence": "CGNDB feature f10318a0be2c11d892e2080020a0f4c9 \"Rivière Kogaluc\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "9a02f17d-9b02-4388-98e3-6dd085c9dbf2": {
+      "name": "Du Sud",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -70.7842,
+          46.582,
+          -70.2929,
+          47.04
+        ],
+        "evidence": "CGNDB feature eca1d720be5011d892e2080020a0f4c9 \"Rivière du Sud\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "9cc9b77f-d405-4530-a130-d002e3723a00": {
+      "name": "Orignal",
+      "regions": [
+        "qc:08",
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -77.6812,
+          47.1718,
+          -77.6341,
+          47.2408
+        ],
+        "evidence": "CGNDB feature 444eb54fbe4111d892e2080020a0f4c9 \"Rivière de l'Orignal\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "9ce0330d-2bf6-4ac1-87a6-bab7ba621e75": {
+      "name": "(sans nom) (à la Baleine depuis lac Tudor)",
+      "regions": [
+        "qc:10"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "9d106db6-7d79-4657-96e4-1a1b9bdb935f": {
+      "name": "De la Fourche (Armagh)",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -70.6137,
+          46.5755,
+          -70.4569,
+          46.7383
+        ],
+        "evidence": "CGNDB feature ce5d5719d1e111d892e2080020a0f4c9 \"Rivière de la Fourche\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "9d9b1366-7ac3-49c4-93d5-9944825cf544": {
+      "name": "Manicouagan Est (réservoir)",
+      "regions": [
+        "qc:09"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "9fa5cb4f-08e3-44d6-8b23-cfad0355f441": {
+      "name": "Delay",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -71.4768,
+          55.4864,
+          -70.7173,
+          56.9481
+        ],
+        "evidence": "CGNDB feature d4ece702be0c11d892e2080020a0f4c9 \"Rivière Delay\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "a053c397-6070-439b-9d28-c20c03da63be": {
+      "name": "Natastan",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -74.9817,
+          51.3238,
+          -74.9416,
+          51.3639
+        ],
+        "evidence": "CGNDB feature 60dca699be3f11d892e2080020a0f4c9 \"Rivière Natastan\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "a0ae97af-3851-4580-8346-b45527b2345a": {
+      "name": "Croche",
+      "regions": [
+        "qc:02",
+        "qc:04"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "a1581969-e68f-4007-9614-db55d78c1c64": {
+      "name": "Témiscamie Est",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -71.8392,
+          51.7013,
+          -71.7991,
+          51.7414
+        ],
+        "evidence": "CGNDB feature ee33e857d1e311d892e2080020a0f4c9 \"Rivière Témiscamie Est\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "a31f283f-80a5-4eb3-a349-ee440d7c7827": {
+      "name": "Tousignant",
+      "regions": [
+        "qc:04"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "a5fe8adc-453e-4e64-ae96-94fd51751dfc": {
+      "name": "Swampy Bay",
+      "regions": [
+        "qc:09",
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -69.1112,
+          54.9372,
+          -67.088,
+          57.0346
+        ],
+        "evidence": "CGNDB feature 523bd17bbe5111d892e2080020a0f4c9 \"Rivière Swampy Bay\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "a6a0e792-5287-45f1-868e-9e25169e6c75": {
+      "name": "Noir (ruisseau) (Sept Frères)",
+      "regions": [
+        "qc:15"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "a73a1444-a451-46b0-8100-00dd66e48615": {
+      "name": "Doncaster",
+      "regions": [
+        "qc:15"
+      ],
+      "match": {
+        "bbox": [
+          -74.1671,
+          45.9594,
+          -74.0361,
+          46.1626
+        ],
+        "evidence": "CGNDB feature c9f70114be0d11d892e2080020a0f4c9 \"Rivière Doncaster\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "a89c2bfb-9ee4-409b-aaa9-5140dcce9ece": {
+      "name": "Nestaocano",
+      "regions": [
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -73.6162,
+          49.5755,
+          -72.8183,
+          50.8584
+        ],
+        "evidence": "CGNDB feature a72a3d58be3f11d892e2080020a0f4c9 \"Rivière Nestaocano\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "a921f8da-ab18-47ca-a055-9caea803c400": {
+      "name": "Désert",
+      "regions": [
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -76.237,
+          46.3486,
+          -75.8725,
+          46.7573
+        ],
+        "evidence": "CGNDB feature 5391b5cabe0d11d892e2080020a0f4c9 \"Rivière Désert\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "a9f70910-84cb-4ca8-8f99-5781906eed19": {
+      "name": "Kekek",
+      "regions": [
+        "qc:08"
+      ],
+      "match": {
+        "bbox": [
+          -76.1982,
+          48.0636,
+          -75.8571,
+          48.2819
+        ],
+        "evidence": "CGNDB feature 349b96e8be2c11d892e2080020a0f4c9 \"Rivière Kekek\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "aa573db6-527e-4b1e-be19-5586b2a7551d": {
+      "name": "Du Nord (Dumoine)",
+      "regions": [
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -77.8232,
+          46.8111,
+          -77.8106,
+          46.8469
+        ],
+        "evidence": "CGNDB feature 384303e7be4011d892e2080020a0f4c9 \"Rivière du Nord\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "aa989974-e874-4625-9aab-a3513e04133f": {
+      "name": "Noire (Lanaudière)",
+      "regions": [
+        "qc:14"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "ab5cc2fc-bcdb-42dd-9631-55ce0c8b2c69": {
+      "name": "Matawin",
+      "regions": [
+        "qc:14",
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -73.6772,
+          46.8228,
+          -72.9286,
+          46.9263
+        ],
+        "evidence": "CGNDB feature 968a3517be3a11d892e2080020a0f4c9 \"Rivière Matawin\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "ac1828d2-8a54-40b5-9a3c-5614ba4def23": {
+      "name": "Du Nord",
+      "regions": [
+        "qc:14",
+        "qc:15"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "ac6cf5a6-32a2-484b-ba86-cee62ca4cd3b": {
+      "name": "Belle Rivière",
+      "regions": [
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -71.8304,
+          48.2916,
+          -71.7065,
+          48.3661
+        ],
+        "evidence": "CGNDB feature c10095fabbe711d892e2080020a0f4c9 \"Ruisseau de la Belle Rivière\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "ace042ee-9751-41e1-9be5-fe31c218427c": {
+      "name": "Pontax",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -78.8249,
+          51.4233,
+          -75.9413,
+          51.964
+        ],
+        "evidence": "CGNDB feature 5d3117cebf1011d892e2080020a0f4c9 \"Rivière Pontax\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "ae0207e9-6db1-4008-b444-0dabdab79131": {
+      "name": "Serpent",
+      "regions": [
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -76.1362,
+          46.8684,
+          -76.0853,
+          46.9063
+        ],
+        "evidence": "CGNDB feature 79178cf8be4f11d892e2080020a0f4c9 \"Rivière Serpent\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "ae126a1c-5fcd-4e45-b921-6252ab9f5939": {
+      "name": "Camie",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -72.1517,
+          51.5433,
+          -72.1116,
+          51.5834
+        ],
+        "evidence": "CGNDB feature 2fd6a92bbbed11d892e2080020a0f4c9 \"Rivière Camie\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "ae82f0d7-3c54-4de1-9dce-77a4899c4586": {
+      "name": "Capitachouane",
+      "regions": [
+        "qc:08"
+      ],
+      "match": {
+        "bbox": [
+          -76.4933,
+          47.8739,
+          -76.1255,
+          47.985
+        ],
+        "evidence": "CGNDB feature fd066f0dbbed11d892e2080020a0f4c9 \"Rivière Capitachouane\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "afb3470a-4ac2-4a52-a2cf-45c7f92a9562": {
+      "name": "Manouane (06)",
+      "regions": [
+        "qc:02"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "b0f87217-1e1f-40d7-bcfd-af243acb3459": {
+      "name": "Simon",
+      "regions": [
+        "qc:15"
+      ],
+      "match": {
+        "bbox": [
+          -74.3446,
+          45.8862,
+          -74.1342,
+          45.9243
+        ],
+        "evidence": "CGNDB feature a2074629bfae11d892e2080020a0f4c9 \"Rivière à Simon\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "b1c58595-e437-4138-96a7-08fc679271fe": {
+      "name": "Serpentine-Genest",
+      "regions": [
+        "qc:03"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "b25bca69-22ea-4fe4-9495-f6ba9ac45a59": {
+      "name": "Ristigouche",
+      "regions": [
+        "ca:nb",
+        "qc:11"
+      ],
+      "match": {
+        "bbox": [
+          -67.5561,
+          47.6572,
+          -66.3666,
+          48.2494
+        ],
+        "evidence": "CGNDB feature 762e8722ba2011d892e2080020a0f4c9 \"Rivière Ristigouche\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "b3190faf-d842-4272-90a1-3b409e232e88": {
+      "name": "Neigette",
+      "regions": [
+        "qc:01"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "b5b12f89-b740-4d21-838a-5e77180b67ca": {
+      "name": "Chenal Bostonnais",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -72.4866,
+          47.6876,
+          -72.3965,
+          47.7988
+        ],
+        "evidence": "CGNDB feature 5e8d59f7bbeb11d892e2080020a0f4c9 \"Chenal Bostonnais\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "b5bcb908-9504-4f56-89ff-c111550f17fa": {
+      "name": "Dumoine",
+      "regions": [
+        "qc:08",
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -77.9349,
+          46.2023,
+          -77.7244,
+          47.2848
+        ],
+        "evidence": "CGNDB feature 6e21c2d9be1011d892e2080020a0f4c9 \"Rivière Dumoine\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "b62bd1c3-286d-436a-89c4-9e41a67bbb7e": {
+      "name": "Des Pins (Nicolet)",
+      "regions": [
+        "qc:17"
+      ],
+      "match": {
+        "bbox": [
+          -71.8954,
+          45.8893,
+          -71.8616,
+          45.9175
+        ],
+        "evidence": "CGNDB feature 5e56fa3ebf1011d892e2080020a0f4c9 \"Rivière des Pins\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "b65dd73a-a1ef-4d87-981e-44fc6bedb72a": {
+      "name": "Filkars",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -71.3624,
+          46.2648,
+          -71.1527,
+          46.4407
+        ],
+        "evidence": "CGNDB feature 95b86d3bbe1211d892e2080020a0f4c9 \"Rivière Filkars\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "b6e8d40f-2a4c-45b5-a5dd-e0000c1171c6": {
+      "name": "Mistassibi Nord-Ouest",
+      "regions": [
+        "qc:02"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "b717f73b-1c6e-40a1-af84-63b506dea2bf": {
+      "name": "À l'Eau Chaude (ruisseau)",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -70.6698,
+          46.5018,
+          -70.5228,
+          46.6045
+        ],
+        "evidence": "CGNDB feature ac1ff871be1011d892e2080020a0f4c9 \"Ruisseau à l'Eau Chaude\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "b8309ddb-9092-4cde-b173-a4b3ca586db0": {
+      "name": "Palmer",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -71.4587,
+          46.1702,
+          -71.119,
+          46.3777
+        ],
+        "evidence": "CGNDB feature 295d9f3ebe4211d892e2080020a0f4c9 \"Rivière Palmer\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "b8e0d3f0-4fd4-4e39-99b5-5f423663e3d1": {
+      "name": "Des Abénaquis (Etchemin)",
+      "regions": [
+        "qc:12"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "b97e5503-3d82-47e2-9f74-670c6985753b": {
+      "name": "Des Mille-Îles",
+      "regions": [
+        "qc:13",
+        "qc:15",
+        "qc:14"
+      ],
+      "match": {
+        "bbox": [
+          -73.5492,
+          45.6791,
+          -73.5091,
+          45.7192
+        ],
+        "evidence": "CGNDB feature 3d5d354cbf1011d892e2080020a0f4c9 \"Rivière des Mille Îles\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "b98b9675-d32d-406e-87c7-d514355bde9e": {
+      "name": "Bécancour",
+      "regions": [
+        "qc:12",
+        "qc:17",
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -72.4781,
+          45.9908,
+          -71.1914,
+          46.538
+        ],
+        "evidence": "CGNDB feature 0b28eb57bbe711d892e2080020a0f4c9 \"Rivière Bécancour\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "bab5aec7-e6f3-496a-b0b5-b08a002d0240": {
+      "name": "Du Bic",
+      "regions": [
+        "qc:01"
+      ],
+      "match": {
+        "bbox": [
+          -68.9296,
+          48.1566,
+          -68.6868,
+          48.3963
+        ],
+        "evidence": "CGNDB feature 886018c9bbea11d892e2080020a0f4c9 \"Rivière du Bic\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "bb37466f-eb90-4a1b-aa64-fc1006079f2c": {
+      "name": "Betsiamites",
+      "regions": [
+        "qc:02",
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -70.802,
+          48.4427,
+          -68.6311,
+          51.2123
+        ],
+        "evidence": "CGNDB feature 0ccc0e7a849c20c3697db655f560cac0 \"Rivière Betsiamites\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "bcbefbfa-2078-4c97-bede-b430704b7646": {
+      "name": "Chateauguay",
+      "regions": [
+        "qc:16"
+      ],
+      "match": {
+        "bbox": [
+          -74.2567,
+          44.8289,
+          -73.717,
+          45.5119
+        ],
+        "evidence": "CGNDB feature 75582b63bbef11d892e2080020a0f4c9 \"Rivière Châteauguay\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "bccd0c11-94ab-4328-b3ec-69ce2eaded0b": {
+      "name": "Etamamiou",
+      "regions": [
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -60.2857,
+          51.0139,
+          -60.1083,
+          51.1296
+        ],
+        "evidence": "CGNDB feature ab876c66be1111d892e2080020a0f4c9 \"Rivière Étamamiou\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "bceea1ee-a1f8-46b9-a032-597d963d6863": {
+      "name": "Saint-Augustin",
+      "regions": [
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -59.7226,
+          51.0805,
+          -58.4989,
+          52.6945
+        ],
+        "evidence": "CGNDB feature 64520949ba1f11d892e2080020a0f4c9 \"Rivière Saint-Augustin\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "bead990d-1881-4861-8a8d-a6e322f7a74d": {
+      "name": "Saint-Jean",
+      "regions": [
+        "qc:09"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "c007ef28-ab0c-4349-af1e-db990988293f": {
+      "name": "False",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -68.4207,
+          57.2438,
+          -67.832,
+          58.3937
+        ],
+        "evidence": "CGNDB feature e6d6aeafbe1111d892e2080020a0f4c9 \"Rivière False\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "c017f10c-b356-4089-b052-98c8e596a583": {
+      "name": "De la Baie",
+      "regions": [
+        "qc:08"
+      ],
+      "match": {
+        "bbox": [
+          -77.4686,
+          47.4448,
+          -77.4546,
+          47.4587
+        ],
+        "evidence": "CGNDB feature 21c17c3dbbe611d892e2080020a0f4c9 \"Rivière de la Baie\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "c0d02ef7-14ca-4bff-a6d2-2884dd90d2f9": {
+      "name": "Normandin",
+      "regions": [
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -74.4459,
+          48.9451,
+          -73.4161,
+          49.7231
+        ],
+        "evidence": "CGNDB feature 48490954be4011d892e2080020a0f4c9 \"Rivière Normandin\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "c2c79634-a10c-434a-98c3-e20a2b0a3ce7": {
+      "name": "Polemond",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -77.7756,
+          59.535,
+          -77.7355,
+          59.575
+        ],
+        "evidence": "CGNDB feature ce24196abe4611d892e2080020a0f4c9 \"Rivière Polemond\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "c2ca2e20-53ed-4aa6-af0f-81cc231abe77": {
+      "name": "Saint-Francois",
+      "regions": [
+        "qc:05",
+        "qc:12",
+        "qc:17"
+      ],
+      "match": {
+        "bbox": [
+          -72.9969,
+          45.3079,
+          -71.2716,
+          46.1269
+        ],
+        "evidence": "CGNDB feature 3e9375a8be4d11d892e2080020a0f4c9 \"Rivière Saint-François\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "c526c603-2a60-4080-884c-388a143cb41b": {
+      "name": "Forant",
+      "regions": [
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -77.204,
+          46.3701,
+          -77.1896,
+          46.3845
+        ],
+        "evidence": "CGNDB feature e5df606fbe1211d892e2080020a0f4c9 \"Rivière Forant\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "c55513ce-f8d4-414f-ad28-677c6f93f46b": {
+      "name": "Mauvaise",
+      "regions": [
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -71.8848,
+          46.9233,
+          -71.8447,
+          46.9634
+        ],
+        "evidence": "CGNDB feature b515e089be3a11d892e2080020a0f4c9 \"Rivière Mauvaise\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "c718794b-c269-4fbe-83f1-7bffed2cd28f": {
+      "name": "Pitchpine (ruisseau)",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -74.7386,
+          47.9187,
+          -74.6985,
+          47.9588
+        ],
+        "evidence": "CGNDB feature 3ae788a8be4611d892e2080020a0f4c9 \"Ruisseau Pitchpine\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "c767bf23-aa81-48bb-9da4-159985712bab": {
+      "name": "(tributaire lac Fromont) (Eastmain)",
+      "regions": [
+        "qc:10"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "c7c3af4a-e976-4363-b1fd-b8e05dc7ce1b": {
+      "name": "Du Loup",
+      "regions": [
+        "qc:04"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "c8454bf6-3e0f-467b-93d8-710ff6485092": {
+      "name": "Matawin Ouest",
+      "regions": [
+        "qc:14"
+      ],
+      "match": {
+        "bbox": [
+          -74.3484,
+          46.6197,
+          -74.3083,
+          46.6598
+        ],
+        "evidence": "CGNDB feature 9697f0b8be3a11d892e2080020a0f4c9 \"Rivière Matawin Ouest\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "c8631c37-42b8-4ebc-a140-f8444af41dc3": {
+      "name": "Suzie",
+      "regions": [
+        "qc:08",
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -75.7099,
+          48.1255,
+          -75.6441,
+          48.3345
+        ],
+        "evidence": "CGNDB feature 4d3affccbe5111d892e2080020a0f4c9 \"Rivière Suzie\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "c879135e-ed67-4543-b004-477f47843859": {
+      "name": "Aux Ormes",
+      "regions": [
+        "qc:12"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "c93e6d23-4033-4f16-b973-b482db5dbf7d": {
+      "name": "Attic",
+      "regions": [
+        "qc:08"
+      ],
+      "match": {
+        "bbox": [
+          -76.5056,
+          48.2234,
+          -76.4631,
+          48.2389
+        ],
+        "evidence": "CGNDB feature d4194393bbe511d892e2080020a0f4c9 \"Rivière Attic\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "cab6064e-8955-44f3-ac49-9c0812f82009": {
+      "name": "Des Îles",
+      "regions": [
+        "qc:14",
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -73.4989,
+          46.655,
+          -73.4291,
+          46.6939
+        ],
+        "evidence": "CGNDB feature 6e8f2c0fbe2a11d892e2080020a0f4c9 \"Rivière des Îles\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "cb29b941-673d-40b0-8b8c-53d33ecb13db": {
+      "name": "Bras d'Henri",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -71.374,
+          46.3915,
+          -71.0885,
+          46.5951
+        ],
+        "evidence": "CGNDB feature fff08141bbeb11d892e2080020a0f4c9 \"Bras d'Henri\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "cd8f2951-98ba-4b24-b2ba-69c1acce71eb": {
+      "name": "Gervais",
+      "regions": [
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -72.6679,
+          49.0896,
+          -72.5788,
+          49.2447
+        ],
+        "evidence": "CGNDB feature ebbbace0be1711d892e2080020a0f4c9 \"Rivière Gervais\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "d0140a57-289e-4d16-b60c-3dea07813913": {
+      "name": "Godbout Est",
+      "regions": [
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -67.7532,
+          49.6258,
+          -67.6888,
+          49.994
+        ],
+        "evidence": "CGNDB feature 5ee38057be1811d892e2080020a0f4c9 \"Rivière Godbout Est\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "d151d376-0c68-474d-869f-847fb7021e56": {
+      "name": "Lorette",
+      "regions": [
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -71.3299,
+          46.7959,
+          -71.3095,
+          46.8166
+        ],
+        "evidence": "CGNDB feature f2c1dc15be3311d892e2080020a0f4c9 \"Rivière Lorette\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "d171f004-c9da-4fe6-84c0-d5c00f4ee1cb": {
+      "name": "Rivière à Pierre",
+      "regions": [
+        "qc:03"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "d1d22f4e-ccc4-4286-bbf7-4a3f6ac5422e": {
+      "name": "Saint-Maurice",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -74.2314,
+          46.2575,
+          -72.0715,
+          48.821
+        ],
+        "evidence": "CGNDB feature a038418dbe4d11d892e2080020a0f4c9 \"Rivière Saint-Maurice\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "d2a2d896-9e71-43dc-8f8b-e31b5b82124e": {
+      "name": "Flamand",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -73.6437,
+          47.4647,
+          -73.4266,
+          47.4961
+        ],
+        "evidence": "CGNDB feature a6fff27dbe1211d892e2080020a0f4c9 \"Rivière Flamand\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "d3f73564-df2d-400d-89b4-6be5f11846f0": {
+      "name": "Tetepisca",
+      "regions": [
+        "qc:09"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "d46ccfd0-e61b-4382-b256-284ce8fc4044": {
+      "name": "George",
+      "regions": [
+        "qc:09",
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -66.3169,
+          54.6185,
+          -63.8983,
+          59.001
+        ],
+        "evidence": "CGNDB feature d2a5dcfabe1711d892e2080020a0f4c9 \"Rivière George\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "d575b688-a7ef-4e9b-b72f-621b5509e0cc": {
+      "name": "Ignace",
+      "regions": [
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -76.7832,
+          46.5907,
+          -76.3394,
+          46.7348
+        ],
+        "evidence": "CGNDB feature 5361027bbe2a11d892e2080020a0f4c9 \"Rivière Ignace\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "d5cd3260-3dbf-45ff-9d9c-b5b1fc6e0712": {
+      "name": "Portneuf",
+      "regions": [
+        "qc:02",
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -70.4822,
+          48.4457,
+          -69.0783,
+          49.1963
+        ],
+        "evidence": "CGNDB feature 18ff4ed7be4711d892e2080020a0f4c9 \"Rivière Portneuf\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "d62acd2e-55c1-45a0-ac29-7a11dbd2070e": {
+      "name": "Saint-Laurent (fleuve)",
+      "regions": [
+        "qc:16",
+        "qc:06",
+        "qc:14",
+        "qc:17",
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -77.1413,
+          44.0872,
+          -64.073,
+          50.9543
+        ],
+        "evidence": "CGNDB feature 4d00fe4cba2011d892e2080020a0f4c9 \"Fleuve Saint-Laurent\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "d7f9dd09-ff77-46da-bbba-46fb5b3de23b": {
+      "name": "Petawawa",
+      "regions": [
+        "ca:on"
+      ],
+      "match": {
+        "bbox": [
+          -78.9926,
+          45.6616,
+          -77.2506,
+          46.1834
+        ],
+        "evidence": "CGNDB feature 0d0451bf849c20c35bb4236761921886 \"Petawawa River\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "d8c1312d-cda2-4e08-8526-d709e2994b13": {
+      "name": "Mascouche",
+      "regions": [
+        "qc:15",
+        "qc:14",
+        "qc:13"
+      ],
+      "match": {
+        "bbox": [
+          -73.9938,
+          45.6722,
+          -73.5766,
+          45.7667
+        ],
+        "evidence": "CGNDB feature 5454be22be3a11d892e2080020a0f4c9 \"Rivière Mascouche\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "d8cce9f5-fd5b-4109-8606-a140fabf0c8e": {
+      "name": "Nicolet",
+      "regions": [
+        "qc:17",
+        "qc:05"
+      ],
+      "match": {
+        "bbox": [
+          -72.7026,
+          45.7904,
+          -71.5131,
+          46.2572
+        ],
+        "evidence": "CGNDB feature c308a424be3f11d892e2080020a0f4c9 \"Rivière Nicolet\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "d8fc43b9-5704-4e2c-8db2-8917adc556d6": {
+      "name": "Des Fleurs",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -70.6282,
+          46.401,
+          -70.484,
+          46.5447
+        ],
+        "evidence": "CGNDB feature b7e3d4debe1211d892e2080020a0f4c9 \"Rivière des Fleurs\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "d95b0936-9681-417a-92ee-a09b2948412f": {
+      "name": "Magpie",
+      "regions": [
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -64.9687,
+          50.2772,
+          -64.3454,
+          51.8126
+        ],
+        "evidence": "CGNDB feature 3ac211e6be3911d892e2080020a0f4c9 \"Rivière Magpie\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "d9f7847e-cc00-40d9-ac31-900efb617442": {
+      "name": "Aux Rochers",
+      "regions": [
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -67.3959,
+          49.9227,
+          -66.8564,
+          50.8584
+        ],
+        "evidence": "CGNDB feature 40c291d9be4a11d892e2080020a0f4c9 \"Rivière aux Rochers\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "dbe58a23-909c-4a68-b711-7b2e060af7f2": {
+      "name": "Tomifobia",
+      "regions": [
+        "qc:05"
+      ],
+      "match": {
+        "bbox": [
+          -71.9993,
+          44.9948,
+          -71.9475,
+          45.0339
+        ],
+        "evidence": "CGNDB feature 7056ec4dbe5211d892e2080020a0f4c9 \"Rivière Tomifobia\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "dc6e34a1-b088-44bb-a891-89f822cfe6a0": {
+      "name": "Du Cinq",
+      "regions": [
+        "qc:12"
+      ],
+      "match": {
+        "bbox": [
+          -71.1215,
+          46.1391,
+          -70.9235,
+          46.2818
+        ],
+        "evidence": "CGNDB feature 75a9b1eabbf011d892e2080020a0f4c9 \"Rivière du Cinq\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "dd3a0fad-3b88-4211-98af-413fef62408b": {
+      "name": "Sept Frères (ruisseau)",
+      "regions": [
+        "qc:15"
+      ],
+      "match": {
+        "bbox": [
+          -75.1833,
+          46.2946,
+          -75.1522,
+          46.3202
+        ],
+        "evidence": "CGNDB feature 6528a9fcd1e111d892e2080020a0f4c9 \"Ruisseau des Sept Frères\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "dd80b1d0-e813-4233-941c-2458fbe837c3": {
+      "name": "Godbout",
+      "regions": [
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -67.7322,
+          49.289,
+          -67.5903,
+          49.6497
+        ],
+        "evidence": "CGNDB feature 5eb9ff51be1811d892e2080020a0f4c9 \"Rivière Godbout\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "dfdf8695-a5f2-4f79-8d99-be8a295efa8e": {
+      "name": "Némiscachingue",
+      "regions": [
+        "qc:14",
+        "qc:15"
+      ],
+      "match": {
+        "bbox": [
+          -74.4709,
+          47.5752,
+          -74.4468,
+          47.6614
+        ],
+        "evidence": "CGNDB feature 97415dd3be3f11d892e2080020a0f4c9 \"Rivière Némiscachingue\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "e0b2195a-c22d-4a1e-a864-43a9d5c3909c": {
+      "name": "Lièvre",
+      "regions": [
+        "qc:15",
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -75.9299,
+          45.507,
+          -74.483,
+          47.6865
+        ],
+        "evidence": "CGNDB feature 8a00899fbe3311d892e2080020a0f4c9 \"Rivière du Lièvre\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "e18dedfa-8065-4904-ad5e-768ccd116c14": {
+      "name": "Aux Canards",
+      "regions": [
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -69.7684,
+          48.0583,
+          -69.7283,
+          48.0984
+        ],
+        "evidence": "CGNDB feature 9297baf4bbed11d892e2080020a0f4c9 \"Rivière aux Canards\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "e1e72932-b2d7-4cda-bc74-321d5af08b70": {
+      "name": "Gentilly",
+      "regions": [
+        "qc:17"
+      ],
+      "match": {
+        "bbox": [
+          -72.333,
+          46.2488,
+          -71.976,
+          46.3677
+        ],
+        "evidence": "CGNDB feature cc1ae7d2be1711d892e2080020a0f4c9 \"Rivière Gentilly\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "e379688a-bdbc-4f87-8d24-31a6df8c1d47": {
+      "name": "Wabano Ouest",
+      "regions": [
+        "qc:02",
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -74.0158,
+          48.6591,
+          -73.9548,
+          48.8151
+        ],
+        "evidence": "CGNDB feature a45d9387bf0411d892e2080020a0f4c9 \"Rivière Wabano Ouest\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "e4b83caf-25c9-484b-849f-fe2387614738": {
+      "name": "Turgeon",
+      "regions": [
+        "qc:08",
+        "qc:10",
+        "ca:on"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "e5204b28-0574-4767-b017-5421e29d5186": {
+      "name": "Gazeau",
+      "regions": [
+        "qc:02"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "e91d6a56-e8af-4452-9d7c-86504fdb5d98": {
+      "name": "Saffray",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -71.3191,
+          52.2566,
+          -71.1494,
+          52.4674
+        ],
+        "evidence": "CGNDB feature b57cb388be4c11d892e2080020a0f4c9 \"Rivière Saffray\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "eaaf2f2a-9fd8-4826-87c5-1838f05326ae": {
+      "name": "Harricana",
+      "regions": [
+        "qc:08",
+        "qc:10",
+        "ca:on"
+      ],
+      "match": {
+        "bbox": [
+          -79.7862,
+          48.0663,
+          -77.5262,
+          51.4069
+        ],
+        "evidence": "CGNDB feature 3146f3aaba2111d892e2080020a0f4c9 \"Rivière Harricana\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "ebe98987-d51d-4e96-9b37-aab51e9140a6": {
+      "name": "Matonipi",
+      "regions": [
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -69.8231,
+          51.3468,
+          -69.692,
+          51.819
+        ],
+        "evidence": "CGNDB feature 9eadf2bdbe3a11d892e2080020a0f4c9 \"Rivière Matonipi\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "ec718683-af7f-4301-be4f-e70cd50896ef": {
+      "name": "Coucou",
+      "regions": [
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -75.6341,
+          47.4582,
+          -75.3836,
+          47.5909
+        ],
+        "evidence": "CGNDB feature a4b62e38be0b11d892e2080020a0f4c9 \"Rivière du Coucou\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "ed0a014f-1024-42e9-ad1a-ae1ff75d1316": {
+      "name": "Sauvage",
+      "regions": [
+        "qc:14"
+      ],
+      "match": {
+        "bbox": [
+          -73.8888,
+          46.5118,
+          -73.8075,
+          46.6623
+        ],
+        "evidence": "CGNDB feature ae32f015be4e11d892e2080020a0f4c9 \"Rivière Sauvage\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "ed4cd409-8e91-446d-b840-e2cb2d5e308d": {
+      "name": "Métabetchouane",
+      "regions": [
+        "qc:03",
+        "qc:04",
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -72.2272,
+          47.3535,
+          -71.6375,
+          48.4328
+        ],
+        "evidence": "CGNDB feature 9639396ebe3b11d892e2080020a0f4c9 \"Rivière Métabetchouane\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "ef2747f4-5e18-4a31-bb1e-24cae3905cb9": {
+      "name": "Shipastouk",
+      "regions": [
+        "qc:10"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "efc29d71-6072-4780-9f11-f4fefbc6ed09": {
+      "name": "Kipawa",
+      "regions": [
+        "qc:08"
+      ],
+      "match": {
+        "bbox": [
+          -79.401,
+          46.7509,
+          -78.0246,
+          47.0929
+        ],
+        "evidence": "CGNDB feature dc7d0950be2c11d892e2080020a0f4c9 \"Rivière Kipawa\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "f11f2944-b02c-464d-945f-ca070ec3572e": {
+      "name": "Livernois",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -73.5,
+          47.0553,
+          -73.2539,
+          47.3155
+        ],
+        "evidence": "CGNDB feature b7b12977be3311d892e2080020a0f4c9 \"Rivière Livernois\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "f192530c-8250-410a-a668-6ee6fdd2032f": {
+      "name": "Alex",
+      "regions": [
+        "qc:02"
+      ],
+      "match": {
+        "bbox": [
+          -71.7963,
+          48.7984,
+          -71.3403,
+          49.4733
+        ],
+        "evidence": "CGNDB feature c380b7f9bbe411d892e2080020a0f4c9 \"Rivière Alex\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "f1aade76-33bd-4254-ae5a-c7fbd9b73b70": {
+      "name": "Nastapoka",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -76.5651,
+          56.4575,
+          -74.2363,
+          57.0373
+        ],
+        "evidence": "CGNDB feature 5ebbc260be3f11d892e2080020a0f4c9 \"Rivière Nastapoka\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "f1b82ede-2200-416b-bfa8-dd8266dcce79": {
+      "name": "L'Épinay",
+      "regions": [
+        "qc:10"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "f385c480-215d-4d32-89be-3d9c0a9cdb96": {
+      "name": "Aux Outardes et Mitchell",
+      "regions": [
+        "qc:16"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "f40c74ed-fde5-4056-b388-04e1ec5c830c": {
+      "name": "Wessonneau Nord",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -73.3116,
+          47.1986,
+          -73.0078,
+          47.3353
+        ],
+        "evidence": "CGNDB feature cb20fa42bf0411d892e2080020a0f4c9 \"Rivière Wessonneau Nord\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "f43a901c-f3ed-4d3f-ab08-203cc5c3715f": {
+      "name": "(sans nom) (René-Lévesque)",
+      "regions": [
+        "qc:09"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "f6fabf50-b33b-4504-9e62-385ace05216a": {
+      "name": "Line (ruisseau)",
+      "regions": [
+        "qc:15",
+        "qc:14"
+      ],
+      "match": {
+        "bbox": [
+          -74.6851,
+          47.2048,
+          -74.6679,
+          47.2189
+        ],
+        "evidence": "CGNDB feature a6939969be3311d892e2080020a0f4c9 \"Ruisseau Line\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "f71f963b-cb51-45a5-a927-321e071855b5": {
+      "name": "Wessonneau du Milieu",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -73.2739,
+          47.1638,
+          -73.0251,
+          47.2633
+        ],
+        "evidence": "CGNDB feature cb1a4381bf0411d892e2080020a0f4c9 \"Rivière Wessonneau du Milieu\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "f860bf29-cfff-45a6-acc2-51e1a2f1afbf": {
+      "name": "Bras-du-Nord",
+      "regions": [
+        "qc:03"
+      ],
+      "match": {
+        "bbox": [
+          -71.8649,
+          46.9534,
+          -71.8484,
+          46.9724
+        ],
+        "evidence": "CGNDB feature 0a96e572be4d11d892e2080020a0f4c9 \"Bras du Nord\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "f8dbbccf-426b-44b7-85c3-efc7337d94fa": {
+      "name": "Noire",
+      "regions": [
+        "qc:07"
+      ],
+      "match": {
+        "bbox": [
+          -77.6589,
+          45.846,
+          -76.7697,
+          46.9484
+        ],
+        "evidence": "CGNDB feature 1da9c862be4011d892e2080020a0f4c9 \"Rivière Noire\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "f91bcfb5-b185-416c-a031-7c8aeae2e5b6": {
+      "name": "Rouge",
+      "regions": [
+        "qc:14",
+        "qc:15"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "fae7a894-bd30-4f19-bcb3-f56ab79c0320": {
+      "name": "Ouitachouaniche",
+      "regions": [
+        "qc:02"
+      ],
+      "checkedAt": "2026-10-14"
+    },
+    "fb006628-c897-4f05-aa8c-12c29290cb5d": {
+      "name": "Olomane",
+      "regions": [
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -61.3269,
+          50.204,
+          -60.2723,
+          51.9812
+        ],
+        "evidence": "CGNDB feature e144b379be4011d892e2080020a0f4c9 \"Rivière Olomane\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "fd18430b-3092-46e3-a841-4669a41edfad": {
+      "name": "René-Lévesque",
+      "regions": [
+        "qc:09"
+      ],
+      "match": {
+        "bbox": [
+          -69.2817,
+          54.02,
+          -69.2416,
+          54.06
+        ],
+        "evidence": "CGNDB feature 0cf46596849c20c3196d8dd362075d6f \"Rivière René-Lévesque\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "fd77c263-f0fd-4d9d-8cee-240ea61bdf62": {
+      "name": "Dicky (ruisseau)",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -73.9859,
+          47.1145,
+          -73.9187,
+          47.1755
+        ],
+        "evidence": "CGNDB feature 8dceebe6be0d11d892e2080020a0f4c9 \"Ruisseau Dicky\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "fe2de21b-1459-4c6e-adf7-09cb1130ac35": {
+      "name": "Aux Feuilles",
+      "regions": [
+        "qc:10"
+      ],
+      "match": {
+        "bbox": [
+          -74.4839,
+          57.3887,
+          -69.8835,
+          58.8732
+        ],
+        "evidence": "CGNDB feature 8723d212be1211d892e2080020a0f4c9 \"Rivière aux Feuilles\""
+      },
+      "checkedAt": "2026-10-14"
+    },
+    "ffcf132a-c459-494c-9ce0-f85e46ca05c0": {
+      "name": "Flamand Ouest",
+      "regions": [
+        "qc:04"
+      ],
+      "match": {
+        "bbox": [
+          -73.4139,
+          47.5716,
+          -73.3738,
+          47.6117
+        ],
+        "evidence": "CGNDB feature 88bc266abf8f11d892e2080020a0f4c9 \"Rivière Flamand Ouest\""
+      },
+      "checkedAt": "2026-10-14"
+    }
+  }
+}

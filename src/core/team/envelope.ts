@@ -60,7 +60,12 @@ export const CONTROL_TYPES = [
   'k.share',
 ] as const;
 export const DATA_TYPES = ['e.set', 'e.del', 'msg'] as const;
-export const EPHEMERAL_TYPES = ['pos'] as const;
+/**
+ * `pen` (#683): a teammate's stroke in progress. Peers before 2.5.2 refuse an
+ * unknown type with a strike, so `pen` only goes to peers that advertise
+ * `cap.pen` (`SyncStore.canReceive`, `@core/teamdraw/caps`).
+ */
+export const EPHEMERAL_TYPES = ['pos', 'pen'] as const;
 
 export type ControlType = (typeof CONTROL_TYPES)[number];
 export type DataType = (typeof DATA_TYPES)[number];
@@ -80,10 +85,17 @@ export const MAX_OP_BYTES: Readonly<Record<OpType, number>> = {
   'e.del': 2 * 1024,
   msg: 16 * 1024,
   pos: 1024,
+  pen: 6 * 1024,
 };
 export const MAX_SEQ = 2 ** 31 - 1;
 /** Ephemeral ops live at most a day. */
 export const MAX_TTL_S = 24 * 60 * 60;
+/**
+ * A live stroke (`pen`, #683) outlives its sender by at most this long if the
+ * phone drops. A `pen` claiming longer is malformed: it would keep a stroke
+ * on everyone's map that its author can no longer change.
+ */
+export const PEN_TTL_S = 30;
 export const MAX_SEALED_RECIPIENTS = 64;
 
 export interface SealedKeys {
@@ -223,7 +235,8 @@ function shapeOk(r: Record<string, unknown>, t: OpType): boolean {
   if (isEphemeralType(t)) {
     if (r['sq'] !== 0) return false;
     const ttl = r['ttl'];
-    return Number.isSafeInteger(ttl) && (ttl as number) >= 1 && (ttl as number) <= MAX_TTL_S;
+    const maxTtl = t === 'pen' ? PEN_TTL_S : MAX_TTL_S;
+    return Number.isSafeInteger(ttl) && (ttl as number) >= 1 && (ttl as number) <= maxTtl;
   }
   if (has('ttl')) return false;
   return Number.isSafeInteger(r['sq']) && (r['sq'] as number) >= 1;

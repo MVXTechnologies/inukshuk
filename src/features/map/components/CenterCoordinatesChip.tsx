@@ -4,6 +4,7 @@ import {
   ALTITUDE_SEPARATOR,
   altitudeFits,
   chipAltitudeText,
+  isRealCenter,
   type AltitudeSource,
 } from '@core/map/coordinatesChip';
 import { openConvert } from '@features/convert/openConvert';
@@ -87,7 +88,9 @@ export const CenterCoordinatesChip = memo(function CenterCoordinatesChip({
 }) {
   const on = useSettingsStore((s) => s.showCenterCursor);
   const units = useSettingsStore((s) => s.units);
-  const center = useMapStore((s) => s.mapCenter);
+  const settled = useMapStore((s) => s.mapCenter);
+  // No camera yet (0, 0 on first launch): no chip and no elevation lookup.
+  const center = isRealCenter(settled) ? settled : null;
   // An external receiver in use feeds the recorder its own altitude: show
   // that one. Decimetres, so a jittering fix does not re-render per digit.
   const externalAltitude = useGnssStore((s) => {
@@ -105,7 +108,7 @@ export const CenterCoordinatesChip = memo(function CenterCoordinatesChip({
   const outline = useChromeOutline();
 
   const following = you !== null;
-  const at = you ?? center;
+  const at = you !== null && isRealCenter(you) ? you : following ? null : center;
   // The DEM is read only for the centre, and only while the chip is shown.
   const ground = useCenterElevation(on && !following ? center : null);
   if (!on || at === null) return null;

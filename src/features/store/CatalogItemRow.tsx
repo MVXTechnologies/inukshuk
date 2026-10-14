@@ -1,3 +1,4 @@
+import { itemCredit, sourceFreeLine } from '@core/catalog/credit';
 import type { InstallStatus } from '@core/catalog/installStatus';
 import { catalogRowMeta, catalogSourceCaption } from '@core/catalog/nearbySections';
 import type { CatalogItem, CatalogSource } from '@core/catalog/schema';
@@ -10,6 +11,7 @@ import { Button, Icon, IconButton, ProgressBar, Text, useTheme } from 'react-nat
 
 import { LocatorThumb } from './LocatorThumb';
 import { openExternalLink } from '@lib/openLink';
+import { useCreditLanguage } from './useCreditLanguage';
 
 /**
  * One Maps-tab row (revamp `After-Maps.html`): a 56 dp locator thumbnail,
@@ -74,7 +76,14 @@ export function CatalogItemRow({
   const tokens = useSchemeTokens();
   const muted = tokens.inkMuted;
 
-  const caption = catalogSourceCaption(source?.name, item.region);
+  // A credited map (#680) names its author first; the publisher's terms also
+  // want "Available free at …" on every card.
+  const credit = itemCredit(item);
+  const caption =
+    credit !== undefined
+      ? [credit, source?.name].filter((p) => p !== undefined).join(' · ')
+      : catalogSourceCaption(source?.name, item.region);
+  const freeLine = sourceFreeLine(source, useCreditLanguage());
   const meta = catalogRowMeta(item.sizeBytes, distanceMeters, units);
 
   const action = downloading ? (
@@ -166,6 +175,11 @@ export function CatalogItemRow({
           {caption !== '' && (
             <Text numberOfLines={1} style={[styles.caption, { color: muted }]}>
               {caption}
+            </Text>
+          )}
+          {freeLine !== undefined && (
+            <Text numberOfLines={1} style={[styles.caption, { color: muted }]}>
+              {freeLine}
             </Text>
           )}
           {meta !== '' && (

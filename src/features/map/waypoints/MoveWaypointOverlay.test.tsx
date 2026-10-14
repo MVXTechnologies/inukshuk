@@ -1,4 +1,6 @@
+import { pinGeometry, WAYPOINT_PIN_DIAMETER } from '@core/library/waypointStyle';
 import { useMapStore } from '@state/mapStore';
+import { useSettingsStore } from '@state/settingsStore';
 import { useWaypointMoveStore } from '@state/waypointMoveStore';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { darkTheme, lightTheme } from '@ui/theme';
@@ -38,6 +40,7 @@ beforeEach(() => {
   });
   useWaypointMoveStore.setState({ moving: null });
   useMapStore.setState({ mapCenter: null });
+  useSettingsStore.setState({ pinScale: 100 });
 });
 afterEach(() => jest.restoreAllMocks());
 
@@ -117,6 +120,36 @@ describe('MoveWaypointOverlay (#676)', () => {
     });
     const line = mockLayers.find((l) => l.id === 'waypoint-move-line');
     expect((line?.paint as Record<string, unknown>)['line-dasharray']).toEqual([3, 3]);
+  });
+
+  it('draws the moving pin at Settings › Pin size, its tip still on the centre', async () => {
+    useWaypointMoveStore.setState({ moving: { ...TARGET, size: 'L' } });
+    const sizes: { w: number; box: number }[] = [];
+    for (const pinScale of [100, 150] as const) {
+      useSettingsStore.setState({ pinScale });
+      const r = await render(
+        <PaperProvider theme={lightTheme}>
+          <MoveWaypointOverlay
+            units="metric"
+            onCancel={jest.fn()}
+            onConfirm={jest.fn()}
+            onLocate={jest.fn()}
+          />
+        </PaperProvider>,
+      );
+      const pin = screen.getByTestId('move-pin');
+      const box = (StyleSheet.flatten(pin.props.style) as { height: number }).height;
+      const view = pin.children[0];
+      if (view === undefined || typeof view === 'string') throw new Error('no pin view');
+      const { width } = StyleSheet.flatten(view.props.style) as { width: number };
+      sizes.push({ w: width, box });
+      await r.unmount();
+    }
+    const d = WAYPOINT_PIN_DIAMETER.L;
+    const at = (k: number) => ({ w: pinGeometry(d * k).width, box: pinGeometry(d * k).height * 2 });
+    expect(sizes[0]).toEqual(at(1));
+    expect(sizes[1]).toEqual(at(1.5));
+    expect(sizes[1]!.w).toBeGreaterThan(sizes[0]!.w);
   });
 
   it('Android Back cancels', async () => {

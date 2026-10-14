@@ -9,6 +9,7 @@ import {
   isControlType,
   isEphemeralType,
   openPayload,
+  PEN_TTL_S,
   type Encryption,
   type RejectReason,
   type SignedOp,
@@ -28,6 +29,7 @@ import {
   type TeamState,
 } from './membership';
 import { isAdminRole, type Audience, type Priority } from './roles';
+import { capHolders } from '@core/teamdraw/caps';
 
 /**
  * One device's copy of one team (#589): the op log, the resolved membership,
@@ -81,6 +83,7 @@ export const MAX_GAP_BYTES = 8 * 1024 * 1024;
 export const MAX_GAP_BYTES_PER_AUTHOR = 1024 * 1024;
 /** An admin replica auto-rotates for a given leaking author at most this often. */
 export const AUTO_ROTATE_INTERVAL_MS = 30 * 60 * 1000;
+export { PEN_TTL_S };
 
 export class TeamReplica {
   readonly log = new OpLog();
@@ -100,6 +103,8 @@ export class TeamReplica {
   private lastFullFold = -Infinity;
   /** Diagnostics: how many full refolds this replica has run. */
   fullFolds = 0;
+  /** Diagnostics: how many times the capability holders were recomputed (#683). */
+  capScans = 0;
   /** Logged ops stored but not folded yet (a coalesced rebuild is pending). */
   private dataDirty = false;
   /** Per author, the chain we hold (for the version vector and serving). */
@@ -115,6 +120,12 @@ export class TeamReplica {
   private readonly autoRotated = new Map<string, number>();
   private rotating = false;
   private entityCache: TeamData | undefined;
+  /**
+   * Per capability, the members advertising it (#683): `canReceive` runs per
+   * live stroke per session, so it reads this, never a refold. Dropped with
+   * the entity view and whenever a data op folds in.
+   */
+  private capCache: Map<string, { holders: ReadonlySet<string>; validUntil: number }> | undefined;
   /** Positions view; dropped on a new position, a refold or the first expiry. */
   private positionCache:
     { state: TeamState; validUntil: number; view: TeamData['positions'] } | undefined;
@@ -135,8 +146,7 @@ export class TeamReplica {
   /** Import keys from the secure store (or the creator's first key). */
   addKey(key: TeamKey): void {
     this.keyring.set(key.keyId, key.key);
-    this.entityCache = undefined;
-    this.positionCache = undefined;
+    this.dropViews();
   }
 
   key(keyId: string): Uint8Array | undefined {
@@ -173,6 +183,33 @@ export class TeamReplica {
 
   liveEphemeral(now: number): SignedOp[] {
     return this.log.liveEphemeral(now);
+  }
+
+  /**
+   * Whether `member` advertises capability `cap` at `now` (#683: gates `pen`
+   * in the sync session). Cached until the data changes or the first claim
+   * expires; never folds (a deferred fold waits for the tick).
+   */
+  canReceive(member: string, cap: string, now: number = this.now): boolean {
+    let cached = this.capCache?.get(cap);
+    if (cached === undefined || now >= cached.validUntil) {
+      cached = capHolders(this.entities(), now, cap);
+      this.capCache ??= new Map();
+      this.capCache.set(cap, cached);
+      this.capScans++;
+    }
+    return cached.holders.has(member);
+  }
+
+  /** When a held ephemeral op goes by this device's clock (`OpLog.ephemeralDeadline`). */
+  ephemeralDeadline(op: SignedOp): number | undefined {
+    return this.log.ephemeralDeadline(op);
+  }
+
+  private dropViews(): void {
+    this.entityCache = undefined;
+    this.positionCache = undefined;
+    this.capCache = undefined;
   }
 
   /** Is this a genesis op for *our* team id (cheap pre-check before storing it)? */
@@ -363,7 +400,8 @@ export class TeamReplica {
     }
     report.accepted.push(op);
     if (!logged) {
-      this.positionCache = undefined;
+      // Only a new position changes the positions view (a stroke never does, #683).
+      if (op.env.t === 'pos') this.positionCache = undefined;
       return;
     }
     fresh.push(op);
@@ -487,6 +525,7 @@ export class TeamReplica {
           // roleAt holds exactly the data ops the fold accepted.
           if (this.state.roleAt.has(op.id)) {
             applyDataOp(this.entityCache, this.state, op, (o) => this.decode(o));
+            this.capCache = undefined;
           }
         }
       }
@@ -509,8 +548,7 @@ export class TeamReplica {
       this.lastFullFold = now;
       this.fullFolds++;
       this.held = new Map([...state.chains].map(([a, ch]) => [a, [...ch.ids]]));
-      this.entityCache = undefined;
-      this.positionCache = undefined;
+      this.dropViews();
       for (const m of state.members.values()) {
         if (m.removeCut !== undefined) this.log.dropAbove(m.id, m.removeCut);
       }
@@ -531,8 +569,7 @@ export class TeamReplica {
       if (kw === undefined || !kw.w.some(([m]) => m === this.id)) continue;
       for (const k of unwrapKeys(this.c, this.teamId, kw, me)) {
         this.keyring.set(k.keyId, k.key);
-        this.entityCache = undefined;
-        this.positionCache = undefined;
+        this.dropViews();
       }
     }
   }
@@ -547,7 +584,8 @@ export class TeamReplica {
           id: this.id,
           boxSecret: this.keys.boxSecret,
         });
-    if (body !== undefined) this.decoded.set(op.id, body);
+    // Live strokes come 4 a second and are superseded at once: never cached (#683).
+    if (body !== undefined && op.env.t !== 'pen') this.decoded.set(op.id, body);
     return body;
   }
 
@@ -563,23 +601,30 @@ export class TeamReplica {
   data(now = this.now): TeamData {
     // A read folds anything deferred (bounded by how often the app reads).
     this.flush(now);
-    if (this.entityCache === undefined) {
-      const fresh = emptyData();
-      for (const op of this.state.data) applyDataOp(fresh, this.state, op, (o) => this.decode(o));
-      this.entityCache = fresh;
-    }
+    const entities = this.entities();
     const cached = this.positionCache;
     if (cached === undefined || cached.state !== this.state || now >= cached.validUntil) {
       const scratch = emptyData();
       let validUntil = Infinity;
       for (const op of this.log.liveEphemeral(now)) {
-        if (!admitEphemeral(this.state, op)) continue;
+        // Positions only: live strokes (`pen`) are read by `@core/teamdraw/pen`.
+        if (op.env.t !== 'pos' || !admitEphemeral(this.state, op)) continue;
         applyDataOp(scratch, this.state, op, (o) => this.decode(o));
         validUntil = Math.min(validUntil, expiresAt(op.env) ?? Infinity);
       }
       this.positionCache = { state: this.state, validUntil, view: scratch.positions };
     }
-    this.entityCache.positions = this.positionCache!.view;
+    entities.positions = this.positionCache!.view;
+    return entities;
+  }
+
+  /** The entity view as folded so far (no flush). */
+  private entities(): TeamData {
+    if (this.entityCache === undefined) {
+      const fresh = emptyData();
+      for (const op of this.state.data) applyDataOp(fresh, this.state, op, (o) => this.decode(o));
+      this.entityCache = fresh;
+    }
     return this.entityCache;
   }
 
@@ -633,6 +678,15 @@ export class TeamReplica {
     const enc = this.encryptionFor(sealedTo);
     if (enc === undefined) return undefined;
     const op = this.writer.ephemeral(now, { t: 'pos', secret: pos, enc, ttl: ttlS });
+    this.commit(op, now);
+    return op;
+  }
+
+  /** Send my stroke in progress (#683): ephemeral, group-encrypted, latest wins, 30 s. */
+  stroke(now: number, body: Json): SignedOp | undefined {
+    const enc = this.encryptionFor(undefined);
+    if (enc === undefined) return undefined;
+    const op = this.writer.ephemeral(now, { t: 'pen', secret: body, enc, ttl: PEN_TTL_S });
     this.commit(op, now);
     return op;
   }

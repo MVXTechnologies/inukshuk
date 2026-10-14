@@ -40,7 +40,8 @@ export class TokenBucket {
   }
 }
 
-export type OpCategory = 'control' | 'data' | 'msg' | 'pos';
+/** `draw`: live strokes (`pen`, #683), in their own bucket so they never drain `control`. */
+export type OpCategory = 'control' | 'data' | 'msg' | 'pos' | 'draw';
 
 export interface PeerLimits {
   maxFrameBytes: number;
@@ -54,6 +55,12 @@ export interface PeerLimits {
   strikesToBan: number;
   strikeWindowMs: number;
   banMs: number;
+  /**
+   * Live strokes per AUTHOR inside `ops.draw`: [per second, burst] (#683).
+   * One noisy member (or a relay forwarding one) fills only their own
+   * bucket, never their teammates' strokes on the same link.
+   */
+  drawPerAuthor: [number, number];
 }
 
 /** Phones on the same Wi-Fi or hotspot. */
@@ -69,10 +76,14 @@ export const LAN_LIMITS: PeerLimits = {
     msg: [10, 100],
     // 500 members relaying positions every ~10 s.
     pos: [60, 600],
+    // Live strokes, all drawers on this link: five at full rate (4/s each).
+    draw: [20, 60],
   },
   strikesToBan: 20,
   strikeWindowMs: 60_000,
   banMs: 10 * 60_000,
+  // One drawer sends ≤ 4/s (`@core/teamdraw/pen`); the slack absorbs relay bunching.
+  drawPerAuthor: [6, 12],
 };
 
 /** Third-party relays (Nostr, later): tiny budgets, the relay is shared with strangers. */
@@ -82,10 +93,13 @@ export const RELAY_LIMITS: PeerLimits = {
   burstBytes: 512 * 1024,
   framesPerSec: 20,
   burstFrames: 60,
-  ops: { control: [1, 20], data: [5, 50], msg: [5, 50], pos: [10, 100] },
+  // `pen` is never sent over a relay (sessions carry it only when told to,
+  // `SessionOptions.carryLiveStrokes`): an honest peer uses none of `draw`.
+  ops: { control: [1, 20], data: [5, 50], msg: [5, 50], pos: [10, 100], draw: [1, 4] },
   strikesToBan: 10,
   strikeWindowMs: 60_000,
   banMs: 30 * 60_000,
+  drawPerAuthor: [1, 4],
 };
 
 export type StrikeReason =
@@ -95,6 +109,8 @@ export class PeerGuard {
   private readonly bytes: TokenBucket;
   private readonly frames: TokenBucket;
   private readonly ops: Record<OpCategory, TokenBucket>;
+  /** Per author `draw` buckets (≤ one per member: the caller maps strangers to one key). */
+  private readonly drawers = new Map<string, TokenBucket>();
   private strikes: number[] = [];
   bannedUntil: number | undefined;
 
@@ -106,6 +122,7 @@ export class PeerGuard {
       data: new TokenBucket(...limits.ops.data),
       msg: new TokenBucket(...limits.ops.msg),
       pos: new TokenBucket(...limits.ops.pos),
+      draw: new TokenBucket(...limits.ops.draw),
     };
   }
 
@@ -124,6 +141,19 @@ export class PeerGuard {
     return this.ops[category].take(1, now);
   }
 
+  /**
+   * A live stroke by `author`: their own bucket first, then the link's `draw`
+   * bucket, so an author over their rate never spends their teammates' share.
+   */
+  admitDraw(author: string, now: number): boolean {
+    let mine = this.drawers.get(author);
+    if (mine === undefined) {
+      mine = new TokenBucket(...this.limits.drawPerAuthor);
+      this.drawers.set(author, mine);
+    }
+    return mine.take(1, now) && this.ops.draw.take(1, now);
+  }
+
   /** Record a strike; returns true when this one triggers a ban. */
   strike(now: number): boolean {
     this.strikes = this.strikes.filter((t) => now - t < this.limits.strikeWindowMs);
@@ -138,6 +168,7 @@ export class PeerGuard {
 
 export function categoryOf(type: string): OpCategory {
   if (type === 'pos') return 'pos';
+  if (type === 'pen') return 'draw';
   if (type === 'msg') return 'msg';
   if (type.startsWith('e.')) return 'data';
   return 'control';

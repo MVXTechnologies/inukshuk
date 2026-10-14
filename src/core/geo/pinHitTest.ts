@@ -37,6 +37,8 @@ export const PIN_TIE_PX = 1;
 export interface PinHitArea {
   radiusPx: number;
   headOffsetPx: number;
+  /** The drawn head's own radius (no slack): a tap inside it is dead on the pin. */
+  headRadiusPx: number;
 }
 
 /**
@@ -44,13 +46,22 @@ export interface PinHitArea {
  * symbol pin draws `pinGeometry(d).headCenterY` above the tip anchored on the
  * coordinate, and as wide as the head plus the gesture's slack. Screen px are
  * the map's own (dp), as `project` returns them.
+ *
+ * `scale` is the Pin size setting (#686, `@core/map/pinScale`): the head is
+ * drawn that much larger or smaller, so its disc is too. The finger's slack
+ * and the 48 dp minimum stay what they are: a finger does not change size.
  */
-export function pinHitArea(size: WaypointSize | undefined, gesture: PinHitGesture): PinHitArea {
-  const d = WAYPOINT_PIN_DIAMETER[waypointSize(size)];
+export function pinHitArea(
+  size: WaypointSize | undefined,
+  gesture: PinHitGesture,
+  scale = 1,
+): PinHitArea {
+  const d = WAYPOINT_PIN_DIAMETER[waypointSize(size)] * scale;
   const radius = d / 2 + PIN_HIT_SLOP_PX[gesture];
   return {
     radiusPx: gesture === 'tap' ? Math.max(PIN_MIN_TAP_RADIUS_PX, radius) : radius,
     headOffsetPx: pinGeometry(d).headCenterY,
+    headRadiusPx: d / 2,
   };
 }
 
@@ -92,22 +103,45 @@ export function unprojectablePins<T extends PinCandidate>(pins: readonly T[]): T
  * Two heads equally near (within {@link PIN_TIE_PX} — pins at one spot):
  * the one DRAWN ON TOP wins, by the layer's own rule (`comparePinDraw`:
  * south in front, then later in `pins`), so a tap opens the pin you see.
+ *
+ * `scale`: the Pin size setting (#686), see `pinHitArea`.
  */
 export function nearestPinAt<T extends PinCandidate>(
   pins: readonly T[],
   projected: readonly ProjectedPin[],
   tap: readonly [number, number],
   gesture: PinHitGesture,
+  scale = 1,
 ): T | null {
+  return nearestPinHitAt(pins, projected, tap, gesture, scale)?.pin ?? null;
+}
+
+/** A pin hit, and how far the tap was from its head's centre. */
+export interface PinHit<T> {
+  pin: T;
+  distancePx: number;
+  /** The tap landed on the drawn head itself, not in the finger's slack round it. */
+  onHead: boolean;
+}
+
+/** {@link nearestPinAt}, with the distance: the tap router weighs it against a cluster (#685). */
+export function nearestPinHitAt<T extends PinCandidate>(
+  pins: readonly T[],
+  projected: readonly ProjectedPin[],
+  tap: readonly [number, number],
+  gesture: PinHitGesture,
+  scale = 1,
+): PinHit<T> | null {
   const [px, py] = tap;
   let best: T | null = null;
   let bestIndex = -1;
   let bestDistance = Infinity;
+  let bestHead = 0;
   for (let i = 0; i < pins.length; i++) {
     const point = projected[i];
     const pin = pins[i];
     if (!point || !pin) continue;
-    const { radiusPx, headOffsetPx } = pinHitArea(pin.size, gesture);
+    const { radiusPx, headOffsetPx, headRadiusPx } = pinHitArea(pin.size, gesture, scale);
     const distance = Math.hypot(px - point[0], py - (point[1] - headOffsetPx));
     if (distance >= radiusPx) continue;
     const nearer = distance < bestDistance - PIN_TIE_PX;
@@ -119,7 +153,10 @@ export function nearestPinAt<T extends PinCandidate>(
       bestDistance = distance;
       best = pin;
       bestIndex = i;
+      bestHead = headRadiusPx;
     }
   }
-  return best;
+  return best === null
+    ? null
+    : { pin: best, distancePx: bestDistance, onHead: bestDistance <= bestHead };
 }

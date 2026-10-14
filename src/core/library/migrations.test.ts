@@ -229,6 +229,41 @@ describe('migrateLibraryIndex', () => {
     expect(index.maps[0]).not.toHaveProperty('sourceUpdatedAt');
   });
 
+  it('keeps a catalog map’s credit, file version and page (#680), and drops junk ones', () => {
+    const credited = {
+      id: 'm1',
+      fileUri: 'maps/m1.pdf',
+      georeferences: [],
+      sourceItemId: 'cpa-x',
+      sourceVersion: 'd0357cf3',
+      sourceCredit: 'Charles Leduc · 2023',
+      sourceFreeAt: 'cartespleinair.org',
+      sourcePageUrl: 'https://cartespleinair.org/cartes/x',
+    };
+    const kept = migrateLibraryIndex({ schemaVersion: LIBRARY_SCHEMA_VERSION, maps: [credited] });
+    expect(kept.maps[0]).toMatchObject({
+      sourceVersion: 'd0357cf3',
+      sourceCredit: 'Charles Leduc · 2023',
+      sourceFreeAt: 'cartespleinair.org',
+      sourcePageUrl: 'https://cartespleinair.org/cartes/x',
+    });
+    const junk = migrateLibraryIndex({
+      schemaVersion: LIBRARY_SCHEMA_VERSION,
+      maps: [
+        {
+          ...credited,
+          sourceVersion: 7,
+          sourceCredit: ' ',
+          sourceFreeAt: 'x'.repeat(201),
+          sourcePageUrl: 'javascript:alert(1)',
+        },
+      ],
+    });
+    for (const key of ['sourceVersion', 'sourceCredit', 'sourceFreeAt', 'sourcePageUrl']) {
+      expect(junk.maps[0]).not.toHaveProperty(key);
+    }
+  });
+
   it('upgrades a v2 index: waypoints start empty', () => {
     const v2 = {
       schemaVersion: 2,

@@ -1,5 +1,6 @@
+import { itemCredit } from '@core/catalog/credit';
 import { findInstalledMap } from '@core/catalog/installStatus';
-import type { CatalogItem } from '@core/catalog/schema';
+import type { CatalogItem, CatalogSource } from '@core/catalog/schema';
 import type { MapDocument } from '@core/models';
 import { downloadCatalogPdf, CatalogDownloadCanceled } from '@data/catalogDownload';
 import * as storage from '@data/storage';
@@ -27,6 +28,35 @@ export { CatalogDownloadCanceled };
  */
 
 const cancels = new Map<string, () => void>();
+
+/**
+ * What a downloaded map remembers of its catalog item: the dedup/update keys
+ * (`sourceItemId`, `sourceUpdatedAt`, `sourceVersion`) and, for a publisher
+ * whose terms require it (#680), the author credit, the "free at" host and the
+ * map's page, so the Library row credits the author offline.
+ */
+export function catalogProvenance(
+  item: CatalogItem,
+  source: CatalogSource | undefined,
+): Pick<
+  MapDocument,
+  | 'sourceItemId'
+  | 'sourceUpdatedAt'
+  | 'sourceVersion'
+  | 'sourceCredit'
+  | 'sourceFreeAt'
+  | 'sourcePageUrl'
+> {
+  const credit = itemCredit(item);
+  return {
+    sourceItemId: item.id,
+    ...(item.updatedAt !== undefined ? { sourceUpdatedAt: item.updatedAt } : {}),
+    ...(item.version !== undefined ? { sourceVersion: item.version } : {}),
+    ...(credit !== undefined ? { sourceCredit: credit } : {}),
+    ...(source?.freeAt !== undefined ? { sourceFreeAt: source.freeAt } : {}),
+    ...(item.pageUrl !== undefined ? { sourcePageUrl: item.pageUrl } : {}),
+  };
+}
 
 /** Cancel an in-flight store download (no-op when none is running). */
 export function cancelCatalogDownload(itemId: string): void {
@@ -72,17 +102,19 @@ export async function downloadCatalogItemToLibrary(
       reportError(err, `catalog-download-parse ${item.id}`);
       throw err;
     }
-    if (doc.georeferences.length === 0) {
+    // A plain-PDF item (#680) is listed as "not placed yet": no georeference
+    // is expected. A GeoPDF without one is a catalog bug.
+    if (doc.georeferences.length === 0 && item.format === 'geopdf') {
       reportError(
         new Error('catalog map parsed with no georeference'),
         `catalog-georef ${item.id}`,
       );
     }
 
-    const provenance = {
-      sourceItemId: item.id,
-      ...(item.updatedAt !== undefined ? { sourceUpdatedAt: item.updatedAt } : {}),
-    };
+    const provenance = catalogProvenance(
+      item,
+      catalog.index?.sources.find((s) => s.id === item.sourceId),
+    );
 
     const library = useLibraryStore.getState();
     // The store intentionally skips writes before hydration. Do not treat an

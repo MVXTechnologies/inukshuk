@@ -71,6 +71,7 @@ import { MeshLink, type MeshLinkStatus } from './meshLink';
 import { MeshSessionHost, type FrameStep } from './meshSessions';
 import type { MeshPeer, MeshTransport } from './meshTransport';
 import { PersistingStore } from './persistingStore';
+import { onlyPens, SessionDrawing, type SessionDrawAlert } from './teamDraw';
 import type { TeamDisk, TeamRecord } from './teamDisk';
 
 export interface SessionDeps {
@@ -84,6 +85,10 @@ export interface SessionDeps {
   onChange: () => void;
   /** A teammate's message routed `badge` or `alert` to me. */
   onAlert: (alert: TeamAlert) => void;
+  /** Teammates' live strokes changed (#683): never through `onChange` (4 a second). */
+  onDraw?: () => void;
+  /** A teammate's drawing earned a snackbar or a notification (#683). */
+  onDrawAlert?: (alert: SessionDrawAlert) => void;
   /** Re-sync period for open sessions (ms); 0 in tests that tick by hand. */
   tickMs?: number;
 }
@@ -147,6 +152,8 @@ export class TeamSession {
   private link: MeshLink | null = null;
   private host: MeshSessionHost<SessionEvent, SyncSession> | null = null;
   private readonly meta = new Map<string, PeerMeta>();
+  /** Teammates whose phone stopped taking live strokes (#683, `SessionOptions.liveStrokeMute`). */
+  private readonly liveStrokeMute = new Set<string>();
   readonly joinNotices: JoinNotice[] = [];
   /** Connections on which a joiner was admitted (peer id → member id). */
   private readonly admittedOn = new Map<string, string>();
@@ -161,7 +168,18 @@ export class TeamSession {
   ) {
     this.store = new PersistingStore(replica, deps.disk);
     this.store.onStored = (ops) => this.afterStored(ops, null);
+    this.draw = new SessionDrawing({
+      replica,
+      me: replica.id,
+      now: deps.now,
+      guardWrite: () => this.guardWrite(),
+      run: (fn, ephemeral) => this.run(fn, ephemeral),
+      dataVersion: () => this.dataVersion,
+    });
   }
+
+  /** Team drawing (#683): shapes, live strokes, `cap.pen`. */
+  readonly draw: SessionDrawing;
 
   /**
    * Restore a team from disk. The writer resumes from the LATER of the saved
@@ -654,13 +672,22 @@ export class TeamSession {
     this.host = new MeshSessionHost<SessionEvent, SyncSession>(
       transport,
       {
+        // The mesh links teammates' phones directly (LAN / hotspot): a
+        // first-party transport, so it may carry live strokes (#683).
         initiate: (peer) => {
           this.touch(peer, false);
-          return SyncSession.initiate(this.deps.c, this.store, { now: this.deps.now() });
+          return SyncSession.initiate(this.deps.c, this.store, {
+            now: this.deps.now(),
+            carryLiveStrokes: true,
+            liveStrokeMute: this.liveStrokeMute,
+          });
         },
         respond: (peer) => {
           this.touch(peer, false);
-          return SyncSession.respond(this.deps.c, this.store);
+          return SyncSession.respond(this.deps.c, this.store, {
+            carryLiveStrokes: true,
+            liveStrokeMute: this.liveStrokeMute,
+          });
         },
       },
       (peerId, event, session) => this.onSessionEvent(peerId, event, session),
@@ -791,13 +818,24 @@ export class TeamSession {
 
   private gossip(ops: readonly SignedOp[], except: string | null): void {
     if (ops.length === 0 || this.host === null) return;
-    this.host.forEachOpen((s, peer) => (peer.peerId === except ? empty() : s.push(ops)));
+    const now = this.deps.now();
+    this.host.forEachOpen((s, peer) => (peer.peerId === except ? empty() : s.push(ops, now)));
   }
 
   private afterStored(ops: readonly SignedOp[], from: string | null): void {
     if (ops.length === 0) return;
+    if (from !== null && ops.some((op) => op.env.t === 'pen' || op.env.t === 'e.set')) {
+      for (const a of this.draw.admit(ops)) this.deps.onDrawAlert?.(a);
+    }
+    if (onlyPens(ops)) {
+      // Live strokes: relayed, and drawn by the drawing layer alone (#683).
+      this.gossip(ops, from);
+      this.deps.onDraw?.();
+      return;
+    }
     this.dirty = true;
     this.gossip(ops, from);
+    if (ops.some((op) => op.env.t === 'pen' || op.env.t === 'e.set')) this.deps.onDraw?.();
     if (from !== null && ops.some((op) => op.env.t === 'msg' || op.env.t === 'e.set')) {
       const ctx = alertContext(this.replica.state, this.replica.data(this.deps.now()));
       const now = this.deps.now();
@@ -901,6 +939,8 @@ export class TeamSession {
         const ok = this.writeMsg(systemMessage(this.deps.newId(), SYS_TEAM, nameText(view.name)));
         if (ok === null) this.updateRecord({ teamNameKeyId: keyId });
       }
+      // Tell the team this phone draws live (#683): once, under a key it can use.
+      this.draw.advertise();
     } finally {
       this.profileCheckBusy = false;
     }

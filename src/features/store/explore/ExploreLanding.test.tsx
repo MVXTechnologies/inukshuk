@@ -11,7 +11,11 @@ import { useSettingsStore } from '@state/settingsStore';
 import { fireEvent } from '@testing-library/react-native';
 import { Linking } from 'react-native';
 
+import { cardMeta } from './ExploreLanding';
 import {
+  cpaIndex,
+  cpaMap,
+  cpaSource,
   fixtureIndex,
   fixtureItem,
   mountWithProviders,
@@ -221,6 +225,23 @@ describe('Popular near you never vanishes silently', () => {
     const view = await landing();
     expect(view.getByText('No maps in the catalog near you yet.')).toBeTruthy();
   });
+});
+
+it('lists Cartes Plein-air under Collections and credits its maps on their cards (#680)', async () => {
+  seedCatalog({
+    ...cpaIndex(),
+    sourceCounts: { 'nrcan-cantopo': 1, 'chs-charts': 1, 'cartes-plein-air': 368 },
+  } as ReturnType<typeof cpaIndex>);
+  const view = await landing();
+  // The collection row: the publisher, its count, and "free at" instead of a licence.
+  expect(view.getByText('Cartes Plein-air')).toBeTruthy();
+  expect(view.getByText('368 maps · Available free at cartespleinair.org')).toBeTruthy();
+  // The carousel card: the author first, and the free line.
+  expect(view.getByText('Auteur Exemple · 2022 · Cartes Plein-air')).toBeTruthy();
+  expect(view.getAllByText('Available free at cartespleinair.org').length).toBeGreaterThan(0);
+  expect(cardMeta(cpaMap, cpaSource)).toBe('Auteur Exemple · 2022 · Cartes Plein-air');
+  await fireEvent.press(view.getByText('Cartes Plein-air'));
+  expect(mockPush).toHaveBeenCalledWith('/explore/list?source=cartes-plein-air');
 });
 
 it('ends with the organisation call to action', async () => {

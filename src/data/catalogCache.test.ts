@@ -3,12 +3,18 @@ import {
   CATALOG_SCHEMA_VERSION,
   type CatalogShardRef,
 } from '@core/catalog/schema';
+import { CATALOG_SEARCH_SCHEMA_VERSION } from '@core/catalog/searchDigest';
 import Constants from 'expo-constants';
 import {
+  catalogCacheFile,
+  catalogIndexBaseUrl,
+  catalogIndexUrls,
   catalogManifestUrl,
   loadCatalogFacets,
   loadCatalogManifest,
+  loadCatalogSearchDigest,
   loadCatalogShard,
+  resetCatalogIndexBaseUrl,
 } from './catalogCache';
 import * as storage from './storage';
 
@@ -56,6 +62,7 @@ beforeEach(() => {
   fetchMock = jest.fn();
   global.fetch = fetchMock as unknown as typeof fetch;
   readJson.mockResolvedValue(null);
+  resetCatalogIndexBaseUrl();
 });
 
 describe('catalogManifestUrl', () => {
@@ -363,5 +370,223 @@ describe('loadCatalogFacets (#474)', () => {
   it('returns null when unusable and uncached', async () => {
     fetchMock.mockResolvedValue(okResponse({ schemaVersion: 99, shards: {} }));
     expect(await loadCatalogFacets(ref)).toBeNull();
+  });
+});
+
+// #680: 2.5.2 reads the credited edition (v3), which shares v2's unchanged
+// shards through `../v2/` paths. Apps before 2.5.2 keep reading v2 and never
+// see Cartes Plein-air. A missing or broken v3 must leave the store working on
+// v2, never empty.
+describe('catalog editions: v3 first, v2 as the fallback', () => {
+  const V3 = 'https://inukshuk.mvxtechnologies.com/catalog/v3/index.json';
+  const V2 = 'https://inukshuk.mvxtechnologies.com/catalog/v2/index.json';
+  const HOST = 'https://inukshuk.mvxtechnologies.com/catalog';
+  beforeEach(() => setManifestUrl(''));
+  afterEach(() => setManifestUrl('https://test.example/manifest.json'));
+
+  const shardRef = (id: string, path: string) => ({
+    id,
+    category: id.split('-')[0] ?? 'topo',
+    path,
+    itemCount: 1,
+    bbox: [-80, 40, -70, 50],
+  });
+  const v3Index = {
+    schemaVersion: CATALOG_INDEX_SCHEMA_VERSION,
+    sources: validManifest.sources,
+    shards: [
+      shardRef('topo-n40w080', '../v2/shards/topo-n40w080.json'),
+      shardRef('river-n40w080', 'shards/river-n40w080.json'),
+    ],
+    categoryCounts: { topo: 1, river: 1 },
+  };
+  const v2Index = {
+    ...v3Index,
+    shards: [shardRef('topo-n40w080', 'shards/topo-n40w080.json')],
+    categoryCounts: { topo: 1 },
+  };
+  const notFound = { ok: false, status: 404 } as unknown as Response;
+  const shardBody = { id: 'topo-n40w080', items: validManifest.items };
+  const sourceIds = new Set(['s1']);
+
+  /** Route fetches by URL; anything unrouted is a network failure. */
+  function serve(routes: Record<string, Response>): void {
+    fetchMock.mockImplementation(async (url: string) => {
+      const response = routes[url];
+      if (response === undefined) throw new Error(`offline: ${url}`);
+      return response;
+    });
+  }
+  const fetchedUrls = () => fetchMock.mock.calls.map((call: unknown[]) => call[0]);
+
+  it('tries v3, then v2, and only those (no override)', () => {
+    expect(catalogIndexUrls()).toEqual([V3, V2]);
+  });
+
+  it('an override (e2e fixture) is the only candidate: never production v2', async () => {
+    setManifestUrl('http://127.0.0.1:8787/index.json');
+    expect(catalogIndexUrls()).toEqual(['http://127.0.0.1:8787/index.json']);
+    serve({});
+    expect(await loadCatalogManifest()).toBeNull();
+    expect(fetchedUrls()).toEqual(['http://127.0.0.1:8787/index.json']);
+  });
+
+  it('loads v3 and resolves shared shards to the very URL v2 uses (one cache entry)', async () => {
+    serve({
+      [V3]: okResponse(v3Index),
+      [`${HOST}/v2/shards/topo-n40w080.json`]: okResponse(shardBody),
+    });
+    const result = await loadCatalogManifest();
+    expect(result?.index.shards.map((s) => s.id)).toEqual(['topo-n40w080', 'river-n40w080']);
+    expect(fetchedUrls()).toEqual([V3]);
+    expect(catalogIndexBaseUrl()).toBe(V3);
+
+    const shared = result?.index.shards[0];
+    if (shared === undefined) throw new Error('no shard');
+    expect((await loadCatalogShard(shared, sourceIds))?.items).toHaveLength(1);
+    expect(fetchedUrls()[1]).toBe(`${HOST}/v2/shards/topo-n40w080.json`);
+    expect(writeJson).toHaveBeenCalledWith(
+      'catalog-shard-topo-n40w080.json',
+      expect.objectContaining({ url: `${HOST}/v2/shards/topo-n40w080.json` }),
+    );
+  });
+
+  it('resolves a v3-only shard under v3', async () => {
+    serve({ [V3]: okResponse(v3Index), [`${HOST}/v3/shards/river-n40w080.json`]: notFound });
+    const result = await loadCatalogManifest();
+    const river = result?.index.shards[1];
+    if (river === undefined) throw new Error('no shard');
+    await loadCatalogShard(river, sourceIds);
+    expect(fetchedUrls()[1]).toBe(`${HOST}/v3/shards/river-n40w080.json`);
+  });
+
+  it.each([
+    ['missing (404)', notFound],
+    ['unparseable', okResponse({ schemaVersion: 99 })],
+  ])('falls back to v2 when v3 is %s, and resolves against v2', async (_label, v3Response) => {
+    serve({
+      [V3]: v3Response,
+      [V2]: okResponse(v2Index),
+      [`${HOST}/v2/shards/topo-n40w080.json`]: okResponse(shardBody),
+    });
+    const result = await loadCatalogManifest();
+    expect(result?.fromCache).toBe(false);
+    expect(result?.index.shards.map((s) => s.id)).toEqual(['topo-n40w080']);
+    expect(fetchedUrls()).toEqual([V3, V2]);
+    expect(catalogIndexBaseUrl()).toBe(V2);
+    expect(writeJson).toHaveBeenCalledWith('catalog.json', expect.objectContaining({ url: V2 }));
+
+    const shard = result?.index.shards[0];
+    if (shard === undefined) throw new Error('no shard');
+    expect((await loadCatalogShard(shard, sourceIds))?.items).toHaveLength(1);
+    expect(fetchedUrls()[2]).toBe(`${HOST}/v2/shards/topo-n40w080.json`);
+  });
+
+  it('retries v3 even when a fresh v2 copy is cached (v3 deployed since)', async () => {
+    readJson.mockResolvedValue({ fetchedAt: Date.now() - 1000, url: V2, raw: v2Index });
+    serve({ [V3]: okResponse(v3Index) });
+    const result = await loadCatalogManifest();
+    expect(result?.fromCache).toBe(false);
+    expect(result?.index.shards).toHaveLength(2);
+    expect(catalogIndexBaseUrl()).toBe(V3);
+  });
+
+  it('serves a fresh v3 copy without touching the network', async () => {
+    readJson.mockResolvedValue({ fetchedAt: Date.now() - 1000, url: V3, raw: v3Index });
+    const result = await loadCatalogManifest();
+    expect(result?.fromCache).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(catalogIndexBaseUrl()).toBe(V3);
+  });
+
+  it('offline right after the update: the v2 copy 2.5.1 cached still browses, against v2', async () => {
+    readJson.mockResolvedValue({ fetchedAt: Date.now() - 60_000, url: V2, raw: v2Index });
+    serve({});
+    const result = await loadCatalogManifest();
+    expect(result?.fromCache).toBe(true);
+    expect(result?.index.shards.map((s) => s.path)).toEqual(['shards/topo-n40w080.json']);
+    expect(fetchedUrls()).toEqual([V3, V2]);
+    expect(catalogIndexBaseUrl()).toBe(V2);
+  });
+
+  // 2.5.2 review: a phone rolled back to 2.5.1 falls back, offline, to any
+  // same-origin copy in the files it reads. A v3 load must never write those
+  // (they would show Cartes Plein-air without its credits, and v3's river
+  // shards under v2's ids).
+  it('a v3 load never writes the files 2.5.1 reads; the shared v2 shard is v2’s own entry', async () => {
+    const v3WithDigests = {
+      ...v3Index,
+      search: { path: 'search.json', byteSize: 10 },
+      facets: { path: 'facets.json', byteSize: 10 },
+    };
+    const riverBody = {
+      id: 'river-n40w080',
+      items: [{ ...validManifest.items[0], id: 'cpa-1', category: 'river' }],
+    };
+    serve({
+      [V3]: okResponse(v3WithDigests),
+      [`${HOST}/v3/search.json`]: okResponse({
+        schemaVersion: CATALOG_SEARCH_SCHEMA_VERSION,
+        shardIds: ['river-n40w080'],
+        tokens: { canot: [0] },
+      }),
+      [`${HOST}/v3/facets.json`]: okResponse({ schemaVersion: 1, shards: {} }),
+      [`${HOST}/v3/shards/river-n40w080.json`]: okResponse(riverBody),
+      [`${HOST}/v2/shards/topo-n40w080.json`]: okResponse(shardBody),
+    });
+    const result = await loadCatalogManifest();
+    const index = result?.index;
+    if (index === undefined) throw new Error('no index');
+    if (index.search) await loadCatalogSearchDigest(index.search);
+    if (index.facets) await loadCatalogFacets(index.facets);
+    for (const shard of index.shards) await loadCatalogShard(shard, sourceIds);
+
+    const writes = writeJson.mock.calls.map((c: unknown[]) => ({
+      file: c[0] as string,
+      url: (c[1] as { url: string }).url,
+    }));
+    expect(writes.map((w) => w.file).sort()).toEqual([
+      'catalog-shard-topo-n40w080.json',
+      'catalog-v3-facets.json',
+      'catalog-v3-search.json',
+      'catalog-v3-shard-river-n40w080.json',
+      'catalog-v3.json',
+    ]);
+    // Every file 2.5.1 reads holds a v2 URL only.
+    const legacy = new Set(['catalog.json', 'catalog-search.json', 'catalog-facets.json']);
+    for (const w of writes) {
+      if (legacy.has(w.file) || /^catalog-shard-/.test(w.file)) expect(w.url).toMatch(/\/v2\//);
+      if (w.url.includes('/v3/')) expect(w.file).toMatch(/^catalog-v3/);
+    }
+  });
+
+  it('names cache files by edition: v1, v2 and fixtures keep the legacy names', () => {
+    expect(catalogCacheFile('', V3)).toBe('catalog-v3.json');
+    expect(catalogCacheFile('-shard-river-x', `${HOST}/v3/shards/river-x.json`)).toBe(
+      'catalog-v3-shard-river-x.json',
+    );
+    expect(catalogCacheFile('-shard-topo-x', `${HOST}/v2/shards/topo-x.json`)).toBe(
+      'catalog-shard-topo-x.json',
+    );
+    expect(catalogCacheFile('', V2)).toBe('catalog.json');
+    expect(catalogCacheFile('-search', `${HOST}/v1/manifest.json`)).toBe('catalog-search.json');
+    expect(catalogCacheFile('', 'http://127.0.0.1:8787/index.json')).toBe('catalog.json');
+    expect(catalogCacheFile('-facets', `${HOST}/v4/facets.json`)).toBe('catalog-v4-facets.json');
+  });
+
+  it('offline with only the v2 copy in catalog.json (no v3 copy yet): browses v2', async () => {
+    readJson.mockImplementation(async (file: string) =>
+      file === 'catalog.json' ? { fetchedAt: Date.now() - 60_000, url: V2, raw: v2Index } : null,
+    );
+    serve({});
+    const result = await loadCatalogManifest();
+    expect(result?.fromCache).toBe(true);
+    expect(catalogIndexBaseUrl()).toBe(V2);
+  });
+
+  it('returns null when neither edition is reachable and nothing is cached', async () => {
+    serve({ [V3]: notFound, [V2]: notFound });
+    expect(await loadCatalogManifest()).toBeNull();
+    expect(catalogIndexBaseUrl()).toBe(V3);
   });
 });

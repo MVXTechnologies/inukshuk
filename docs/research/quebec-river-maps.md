@@ -153,6 +153,9 @@ written permission. So we only counted from it, once, and stored nothing.
    small and local, so this is likely a fast yes. It would prove the flow end to
    end.
 3. **Cartes Plein-air.** 366 maps; the site has to agree per author.
+   **Granted in writing on 2026-10-13** (#680): link, never copy; credit each
+   map's author; never paid content. Crawled weekly; the terms and the
+   pipeline are in `docs/CATALOG-SOURCES.md` §1.6.
 
 Optional later: Tourisme Abitibi-Témiscamingue (Accès Plein Air carte-guides),
 and Sépaq (its partnership proposal already exists and is kept out of the repo).

@@ -26,6 +26,8 @@ import { Linking, StyleSheet } from 'react-native';
 import { ExploreMapScreen } from './ExploreMapScreen';
 import {
   collectionsRaw,
+  cpaIndex,
+  cpaMap,
   CUPERTINO,
   cupertinoIndex,
   cupertinoSheets,
@@ -208,6 +210,46 @@ it('a tapped point shows its card and footprint, and Details opens it', async ()
   expect(mockCaptured.footprint).toBe(true);
   await fireEvent.press(view.getByText('Details'));
   expect(mockPush).toHaveBeenCalledWith('/explore/item/cantopo-021l14');
+});
+
+it('a Cartes Plein-air map names its author and says where it is free, on its card and in the list (#680)', async () => {
+  seedCatalog({ ...cpaIndex(), shards: [HERE, EAST] });
+  const view = await mapScreen();
+  await act(async () => {
+    mockCaptured.source?.onPress({
+      stopPropagation: jest.fn(),
+      nativeEvent: {
+        features: [
+          {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [-76.1, 46.5] },
+            properties: { id: cpaMap.id },
+          },
+        ],
+      },
+    });
+  });
+  expect(
+    view.getAllByText('Auteur Exemple · 2022 · River routes · Cartes Plein-air · 2 MB · Free')
+      .length,
+  ).toBe(1);
+  expect(view.getAllByText('Available free at cartespleinair.org').length).toBeGreaterThan(0);
+  // A source without such terms gets no free line.
+  await act(async () => {
+    mockCaptured.source?.onPress({
+      stopPropagation: jest.fn(),
+      nativeEvent: {
+        features: [
+          {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [-71.3, 46.95] },
+            properties: { id: lacBeauport.id },
+          },
+        ],
+      },
+    });
+  });
+  expect(view.getByText('Topographic · NRCan CanTopo · 5 MB · Free')).toBeTruthy();
 });
 
 it('filter chips narrow the points; the list toggle keeps the filter', async () => {

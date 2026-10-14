@@ -1,6 +1,7 @@
+import { itemCredit, sourceFreeLine } from '@core/catalog/credit';
 import { formatMapScale } from '@core/catalog/exploreFacets';
 import { formatDistanceShort } from '@core/catalog/exploreFormat';
-import { installStatusFor } from '@core/catalog/installStatus';
+import { installStatusFor, NEWER_VERSION_NOTICE } from '@core/catalog/installStatus';
 import { catalogItemDistanceMeters } from '@core/catalog/nearest';
 import type { CatalogItem, CatalogSource } from '@core/catalog/schema';
 import {
@@ -27,6 +28,7 @@ import { ExploreStat, MapPreview, TagChip } from './ExploreParts';
 import { itemFacets, itemScaleDenominator } from './facetsAdapter';
 import { useCatalogDownloadFlow } from './useCatalogDownloadFlow';
 import { openExternalLink } from '@lib/openLink';
+import { useCreditLanguage } from '../useCreditLanguage';
 
 /**
  * One map's detail page (#447, board `Detail.dc.html`): preview (the
@@ -58,6 +60,7 @@ export function CatalogDetailScreen({ id }: { id: string }) {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const flow = useCatalogDownloadFlow();
+  const creditLang = useCreditLanguage();
 
   const status = useCatalogStore((s) => s.status);
   const index = useCatalogStore((s) => s.index);
@@ -107,10 +110,39 @@ export function CatalogDetailScreen({ id }: { id: string }) {
     distance !== null ? { value: formatDistanceShort(distance, units), label: 'From you' } : null,
   ].filter((s): s is { value: string; label: string } => s !== null);
 
-  const rows: { label: string; value: string; url?: string }[] = [
+  // A credited map (#680): its author leads, and the publisher's terms want
+  // the "free at" line on the page. A plain PDF opens as a document.
+  const credit = itemCredit(item);
+  const freeLine = sourceFreeLine(source, creditLang);
+  const freeUrl = item.pageUrl ?? source?.homepage;
+  const plainPdf = item.format === 'pdf';
+  const openLabel = plainPdf ? 'Open PDF' : 'Open on map';
+  // A bbox taken from the river's name or the region is not the sheet's extent.
+  const coverageLabel =
+    item.bboxPrecision === 'river'
+      ? 'Approximate area (the river)'
+      : item.bboxPrecision === 'region'
+        ? 'Approximate area (the region)'
+        : 'Coverage';
+
+  // `a11y`: the link's spoken label, when "Open " + the value does not read right.
+  const rows: { label: string; value: string; url?: string; a11y?: string }[] = [
+    ...(item.author !== undefined ? [{ label: 'Author', value: item.author }] : []),
+    ...(item.year !== undefined ? [{ label: 'Year', value: String(item.year) }] : []),
     { label: 'Format', value: formatLabel(item) },
+    ...(plainPdf ? [{ label: 'On the map', value: 'Not placed yet' }] : []),
     ...(item.updatedAt !== undefined ? [{ label: 'Updated', value: item.updatedAt }] : []),
     ...(source !== undefined ? [{ label: 'Licence', value: source.licence }] : []),
+    ...(item.pageUrl !== undefined
+      ? [
+          {
+            label: 'Map page',
+            value: `On ${hostOf(item.pageUrl)}`,
+            url: item.pageUrl,
+            a11y: `Open on ${hostOf(item.pageUrl)}`,
+          },
+        ]
+      : []),
     ...(source?.homepage !== undefined
       ? [{ label: 'Source', value: hostOf(source.homepage), url: source.homepage }]
       : []),
@@ -119,7 +151,7 @@ export function CatalogDetailScreen({ id }: { id: string }) {
   const primary = downloading
     ? null
     : installStatus === 'installed'
-      ? { label: 'Open on map', onPress: () => flow.open(item) }
+      ? { label: openLabel, onPress: () => flow.open(item) }
       : installStatus === 'update-available'
         ? { label: 'Update', onPress: () => flow.update(item) }
         : { label: 'Download · Free', onPress: () => flow.requestDownload(item) };
@@ -159,8 +191,23 @@ export function CatalogDetailScreen({ id }: { id: string }) {
             {item.title}
           </Text>
           <Text style={[styles.publisher, { color: t.inkMuted }]}>
-            {[source?.attribution ?? source?.name, item.id].filter(Boolean).join(' · ')}
+            {credit !== undefined
+              ? [credit, source?.name].filter(Boolean).join(' · ')
+              : [source?.attribution ?? source?.name, item.id].filter(Boolean).join(' · ')}
           </Text>
+          {freeLine !== undefined &&
+            (freeUrl !== undefined ? (
+              <Pressable
+                onPress={() => void openExternalLink(freeUrl)}
+                accessibilityRole="link"
+                hitSlop={target.compactHitSlop}
+                style={styles.freeLink}
+              >
+                <Text style={[styles.free, { color: t.explore.accent }]}>{freeLine}</Text>
+              </Pressable>
+            ) : (
+              <Text style={[styles.free, { color: t.ink }]}>{freeLine}</Text>
+            ))}
         </View>
 
         {stats.length > 0 && (
@@ -175,11 +222,11 @@ export function CatalogDetailScreen({ id }: { id: string }) {
           <View
             style={[styles.coverage, { backgroundColor: t.surface, borderColor: t.outlineVariant }]}
             accessible
-            accessibilityLabel={`Coverage map. ${coverageText(item.bbox)}`}
+            accessibilityLabel={`${coverageLabel}. ${coverageText(item.bbox)}`}
           >
             <CoverageMap bbox={item.bbox} position={position} height={150} />
             <Text style={[styles.coverageText, { color: t.inkMuted }]}>
-              Coverage · {coverageText(item.bbox)}
+              {coverageLabel} · {coverageText(item.bbox)}
             </Text>
           </View>
         )}
@@ -192,7 +239,7 @@ export function CatalogDetailScreen({ id }: { id: string }) {
                 <Pressable
                   onPress={() => void openExternalLink(row.url ?? '')}
                   accessibilityRole="link"
-                  accessibilityLabel={`Open ${row.value}`}
+                  accessibilityLabel={row.a11y ?? `Open ${row.value}`}
                   hitSlop={target.compactHitSlop}
                   style={styles.rowLink}
                 >
@@ -206,6 +253,9 @@ export function CatalogDetailScreen({ id }: { id: string }) {
         </View>
 
         <View style={styles.actions}>
+          {installStatus === 'update-available' && !downloading && (
+            <Text style={[styles.newer, { color: t.ink }]}>{NEWER_VERSION_NOTICE}</Text>
+          )}
           {downloading ? (
             <View style={styles.progressWrap}>
               <ProgressBar
@@ -244,12 +294,14 @@ export function CatalogDetailScreen({ id }: { id: string }) {
               accessibilityRole="button"
               style={[styles.secondary, { borderColor: t.outline }]}
             >
-              <Text style={[styles.secondaryText, { color: t.ink }]}>Open on map</Text>
+              <Text style={[styles.secondaryText, { color: t.ink }]}>{openLabel}</Text>
             </Pressable>
           )}
         </View>
         <Text style={[styles.footnote, { color: t.inkMuted }]}>
-          Downloaded straight from the publisher, kept in your Library, works without signal.
+          {plainPdf
+            ? 'Downloaded straight from the publisher, kept in your Library. Not placed on the map yet: it opens as a PDF, without your position.'
+            : 'Downloaded straight from the publisher, kept in your Library, works without signal.'}
         </Text>
       </ScrollView>
       {flow.overlays}
@@ -275,6 +327,9 @@ const styles = StyleSheet.create({
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   title: { marginTop: space.xs, fontSize: 24, lineHeight: 29, fontWeight: '800' },
   publisher: { fontSize: 14, lineHeight: 19 },
+  freeLink: { alignSelf: 'flex-start' },
+  newer: { textAlign: 'center', fontSize: 14, lineHeight: 19, fontWeight: '700' },
+  free: { fontSize: 14, lineHeight: 19, fontWeight: '700' },
   stats: {
     marginTop: space.lg,
     marginHorizontal: space.lg,

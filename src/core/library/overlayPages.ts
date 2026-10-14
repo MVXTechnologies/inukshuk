@@ -57,6 +57,25 @@ export function unsupportedProjectionNotice(crs?: string): string {
   return `Map projection not supported${crs ? ` (${crs})` : ''} — cannot be placed on the map`;
 }
 
+/**
+ * The line for a map the catalog lists as a plain PDF (#680: Cartes Plein-air
+ * canoe maps are LibreOffice exports with no georeferencing). Nothing is
+ * wrong with it, it is simply not placed yet, so it says so instead of the
+ * error-toned {@link NO_GEOREFERENCE_NOTICE}, and tapping it opens the PDF.
+ */
+export const NOT_PLACED_NOTICE = 'Not placed on the map yet — tap to open the PDF';
+
+/**
+ * A catalog download with no georeferencing. The generator verifies every
+ * GeoPDF it lists, so a catalog map without a georeference is one the catalog
+ * listed as a plain PDF: it opens as a document, not on the map.
+ */
+export function isUnplacedCatalogMap(
+  map: Pick<MapDocument, 'georeferences'> & Partial<Pick<MapDocument, 'sourceItemId'>>,
+): boolean {
+  return map.georeferences.length === 0 && map.sourceItemId !== undefined;
+}
+
 /** Can this georeference's corners actually be handed to the map? */
 export function isPlaceable(geo: GeoReference): boolean {
   return cornersAreValid(geo.viewport.corners);
@@ -66,8 +85,12 @@ export function isPlaceable(geo: GeoReference): boolean {
  * The subtitle line for a map card, or `null` when the map has at least one
  * page that can be drawn (the card then shows its page/overlay counts instead).
  */
-export function georeferenceNotice(map: Pick<MapDocument, 'georeferences'>): string | null {
-  if (map.georeferences.length === 0) return NO_GEOREFERENCE_NOTICE;
+export function georeferenceNotice(
+  map: Pick<MapDocument, 'georeferences'> & Partial<Pick<MapDocument, 'sourceItemId'>>,
+): string | null {
+  if (map.georeferences.length === 0) {
+    return isUnplacedCatalogMap(map) ? NOT_PLACED_NOTICE : NO_GEOREFERENCE_NOTICE;
+  }
   const primaries = primaryGeoreferences(map.georeferences);
   if (primaries.some(isPlaceable)) return null;
   // Report the CRS of the first page that failed. Documents imported before

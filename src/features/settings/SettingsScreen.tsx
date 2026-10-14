@@ -23,6 +23,7 @@ import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
 import { BetaFeaturesSection } from './BetaFeaturesSection';
 import { CoordinateFormatSetting } from './CoordinateFormatSetting';
 import { NavigationButtonsSetting } from './NavigationButtonsSetting';
+import { PinSizeSetting } from './PinSizeSetting';
 import { ExtensionsSection } from './ExtensionsSection';
 import Constants from 'expo-constants';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -371,6 +372,8 @@ export function SettingsScreen() {
                 </View>
                 {/* #677: one app-wide coordinate format (map chip, waypoint cards, copies). */}
                 <CoordinateFormatSetting />
+                {/* #686: every waypoint pin on the map at 75–150 %. */}
+                <PinSizeSetting />
                 <List.Item title="Theme" description="Follow the system, or force light / dark" />
                 <View style={styles.segment}>
                   <SegmentedButtons
@@ -764,8 +767,9 @@ export function SettingsScreen() {
               <List.Item
                 title="Maps & data"
                 // paper truncates descriptions at 2 lines by default; the
-                // credit roll must stay fully readable.
-                descriptionNumberOfLines={14}
+                // credit roll must stay fully readable. 0 = no limit: the roll
+                // is ~1,500 characters, past any fixed count on a phone.
+                descriptionNumberOfLines={0}
                 description={MAP_DATA_CREDITS}
               />
             </View>

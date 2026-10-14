@@ -80,9 +80,13 @@ async function mountedLiveLayers(): Promise<{ id: string; beforeId?: string; aft
       <PuckLayers weakAccuracyM={30} />
       <HeadingCone location={HERE} />
       <MoveWaypointLayers />
+      {/* Two pins, one selected: the clustered layers and the selected pin's own. */}
       <WaypointPinLayers
-        pins={[{ key: 'saved-a', latitude: 46.8, longitude: -71.2, label: 'A', hasPhoto: true }]}
-        selectedKey={null}
+        pins={[
+          { key: 'saved-a', latitude: 46.8, longitude: -71.2, label: 'A', hasPhoto: true },
+          { key: 'saved-b', latitude: 46.81, longitude: -71.2, label: 'B', hasPhoto: true },
+        ]}
+        selectedKey="saved-b"
         hiddenKey={null}
         glyphs="https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf"
       />
@@ -131,6 +135,25 @@ describe('LIVE_LAYER_ORDER', () => {
     }
     expect(at('waypoint-pin-label')).toBeLessThan(at('inukshuk-puck-ring'));
     expect(at('inukshuk-puck-ring')).toBeLessThan(at('inukshuk-puck-dot'));
+  });
+
+  it('stacks clusters under the pins, glyphs over bodies, the selected pin over all (#685)', () => {
+    const at = (id: LiveLayerId) => LIVE_LAYER_ORDER.indexOf(id);
+    expect(at('trail-photos-selected')).toBeLessThan(at('waypoint-cluster'));
+    expect(at('waypoint-cluster')).toBeLessThan(at('waypoint-cluster-count'));
+    expect(at('waypoint-cluster-count')).toBeLessThan(at('waypoint-pin'));
+    expect(at('waypoint-pin')).toBeLessThan(at('waypoint-pin-glyph'));
+    expect(at('waypoint-pin-label')).toBeLessThan(at('waypoint-pin-selected'));
+    expect(at('waypoint-pin-selected-label')).toBeLessThan(at('team-sos-halo'));
+  });
+
+  it('mounts every waypoint layer at its anchor (clusters, pins, the selected pin)', async () => {
+    const ids = (await mountedLiveLayers()).map((l) => l.id);
+    for (const id of LIVE_LAYER_ORDER.filter(
+      (x) => x.startsWith('waypoint-') && !x.includes('move'),
+    )) {
+      expect(ids).toContain(id);
+    }
   });
 
   it('puts one anchor per live layer at the very top of every style', () => {

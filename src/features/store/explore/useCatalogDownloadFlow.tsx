@@ -1,4 +1,6 @@
 import type { CatalogItem } from '@core/catalog/schema';
+import { isUnplacedCatalogMap } from '@core/library/overlayPages';
+import { openMapPdf, openMapPdfMessage } from '@features/library/openMapPdf';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
 import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
@@ -18,7 +20,8 @@ import {
  * search, filtered list, map, detail): Download asks for a destination folder
  * (user-initiated dialog — the only Portal here), then streams into the
  * Library with progress in `catalogStore.downloads`; Update replaces in place;
- * Open activates the installed map and returns to the Map tab. Outcomes land
+ * Open activates the installed map and returns to the Map tab (or, for a map
+ * not placed yet, opens its PDF). Outcomes land
  * in a self-timed snackbar (paper's own timer sticks on One UI).
  *
  * The screen renders `overlays` once, at its root.
@@ -80,10 +83,22 @@ export function useCatalogDownloadFlow(): CatalogDownloadFlow {
     (item: CatalogItem) => {
       const doc = useLibraryStore.getState().maps.find((m) => m.sourceItemId === item.id);
       if (doc === undefined) return;
+      // Not placed yet (#680): nothing to show on the map, so open the PDF.
+      if (isUnplacedCatalogMap(doc)) {
+        openMapPdf(doc).then(
+          (result) => {
+            const message = openMapPdfMessage(result);
+            if (message !== null) show(message);
+          },
+          (err: unknown) =>
+            show(`Could not open the PDF: ${err instanceof Error ? err.message : String(err)}`),
+        );
+        return;
+      }
       useLibraryStore.getState().setActiveMap(doc.id);
       router.navigate('/');
     },
-    [router],
+    [router, show],
   );
 
   const cancel = useCallback((item: CatalogItem) => cancelCatalogDownload(item.id), []);

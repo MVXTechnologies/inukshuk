@@ -18,6 +18,18 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
  */
 
 const CANVAS_PX = 100;
+/** The dot's diameter is 5.2 units: a footprint is drawn at least this big, around its centre. */
+export const MIN_FOOTPRINT = 8;
+
+/** A footprint grown about its centre to at least `min` a side. */
+export function minFootprint(
+  r: { x: number; y: number; width: number; height: number },
+  min: number,
+): { x: number; y: number; width: number; height: number } {
+  const width = Math.max(r.width, min);
+  const height = Math.max(r.height, min);
+  return { x: r.x + (r.width - width) / 2, y: r.y + (r.height - height) / 2, width, height };
+}
 
 export const CoverageMap = memo(function CoverageMap({
   bbox,
@@ -30,6 +42,7 @@ export const CoverageMap = memo(function CoverageMap({
 }) {
   const t = useSchemeTokens();
   const scene = useMemo(() => locatorScene(bbox, CANVAS_PX), [bbox]);
+  const sheet = minFootprint(scene.sheet, MIN_FOOTPRINT);
   const you = useMemo(() => {
     if (position === null) return null;
     const [x, y] = projectToWindow(
@@ -59,16 +72,6 @@ export const CoverageMap = memo(function CoverageMap({
         {scene.borders.map((d, i) => (
           <Path key={`border-${i}`} d={d} stroke={t.outlineVariant} strokeWidth={0.5} fill="none" />
         ))}
-        <Rect
-          x={scene.sheet.x}
-          y={scene.sheet.y}
-          width={Math.max(scene.sheet.width, 1)}
-          height={Math.max(scene.sheet.height, 1)}
-          fill={t.explore.footprint}
-          fillOpacity={0.14}
-          stroke={t.explore.footprint}
-          strokeWidth={1.2}
-        />
         {you !== null && (
           <Circle
             cx={you.x}
@@ -79,6 +82,19 @@ export const CoverageMap = memo(function CoverageMap({
             strokeWidth={1}
           />
         )}
+        {/* Over the dot (2.5.2 QA: a river's small box hid under it), and never
+          smaller than the dot itself. */}
+        <Rect
+          x={sheet.x}
+          y={sheet.y}
+          width={sheet.width}
+          height={sheet.height}
+          fill={t.explore.footprint}
+          fillOpacity={0.14}
+          stroke={t.explore.footprint}
+          strokeWidth={1.2}
+          testID="coverage-footprint"
+        />
       </Svg>
     </View>
   );

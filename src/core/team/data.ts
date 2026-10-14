@@ -35,6 +35,8 @@ import { isTaskStatusUpdate, validTaskFields } from './tasks';
  * | `track`, `photo` | owned | the creator only | creator or an admin |
  * | `comment` | owned | the creator only (guests too) | creator or an admin |
  * | `msg` (from `msg` ops) | owned, immutable | the creator, once (guests too) | creator or admin (redact) |
+ * | `drw` map drawing (#683) | owned | the creator (members); later only its note | creator or admin |
+ * | `cap` capabilities (#683) | owned, id = the member | the member (guests too) | member or admin |
  *
  * Guests write only comments: `msg` ops and `comment` entities (their own).
  * A geo-anchored comment ("pin") is a message on the thread `pin:<its id>`
@@ -70,9 +72,11 @@ export const OWNED_KINDS: readonly EntityKind[] = [
   'sos',
   'rly',
   'mres',
+  'drw',
+  'cap',
 ];
 /** Entity kinds a guest may write (their own records only). */
-export const GUEST_KINDS: readonly EntityKind[] = ['comment', 'sos', 'mres'];
+export const GUEST_KINDS: readonly EntityKind[] = ['comment', 'sos', 'mres', 'cap'];
 /** Kinds whose `e.set` may name another member's record (`o`). */
 const O_KINDS: readonly string[] = ['task', 'trl', 'sos', 'mres', 'tve'];
 
@@ -234,7 +238,7 @@ export function applyDataOp(out: TeamData, state: TeamState, op: SignedOp, decod
       ? { ...prev, state: mergeEntity(prev.state, patch) }
       : { ...rec, state: patch };
     out.entities.set(key, next);
-    if (next.kind === 'trl' || next.kind === 'tve' || next.kind === 'sos')
+    if (next.kind === 'trl' || next.kind === 'tve' || next.kind === 'sos' || next.kind === 'drw')
       reindex(out.index, next, prev?.state);
   };
   const { env, stamp } = op;

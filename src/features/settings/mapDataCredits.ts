@@ -1,3 +1,4 @@
+import { CPA_HOST, CPA_SOURCE } from '@core/catalog/cartesPleinAir/items';
 import { CONVERT_CREDITS } from '@core/convert/credits';
 import { MARINE_ENABLED, VECTOR_BASEMAP_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { MARINE_DISCLAIMER, OPENSEAMAP_ATTRIBUTION } from '@core/geo/marineLayers';
@@ -61,6 +62,9 @@ const PARTS: readonly string[] = [
   'Geodetic points: national and provincial survey agencies (see Settings › Extensions › Coverage & sources) and OpenStreetMap contributors',
   // Overlays → Tide stations (infra/tiles/nas/tides.sh). CHS is not in it.
   'Tide stations: NOAA/NOS/CO-OPS (public domain) · Shom, 2025. Références Altimétriques Maritimes, doi:10.17183/MAREE_COURANTS_RAM (Licence Ouverte 2.0) · © Kartverket (CC BY 4.0) · 出典：気象庁 (Japan Meteorological Agency, Public Data Licence 1.0) · Canada: contains data of the Canadian Hydrographic Service (DFO), fetched live by this device from CHS IWLS, under the CHS Licence Agreement · not for navigation',
+  // Explore's canoe maps (#680): linked, never copied, with the publisher's
+  // written permission; each map names its own author on its card.
+  `Canoe maps: ${CPA_SOURCE.name} (${CPA_HOST}), each map by its own author, available free at ${CPA_HOST}; river locations from the Canadian Geographical Names Database (NRCan, Open Government Licence – Canada)`,
   // Convert (PROJ, the EPSG Dataset's terms, every grid agency's licence).
   CONVERT_CREDITS,
   // Tides ride the forecast card, which is gated on weather OR marine.

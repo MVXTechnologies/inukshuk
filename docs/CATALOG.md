@@ -1,4 +1,4 @@
-# The world catalog (`/catalog/v2/`)
+# The world catalog (`/catalog/v2/` and `/catalog/v3/`)
 
 How the Maps tab's catalog (the store; "Search" before 1.7.0) is generated, sharded, published and read.
 Design background: `docs/plans/plan-map-store.md`.
@@ -14,6 +14,12 @@ takedown or update is instantly effective.
 Three document kinds, all static JSON on the GitHub Pages site (`docs/` is the
 Pages root, so `docs/catalog/v2/index.json` serves at
 `https://inukshuk.mvxtechnologies.com/catalog/v2/index.json`).
+
+The same layout is published twice, as two **editions** (§7): `v2/`, which
+every installed app reads, and `v3/`, which 2.5.2+ reads and which adds the
+sources whose terms only 2.5.2+ can honour (Cartes Plein-air). This section
+describes `v2/`; `v3/` differs only in what it lists and in sharing v2's
+shards through `../v2/` paths.
 
 ### `v2/index.json` — what every client fetches first
 
@@ -149,8 +155,14 @@ ever ship Fiji-dense coverage.
 Shard URLs are resolved by the pure `resolveCatalogUrl(indexUrl, path)` —
 hand-rolled because React Native's `URL` shim has no relative resolution — and
 it refuses absolute paths, `..` and off-host URLs. The parser rejects the same
-things when reading the index, so a tampered manifest cannot redirect a phone
-off-host.
+things when reading the index (`isCatalogRelativePath`, shared by both), so a
+tampered manifest cannot redirect a phone off-host. The one exception is a
+single leading `../v<N>/`, into a sibling edition's directory on the same
+host (§7); the result is normalized, so a shared shard has one URL.
+
+Since 2.5.2 the index URL is `/catalog/v3/index.json`, with
+`/catalog/v2/index.json` as the fallback (§7), and every path resolves against
+the index that actually loaded (`catalogIndexBaseUrl()`).
 
 ### Search across a sharded catalog
 
@@ -199,10 +211,26 @@ generator publishes a search digest and the client consults it.
 ## 4. Generating it
 
 ```
+npx tsx scripts/catalog/recover-fragments-from-published.ts  # → the missing fragments, from docs/catalog/v3 (or v2)
 npx tsx scripts/catalog/fetch-<source>.ts   # → scripts/catalog/fragments/<source>.json
-npx tsx scripts/catalog/build-manifest.ts   # → docs/catalog/v2/{index,search,facets,collections}.json + shards/
+npx tsx scripts/catalog/build-manifest.ts   # → docs/catalog/{v2,v3}/{index,search,facets,collections}.json + shards/
 npx tsx scripts/catalog/make-fixture.ts     # → .maestro/fixtures/catalog/ (e2e)
 ```
+
+- **Never publish from a checkout that lacks a fragment.** `build-manifest.ts`
+  rebuilds the whole catalog from the fragments on disk, and the bulk ones
+  (`usgs-ustopo`, `usfs-fstopo`) are gitignored: a missing fragment silently
+  drops that source for every installed app. `recover-fragments-from-published.ts`
+  writes each missing fragment back from the published index + shards (rows
+  verbatim, minus the `terrain` the build recomputes) and checks the committed
+  ones still match. Run it, then `build-manifest.ts` **before** fetching the
+  new source: `git diff --stat docs/catalog` must be empty (an index whose
+  content is unchanged keeps its `generatedAt`). Proven on the 2026-09-29
+  catalog (all 352 shards and side documents byte-identical, with the full
+  terrain pass) and on the 2026-10-14 one with v3.
+  A committed fragment that is newer than the catalog (a merged weekly
+  Cartes Plein-air crawl not yet published) is reported as a mismatch: that
+  one is expected, the build then publishes it.
 
 - Fragments are plain `{ sources, items }` JSON: one per source, either crawled
   by a `fetch-*.ts` or hand-curated.
@@ -210,6 +238,15 @@ npx tsx scripts/catalog/make-fixture.ts     # → .maestro/fixtures/catalog/ (e2
   `scripts/catalog/sources/quebec-rivers.json`, and emits only the maps whose
   publisher has granted permission. Until one does, it writes no fragment
   (CATALOG-SOURCES §1.5).
+- `fetch-cartespleinair.ts` crawls cartespleinair.org (no feed exists) into
+  `fragments/cartes-plein-air.json`. A weekly workflow
+  (`catalog-cartespleinair.yml`) runs it and opens one pull request with the
+  added / withdrawn / republished maps; after merging, publish with
+  `build-manifest.ts` as for every source (CATALOG-SOURCES §1.6). Its rows carry
+  the author credit (`author`, `year`, `pageUrl`), the file `version` and a
+  `bboxPrecision`; the source carries `freeAt`. Older apps would ignore those
+  fields and list the maps uncredited, so the source is published **in v3
+  only** (§7) and its publish changes nothing under `v2/` or `v1/`.
 - `build-manifest.ts` merges them, drops duplicate ids, refuses items whose
   `sourceId` was never declared, plans the shards with the **same**
   `planCatalogShards` the client's ranking assumes, and validates every shard
@@ -445,3 +482,53 @@ place carries its provenance in an `evidence` field; the generator strips it.
   - federal parks.
 
   Sépaq tourist sites (Chute-Montmorency) are excluded too.
+
+## 7. Editions: v2 for every app, v3 for 2.5.2+ (#680)
+
+Pages serves `main:/docs`, so a catalog change reaches every installed app the
+moment it is merged. Most sources are fine with that. **Cartes Plein-air is
+not**: its permission requires each map's author credit and "Available free at
+cartespleinair.org" (CATALOG-SOURCES §1.6), which only 2.5.2+ renders
+(`@core/catalog/credit`). An older app parses the rows happily and would list
+the maps without either. So the generator publishes two editions from the
+same fragments (`@core/catalog/editions`):
+
+| Edition | Read by                         | Lists                                                                               |
+| ------- | ------------------------------- | ----------------------------------------------------------------------------------- |
+| `v1/`   | builds before the world catalog | CanTopo only, flat (§1)                                                             |
+| `v2/`   | every app up to 2.5.1           | every source except those that need credit rendering                                |
+| `v3/`   | 2.5.2+                          | everything; shards identical to v2's are referenced, the rest (`river-*`) live here |
+
+- **The split is a rule, not a list.** `needsCreditRendering(source)` is true
+  when the source declares `freeAt` or any of its rows has an `author`; such a
+  source and all its rows go to v3 only. A future source with credit terms is
+  kept out of v2 without anyone remembering to.
+- **v3 does not copy v2.** A v3 shard byte-identical to the v2 shard of the
+  same id is referenced as `../v2/shards/<id>.json`. Shards are keyed by
+  category × cell, so today every topo and forest shard is shared (352) and
+  only the 5 `river-*` shards live under `v3/shards/`. v3 publishes its own
+  `index.json`, `search.json`, `facets.json` and `collections.json` (they
+  describe all 357 shards). Added: **1.19 MB** (river shards 0.24 MB, index
+  91 KB, search 776 KB, facets 48 KB, collections 31 KB); copying the shards
+  instead would have added 31 MB to every catalog commit.
+- **Unchanged means byte-identical.** An index (and the v1 manifest) whose
+  content did not change keeps its previous `generatedAt`. So:
+  - the weekly Cartes Plein-air PR, once published, changes files under `v3/`
+    only: `git diff --stat docs/catalog/v2 docs/catalog/v1` stays empty;
+  - an update to any other source changes `v2/` (its shards, index and
+    digests) and `v3/`'s index and digests, which point at those same shards.
+    It reaches old and new apps alike.
+- **The client** (`src/data/catalogCache.ts`) tries `v3/index.json`, then
+  `v2/index.json`, and resolves shards, digests and collections against the
+  one that loaded (`catalogIndexBaseUrl()`). A missing or broken v3 leaves the
+  store on v2: no river maps, nothing else lost. Only v3 is served from the
+  on-device cache without asking, so a v2 copy taken during an outage is
+  retried for v3 on the next load. A shared shard resolves to the same URL a
+  2.5.1 install cached it under, so updating keeps the shard cache. A build
+  with a `catalogManifestUrl` override (the e2e fixture) reads only that URL.
+- **Guards.** `editions.test.ts` builds both editions from the committed
+  Cartes Plein-air fragment and proves v2 holds none of its bytes, v3 shares
+  every identical shard, and a Cartes Plein-air-only change leaves v2
+  byte-identical. `publishedEditions.test.ts` checks the committed
+  `docs/catalog/` itself: no Cartes Plein-air, author or `freeAt` in any v2
+  file, and every v3 shard path resolving to a file of the advertised size.

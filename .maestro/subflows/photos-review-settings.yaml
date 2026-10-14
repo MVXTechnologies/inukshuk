@@ -40,11 +40,13 @@ appId: com.inukshuk.app
             notVisible: 'Keep screen awake.*'
           commands:
             - tapOn: 'App settings.*'
-      - scrollUntilVisible:
-          element:
-            text: ${NEXT}
-          direction: DOWN
+      - extendedWaitUntil:
+          visible: 'Keep screen awake.*'
           timeout: 5000
+- scrollUntilVisible:
+    element:
+      text: ${NEXT}
+    direction: DOWN
 - tapOn: ${NEXT}
 - pressKey: back
 - extendedWaitUntil:

@@ -71,3 +71,17 @@ export function altitudeFits(
   const text = estimateChipTextDp(`${coords}${ALTITUDE_SEPARATOR}${altitude}`);
   return text * ALTITUDE_MIN_SCALE + chipChromeDp(following) <= availableDp;
 }
+
+/**
+ * Whether a camera centre is a real one: finite, on the globe, and not the
+ * null island MapLibre reports before its first camera (2.5.2 QA: on first
+ * launch the chip flashed "0.00000, 0.00000 · ≈-9838 m", the sea floor
+ * off Africa). Nothing is shown until a real centre exists.
+ */
+export function isRealCenter(p: { latitude: number; longitude: number } | null): boolean {
+  if (p === null) return false;
+  const { latitude: lat, longitude: lon } = p;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return false;
+  return Math.abs(lat) > 1e-9 || Math.abs(lon) > 1e-9;
+}

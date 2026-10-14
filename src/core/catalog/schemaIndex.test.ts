@@ -119,6 +119,22 @@ describe('parseCatalogIndex — v2', () => {
     expect(parsed?.shards.map((s) => s.id)).toEqual(['ok']);
   });
 
+  it('accepts a shard shared with a sibling edition (../v2/), and only that climb', () => {
+    const { index: parsed } = parseCatalogIndex(
+      index({
+        shards: [
+          shardRef({ id: 'shared', path: '../v2/shards/shared.json' }),
+          shardRef({ id: 'climb-twice', path: '../../v2/shards/a.json' }),
+          shardRef({ id: 'not-a-version', path: '../private/a.json' }),
+          shardRef({ id: 'climb-later', path: '../v2/../x.json' }),
+        ],
+      }),
+    );
+    expect(parsed?.shards.map((s) => [s.id, s.path])).toEqual([
+      ['shared', '../v2/shards/shared.json'],
+    ]);
+  });
+
   it('drops duplicate shard ids, keeping the first', () => {
     const { index: parsed, warnings } = parseCatalogIndex(
       index({ shards: [shardRef({ itemCount: 1 }), shardRef({ itemCount: 2 })] }),

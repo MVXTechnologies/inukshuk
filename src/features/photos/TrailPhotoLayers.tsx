@@ -9,7 +9,6 @@ import {
   PHOTO_CLUSTER_RADIUS,
   photoSetKey,
   readPhotoPress,
-  SELECTED_RING_IMAGE,
   selectedRingLayout,
   selectedSpriteLayout,
   spritePixelRatio,
@@ -31,7 +30,6 @@ import {
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { NativeSyntheticEvent } from 'react-native';
 
-import { PHOTO_BADGE_IMAGES } from './photoBadgeImages';
 import { photoFileUri } from './photoUri';
 
 /**
@@ -84,11 +82,6 @@ type PressEvent = NativeSyntheticEvent<{
   point?: [number, number];
 }>;
 
-const PRIMED_BADGES = [
-  ...Array.from({ length: 9 }, (_, i) => `ph-count-${i + 2}`),
-  SELECTED_RING_IMAGE,
-];
-
 export function TrailPhotoLayers({
   id,
   photos,
@@ -107,7 +100,6 @@ export function TrailPhotoLayers({
 
   // Sprite LRU, reset whenever the drawn set (and so the names) changes.
   const [lru, setLru] = useState<{ prefix: string; names: string[] }>({ prefix: '', names: [] });
-  const [badges, setBadges] = useState<string[]>(PRIMED_BADGES);
   const sprites = lru.prefix === prefix ? lru.names : initialSprites(prefix, drawn.length);
 
   const images = useMemo(() => {
@@ -123,12 +115,11 @@ export function TrailPhotoLayers({
         };
       }
     }
-    for (const name of badges) {
-      const image = PHOTO_BADGE_IMAGES[name];
-      if (image !== undefined) out[name] = image;
-    }
+    // The count pills and the selected ring are shared with the waypoint
+    // clusters: the map's one registration (`MapImages`) owns them, never this
+    // instance, which mounts and unmounts with its trail.
     return out;
-  }, [sprites, badges, prefix, drawn]);
+  }, [sprites, prefix, drawn]);
 
   const onImageMissing = useCallback(
     (e: NativeSyntheticEvent<{ image: string }>) => {
@@ -141,10 +132,8 @@ export function TrailPhotoLayers({
             [name],
           ),
         }));
-      } else if (PHOTO_BADGE_IMAGES[name] !== undefined) {
-        setBadges((prev) => (prev.includes(name) ? prev : [...prev, name]));
       }
-      // Anything else belongs to another layer or instance.
+      // Anything else belongs to another layer or instance (a count pill: `MapImages`).
     },
     [prefix, drawn.length],
   );
