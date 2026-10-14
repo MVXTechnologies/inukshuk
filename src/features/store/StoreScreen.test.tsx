@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 /**
  * The Search tab's whole-catalog search, at the real call site.
  *
@@ -209,7 +210,7 @@ it('leads "Popular near you" with Canadian sheets from Québec City, Maine quads
   });
   useSettingsStore.setState({
     lastKnownPosition: { latitude: 46.8139, longitude: -71.2082 },
-    units: 'metric',
+    units: METRIC,
   });
   const view = await mount();
   await flush();

@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC, NAUTICAL } from '@core/format';
 import {
   activitiesLabel,
   countriesLabel,
@@ -16,21 +17,25 @@ const NB = ' ';
 
 describe('trail formatting', () => {
   it('formats lengths as approximations', () => {
-    expect(formatTrailLength(43.3, 'metric')).toBe('≈43 km');
-    expect(formatTrailLength(1600.4, 'metric')).toBe(`≈1${NB}600 km`);
-    expect(formatTrailLength(8.26, 'metric')).toBe('≈8.3 km');
-    expect(formatTrailLength(50, 'imperial')).toBe('≈31 mi');
-    expect(formatTrailLength(0, 'metric')).toBe('— km');
+    expect(formatTrailLength(43.3, METRIC)).toBe('≈43 km');
+    expect(formatTrailLength(1600.4, METRIC)).toBe(`≈1${NB}600 km`);
+    expect(formatTrailLength(8.26, METRIC)).toBe('≈8.3 km');
+    expect(formatTrailLength(50, IMPERIAL)).toBe('≈31 mi');
+    expect(formatTrailLength(0, METRIC)).toBe('— km');
+    expect(formatTrailLength(50, NAUTICAL)).toBe('≈27 NM');
+    expect(formatTrailLength(Number.NaN, NAUTICAL)).toBe('— NM');
   });
 
   it('formats how far you are', () => {
-    expect(formatDistanceFrom(347, 'metric')).toBe('350 m');
-    expect(formatDistanceFrom(1234, 'metric')).toBe('1.2 km');
-    expect(formatDistanceFrom(17_050, 'metric')).toBe('17 km');
-    expect(formatDistanceFrom(1_234_000, 'metric')).toBe(`1${NB}234 km`);
-    expect(formatDistanceFrom(100, 'imperial')).toBe('330 ft');
-    expect(formatDistanceFrom(5000, 'imperial')).toBe('3.1 mi');
-    expect(formatDistanceFrom(50_000, 'imperial')).toBe('31 mi');
+    expect(formatDistanceFrom(347, METRIC)).toBe('350 m');
+    expect(formatDistanceFrom(1234, METRIC)).toBe('1.2 km');
+    expect(formatDistanceFrom(17_050, METRIC)).toBe('17 km');
+    expect(formatDistanceFrom(1_234_000, METRIC)).toBe(`1${NB}234 km`);
+    expect(formatDistanceFrom(100, IMPERIAL)).toBe('330 ft');
+    expect(formatDistanceFrom(5000, IMPERIAL)).toBe('3.1 mi');
+    expect(formatDistanceFrom(50_000, IMPERIAL)).toBe('31 mi');
+    expect(formatDistanceFrom(5000, NAUTICAL)).toBe('2.7 NM');
+    expect(formatDistanceFrom(123, NAUTICAL)).toBe('120 m');
   });
 
   it('places long trails by country', () => {
@@ -40,8 +45,8 @@ describe('trail formatting', () => {
   });
 
   it('formats climb to the nearest 10', () => {
-    expect(formatClimb(1847, 'metric')).toBe(`≈1${NB}850 m`);
-    expect(formatClimb(1000, 'imperial')).toBe(`≈3${NB}280 ft`);
+    expect(formatClimb(1847, METRIC)).toBe(`≈1${NB}850 m`);
+    expect(formatClimb(1000, IMPERIAL)).toBe(`≈3${NB}280 ft`);
   });
 
   it('labels activities, stages and countries', () => {
@@ -63,10 +68,8 @@ describe('trail formatting', () => {
   });
 
   it('builds the card and row meta lines', () => {
-    expect(trailCardMeta(trailById(index, 'r8730405'), 'metric')).toBe(
-      'Hiking · ≈43 km · 4 stages',
-    );
-    expect(trailListMeta(trailById(index, 'r391736'), index.countries, 'metric')).toBe(
+    expect(trailCardMeta(trailById(index, 'r8730405'), METRIC)).toBe('Hiking · ≈43 km · 4 stages');
+    expect(trailListMeta(trailById(index, 'r391736'), index.countries, METRIC)).toBe(
       'Hiking · Vermont · ≈440 km',
     );
   });

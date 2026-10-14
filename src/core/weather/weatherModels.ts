@@ -1,3 +1,4 @@
+import { speedUnit, toSpeedUnit, usesFahrenheit, type Units } from '@core/format';
 import {
   capabilitiesUrlForLayer,
   weatherLayerById,
@@ -156,28 +157,28 @@ export function modelCaption(model: WeatherModel): string {
 /**
  * Comparison-table cell text for a raw GetFeatureInfo value. GeoMet units
  * (verified in the layer titles): temp °C, wind speed m/s, 1 h precip mm.
- * Display follows Windy's compact table: whole degrees, whole km/h (or mph),
- * millimetres with one decimal (precip stays metric in both unit systems —
- * same as the drape legend).
+ * Display follows Windy's compact table: whole degrees, whole km/h (mph,
+ * knots — the user's speed unit, #702), millimetres with one decimal
+ * (precip stays metric in every unit choice — same as the drape legend).
  */
-export function compareCellText(variable: ModelVariable, value: number, imperial: boolean): string {
+export function compareCellText(variable: ModelVariable, value: number, units: Units): string {
   switch (variable) {
     case 'temp':
-      return `${Math.round(imperial ? (value * 9) / 5 + 32 : value)}°`;
+      return `${Math.round(usesFahrenheit(units) ? (value * 9) / 5 + 32 : value)}°`;
     case 'wind':
-      return `${Math.round(imperial ? value * 2.23694 : value * 3.6)}`;
+      return `${Math.round(toSpeedUnit(value, units))}`;
     case 'precip':
       return value < 0.05 ? '0' : `${Math.round(value * 10) / 10}`;
   }
 }
 
 /** Row-rail unit label matching {@link compareCellText}. */
-export function compareUnitLabel(variable: ModelVariable, imperial: boolean): string {
+export function compareUnitLabel(variable: ModelVariable, units: Units): string {
   switch (variable) {
     case 'temp':
-      return imperial ? '°F' : '°C';
+      return usesFahrenheit(units) ? '°F' : '°C';
     case 'wind':
-      return imperial ? 'mph' : 'km/h';
+      return speedUnit(units);
     case 'precip':
       return 'mm';
   }

@@ -1,4 +1,4 @@
-import { formatClockTime, formatDistance } from '@core/format';
+import { formatClockTime, formatDistance, METRIC as METRIC_UNITS } from '@core/format';
 import { haversineMeters, initialBearingDeg } from '@core/geo/geomath';
 import { declinationAt } from '@core/geo/wmm';
 
@@ -45,7 +45,7 @@ describe('target name', () => {
   });
 
   it("uses the strip's own target kind (Hiking: next on trail)", () => {
-    const ctx: ComputeContext = { units: 'metric', target: { kind: 'nextOnTrail' } };
+    const ctx: ComputeContext = { units: METRIC_UNITS, target: { kind: 'nextOnTrail' } };
     expect(TARGET_NAME.compute(navigating(), { target: null }, ctx)).toBeNull();
     expect(TARGET_NAME.compute(navigating({ follow: FOLLOW }), { target: null }, ctx)).toEqual({
       glyph: 'route',
@@ -68,7 +68,7 @@ describe('distance to target', () => {
     const data = navigating({ follow: FOLLOW });
     expect(TARGET_DISTANCE.compute(data, P, METRIC)).toEqual({ value: '1.50', unit: 'km' });
     expect(TARGET_DISTANCE.compute(data, { ...P, measure: 'straight' }, METRIC)).toEqual(
-      splitUnit(formatDistance(haversineMeters(QC, FOLLOW.targetPoint), 'metric')),
+      splitUnit(formatDistance(haversineMeters(QC, FOLLOW.targetPoint), METRIC_UNITS)),
     );
   });
 
@@ -76,7 +76,7 @@ describe('distance to target', () => {
     const data = navigating({ follow: FOLLOW });
     expect(TARGET_DISTANCE.compute(data, { ...P, unit: 'nmi' }, METRIC)).toEqual({
       value: '0.81',
-      unit: 'nmi',
+      unit: 'NM',
     });
     expect(TARGET_DISTANCE.compute(data, P, IMPERIAL)).toEqual({ value: '0.93', unit: 'mi' });
   });

@@ -10,6 +10,7 @@
 import { rangeAndBearing, shortAge } from '@core/teamui/positions';
 import { STATUS_LABEL } from '@core/teamui/system';
 import { useExtensionPrefs } from '@features/extensions/prefs';
+import { formatAccuracy, formatDistance } from '@state/formatters';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -79,8 +80,7 @@ export async function hitTestTeam(
   return null;
 }
 
-const dist = (m: number) =>
-  m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(m < 10_000 ? 1 : 0)} km`;
+const dist = (m: number) => formatDistance(m, { style: 'short' });
 
 export function TeamMapOverlay({
   here,
@@ -223,7 +223,7 @@ export function TeamMapOverlay({
                       : shortAge(member.ageMs) === 'now'
                         ? 'just now'
                         : `${shortAge(member.ageMs)} ago`,
-                    member.accuracy !== null ? `±${Math.round(member.accuracy)} m` : null,
+                    member.accuracy !== null ? formatAccuracy(member.accuracy) : null,
                     rb ? `${dist(rb.meters)} ${rb.compass}` : null,
                   ]
                     .filter(Boolean)

@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 /**
  * A long-distance trail on the main map (#467, board `OnMap.dc.html`): the
  * pill closes it, the sheet names the selected stage with its length, climb
@@ -46,7 +47,7 @@ async function sheet(stageIndex: number | null, position: [number, number] | nul
   const shown = useLongTrailsStore.getState().shown!;
   return render(
     <PaperProvider>
-      <ShownTrailSheet shown={shown} position={position} units="metric" onMessage={mockMessage} />
+      <ShownTrailSheet shown={shown} position={position} units={METRIC} onMessage={mockMessage} />
     </PaperProvider>,
   );
 }
@@ -99,7 +100,7 @@ it('works for a trail without stages', async () => {
       <ShownTrailSheet
         shown={useLongTrailsStore.getState().shown!}
         position={[-70.66, 47.22]}
-        units="metric"
+        units={METRIC}
         onMessage={mockMessage}
       />
     </PaperProvider>,

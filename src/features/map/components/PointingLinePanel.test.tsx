@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC } from '@core/format';
 /**
  * Map layers › Map › Pointing line (#681): every option writes the one
  * `pointingLine` setting, the preview and its caption follow, and the page
@@ -28,7 +29,7 @@ async function mount(dark = false) {
 
 beforeEach(() => {
   onBack.mockClear();
-  useSettingsStore.setState({ pointingLine: DEFAULT_POINTING_LINE, units: 'metric' });
+  useSettingsStore.setState({ pointingLine: DEFAULT_POINTING_LINE, units: METRIC });
 });
 
 describe('PointingLinePanel', () => {
@@ -54,7 +55,7 @@ describe('PointingLinePanel', () => {
   });
 
   it('in imperial, the tick choices and the caption read in round feet', async () => {
-    useSettingsStore.setState({ units: 'imperial' });
+    useSettingsStore.setState({ units: IMPERIAL });
     await mount();
     expect(state('200 ft').selected).toBe(true);
     expect(screen.getByLabelText('50 ft')).toBeTruthy();
@@ -67,7 +68,7 @@ describe('PointingLinePanel', () => {
   });
 
   it('in imperial, the length reads in feet and miles everywhere (2.5.1 final QA)', async () => {
-    useSettingsStore.setState({ units: 'imperial' });
+    useSettingsStore.setState({ units: IMPERIAL });
     await mount();
     // The slider's value, the caption and the note: no metres anywhere.
     expect(screen.getByLabelText('Length').props.accessibilityValue).toMatchObject({
@@ -91,7 +92,7 @@ describe('PointingLinePanel', () => {
     expect(cfg().length).toBe(100);
     expect(screen.getByText(/· 500 ft ·/)).toBeTruthy();
     // Back to metric: the same choice, in metres.
-    await act(async () => useSettingsStore.setState({ units: 'metric' }));
+    await act(async () => useSettingsStore.setState({ units: METRIC }));
     expect(screen.getByLabelText('Length').props.accessibilityValue.text).toBe('100 m');
     expect(screen.getByText(/so 100 m is 100 m on the ground/)).toBeTruthy();
   });

@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC } from '@core/format';
 import type { FollowReadout } from '@core/nav';
 import { lightTheme } from '@ui/theme';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
@@ -39,7 +40,7 @@ async function mount(props: Partial<Parameters<typeof NavigationCompassRow>[0]>)
         location={QC}
         destination={null}
         follow={null}
-        units="metric"
+        units={METRIC}
         {...props}
       />
     </PaperProvider>,
@@ -82,7 +83,7 @@ describe('NavigationCompassRow', () => {
   it('off the trail: the distance to it, in the user’s units', async () => {
     await mount({
       follow: { name: 'T', readout: readout({ onTrail: false, crossTrackM: 62 }) },
-      units: 'imperial',
+      units: IMPERIAL,
     });
     // Short enough to fit whole ("Off trail 1…" was cut, 2.5.1 QA)…
     expect(screen.getByText('Off 203 ft')).toBeTruthy();

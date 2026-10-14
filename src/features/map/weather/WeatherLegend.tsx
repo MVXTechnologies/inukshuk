@@ -1,4 +1,5 @@
-import type { WeatherLayer } from '@core/geo/weatherLayers';
+import { legendInUnits, type WeatherLayer } from '@core/geo/weatherLayers';
+import { useSettingsStore } from '@state/settingsStore';
 import { interpolateRamp } from '@core/weather/colorRamp';
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -16,11 +17,13 @@ import { weatherChrome as wc } from './weatherChrome';
  */
 export function WeatherLegend({ layer }: { layer: WeatherLayer }) {
   const ramp = useMemo(() => interpolateRamp(layer.swatch, RAMP_STEPS), [layer]);
+  const units = useSettingsStore((s) => s.units);
+  const legend = legendInUnits(layer, units);
 
   return (
     <View style={styles.pill} pointerEvents="none">
       <View style={styles.unitCell}>
-        <Text style={styles.unitText}>{layer.legend.unit}</Text>
+        <Text style={styles.unitText}>{legend.unit}</Text>
       </View>
       <View style={styles.ramp}>
         {ramp.map((color, i) => (
@@ -28,7 +31,7 @@ export function WeatherLegend({ layer }: { layer: WeatherLayer }) {
           <View key={`${color}-${i}`} style={[styles.rampStep, { backgroundColor: color }]} />
         ))}
         <View style={styles.labels}>
-          {layer.legend.labels.map((v) => (
+          {legend.labels.map((v) => (
             <Text key={v} style={styles.labelText}>
               {v}
             </Text>

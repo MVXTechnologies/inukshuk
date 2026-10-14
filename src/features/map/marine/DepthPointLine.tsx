@@ -23,13 +23,13 @@ import { useDepthPointValue } from './useDepthPointValue';
 export function DepthPointLine({ at }: { at: LatLng }) {
   const installedPacks = useMarinePackStore((s) => s.installed);
   const { status, valueM, sourceLabel } = useDepthPointValue(at, installedPacks);
-  const imperial = useSettingsStore((s) => s.units === 'imperial');
+  const units = useSettingsStore((s) => s.units);
 
   if (status === 'error') return null;
   if (status !== 'ready' || valueM === null) return <MapPointLine text="…" />;
   return (
     <>
-      <MapPointLine text={formatDepthReadout(valueM, imperial)} />
+      <MapPointLine text={formatDepthReadout(valueM, units)} />
       {sourceLabel !== null && <MapPointLine text={sourceLabel} muted />}
     </>
   );

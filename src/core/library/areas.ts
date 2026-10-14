@@ -1,6 +1,6 @@
 import { pointInRing, polygonAreaM2, polygonPerimeterM } from '@core/draw/geometry';
 import { sanitizeVertices } from '@core/draw/serialize';
-import type { Units } from '@core/format';
+import { rulerSystem, type Units } from '@core/format';
 import type { Area, LngLat } from '@core/models';
 
 import { compactDistance } from './libraryRows';
@@ -126,7 +126,7 @@ const trim = (n: number, digits: number): string => {
  */
 export function formatAreaSize(m2: number, units: Units): string {
   const a = Number.isFinite(m2) && m2 > 0 ? m2 : 0;
-  if (units === 'imperial') {
+  if (rulerSystem(units) === 'imperial') {
     const acres = a / M2_PER_ACRE;
     if (acres < 0.1) return `${Math.round(a / M2_PER_FT2).toLocaleString('en-US')} ft²`;
     if (a < M2_PER_MI2) return `${trim(acres, acres < 10 ? 2 : 1)} ac`;

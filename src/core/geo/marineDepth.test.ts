@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC } from '@core/format';
 import type { FloatGrid } from './floatTiff';
 import {
   DEPTH_MAX_GRID_DIM,
@@ -190,15 +191,24 @@ describe('isDepthNoData', () => {
 
 describe('formatDepthReadout', () => {
   it('formats a depth below chart datum', () => {
-    expect(formatDepthReadout(-26.469, false)).toBe('Depth 26.5 m · chart datum');
+    expect(formatDepthReadout(-26.469, METRIC)).toBe('Depth 26.5 m · chart datum');
   });
 
   it('formats a drying height', () => {
-    expect(formatDepthReadout(3.81, false)).toBe('Drying 3.8 m · chart datum');
+    expect(formatDepthReadout(3.81, METRIC)).toBe('Drying 3.8 m · chart datum');
   });
 
   it('converts to feet under imperial units', () => {
-    expect(formatDepthReadout(-10, true)).toBe('Depth 32.8 ft · chart datum');
+    expect(formatDepthReadout(-10, IMPERIAL)).toBe('Depth 32.8 ft · chart datum');
+  });
+
+  it('follows the elevation unit, not the distance unit (#702)', () => {
+    expect(formatDepthReadout(-10, { distance: 'nmi', elevation: 'ft' })).toBe(
+      'Depth 32.8 ft · chart datum',
+    );
+    expect(formatDepthReadout(-10, { distance: 'mi', elevation: 'm' })).toBe(
+      'Depth 10 m · chart datum',
+    );
   });
 });
 

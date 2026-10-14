@@ -68,5 +68,5 @@ it('migrates a legacy unversioned file without the key', async () => {
   mockSaved = { units: 'imperial' };
   await useSettingsStore.getState().hydrate();
   expect(useSettingsStore.getState().pdfWhiteKey).toBe(0);
-  expect(useSettingsStore.getState().units).toBe('imperial');
+  expect(useSettingsStore.getState().units).toEqual({ distance: 'mi', elevation: 'ft' });
 });

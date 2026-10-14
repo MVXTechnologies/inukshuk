@@ -1,5 +1,7 @@
 import type { WeatherLayerId } from '@core/geo/weatherLayers';
 import type { LatLng } from '@core/models';
+import { formatElevation, usesFahrenheit } from '@core/format';
+import { formatWindSummary } from '@core/weather/forecast';
 import { TIDE_MARINE_MAX_M, TIDE_NEARBY_MAX_M } from '@core/weather/tides';
 import { formatDistance, formatTimestamp } from '@state/formatters';
 import { useSettingsStore } from '@state/settingsStore';
@@ -40,9 +42,9 @@ export function ForecastCard({
   const tides = useTides(at, marineActive ? TIDE_MARINE_MAX_M : TIDE_NEARBY_MAX_M);
   const units = useSettingsStore((s) => s.units);
   const temp = (c: number): string =>
-    units === 'imperial' ? `${Math.round((c * 9) / 5 + 32)}°F` : `${Math.round(c * 10) / 10}°C`;
-  const height = (m: number): string =>
-    units === 'imperial' ? `${(m / 0.3048).toFixed(1)} ft` : `${m.toFixed(1)} m`;
+    usesFahrenheit(units) ? `${Math.round((c * 9) / 5 + 32)}°F` : `${Math.round(c * 10) / 10}°C`;
+  // A tide level is a height: the elevation unit, one decimal (#702).
+  const height = (m: number): string => formatElevation(m, units, { decimals: 1 });
   const clock = (epochMs: number): string =>
     new Date(epochMs).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
@@ -87,8 +89,8 @@ export function ForecastCard({
               {[
                 forecast.current.temperatureC !== null ? temp(forecast.current.temperatureC) : null,
                 forecast.current.condition,
-                forecast.current.windSummary !== null
-                  ? `wind ${forecast.current.windSummary}`
+                forecast.current.wind !== null
+                  ? `wind ${formatWindSummary(forecast.current.wind, units)}`
                   : null,
                 forecast.current.relativeHumidityPct !== null
                   ? `RH ${forecast.current.relativeHumidityPct}%`

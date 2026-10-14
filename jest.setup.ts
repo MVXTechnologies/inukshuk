@@ -54,6 +54,15 @@ jest.mock('react-native-reanimated', () => ({
 // `@lib/health` (or `./platform`) themselves, which overrides this.
 jest.mock('@lib/health/platform', () => ({ healthPlatform: null }));
 
+// First-launch units follow the device region (#702): US → miles and feet.
+// Node's Intl follows the machine's LANG (en-US on CI runners, en-CA on a
+// Canadian laptop), so pin the suite to metric; deviceUnits.test.ts tests the
+// real reader with jest.requireActual.
+jest.mock('@state/deviceUnits', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  deviceDefaultUnits: () => require('@core/format').METRIC,
+}));
+
 // expo-secure-store (Strava tokens, NTRIP passwords): jest-expo's automock
 // answers undefined to everything; an in-memory keychain behaves like the
 // real one. Cleared before each test; `globalThis.__secureStore` is the map.

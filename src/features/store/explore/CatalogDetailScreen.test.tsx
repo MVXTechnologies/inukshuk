@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 /**
  * The map detail page (#447): content from the item and its source, and the
  * one primary action per install state — Download · Free (folder dialog),
@@ -66,7 +67,7 @@ const installed = (updatedAt: string): MapDocument =>
 beforeEach(() => {
   seedCatalog(fixtureIndex());
   useLibraryStore.setState({ maps: [], folders: [] });
-  useSettingsStore.setState({ lastKnownPosition: QUEBEC, units: 'metric' });
+  useSettingsStore.setState({ lastKnownPosition: QUEBEC, units: METRIC });
 });
 
 it('shows the map: tags, publisher, stats, coverage and rows', async () => {

@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 /**
  * Team drawing's screens (#683) against a real `TeamService` on the loopback
  * mesh (Node crypto, memory disk): the team menu's entry, drawing mode (its
@@ -189,7 +190,7 @@ beforeEach(async () => {
   const d = defaultExtensionPrefs();
   useSettingsStore.setState({
     extensions: { ...d, team: { ...d.team, installedAt: Date.now() } },
-    units: 'metric',
+    units: METRIC,
   });
   useTeamDrawStore.setState({
     active: false,

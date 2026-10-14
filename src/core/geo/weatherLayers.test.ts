@@ -1,9 +1,11 @@
+import { IMPERIAL, METRIC, NAUTICAL } from '@core/format';
 import {
   ECCC_ATTRIBUTION,
   formatWmsTime,
   getFeatureInfoUrl,
   getFeatureInfoUrlForLayer,
   isWeatherLayerId,
+  legendInUnits,
   parseFeatureInfo,
   parseIsoDuration,
   parseReferenceTimeDefault,
@@ -15,6 +17,7 @@ import {
   weatherCapabilitiesUrl,
   weatherLayerById,
   weatherTileUrl,
+  type WeatherLayerId,
 } from './weatherLayers';
 
 // A trimmed GetCapabilities excerpt captured from GeoMet (RADAR_1KM_RRAI,
@@ -72,6 +75,28 @@ describe('weather layer catalog', () => {
       expect(l.legend.labels.length).toBeGreaterThanOrEqual(3);
       for (const label of l.legend.labels) expect(label.length).toBeGreaterThan(0);
     }
+  });
+
+  it('converts the legend values to the user units, same colour stops (#702)', () => {
+    const byId = (id: WeatherLayerId) => WEATHER_LAYERS.find((l) => l.id === id)!;
+    expect(legendInUnits(byId('wind'), METRIC)).toEqual({
+      unit: 'km/h',
+      labels: ['0', '20', '40', '60', '80'],
+    });
+    expect(legendInUnits(byId('wind'), IMPERIAL)).toEqual({
+      unit: 'mph',
+      labels: ['0', '12', '25', '37', '50'],
+    });
+    expect(legendInUnits(byId('wind'), NAUTICAL)).toEqual({
+      unit: 'kn',
+      labels: ['0', '11', '22', '32', '43'],
+    });
+    expect(legendInUnits(byId('temp'), IMPERIAL)).toEqual({
+      unit: '°F',
+      labels: ['-22', '5', '32', '59', '86'],
+    });
+    expect(legendInUnits(byId('temp'), NAUTICAL)).toBe(byId('temp').legend);
+    expect(legendInUnits(byId('precip'), IMPERIAL)).toBe(byId('precip').legend);
   });
 
   it('type-guards ids and sanitizes persisted junk to null', () => {

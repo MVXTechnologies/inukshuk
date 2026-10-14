@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
 import { useWaypointMoveStore } from '@state/waypointMoveStore';
@@ -32,7 +33,7 @@ async function setup(over: Partial<Omit<Options, 'snack'>> = {}) {
   const options = {
     location: FIX,
     accuracyM: 5,
-    units: 'metric' as const,
+    units: METRIC,
     onEdit: jest.fn(),
     onBeforeMove: jest.fn(),
     getCenter: jest.fn(async () => null),

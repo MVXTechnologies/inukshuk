@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 /** The Library's import card in each job state (#432/#435, boards ImportProgress / ImportDone). */
 import { newImportJob, type ImportJob } from '@core/import/job';
 import type { TrackSummary } from '@core/models';
@@ -48,7 +49,7 @@ async function press(node: Parameters<typeof fireEvent.press>[0]) {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  useSettingsStore.setState({ units: 'metric', showHeatmap: false });
+  useSettingsStore.setState({ units: METRIC, showHeatmap: false });
 });
 
 it('renders nothing without a job', async () => {

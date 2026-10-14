@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC, NAUTICAL } from '@core/format';
 import { metersPerPixel, niceBelow, scaleBar } from './scaleBar';
 
 describe('metersPerPixel', () => {
@@ -57,13 +58,18 @@ describe('scaleBar', () => {
   it('never exceeds the allotted width and always labels a round distance', () => {
     for (let zoom = 3; zoom <= 20; zoom++) {
       for (const lat of [0, 46.8, 60, 83]) {
-        for (const units of ['metric', 'imperial'] as const) {
+        for (const units of [
+          METRIC,
+          IMPERIAL,
+          NAUTICAL,
+          { distance: 'nmi', elevation: 'ft' },
+        ] as const) {
           const bar = scaleBar(zoom, lat, 110, units);
           expect(bar).not.toBeNull();
           if (!bar) continue;
           expect(bar.widthPx).toBeGreaterThan(0);
           expect(bar.widthPx).toBeLessThanOrEqual(110);
-          expect(bar.label).toMatch(/^\d+(\.\d+)? (m|km|ft|mi)$/);
+          expect(bar.label).toMatch(/^\d+(\.\d+)? (m|km|ft|mi|NM)$/);
           const [magnitude] = bar.label.split(' ');
           expect(niceBelow(Number(magnitude))).toBe(Number(magnitude));
         }
@@ -73,9 +79,9 @@ describe('scaleBar', () => {
 
   it('honours the unit system for the same camera', () => {
     // 200 px at z13, 46.8°N ≈ 1308 m of allowance.
-    const metric = scaleBar(13, 46.8, 200, 'metric');
+    const metric = scaleBar(13, 46.8, 200, METRIC);
     expect(metric).toEqual({ meters: 1000, widthPx: expect.any(Number), label: '1 km' });
-    const imperial = scaleBar(13, 46.8, 200, 'imperial');
+    const imperial = scaleBar(13, 46.8, 200, IMPERIAL);
     // 1308 m ≈ 4292 ft, still short of a mile — so feet, rounded down to 2000.
     expect(imperial?.label).toBe('2000 ft');
     expect(imperial?.meters).toBeCloseTo(609.6, 6);
@@ -86,30 +92,38 @@ describe('scaleBar', () => {
   it('switches metric from metres to kilometres at 1 km', () => {
     const mpp = metersPerPixel(15, 0) ?? 0;
     // Exactly 1 km of allowance -> a 1 km bar.
-    expect(scaleBar(15, 0, 1000 / mpp, 'metric')?.label).toBe('1 km');
+    expect(scaleBar(15, 0, 1000 / mpp, METRIC)?.label).toBe('1 km');
     // A hair under -> the largest nice value below 1 km.
-    expect(scaleBar(15, 0, 999 / mpp, 'metric')?.label).toBe('500 m');
+    expect(scaleBar(15, 0, 999 / mpp, METRIC)?.label).toBe('500 m');
+  });
+
+  it('switches nautical miles to the short unit under one cable (#702)', () => {
+    const mpp = metersPerPixel(15, 0) ?? 0;
+    expect(scaleBar(15, 0, 1852 / mpp, NAUTICAL)?.label).toBe('1 NM');
+    expect(scaleBar(15, 0, 186 / mpp, NAUTICAL)?.label).toBe('0.1 NM');
+    expect(scaleBar(15, 0, 185 / mpp, NAUTICAL)?.label).toBe('100 m');
+    expect(scaleBar(15, 0, 185 / mpp, { distance: 'nmi', elevation: 'ft' })?.label).toBe('500 ft');
   });
 
   it('switches imperial from feet to miles at one mile', () => {
     const mpp = metersPerPixel(15, 0) ?? 0;
     const mile = 5280 * 0.3048;
-    expect(scaleBar(15, 0, mile / mpp, 'imperial')?.label).toBe('1 mi');
-    expect(scaleBar(15, 0, (mile - 1) / mpp, 'imperial')?.label).toBe('5000 ft');
+    expect(scaleBar(15, 0, mile / mpp, IMPERIAL)?.label).toBe('1 mi');
+    expect(scaleBar(15, 0, (mile - 1) / mpp, IMPERIAL)?.label).toBe('5000 ft');
   });
 
   it('draws a shorter bar the further north you are, at the same zoom', () => {
-    const south = scaleBar(11, 0, 110, 'metric');
-    const north = scaleBar(11, 75, 110, 'metric');
+    const south = scaleBar(11, 0, 110, METRIC);
+    const north = scaleBar(11, 75, 110, METRIC);
     expect(north?.meters).toBeLessThan(south?.meters ?? 0);
   });
 
   it('returns null for junk geometry', () => {
-    expect(scaleBar(12, 46, 0, 'metric')).toBeNull();
-    expect(scaleBar(12, 46, -10, 'metric')).toBeNull();
-    expect(scaleBar(12, 46, Number.NaN, 'metric')).toBeNull();
-    expect(scaleBar(Number.NaN, 46, 110, 'metric')).toBeNull();
+    expect(scaleBar(12, 46, 0, METRIC)).toBeNull();
+    expect(scaleBar(12, 46, -10, METRIC)).toBeNull();
+    expect(scaleBar(12, 46, Number.NaN, METRIC)).toBeNull();
+    expect(scaleBar(Number.NaN, 46, 110, METRIC)).toBeNull();
     // Absurdly deep zoom: even the smallest nice distance is sub-pixel.
-    expect(scaleBar(2000, 46, 110, 'metric')).toBeNull();
+    expect(scaleBar(2000, 46, 110, METRIC)).toBeNull();
   });
 });

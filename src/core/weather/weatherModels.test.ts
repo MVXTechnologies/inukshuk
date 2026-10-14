@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC, NAUTICAL } from '@core/format';
 import { WEATHER_LAYERS } from '@core/geo/weatherLayers';
 import {
   compareCellText,
@@ -108,23 +109,30 @@ describe('modelCaption', () => {
 
 describe('compareCellText / compareUnitLabel', () => {
   it('formats temperature in whole degrees, both unit systems', () => {
-    expect(compareCellText('temp', 20.805811, false)).toBe('21°');
-    expect(compareCellText('temp', 0, true)).toBe('32°');
-    expect(compareUnitLabel('temp', false)).toBe('°C');
-    expect(compareUnitLabel('temp', true)).toBe('°F');
+    expect(compareCellText('temp', 20.805811, METRIC)).toBe('21°');
+    expect(compareCellText('temp', 0, IMPERIAL)).toBe('32°');
+    expect(compareUnitLabel('temp', METRIC)).toBe('°C');
+    expect(compareUnitLabel('temp', IMPERIAL)).toBe('°F');
   });
 
   it('converts wind m/s to whole km/h or mph', () => {
-    expect(compareCellText('wind', 5, false)).toBe('18');
-    expect(compareCellText('wind', 5, true)).toBe('11');
-    expect(compareUnitLabel('wind', false)).toBe('km/h');
-    expect(compareUnitLabel('wind', true)).toBe('mph');
+    expect(compareCellText('wind', 5, METRIC)).toBe('18');
+    expect(compareCellText('wind', 5, IMPERIAL)).toBe('11');
+    expect(compareUnitLabel('wind', METRIC)).toBe('km/h');
+    expect(compareUnitLabel('wind', IMPERIAL)).toBe('mph');
+  });
+
+  it('follows the distance unit to knots, and keeps °F to miles + feet (#702)', () => {
+    expect(compareCellText('wind', 5, NAUTICAL)).toBe('10');
+    expect(compareUnitLabel('wind', NAUTICAL)).toBe('kn');
+    expect(compareCellText('temp', 0, { distance: 'mi', elevation: 'm' })).toBe('0°');
+    expect(compareUnitLabel('temp', NAUTICAL)).toBe('°C');
   });
 
   it('keeps precip in mm with one decimal, zero-flooring drizzle noise', () => {
-    expect(compareCellText('precip', 0.04, false)).toBe('0');
-    expect(compareCellText('precip', 0.449, true)).toBe('0.4');
-    expect(compareCellText('precip', 12.06, false)).toBe('12.1');
-    expect(compareUnitLabel('precip', true)).toBe('mm');
+    expect(compareCellText('precip', 0.04, METRIC)).toBe('0');
+    expect(compareCellText('precip', 0.449, IMPERIAL)).toBe('0.4');
+    expect(compareCellText('precip', 12.06, METRIC)).toBe('12.1');
+    expect(compareUnitLabel('precip', IMPERIAL)).toBe('mm');
   });
 });

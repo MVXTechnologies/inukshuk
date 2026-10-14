@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC, type Units } from '@core/format';
 import type { Area } from '@core/models';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { Animated } from 'react-native';
@@ -28,7 +29,7 @@ const AREA: Area = {
   createdAt: 1,
 };
 
-async function setup(area: Area = AREA, units: 'metric' | 'imperial' = 'metric') {
+async function setup(area: Area = AREA, units: Units = METRIC) {
   const handlers = {
     onEdit: jest.fn(),
     onDelete: jest.fn(),
@@ -79,7 +80,7 @@ describe('AreaCard (#503)', () => {
   });
 
   it('reads the size in the unit setting', async () => {
-    await setup(AREA, 'imperial');
+    await setup(AREA, IMPERIAL);
     expect(screen.getByTestId('area-card-summary')).toHaveTextContent(/ ac · perimeter .* mi$/);
   });
 

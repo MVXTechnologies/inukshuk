@@ -142,7 +142,7 @@ export function RecordingPanel(props: Props) {
   // countdown (all keep moving while paused, when `elapsedS` stands still).
   const now = useNow(1000);
   const paused = status === 'paused';
-  const chip = gpsChip(gpsQuality, lastAccuracyM, lastFixAt, now);
+  const chip = gpsChip(gpsQuality, lastAccuracyM, lastFixAt, now, units);
   const receiverChip = useReceiverChip();
   const setReceiverSheetOpen = useGnssStore((s) => s.setSheetOpen);
 

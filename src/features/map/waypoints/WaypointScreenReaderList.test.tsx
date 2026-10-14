@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 import { useMapStore } from '@state/mapStore';
 import { useScreenSheetStore } from '@state/screenSheetStore';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
@@ -65,7 +66,7 @@ async function setup({
       <WaypointScreenReaderList
         pins={pins}
         here={here}
-        units="metric"
+        units={METRIC}
         onOpen={onOpen}
         available={available}
         screenFocused

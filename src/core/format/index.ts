@@ -10,53 +10,14 @@
  * The `(value) => string` call shape the ~50 UI call sites want is now built
  * by {@link createFormatters}; `src/state/formatters.ts` holds the instance
  * bound to the settings store, which is the single source of truth for units.
+ *
+ * The unit-dependent formatters (distance, elevation, speed, pace, accuracy)
+ * and the unit model itself live in `./units` (#702), re-exported here.
  */
 
-/** Display unit system for distance/elevation/speed/pace formatting. */
-export type Units = 'metric' | 'imperial';
+import { formatDistance, formatElevation, formatPace, formatSpeed, type Units } from './units';
 
-const M_PER_FT = 0.3048;
-const M_PER_MI = 1609.344;
-const MPH_PER_MPS = 3600 / M_PER_MI;
-
-/** Metres -> "1.23 km" / "840 m" (metric) or "1.23 mi" / "840 ft" (imperial). */
-export function formatDistance(meters: number, units: Units): string {
-  if (!Number.isFinite(meters) || meters < 0) {
-    return units === 'imperial' ? '0 ft' : '0 m';
-  }
-  if (units === 'imperial') {
-    const feet = meters / M_PER_FT;
-    // Switch to miles at the same threshold the rounding uses, so a value that
-    // would round to 1000 ft renders as miles instead of "1000 ft".
-    if (Math.round(feet) < 1000) return `${Math.round(feet)} ft`;
-    const miles = meters / M_PER_MI;
-    return miles < 10 ? `${miles.toFixed(2)} mi` : `${miles.toFixed(1)} mi`;
-  }
-  // Same boundary rule: [999.5, 1000) must render as km, never "1000 m".
-  if (Math.round(meters) < 1000) return `${Math.round(meters)} m`;
-  return `${(meters / 1000).toFixed(2)} km`;
-}
-
-/** Metres -> "1 234 m" or "4 049 ft" (elevation, no decimals). */
-export function formatElevation(meters: number, units: Units): string {
-  if (!Number.isFinite(meters)) return units === 'imperial' ? '0 ft' : '0 m';
-  if (units === 'imperial') return `${Math.round(meters / M_PER_FT)} ft`;
-  return `${Math.round(meters)} m`;
-}
-
-/**
- * A climb or a drop: "+120 m" / "−85 m". Zero (after rounding) carries no
- * sign — "0 m", never "+0 m" or "−0 m".
- */
-export function formatElevationChange(
-  meters: number,
-  direction: 'up' | 'down',
-  units: Units,
-): string {
-  const text = formatElevation(Math.abs(meters), units);
-  if (/^0 /.test(text)) return text;
-  return `${direction === 'up' ? '+' : '−'}${text}`;
-}
+export * from './units';
 
 /** Seconds -> "H:MM:SS" or "M:SS". Unit-system independent. */
 export function formatDuration(seconds: number): string {
@@ -66,27 +27,6 @@ export function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const pad = (n: number) => n.toString().padStart(2, '0');
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
-}
-
-/** m/s -> "4.2 km/h" or "2.6 mph". */
-export function formatSpeed(mps: number, units: Units): string {
-  if (!Number.isFinite(mps) || mps < 0) {
-    return units === 'imperial' ? '0.0 mph' : '0.0 km/h';
-  }
-  if (units === 'imperial') return `${(mps * MPH_PER_MPS).toFixed(1)} mph`;
-  return `${(mps * 3.6).toFixed(1)} km/h`;
-}
-
-/** m/s -> "6:00/km" or "9:39/mi" pace. Returns "—" for non-positive/implausible speeds. */
-export function formatPace(mps: number, units: Units): string {
-  if (!Number.isFinite(mps) || mps <= 0.1) return '—';
-  const secPerUnit = (units === 'imperial' ? M_PER_MI : 1000) / mps;
-  if (secPerUnit > 99 * 60) return '—';
-  const m = Math.floor(secPerUnit / 60);
-  const s = Math.round(secPerUnit % 60);
-  const mm = s === 60 ? m + 1 : m;
-  const ss = s === 60 ? 0 : s;
-  return `${mm}:${ss.toString().padStart(2, '0')}/${units === 'imperial' ? 'mi' : 'km'}`;
 }
 
 /** Heading degrees -> cardinal abbreviation (N, NE, …). Unit-system independent. */

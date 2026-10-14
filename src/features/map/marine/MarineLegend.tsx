@@ -1,3 +1,4 @@
+import { toElevationUnit } from '@core/format';
 import { DEPTH_BAND_BREAKS_M, DEPTH_BANDS } from '@core/geo/depthChart';
 import { marineSourceCaption, type MarineSource } from '@core/geo/marineSources';
 import { useSettingsStore } from '@state/settingsStore';
@@ -5,8 +6,6 @@ import { StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 
 import { weatherChrome as wc } from '../weather/weatherChrome';
-
-const M_TO_FT = 3.28084;
 
 /**
  * Depth legend for marine chart mode (marine wave D §D2, source line added
@@ -31,10 +30,11 @@ export function MarineLegend({
   source: MarineSource | null;
   offline?: boolean;
 }) {
-  const imperial = useSettingsStore((s) => s.units === 'imperial');
-  const unit = imperial ? 'ft' : 'm';
+  // Depths are heights below the datum: they follow the elevation unit (#702).
+  const units = useSettingsStore((s) => s.units);
+  const unit = units.elevation;
   const label = (m: number): string =>
-    m === 0 ? '0' : Math.round(imperial ? m * M_TO_FT : m).toString();
+    m === 0 ? '0' : Math.round(toElevationUnit(m, units)).toString();
 
   return (
     <View style={styles.slab} pointerEvents="none" accessibilityLabel="Depth legend">

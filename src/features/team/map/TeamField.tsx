@@ -8,6 +8,7 @@
  * Big targets, high contrast (sunlight), one-handed reach.
  */
 import { metres, rallyArrivals } from '@core/teamui/field';
+import { formatDistance } from '@state/formatters';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -22,8 +23,7 @@ import { useTeamMapFocus } from './teamMapFocus';
 
 const HOLD_MS = 2_000;
 
-const dist = (m: number) =>
-  m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(m < 10_000 ? 1 : 0)} km`;
+const dist = (m: number) => formatDistance(m, { style: 'short' });
 
 /** Hold to raise an SOS. */
 export function SosHoldCard({

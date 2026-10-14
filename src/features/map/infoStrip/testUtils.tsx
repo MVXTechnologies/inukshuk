@@ -3,6 +3,7 @@
  * to a known strip, a provider tree in either theme, and a stand-in for
  * MapScreen that counts its own renders.
  */
+import { METRIC } from '@core/format';
 import { applyPreset, presetById, type PresetId } from '@core/infoStrip/presets';
 import { normaliseInfoStripSettings } from '@core/infoStrip/settings';
 import type { InfoStrip } from '@core/infoStrip/types';
@@ -29,7 +30,7 @@ export function resetStores(): void {
   useSettingsStore.setState({
     infoStrip: normaliseInfoStripSettings(undefined),
     coordinateFormat: 'dd',
-    units: 'metric',
+    units: METRIC,
     hydrated: true,
   });
   useMapStore.setState({ mapCenter: QC, followUser: false });

@@ -16,6 +16,7 @@
  * Same discipline as `@core/weather/tides`: parsers are total — any input in,
  * a usable result (or null / empty) out. Endpoints verified live 2026-10-05.
  */
+import { formatElevation, type Units } from '@core/format';
 import { nextHighLow, type TideExtreme, type TideReading } from '@core/weather/tides';
 
 export const COOPS_DATA_URL = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter';
@@ -188,20 +189,25 @@ export function kvExtremes(
   return [nextHigh, nextLow].filter((e): e is TideExtreme => e !== null);
 }
 
-/** "Water 1.23 m above MLLW · rising · next high 14:52 (1.57 m)" — the card's Now line. */
+/**
+ * "Water 1.23 m above MLLW · rising · next high 14:52 (1.57 m)" — the card's
+ * Now line, heights in the user's elevation unit (#702).
+ */
 export function nowLine(
   live: LiveTide,
   cdLabel: string,
   clock: (ms: number) => string,
+  units: Units,
 ): string | null {
+  const h = (m: number) => formatElevation(m, units, { decimals: 2 });
   const parts: string[] = [];
   if (live.level) {
-    parts.push(`Water ${live.level.heightM.toFixed(2)} m above ${cdLabel}`);
+    parts.push(`Water ${h(live.level.heightM)} above ${cdLabel}`);
     if (live.trend) parts.push(live.trend);
   }
   const next = [live.nextHigh, live.nextLow]
     .filter((e): e is TideExtreme => e !== null)
     .sort((a, b) => a.timeMs - b.timeMs)[0];
-  if (next) parts.push(`next ${next.kind} ${clock(next.timeMs)} (${next.heightM.toFixed(2)} m)`);
-  return parts.length ? parts.join(' · ').replace(/-(\d)/g, '−$1') : null;
+  if (next) parts.push(`next ${next.kind} ${clock(next.timeMs)} (${h(next.heightM)})`);
+  return parts.length ? parts.join(' · ') : null;
 }

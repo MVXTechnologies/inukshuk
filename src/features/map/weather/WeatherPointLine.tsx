@@ -43,7 +43,7 @@ export function WeatherPointLine({
 
   const text =
     status === 'ready' && value !== null
-      ? pointReadoutText(layer, model, value.value, units === 'imperial', timeMs)
+      ? pointReadoutText(layer, model, value.value, units, timeMs)
       : status === 'loading'
         ? '…'
         : 'No data';

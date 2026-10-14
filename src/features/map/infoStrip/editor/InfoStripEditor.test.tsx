@@ -269,7 +269,7 @@ describe('field settings (generated from the params schema)', () => {
     expect(currentStrip().rows[0]![1]!.params.target).toEqual({ kind: 'coordinate', point: QC });
     await tap('Along the trail');
     expect(currentStrip().rows[0]![1]!.params.measure).toBe('trail');
-    await tap('nmi');
+    await tap('NM');
     expect(currentStrip().rows[0]![1]!.params.unit).toBe('nmi');
   });
 });

@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 /**
  * The map's drawing tools end to end, minus the map (#502/#503): taps build
  * the shape, the panel's Undo/Clear/Save drive the editor, Save writes a
@@ -98,7 +99,7 @@ const Harness = forwardRef(function Harness(_: object, ref: Ref<MapDrawing>) {
   const drawing = useMapDrawing({
     mapRef: mapRef as never,
     showSnack: snack,
-    units: 'metric',
+    units: METRIC,
     topInset: 47,
     onBeforeStart: beforeStart,
   });

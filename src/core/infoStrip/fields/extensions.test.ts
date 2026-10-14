@@ -1,6 +1,6 @@
 import { formatClockTime } from '@core/format';
 
-import { METRIC, NOW, snapshot } from '../testUtils';
+import { IMPERIAL, METRIC, NOW, snapshot } from '../testUtils';
 import { NEAREST_STATION, type GnssSnapshot, type TideSnapshot } from '../types';
 import { LIVE_MAX_AGE_MS } from '@core/tides/live';
 
@@ -63,6 +63,11 @@ describe('tide fields', () => {
     const slack = { ...TIDE, trend: null };
     expect(TIDE_LEVEL.compute(at(slack), NEAREST, METRIC)?.unit).toBe('m');
     expect(TIDE_LEVEL.compute(snapshot(), NEAREST, METRIC)).toBeNull();
+    // A height: the elevation unit (#702).
+    expect(TIDE_LEVEL.compute(at(TIDE), NEAREST, IMPERIAL)).toMatchObject({
+      value: '+12.60',
+      unit: 'ft ↑',
+    });
     // No fresh observation: no level (the next high may still show).
     expect(TIDE_LEVEL.compute(at({ ...TIDE, levelM: null }), NEAREST, METRIC)).toBeNull();
   });

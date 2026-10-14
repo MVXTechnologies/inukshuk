@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC } from '@core/format';
 import { destinationReadout, formatBearing } from './destination';
 
 const QC = { latitude: 46.8139, longitude: -71.2082 };
@@ -28,38 +29,38 @@ describe('destinationReadout', () => {
   it('reports straight-line distance and initial bearing in the chosen units', () => {
     // ~1.1 km due north of the Plaines d'Abraham.
     const to = { latitude: 46.8239, longitude: -71.2082 };
-    const metric = destinationReadout(QC, to, 'metric');
+    const metric = destinationReadout(QC, to, METRIC);
     expect(metric?.distanceM).toBeCloseTo(1112, 0);
     expect(metric?.bearingDeg).toBeCloseTo(0, 6);
     expect(metric?.distance).toBe('1.11 km');
     expect(metric?.bearing).toBe('000° N');
 
-    const imperial = destinationReadout(QC, to, 'imperial');
+    const imperial = destinationReadout(QC, to, IMPERIAL);
     expect(imperial?.distanceM).toBeCloseTo(1112, 0);
     expect(imperial?.distance).toBe('0.69 mi');
   });
 
   it('points east for a destination to the east', () => {
-    const east = destinationReadout(QC, { ...QC, longitude: QC.longitude + 0.02 }, 'metric');
+    const east = destinationReadout(QC, { ...QC, longitude: QC.longitude + 0.02 }, METRIC);
     expect(east?.bearing).toBe('090° E');
   });
 
   it('reads zero distance for the pin you are standing on', () => {
-    const here = destinationReadout(QC, { ...QC }, 'metric');
+    const here = destinationReadout(QC, { ...QC }, METRIC);
     expect(here?.distanceM).toBe(0);
     expect(here?.distance).toBe('0 m');
     expect(here?.bearing).toBe('000° N');
   });
 
   it('returns null without a position or without a destination', () => {
-    expect(destinationReadout(null, QC, 'metric')).toBeNull();
-    expect(destinationReadout(QC, null, 'metric')).toBeNull();
-    expect(destinationReadout(undefined, undefined, 'metric')).toBeNull();
+    expect(destinationReadout(null, QC, METRIC)).toBeNull();
+    expect(destinationReadout(QC, null, METRIC)).toBeNull();
+    expect(destinationReadout(undefined, undefined, METRIC)).toBeNull();
   });
 
   it('returns null for out-of-range or non-finite coordinates', () => {
-    expect(destinationReadout({ latitude: 91, longitude: 0 }, QC, 'metric')).toBeNull();
-    expect(destinationReadout(QC, { latitude: 0, longitude: 181 }, 'metric')).toBeNull();
-    expect(destinationReadout(QC, { latitude: Number.NaN, longitude: 0 }, 'metric')).toBeNull();
+    expect(destinationReadout({ latitude: 91, longitude: 0 }, QC, METRIC)).toBeNull();
+    expect(destinationReadout(QC, { latitude: 0, longitude: 181 }, METRIC)).toBeNull();
+    expect(destinationReadout(QC, { latitude: Number.NaN, longitude: 0 }, METRIC)).toBeNull();
   });
 });

@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC } from '@core/format';
 import {
   compactDistance,
   compactDuration,
@@ -20,7 +21,7 @@ describe('compactDistance', () => {
     [99_940, '99.9 km'],
     [142_300, '142 km'],
   ])('metric %p → %s', (m, out) => {
-    expect(compactDistance(m, 'metric')).toBe(out);
+    expect(compactDistance(m, METRIC)).toBe(out);
   });
 
   it.each([
@@ -28,7 +29,7 @@ describe('compactDistance', () => {
     [11190, '7.0 mi'],
     [200_000, '124 mi'],
   ])('imperial %p → %s', (m, out) => {
-    expect(compactDistance(m, 'imperial')).toBe(out);
+    expect(compactDistance(m, IMPERIAL)).toBe(out);
   });
 });
 
@@ -50,19 +51,19 @@ describe('trailStatsLine', () => {
     expect(
       trailStatsLine(
         { distanceM: 11190, durationS: 3 * 3600 + 31 * 60 + 3, ascentM: 1068.2 },
-        'metric',
+        METRIC,
       ),
     ).toBe('11.2 km · 3:31 · ↑1068 m');
   });
 
   it('omits the duration of an untimed trail', () => {
-    expect(trailStatsLine({ distanceM: 5600, durationS: 0, ascentM: 520 }, 'metric')).toBe(
+    expect(trailStatsLine({ distanceM: 5600, durationS: 0, ascentM: 520 }, METRIC)).toBe(
       '5.6 km · ↑520 m',
     );
   });
 
   it('follows the unit system', () => {
-    expect(trailStatsLine({ distanceM: 11190, durationS: 0, ascentM: 100 }, 'imperial')).toBe(
+    expect(trailStatsLine({ distanceM: 11190, durationS: 0, ascentM: 100 }, IMPERIAL)).toBe(
       '7.0 mi · ↑328 ft',
     );
   });

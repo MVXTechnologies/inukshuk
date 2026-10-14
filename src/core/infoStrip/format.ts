@@ -3,7 +3,12 @@
  * into the value and the (smaller) unit, distances in a fixed unit, bearings
  * and durations as the strip prints them.
  */
-import { formatClockTime, formatDistance, type Units } from '@core/format';
+import {
+  formatClockTime,
+  formatDistance,
+  type DistanceUnit as AppDistanceUnit,
+  type Units,
+} from '@core/format';
 import { formatBearing } from '@core/geo/destination';
 
 import type { StripValue } from './types';
@@ -15,24 +20,16 @@ export function splitUnit(text: string): { value: string; unit?: string } {
 }
 
 /** A distance unit choice: the app's units, or a fixed one (nmi for paddling). */
-export type DistanceUnit = 'app' | 'km' | 'mi' | 'nmi';
+export type DistanceUnit = 'app' | AppDistanceUnit;
 
-const M_PER_NMI = 1852;
-
-/** Metres in the chosen unit: "1.23 km", "840 m", "0.66 nmi". */
+/**
+ * Metres in the chosen unit: "1.23 km", "840 m", "0.66 NM". A fixed unit
+ * overrides the app's distance unit only; the short fallback still follows
+ * the app's choices where it can (NM falls back to the elevation unit).
+ */
 export function formatDistanceIn(meters: number, unit: DistanceUnit, units: Units): string {
-  switch (unit) {
-    case 'app':
-      return formatDistance(meters, units);
-    case 'km':
-      return formatDistance(meters, 'metric');
-    case 'mi':
-      return formatDistance(meters, 'imperial');
-    case 'nmi': {
-      const n = Math.max(0, meters) / M_PER_NMI;
-      return `${n.toFixed(n < 10 ? 2 : 1)} nmi`;
-    }
-  }
+  if (unit === 'app') return formatDistance(meters, units);
+  return formatDistance(meters, { distance: unit, elevation: units.elevation });
 }
 
 /**

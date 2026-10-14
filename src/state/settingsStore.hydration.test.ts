@@ -40,8 +40,14 @@ function heldRead(storage: StorageMock): (saved: unknown) => void {
   return (saved) => release(saved);
 }
 
-/** What a user who opted out of error reports has on disk. */
+/**
+ * What a user who opted out of error reports has on disk (a pre-2.6.1 file:
+ * `units` is still the single metric/imperial switch, #702).
+ */
 const ON_DISK = { schemaVersion: 2, errorReporting: false, units: 'imperial', showHeatmap: false };
+/** How the store holds and writes those units since #702. */
+const MI_FT = { distance: 'mi', elevation: 'ft' } as const;
+const KM_M = { distance: 'km', elevation: 'm' } as const;
 
 it('an early set writes nothing, and cannot reset the saved settings — opt-out included', async () => {
   const { store, storage } = load();
@@ -58,20 +64,20 @@ it('an early set writes nothing, and cannot reset the saved settings — opt-out
 
   const state = store.getState();
   expect(state.errorReporting).toBe(false);
-  expect(state.units).toBe('imperial');
+  expect(state.units).toEqual(MI_FT);
   expect(state.showHeatmap).toBe(false);
   expect(state.themeMode).toBe('dark');
   // One write, of the merged settings: the saved values plus the new one.
   expect(storage.writeJson).toHaveBeenCalledTimes(1);
   expect(storage.writeJson).toHaveBeenCalledWith(
     'settings.json',
-    expect.objectContaining({ errorReporting: false, units: 'imperial', themeMode: 'dark' }),
+    expect.objectContaining({ errorReporting: false, units: MI_FT, themeMode: 'dark' }),
   );
 });
 
 it('holds early writes made before hydrate() is even called', async () => {
   const { store, storage } = load();
-  store.getState().set('units', 'metric'); // the default: no change, nothing to hold
+  store.getState().set('units', { ...KM_M }); // the default: no change, nothing to hold
   store.getState().set('librarySortKey', 'distance');
   expect(storage.writeJson).not.toHaveBeenCalled();
 
@@ -79,7 +85,7 @@ it('holds early writes made before hydrate() is even called', async () => {
   await store.getState().hydrate();
 
   expect(store.getState().librarySortKey).toBe('distance');
-  expect(store.getState().units).toBe('imperial');
+  expect(store.getState().units).toEqual(MI_FT);
   expect(store.getState().errorReporting).toBe(false);
 });
 
@@ -103,7 +109,7 @@ it('keeps early writes in memory and off disk while hydration fails, then lands 
   await expect(store.getState().hydrate()).rejects.toThrow('EIO');
 
   expect(store.getState().hydrated).toBe(false);
-  store.getState().set('units', 'imperial');
+  store.getState().set('units', { ...MI_FT });
   expect(storage.writeJson).not.toHaveBeenCalled();
 
   // The foreground retry.
@@ -111,7 +117,7 @@ it('keeps early writes in memory and off disk while hydration fails, then lands 
   await store.getState().hydrate();
   expect(store.getState()).toMatchObject({
     themeMode: 'light',
-    units: 'imperial',
+    units: MI_FT,
     errorReporting: false,
   });
   expect(storage.writeJson).toHaveBeenCalledTimes(1);
@@ -126,7 +132,7 @@ it('a reset before hydration writes nothing until the file is read', async () =>
   await store.getState().hydrate();
   // The user asked for defaults; they get them, written once (each file:
   // settings.json, and the info strip's own file).
-  expect(store.getState().units).toBe('metric');
+  expect(store.getState().units).toEqual(KM_M);
   const files = storage.writeJson.mock.calls.map(([name]) => name as string);
   expect(files.sort()).toEqual(['info-strip.json', 'settings.json']);
 });
@@ -142,7 +148,7 @@ it('reads settings.json once for concurrent hydrate() calls', async () => {
 
   release(ON_DISK);
   await Promise.all([launch, foregroundRetry]);
-  expect(store.getState().units).toBe('imperial');
+  expect(store.getState().units).toEqual(MI_FT);
 });
 
 it('writes straight through once hydrated, as before', async () => {
@@ -150,6 +156,6 @@ it('writes straight through once hydrated, as before', async () => {
   await store.getState().hydrate();
   expect(storage.writeJson).not.toHaveBeenCalled(); // nothing was pending
 
-  store.getState().set('units', 'imperial');
+  store.getState().set('units', { ...MI_FT });
   expect(storage.writeJson).toHaveBeenCalledTimes(1);
 });

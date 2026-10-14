@@ -5,7 +5,7 @@ import { Text } from 'react-native-paper';
 
 interface Props {
   rows: readonly SplitRow[];
-  unitLabel: 'km' | 'mi';
+  unitLabel: string;
   /** 'pace' | 'speed' column title; null for an untimed route (climb only). */
   measure: 'pace' | 'speed' | null;
   loading?: boolean;

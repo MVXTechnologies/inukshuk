@@ -1,7 +1,10 @@
+import { IMPERIAL, METRIC, NAUTICAL } from '@core/format';
 import type { LatLng } from '@core/models';
 import fixture from './__fixtures__/citypage-collection.json';
 import {
   citypageItemsUrl,
+  formatWindSummary,
+  type ForecastWind,
   MAX_FORECAST_PERIODS,
   parseCitypageCollection,
   parseCitypageFeature,
@@ -51,7 +54,7 @@ describe('parseCitypageCollection', () => {
       temperatureC: 24.1,
       condition: 'Light Rainshower',
       relativeHumidityPct: 77,
-      windSummary: 'WNW 8 km/h, gusts 27',
+      wind: { direction: 'WNW', speedKmh: 8, gustKmh: 27 },
       observedAtMs: Date.parse('2026-08-08T21:00:00Z'),
     });
     expect(f?.periods).toEqual([
@@ -139,11 +142,30 @@ describe('parseCitypageFeature', () => {
           },
         }),
         QUEBEC_CITY,
-      )?.current?.windSummary;
-    expect(wind({})).toBe('10 km/h');
-    expect(wind({ direction: { value: { en: 'NE' } } })).toBe('NE 10 km/h');
+      )?.current?.wind;
+    const text = (w: ForecastWind | null | undefined, units = METRIC) =>
+      w == null ? null : formatWindSummary(w, units);
+    expect(text(wind({}))).toBe('10 km/h');
+    expect(text(wind({ direction: { value: { en: 'NE' } } }))).toBe('NE 10 km/h');
     // A gust at or below the sustained speed is noise, not news.
-    expect(wind({ gust: { value: { en: 10 } } })).toBe('10 km/h');
-    expect(wind({ gust: { value: { en: 25 } } })).toBe('10 km/h, gusts 25');
+    expect(text(wind({ gust: { value: { en: 10 } } }))).toBe('10 km/h');
+    expect(text(wind({ gust: { value: { en: 25 } } }))).toBe('10 km/h, gusts 25');
+  });
+
+  it('words the wind in the user speed unit (#702)', () => {
+    const w: ForecastWind = { direction: 'SW', speedKmh: 32, gustKmh: 50 };
+    expect(formatWindSummary(w, METRIC)).toBe('SW 32 km/h, gusts 50');
+    expect(formatWindSummary(w, IMPERIAL)).toBe('SW 20 mph, gusts 31');
+    expect(formatWindSummary(w, NAUTICAL)).toBe('SW 17 kn, gusts 27');
+  });
+
+  it('drops a wind it cannot convert', () => {
+    const f = parseCitypageFeature(
+      minimal({
+        currentConditions: { wind: { speed: { value: { en: 10 }, units: { en: 'mph' } } } },
+      }),
+      QUEBEC_CITY,
+    );
+    expect(f?.current?.wind ?? null).toBeNull();
   });
 });

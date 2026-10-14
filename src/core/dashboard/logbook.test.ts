@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC, NAUTICAL } from '@core/format';
 import { computeTrackStats } from '@core/geo/track';
 import type { TrackStats, TrackSummary } from '@core/models';
 import {
@@ -123,21 +124,22 @@ describe('niceAxisMax', () => {
   });
 
   it('knows the display unit', () => {
-    expect(distanceUnitMeters('metric')).toBe(1000);
-    expect(distanceUnitMeters('imperial')).toBeCloseTo(1609.344);
+    expect(distanceUnitMeters(METRIC)).toBe(1000);
+    expect(distanceUnitMeters(IMPERIAL)).toBeCloseTo(1609.344);
   });
 });
 
 describe('hero numbers', () => {
   it('formats distance like the board', () => {
-    expect(heroDistance(412_300, 'metric')).toEqual({ value: '412', unit: 'km' });
-    expect(heroDistance(4_240, 'metric')).toEqual({ value: '4.2', unit: 'km' });
-    expect(heroDistance(840, 'metric')).toEqual({ value: '840', unit: 'm' });
-    expect(heroDistance(1_234_000, 'metric')).toEqual({ value: '1,234', unit: 'km' });
-    expect(heroDistance(16_093, 'imperial')).toEqual({ value: '10', unit: 'mi' });
-    expect(heroDistance(8_047, 'imperial')).toEqual({ value: '5', unit: 'mi' });
-    expect(heroDistance(30, 'imperial')).toEqual({ value: '98', unit: 'ft' });
-    expect(heroDistance(Number.NaN, 'metric')).toEqual({ value: '0', unit: 'm' });
+    expect(heroDistance(412_300, METRIC)).toEqual({ value: '412', unit: 'km' });
+    expect(heroDistance(4_240, METRIC)).toEqual({ value: '4.2', unit: 'km' });
+    expect(heroDistance(840, METRIC)).toEqual({ value: '840', unit: 'm' });
+    expect(heroDistance(1_234_000, METRIC)).toEqual({ value: '1\u202f234', unit: 'km' });
+    expect(heroDistance(16_093, IMPERIAL)).toEqual({ value: '10', unit: 'mi' });
+    expect(heroDistance(8_047, IMPERIAL)).toEqual({ value: '5.0', unit: 'mi' });
+    expect(heroDistance(9_260, NAUTICAL)).toEqual({ value: '5.0', unit: 'NM' });
+    expect(heroDistance(30, IMPERIAL)).toEqual({ value: '98', unit: 'ft' });
+    expect(heroDistance(Number.NaN, METRIC)).toEqual({ value: '0', unit: 'm' });
   });
 
   it('formats time', () => {
@@ -147,10 +149,10 @@ describe('hero numbers', () => {
   });
 
   it('formats the climb, switching to km past 10 km', () => {
-    expect(heroClimb(21_400, 'metric')).toEqual({ value: '21.4', unit: 'km' });
-    expect(heroClimb(1_068, 'metric')).toEqual({ value: '1,068', unit: 'm' });
-    expect(heroClimb(1_000, 'imperial')).toEqual({ value: '3,281', unit: 'ft' });
-    expect(heroClimb(21_400, 'imperial')).toEqual({ value: '70.2', unit: 'k ft' });
+    expect(heroClimb(21_400, METRIC)).toEqual({ value: '21.4', unit: 'km' });
+    expect(heroClimb(1_068, METRIC)).toEqual({ value: '1\u202f068', unit: 'm' });
+    expect(heroClimb(1_000, IMPERIAL)).toEqual({ value: '3\u202f281', unit: 'ft' });
+    expect(heroClimb(21_400, IMPERIAL)).toEqual({ value: '70.2', unit: 'k ft' });
   });
 });
 
@@ -196,19 +198,19 @@ describe('activity row text', () => {
     expect(
       activityStatsLine(
         stats({ distanceM: 11_240, movingTimeS: 3 * 3600 + 31 * 60, ascentM: 1068 }),
-        'metric',
+        METRIC,
       ),
     ).toBe('11.2 km · 3:31 · ↑1068 m');
   });
 
   it('falls back to wall-clock time, and drops time when untimed', () => {
     expect(
-      activityStatsLine(stats({ distanceM: 9100, durationS: 5400, ascentM: 675 }), 'metric'),
+      activityStatsLine(stats({ distanceM: 9100, durationS: 5400, ascentM: 675 }), METRIC),
     ).toBe('9.1 km · 1:30 · ↑675 m');
-    expect(activityStatsLine(stats({ distanceM: 1609.344, ascentM: 30.48 }), 'imperial')).toBe(
+    expect(activityStatsLine(stats({ distanceM: 1609.344, ascentM: 30.48 }), IMPERIAL)).toBe(
       '1.0 mi · ↑100 ft',
     );
-    expect(activityStatsLine(undefined, 'metric')).toBe('0.0 km · ↑0 m');
+    expect(activityStatsLine(undefined, METRIC)).toBe('0 m · ↑0 m');
   });
 
   it('captions with date and type', () => {

@@ -1,9 +1,10 @@
+import { IMPERIAL, METRIC } from '@core/format';
 import { badgeIndex, formatDistanceShort, sourceAbbreviation } from './exploreFormat';
 
 it('shortens the distance', () => {
-  expect(formatDistanceShort(12_300, 'metric')).toBe('12 km');
-  expect(formatDistanceShort(200, 'metric')).toBe('< 1 km');
-  expect(formatDistanceShort(16_093, 'imperial')).toBe('10 mi');
+  expect(formatDistanceShort(12_300, METRIC)).toBe('12 km');
+  expect(formatDistanceShort(200, METRIC)).toBe('< 1 km');
+  expect(formatDistanceShort(16_093, IMPERIAL)).toBe('10 mi');
 });
 
 it('abbreviates publishers', () => {
