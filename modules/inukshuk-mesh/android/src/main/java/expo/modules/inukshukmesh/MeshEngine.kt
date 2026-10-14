@@ -14,8 +14,6 @@ import java.nio.channels.SocketChannel
 import java.util.Random
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -165,15 +163,17 @@ class MeshEngine(
   @Synchronized
   fun stop() {
     if (!running.getAndSet(false)) return
-    val done = CountDownLatch(1)
     tasks.add {
       for (c in conns.values.toList()) close(c, "stopped", strike = false, allowRetry = false)
       dials.clear()
-      done.countDown()
     }
     selector?.wakeup()
-    done.await(2, TimeUnit.SECONDS)
-    thread?.join(2_000)
+    val t = thread
+    t?.join(2_000)
+    // The loop can see running == false and drain the queue before the task
+    // above lands, then exit: every socket would stay open and no peer would
+    // hear the drop. Once the I/O thread is gone, run what it left here.
+    if (t == null || !t.isAlive) drainTasks()
     try { server?.close() } catch (_: IOException) {}
     try { selector?.close() } catch (_: IOException) {}
     server = null
@@ -357,6 +357,10 @@ class MeshEngine(
       }
     }
     // Drain stop()'s task.
+    drainTasks()
+  }
+
+  private fun drainTasks() {
     while (true) {
       val task = tasks.poll() ?: break
       try { task() } catch (_: Throwable) {}

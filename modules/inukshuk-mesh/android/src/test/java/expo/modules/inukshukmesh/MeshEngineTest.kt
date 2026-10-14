@@ -160,13 +160,17 @@ object MeshEngineTest {
       // B's queue fills and stays full (no onWritable): end-to-end backpressure.
       var stalled = false
       var sent = 0
+      // onWritable events counted before the send that hit backpressure. Read
+      // it BEFORE send(): the selector thread may drain and announce writable
+      // before send() even returns to us, and counting after would miss it.
+      var before = 0
       val end = System.currentTimeMillis() + 20_000
       while (!stalled && System.currentTimeMillis() < end) {
+        before = rb.writable.size
         try {
           b.send(toA, ByteArray(frame)); sent++
         } catch (e: MeshException) {
           expect(e.code == "E_MESH_BACKPRESSURE", "backpressure code")
-          val before = rb.writable.size
           val wait = System.currentTimeMillis() + 1_500
           while (rb.writable.size == before && System.currentTimeMillis() < wait) Thread.sleep(10)
           stalled = rb.writable.size == before
@@ -178,14 +182,14 @@ object MeshEngineTest {
       expect(aPeers[0]["throttled"] == true, "receiver paused reading")
       expect((a.stats()["inboxBytes"] as Double) <= 4.0 * frame + frame, "receiver inbox bounded")
       // Drain A; B must hear it may write again, and every frame must arrive.
-      val writableBefore = rb.writable.size
       var received = 0
       waitFor("all frames delivered after draining", 20_000) {
         received += a.takeFrames(64).size
         received >= sent
       }
       expect(received == sent, "no frame lost or duplicated")
-      waitFor("writable announced after the stall") { rb.writable.size > writableBefore }
+      // The rejected send armed exactly one onWritable; it must follow the drain.
+      waitFor("writable announced after the stall") { rb.writable.size > before }
     } finally { a.stop(); b.stop() }
   }
 
