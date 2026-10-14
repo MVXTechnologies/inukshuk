@@ -20,6 +20,13 @@ import { SyncSession, type SessionEvent } from '@core/team/sync';
 import { alertContext, alertFor, TaskAlertThrottle, type TeamAlert } from '@core/teamui/alerts';
 import { commentsByPhoto, type Said } from '@core/teamui/mapMarks';
 import { teamRally, teamSos, type TeamRally, type TeamSos } from '@core/teamui/field';
+import {
+  owesReceipt,
+  receiptBody,
+  receiptCount,
+  type AlertRef,
+  type ReceiptCount,
+} from '@core/teamui/receipts';
 import { teamThreads, type ThreadRow } from '@core/teamui/threads';
 import { editors, editText, SYS_EDIT, teamTrails, type TeamTrailView } from '@core/teamui/trails';
 import { pinThread, resolvedMessages, teamPins, type TeamPin } from '@core/teamui/pins';
@@ -450,6 +457,38 @@ export class TeamSession {
     return this.accepted(op.id) ? null : 'not-allowed';
   }
 
+  /**
+   * Receipts (#708): write one for every active teammate SOS or rally point
+   * this phone holds and has not acknowledged yet. Called when ops arrive
+   * from a peer, and on each team open; a no-op when nothing is owed, so a
+   * resync never writes twice. Returns how many were written.
+   */
+  sendOwedReceipts(): number {
+    if (this.guardWrite() !== null || this.replica.state.sendKeyId === undefined) return 0;
+    const data = this.replica.data(this.deps.now());
+    const owed: AlertRef[] = [];
+    for (const s of this.soses())
+      if (!s.resolved) owed.push({ kind: 'sos', owner: s.owner, id: s.id });
+    const r = this.rally();
+    if (r) owed.push({ kind: 'rly', owner: r.owner, id: r.id });
+    const todo = owed.filter((a) => owesReceipt(data, this.me, a));
+    if (todo.length === 0) return 0;
+    const now = this.deps.now();
+    this.run(() => {
+      for (const a of todo) this.replica.write(now, 'e.set', receiptBody(a));
+    });
+    return todo.length;
+  }
+
+  /** Who has received one of my alerts ("3 of 5 received"). */
+  receipts(alert: AlertRef): ReceiptCount {
+    const now = this.deps.now();
+    const active = this.view()
+      .members.filter((m) => m.active)
+      .map((m) => m.id);
+    return receiptCount(this.replica.data(now), alert, active, now);
+  }
+
   private trailsCache: { key: string; trails: TeamTrailView[] } | null = null;
 
   /** Team trails (editable by all members) with their current vertices. */
@@ -844,6 +883,8 @@ export class TeamSession {
         if (alert) this.deps.onAlert(this.taskThrottle.admit(alert, now));
       }
     }
+    // A teammate's SOS or rally point just synced: say so (#708).
+    if (from !== null && ops.some((op) => op.env.t === 'e.set')) this.sendOwedReceipts();
     this.changed();
     // A new key (a rotation, or our first key after a join): re-post what the
     // members admitted later can't read otherwise.
@@ -939,8 +980,10 @@ export class TeamSession {
         const ok = this.writeMsg(systemMessage(this.deps.newId(), SYS_TEAM, nameText(view.name)));
         if (ok === null) this.updateRecord({ teamNameKeyId: keyId });
       }
-      // Tell the team this phone draws live (#683): once, under a key it can use.
+      // Tell the team this phone draws live (#683) and sends receipts (#708):
+      // once, under a key it can use.
       this.draw.advertise();
+      this.sendOwedReceipts();
     } finally {
       this.profileCheckBusy = false;
     }
