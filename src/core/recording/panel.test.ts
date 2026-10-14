@@ -4,11 +4,14 @@ import {
   DEFAULT_HERO_FIELDS,
   EXPANDED_FIELDS,
   expandPanel,
+  HERO_FIELD_LABEL,
   HERO_FIELD_ORDER,
+  heroFieldText,
   INITIAL_PANEL_STATE,
   panelAfterSwipe,
   SWIPE_DISTANCE_DP,
   SWIPE_VELOCITY_DPS,
+  type HeroData,
   type HeroField,
 } from './panel';
 
@@ -89,5 +92,57 @@ describe('hero fields', () => {
 
   it('leaves the fields alone for a slot out of range', () => {
     expect(cycleHeroField(DEFAULT_HERO_FIELDS, 5)).toEqual([...DEFAULT_HERO_FIELDS]);
+  });
+
+  it('skips the metrics the info strip already shows', () => {
+    const skip = new Set<HeroField>(['speed', 'pace']);
+    expect(cycleHeroField(DEFAULT_HERO_FIELDS, 2, skip)).toEqual(['time', 'distance', 'altitude']);
+  });
+
+  it('stays put when every other field is taken or skipped', () => {
+    const skip = new Set<HeroField>(HERO_FIELD_ORDER.filter((f) => f !== 'gain'));
+    expect(cycleHeroField(['gain'], 0, skip)).toEqual(['gain']);
+    expect(cycleHeroField(['gain'], 0, new Set(HERO_FIELD_ORDER))).toEqual(['gain']);
+  });
+});
+
+describe('heroFieldText', () => {
+  // 2026-06-21 12:00 local solar time at Québec City, well before sunset.
+  const NOW = Date.UTC(2026, 5, 21, 16, 45);
+  const data: HeroData = {
+    elapsedS: 4360,
+    distanceM: 8420,
+    ascentM: 412,
+    descentM: 188,
+    movingTimeS: 3490,
+    avgSpeedMps: 1.2,
+    liveSpeedMps: 1,
+    altitudeM: 412.4,
+    position: { latitude: 46.81, longitude: -71.21 },
+    nowMs: NOW,
+  };
+
+  it('formats every hero field in the given units', () => {
+    expect(heroFieldText('time', data, 'metric')).toBe('1:12:40');
+    expect(heroFieldText('distance', data, 'metric')).toBe('8.42 km');
+    expect(heroFieldText('distance', data, 'imperial')).toBe('5.23 mi');
+    expect(heroFieldText('gain', data, 'metric')).toBe('+412 m');
+    expect(heroFieldText('descent', data, 'metric')).toBe('−188 m');
+    expect(heroFieldText('speed', data, 'metric')).toBe('3.6 km/h');
+    expect(heroFieldText('pace', data, 'metric')).toBe('13:53/km');
+    expect(heroFieldText('altitude', data, 'metric')).toBe('412 m');
+    expect(heroFieldText('moving', data, 'metric')).toBe('58:10');
+    expect(heroFieldText('sunset', data, 'metric')).toMatch(/^\d+:\d\d:\d\d$/);
+  });
+
+  it('shows a dash for what it cannot know', () => {
+    const none = { ...data, avgSpeedMps: 0, altitudeM: null, position: null };
+    expect(heroFieldText('pace', none, 'metric')).toBe('—');
+    expect(heroFieldText('altitude', none, 'metric')).toBe('—');
+    expect(heroFieldText('sunset', none, 'metric')).toBe('—');
+  });
+
+  it('labels every field', () => {
+    for (const f of HERO_FIELD_ORDER) expect(HERO_FIELD_LABEL[f]).toMatch(/^[A-Z ]+$/);
   });
 });

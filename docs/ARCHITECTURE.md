@@ -453,6 +453,36 @@ ntripClient.ts` over `data/gnss/ntripSocket.ts` (the module's `openTcp` /
   along the trail, else the next note, else the end, advanced by your furthest
   progress; off trail latches past 30 m and clears within 20 m.
 
+## Info strip (#673, 2.6.0)
+
+The docked strip of fields at the bottom (or top) of the map, plus its two
+map aids (centre cursor, pointing line). The pure core is
+`src/core/infoStrip/` (100 % coverage gate):
+
+- `types.ts`: `InfoStrip` (dock, ≤ 3 rows of `FieldRef`, aids, shared
+  `Target`), `FieldDescriptor` with its `ParamSchema` (drives a generated
+  settings page), `DataDep`, `Tick`, `DepsSnapshot`, `StripValue`.
+- `registry.ts`: every field, `satisfies`-checked like the extension
+  registry; `pickableFields` lists only what fits (nothing greyed out).
+  Fields live in `fields/` (position, navigation, motion, `hero:*` recording
+  metrics through the panel's own `heroFieldText`, extension-fed fields).
+- `layout.ts`: `fitRow` (4 spaces a row, coordinates take 2),
+  `visibleRows` (while recording the panel owns its hero metrics),
+  `stackOffsets` (bottom up: panel or tab bar, strip, compass tape, ⓘ +
+  scale row; the top dock shifts the top chrome).
+- `target.ts` (one strip target, per-field override), `movingSpeed.ts`
+  (10-minute moving speed for ETE/ETA), `presets.ts` (`DEFAULT_STRIP` =
+  2.5.1's chip and dot; Default, Hiking, Navigation, Survey, Paddling),
+  `settings.ts` (`settings.infoStrip`, versioned: a missing key is
+  `DEFAULT_STRIP`; unknown field ids are kept and skipped, so a rollback
+  loses nothing).
+- Magnetic declination comes from `core/geo/wmm.ts`, WMM2025 in pure TS,
+  checked against NOAA's published test values.
+
+Adding a field: a descriptor in `fields/` with a pure `compute()` and its
+tests, and one line in `registry.ts`; the picker, search, settings page and
+presets pick it up.
+
 ## Error reporting ("no silent fails")
 
 - Capture: a chained `ErrorUtils` global handler (fatal + non-fatal), Hermes'
