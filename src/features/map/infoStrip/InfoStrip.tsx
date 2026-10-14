@@ -122,6 +122,7 @@ export const InfoStripView = memo(function InfoStripView({
                 <StripField
                   value={p.value}
                   shrink={p.descriptor.spaces > 1}
+                  fit
                   textTestID={
                     isCoords
                       ? 'map-coords-text'

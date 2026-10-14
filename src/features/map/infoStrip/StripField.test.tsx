@@ -1,8 +1,8 @@
 import type { StripValue } from '@core/infoStrip/types';
 import { darkScheme, lightScheme } from '@ui/tokens';
 import { darkTheme, lightTheme } from '@ui/theme';
-import { render, screen } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
+import { PixelRatio, StyleSheet } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
 import { StripField } from './StripField';
@@ -39,6 +39,8 @@ function Tree({
 const ink = () => StyleSheet.flatten(screen.getByTestId('t').props.style).color as string;
 
 describe('StripField (the one renderer)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
   it('draws tag, value and unit', async () => {
     await render(<Tree value={{ tag: 'ETE', value: '0:21' }} />);
     expect(screen.getByTestId('f')).toHaveTextContent('ETE0:21');
@@ -71,6 +73,31 @@ describe('StripField (the one renderer)', () => {
       });
     },
   );
+
+  it('fitted to a narrow cell, gives up its tag and keeps the value whole (QA 02b)', async () => {
+    jest.spyOn(PixelRatio, 'getFontScale').mockReturnValue(1);
+    const cog = { glyph: 'navigation', tag: 'COG', value: '300°', unit: 'NW' };
+    await render(
+      <PaperProvider theme={lightTheme}>
+        <StripField value={cog} fit testID="f" textTestID="t" />
+      </PaperProvider>,
+    );
+    // Before layout: whole.
+    expect(screen.getByText('COG')).toBeOnTheScreen();
+    expect(screen.getByTestId('t')).toHaveTextContent('300° NW');
+    await fireEvent(screen.getByTestId('f'), 'layout', {
+      nativeEvent: { layout: { width: 84, height: 30 } },
+    });
+    expect(screen.getByTestId('t')).toHaveTextContent('300° NW');
+    expect(screen.queryByText('COG')).toBeNull();
+    expect(screen.getByTestId('t').props.adjustsFontSizeToFit).toBe(true);
+    // Narrower: a type step and no compass point; the value itself is never cut.
+    await fireEvent(screen.getByTestId('f'), 'layout', {
+      nativeEvent: { layout: { width: 50, height: 30 } },
+    });
+    expect(screen.getByTestId('t')).toHaveTextContent(/^300°$/);
+    expect(StyleSheet.flatten(screen.getByTestId('t').props.style).fontSize).toBeLessThan(13);
+  });
 
   it('is memoised on the CONTENT of its value: an equal new object does not render', async () => {
     const { rerender } = await render(<Tree value={{ value: '3.6', unit: 'km/h' }} />);

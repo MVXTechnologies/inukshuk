@@ -207,6 +207,7 @@ export function RowsEditor({ rows, data, ctx, onChange, onOpenField, onAdd }: Ro
                         value={pv.value}
                         shrink={pv.descriptor.spaces > 1}
                         muted={!pv.live}
+                        fit
                       />
                     </Pressable>
                     <Pressable
@@ -271,13 +272,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
     height: 40,
     borderRadius: 10,
-    paddingLeft: 8,
+    paddingLeft: 6,
     borderWidth: 1,
     borderColor: 'transparent',
   },
   chipBody: { flex: 1, minWidth: 0, height: 40, justifyContent: 'center' },
   lifted: { zIndex: 10, elevation: 8, shadowOpacity: 0.25, shadowRadius: 8 },
-  remove: { width: 26, height: 40, alignItems: 'center', justifyContent: 'center' },
+  // Narrow (hitSlop keeps it a 40 dp target): the four chips of a full row
+  // need the room for their values (QA 2.6.0).
+  remove: { width: 22, height: 40, alignItems: 'center', justifyContent: 'center' },
   plus: {
     width: 40,
     height: 40,
