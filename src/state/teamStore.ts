@@ -99,6 +99,12 @@ export interface SosAlarm {
 
 interface TeamStore extends TeamSnapshot {
   sosAlarm: SosAlarm | null;
+  /**
+   * TeamHost wants the mesh up (a team open, foreground or recording). With
+   * `meshRunning` still false, the mesh is starting: the bar says
+   * "Connecting…" rather than a transient "Offline" (QA 2.6.1).
+   */
+  meshWanted: boolean;
   refresh(): void;
   dismissBanner(): void;
   /** Stop this phone's alarm for the current SOS (the band stays). */
@@ -178,6 +184,7 @@ export const useTeamStore = create<TeamStore>((set) => ({
   loaded: false,
   banner: null,
   sosAlarm: null,
+  meshWanted: false,
   refresh: () => {
     set(snapshot(appTeamService()));
     settleAlerts();

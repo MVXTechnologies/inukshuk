@@ -44,6 +44,7 @@ export function useTeamBarSummary(): TeamBarSummary | null {
   const positions = useTeamStore((s) => s.positions);
   const peers = useTeamStore((s) => s.peers);
   const meshRunning = useTeamStore((s) => s.meshRunning);
+  const meshWanted = useTeamStore((s) => s.meshWanted);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), CLOCK_MS);
@@ -62,9 +63,10 @@ export function useTeamBarSummary(): TeamBarSummary | null {
       positions,
       connected,
       meshRunning,
+      meshStarting: meshWanted,
       now,
     });
-  }, [view, positions, peers, meshRunning, now]);
+  }, [view, positions, peers, meshRunning, meshWanted, now]);
 }
 
 export function TeamStatusBar({
@@ -97,6 +99,8 @@ export function TeamStatusBar({
         ? t.map.gnssWarn
         : t.map.gnssLost;
   const offline = summary.sync === 'off' && !summary.solo;
+  // The mesh is starting: a neutral word, no count and no alarm colour yet.
+  const connecting = summary.sync === 'pending' && !summary.solo;
 
   const rallyHere = async () => {
     const at = await myPosition(here);
@@ -159,7 +163,15 @@ export function TeamStatusBar({
               {summary.name}
             </Text>
             <View style={styles.statusRow}>
-              {offline ? (
+              {connecting ? (
+                <Text
+                  style={[styles.status, { color: t.map.chromeInk }, styles.muted]}
+                  numberOfLines={1}
+                  testID="team-bar-status"
+                >
+                  {summary.status}
+                </Text>
+              ) : offline ? (
                 <>
                   <Icon source={glyph} size={14} color={glyphColor} />
                   <Text

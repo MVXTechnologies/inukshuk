@@ -163,7 +163,7 @@ export function TeamPanel({
                   ? `Nearby · ${teamSyncLine(peers, meshRunning)}`
                   : summary.status === 'Only you'
                     ? `Only you · ${teamSyncLine(peers, meshRunning)}`
-                    : summary.sync === 'off'
+                    : summary.sync === 'off' || summary.sync === 'pending'
                       ? summary.status
                       : teamSyncLine(peers, meshRunning)}
               </Text>

@@ -8,6 +8,9 @@
  * - **Sync glyph:** `lan` while syncing with at least one phone, `look` while
  *   the mesh runs with nobody in reach, `off` when it does not run; then the
  *   bar reads "Offline · 12 min" (since the last word from anyone).
+ *   `pending` while the mesh is wanted but not up yet (the app just opened
+ *   the team): "Connecting…", never a transient "Offline · 1 min" that
+ *   flips to "4/4 online" a quarter second later (QA 2.6.1).
  * - **Solo:** a team of one reads "Only you", and the chips offer Invite.
  *
  * Ages are banded the way the map bands them (`ageBand`), never continuous.
@@ -15,7 +18,7 @@
 import { formatDistance, type Units } from '@core/format';
 import { ageBand, FRESH_MS, rangeAndBearing, shortAge, type AgeBand } from './positions';
 
-export type SyncState = 'lan' | 'look' | 'off';
+export type SyncState = 'lan' | 'look' | 'pending' | 'off';
 
 export interface BarMember {
   id: string;
@@ -42,6 +45,8 @@ export interface BarInputs {
   /** Members with an open sync session now. */
   connected: ReadonlySet<string>;
   meshRunning: boolean;
+  /** The mesh is wanted (foreground, a team open) but has not started yet. */
+  meshStarting?: boolean;
   now: number;
 }
 
@@ -86,6 +91,7 @@ export function memberAgeMs(
 const SYNC_WORDS: Record<SyncState, string> = {
   lan: 'syncing nearby',
   look: 'looking for teammates',
+  pending: 'connecting',
   off: 'not syncing',
 };
 
@@ -105,22 +111,32 @@ export function teamBarSummary(i: BarInputs): TeamBarSummary {
   const online = 1 + aged.filter((a) => a.age !== null && a.age <= FRESH_MS).length;
   const total = Math.max(1, active.length);
   const solo = others.length === 0;
-  const sync: SyncState = !i.meshRunning ? 'off' : i.connected.size > 0 ? 'lan' : 'look';
+  const sync: SyncState = !i.meshRunning
+    ? i.meshStarting === true
+      ? 'pending'
+      : 'off'
+    : i.connected.size > 0
+      ? 'lan'
+      : 'look';
   const heard = aged.map((a) => a.age).filter((a): a is number => a !== null);
   const offlineMin =
     sync === 'off' && heard.length > 0 ? Math.floor(Math.min(...heard) / 60_000) : null;
   const status = solo
     ? 'Only you'
-    : sync === 'off'
-      ? offlineMin === null
-        ? 'Offline'
-        : `Offline · ${offlineMin} min`
-      : `${online}/${total} online`;
+    : sync === 'pending'
+      ? 'Connecting…'
+      : sync === 'off'
+        ? offlineMin === null
+          ? 'Offline'
+          : `Offline · ${offlineMin} min`
+        : `${online}/${total} online`;
   const a11y = solo
     ? `${i.name}: only you, ${SYNC_WORDS[sync]}. Opens the team panel`
-    : sync === 'off'
-      ? `${i.name}: ${status}. Opens the team panel`
-      : `${i.name}: ${online} of ${total} online, ${SYNC_WORDS[sync]}. Opens the team panel`;
+    : sync === 'pending'
+      ? `${i.name}: connecting. Opens the team panel`
+      : sync === 'off'
+        ? `${i.name}: ${status}. Opens the team panel`
+        : `${i.name}: ${online} of ${total} online, ${SYNC_WORDS[sync]}. Opens the team panel`;
   return { name: i.name, total, online, solo, faces, sync, offlineMin, status, a11y };
 }
 

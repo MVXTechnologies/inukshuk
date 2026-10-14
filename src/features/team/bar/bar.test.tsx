@@ -170,6 +170,7 @@ function crew(over: { soses?: TeamSos[]; rally?: TeamRally | null; solo?: boolea
         ],
     peers: [],
     meshRunning: true,
+    meshWanted: true,
     unread: 2,
     threadsUnread: 1,
     statuses: new Map(),
@@ -211,11 +212,22 @@ describe('the team status bar (#707)', () => {
     await act(async () =>
       useTeamStore.setState((st) => ({
         meshRunning: false,
+        meshWanted: false,
         positions: st.positions.map((p) => ({ ...p, ageMs: p.ageMs + 12 * 60_000 })),
       })),
     );
     await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />));
     expect(screen.getByTestId('team-bar-status').props.children).toBe('Offline · 8 min');
+  });
+
+  it('while the mesh starts at launch: "Connecting…", not a flash of "Offline" (QA 2.6.1)', async () => {
+    crew();
+    await act(async () => useTeamStore.setState({ meshRunning: false, meshWanted: true }));
+    await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />));
+    expect(screen.getByTestId('team-bar-status').props.children).toBe('Connecting…');
+    expect(screen.queryByText(/Offline/)).toBeNull();
+    await act(async () => useTeamStore.setState({ meshRunning: true }));
+    expect(screen.getByTestId('team-bar-status').props.children).toBe('4/6');
   });
 
   it('publishes the column height for the chips under it', async () => {

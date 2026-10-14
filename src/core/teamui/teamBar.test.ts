@@ -112,6 +112,42 @@ describe('teamBarSummary', () => {
     expect(never.status).toBe('Offline');
   });
 
+  it('while the mesh starts: "Connecting…", never a transient "Offline · N min" (QA 2.6.1)', () => {
+    const { members, positions } = crew();
+    const starting = teamBarSummary({
+      name: 'T',
+      members,
+      positions: positions.map((p) => ({ ...p, ageMs: p.ageMs + MIN })),
+      connected: new Set(),
+      meshRunning: false,
+      meshStarting: true,
+      now: NOW,
+    });
+    expect(starting).toMatchObject({ sync: 'pending', offlineMin: null, status: 'Connecting…' });
+    expect(starting.a11y).toBe('T: connecting. Opens the team panel');
+    // Once it runs, the usual count; if it never could, Offline.
+    const up = teamBarSummary({
+      name: 'T',
+      members,
+      positions,
+      connected: new Set(),
+      meshRunning: true,
+      meshStarting: true,
+      now: NOW,
+    });
+    expect(up.sync).toBe('look');
+    const down = teamBarSummary({
+      name: 'T',
+      members,
+      positions: positions.map((p) => ({ ...p, ageMs: p.ageMs + MIN })),
+      connected: new Set(),
+      meshRunning: false,
+      meshStarting: false,
+      now: NOW,
+    });
+    expect(down.status).toMatch(/^Offline/);
+  });
+
   it('memberAgeMs: the newest of position, contact and session', () => {
     expect(memberAgeMs({ id: 'a', lastSeenAt: null }, undefined, new Set(), NOW)).toBeNull();
     expect(
