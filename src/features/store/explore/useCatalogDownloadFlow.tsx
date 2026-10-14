@@ -1,6 +1,6 @@
 import type { CatalogItem } from '@core/catalog/schema';
 import { isUnplacedCatalogMap } from '@core/library/overlayPages';
-import { openMapPdf } from '@features/library/openMapPdf';
+import { openMapPdf, openMapPdfMessage } from '@features/library/openMapPdf';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
 import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
@@ -86,8 +86,9 @@ export function useCatalogDownloadFlow(): CatalogDownloadFlow {
       // Not placed yet (#680): nothing to show on the map, so open the PDF.
       if (isUnplacedCatalogMap(doc)) {
         openMapPdf(doc).then(
-          (opened) => {
-            if (!opened) show('Opening PDFs is not available on this device');
+          (result) => {
+            const message = openMapPdfMessage(result);
+            if (message !== null) show(message);
           },
           (err: unknown) =>
             show(`Could not open the PDF: ${err instanceof Error ? err.message : String(err)}`),

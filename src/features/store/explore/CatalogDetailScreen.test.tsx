@@ -48,7 +48,8 @@ jest.mock('@data/catalogCache', () => ({
 }));
 jest.mock('@data/diskSpace', () => ({ assessFreeSpaceForWrite: () => null }));
 jest.mock('@features/library/openMapPdf', () => ({
-  openMapPdf: jest.fn(() => Promise.resolve(true)),
+  openMapPdf: jest.fn(() => Promise.resolve('viewer')),
+  openMapPdfMessage: () => null,
 }));
 jest.mock('../../map/search/deviceLanguage', () => ({ deviceSearchLanguage: () => 'en' }));
 

@@ -947,6 +947,15 @@ export async function copyToSharedCache(sourceUri: string, name: string): Promis
   return dest.uri;
 }
 
+/**
+ * Android `content://` uri of a file in the app's documents or cache folder,
+ * served by expo-file-system's FileProvider, for a VIEW intent to another app
+ * (#680). A `file://` uri cannot cross apps on Android 7+. Android only.
+ */
+export function contentUriFor(uri: string): string {
+  return new File(resolveDocumentPath(uri)).contentUri;
+}
+
 /** Is `uri` inside the app's cache directory (a picker copy, an import spill)? */
 export function isCacheUri(uri: string): boolean {
   const cache = new Directory(Paths.cache).uri;

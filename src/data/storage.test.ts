@@ -5,6 +5,7 @@ import {
   adoptOverlayPng,
   existingOverlayPng,
   clearPdfDetailPngs,
+  contentUriFor,
   deleteFileAt,
   documentDirUri,
   downloadBytes,
@@ -44,6 +45,9 @@ jest.mock('expo-file-system', () => {
     }
     get name(): string {
       return this.path.split('/').pop() ?? '';
+    }
+    get contentUri(): string {
+      return `content://app.provider${this.path}`;
     }
     get exists(): boolean {
       return files.has(this.path);
@@ -673,6 +677,18 @@ describe('adoptMapPdf', () => {
     });
     expect(() => adoptMapPdf('m2', 'file:///cache/catalog/m2.part')).toThrow(
       'Not enough free space',
+    );
+  });
+});
+
+describe('contentUriFor (#680)', () => {
+  it('gives the FileProvider uri of a stored, document-relative file', () => {
+    expect(contentUriFor('maps/m1.pdf')).toBe('content://app.provider/doc/maps/m1.pdf');
+  });
+
+  it('gives the FileProvider uri of an absolute cache file', () => {
+    expect(contentUriFor('file:///cache/shared/A.pdf')).toBe(
+      'content://app.provider/cache/shared/A.pdf',
     );
   });
 });

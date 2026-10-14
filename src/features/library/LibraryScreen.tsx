@@ -61,7 +61,7 @@ import { creditLine } from '@core/catalog/credit';
 import { mapsWithNewerVersion, NEWER_VERSION_NOTICE } from '@core/catalog/installStatus';
 import { useCatalogStore } from '@state/catalogStore';
 import { useCreditLanguage } from '../store/useCreditLanguage';
-import { openMapPdf } from './openMapPdf';
+import { openMapPdf, openMapPdfMessage } from './openMapPdf';
 import {
   overlayDetailStatusKey,
   overlayStatusKey,
@@ -435,7 +435,8 @@ export function LibraryScreen() {
 
   const openPdf = async (m: MapDocument) => {
     try {
-      if (!(await openMapPdf(m))) showSnack('Opening PDFs is not available on this device');
+      const message = openMapPdfMessage(await openMapPdf(m));
+      if (message !== null) showSnack(message);
     } catch (err) {
       showSnack(`Could not open the PDF: ${err instanceof Error ? err.message : String(err)}`);
     }
