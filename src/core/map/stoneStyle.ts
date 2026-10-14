@@ -27,6 +27,7 @@ import type {
   LineLayerSpecification,
   SymbolLayerSpecification,
 } from '@maplibre/maplibre-react-native';
+import { M_PER_FT, type ElevationUnit } from '@core/format';
 import { placeNameExpression } from './placeNames';
 import { DEFAULT_PEAK_DENSITY, PEAK_LEAD, type PeakDensity } from './terrainOptions';
 
@@ -323,6 +324,8 @@ export interface StoneStyleOptions {
    * before its elevation-ladder `rank`. Default {@link DEFAULT_PEAK_DENSITY}.
    */
   peakDensity?: PeakDensity;
+  /** Summit and contour heights in metres (default) or feet (#702). */
+  elevationUnit?: ElevationUnit;
 }
 
 /**
@@ -472,14 +475,25 @@ function pad3(n: ExpressionSpecification): ExpressionSpecification {
 const NBSP = '\u00a0';
 
 /**
- * A summit height in whole metres, thousands set off by a thin space the way
- * the topo sheets print them: "808 m", "1 234 m", "8 849 m"; empty when the
- * feature has none. Neither the thin space (U+2009) nor the no-break space
- * before the unit is a break opportunity, so the height never wraps. Built from plain arithmetic rather than `number-format`,
- * whose locale support differs between the native renderers.
+ * A feature's height (integer metres in the tiles) in the elevation unit
+ * (#702): whole metres, or whole feet.
  */
-export function elevationLabel(field: string): ExpressionSpecification {
-  const m: ExpressionSpecification = ['round', ['to-number', ['get', field], 0]];
+export function heightInUnit(field: string, unit: ElevationUnit): ExpressionSpecification {
+  const metres: ExpressionSpecification = ['to-number', ['get', field], 0];
+  return ['round', unit === 'ft' ? ['/', metres, M_PER_FT] : metres];
+}
+
+/**
+ * A summit height in whole metres (or feet, #702), thousands set off by a
+ * thin space the way the topo sheets print them: "808 m", "1 234 m",
+ * "8 849 m", "29 032 ft"; empty when the feature has none. Neither the thin
+ * space (U+2009) nor the no-break space before the unit is a break
+ * opportunity, so the height never wraps. Built from plain arithmetic rather
+ * than `number-format`, whose locale support differs between the native
+ * renderers.
+ */
+export function elevationLabel(field: string, unit: ElevationUnit = 'm'): ExpressionSpecification {
+  const m = heightInUnit(field, unit);
   return [
     'case',
     ['!', ['has', field]],
@@ -490,9 +504,9 @@ export function elevationLabel(field: string): ExpressionSpecification {
       ['to-string', ['floor', ['/', m, 1000]]],
       '\u2009',
       pad3(['%', m, 1000]),
-      `${NBSP}m`,
+      NBSP + unit,
     ],
-    ['concat', ['to-string', m], `${NBSP}m`],
+    ['concat', ['to-string', m], NBSP + unit],
   ];
 }
 
@@ -666,7 +680,7 @@ export function buildStoneLayers(
    * collisions (`symbol-sort-key`, see {@link peakSortKey}). Drawn BELOW the
    * place labels, so a town keeps its name where a minor peak would crowd it. Text only: the style has no
    * sprite and Atkinson carries no ▲ (U+25B2) to draw a marker with.
-   * Metres only — the style builder doesn't know the units setting.
+   * The height reads in `options.elevationUnit` (#702; metres by default).
    */
   const peakLayer = (): SymbolLayerSpecification => {
     const ours = options.peaks;
@@ -696,7 +710,12 @@ export function buildStoneLayers(
           name,
           { 'text-font': ['literal', fonts.bold] },
           // The height on its own line — no dangling line break without one.
-          ['case', ['has', ele], ['concat', '\n', elevationLabel(ele)], ''],
+          [
+            'case',
+            ['has', ele],
+            ['concat', '\n', elevationLabel(ele, options.elevationUnit ?? 'm')],
+            '',
+          ],
           { 'font-scale': 0.85 },
         ],
         'text-font': fonts.regular,
@@ -987,7 +1006,9 @@ export function buildStoneLayers(
     // The height written along the major lines, the way a paper topo map
     // does (owner, 2026-09-28): from z12, where the lines are far enough
     // apart to read. First among the labels, so roads, water and place
-    // names win any collision; metres, as the contour interval is.
+    // names win any collision. The lines sit at metric intervals; their
+    // heights read in the user's elevation unit (#702), so a feet user never
+    // mistakes a metre figure for feet next to a summit in feet.
     contourLabel = {
       id: id('contour-label'),
       type: 'symbol',
@@ -998,7 +1019,7 @@ export function buildStoneLayers(
       layout: {
         'symbol-placement': 'line',
         'symbol-spacing': CONTOUR_LABEL_LAYOUT.spacingPx,
-        'text-field': ['to-string', ['round', ['to-number', ['get', c.field], 0]]],
+        'text-field': ['to-string', heightInUnit(c.field, options.elevationUnit ?? 'm')],
         'text-font': fonts.regular,
         'text-size': ramp([12, 10], [16, 12]),
         'text-max-angle': CONTOUR_LABEL_LAYOUT.maxAngleDeg,

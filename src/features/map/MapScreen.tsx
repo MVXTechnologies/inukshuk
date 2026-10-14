@@ -928,6 +928,7 @@ export function MapScreen() {
         : {}),
       ...(imageryContours ? { imageryContours: imageryContoursOption() } : {}),
       hillshadeStrength,
+      elevationUnit: units.elevation,
       tiltRelief,
       // #495: the imagery's brightening paint. The map maker's frame shows
       // the raw tiles, because that is what its sheet prints.
@@ -1019,6 +1020,7 @@ export function MapScreen() {
     hillshadeStrength,
     peakDensity,
     showParks,
+    units.elevation,
     tiltRelief,
     offlineOnly,
     offlineRegions,
