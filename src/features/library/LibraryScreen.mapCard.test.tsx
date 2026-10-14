@@ -220,7 +220,7 @@ describe('a Cartes Plein-air map, not placed yet (#680)', () => {
       view.getByText('Auteur Exemple · 2022 · Available free at cartespleinair.org'),
     ).toBeOnTheScreen();
     expect(view.queryByLabelText('Overlay pages')).toBeNull();
-    await press(view, 'Aigle-Désert — open the PDF');
+    await press(view, 'Aigle-Désert — open the PDF, long-press to select');
     expect(Sharing.shareAsync).toHaveBeenCalledWith('maps/cpa.pdf', {
       mimeType: 'application/pdf',
       UTI: 'com.adobe.pdf',
@@ -232,7 +232,7 @@ describe('a Cartes Plein-air map, not placed yet (#680)', () => {
   it('says so when the device cannot open files', async () => {
     jest.mocked(Sharing.isAvailableAsync).mockResolvedValue(false);
     const view = await show(cpa);
-    await press(view, 'Aigle-Désert — open the PDF');
+    await press(view, 'Aigle-Désert — open the PDF, long-press to select');
     expect(await view.findByText('Opening PDFs is not available on this device')).toBeTruthy();
     expect(Sharing.shareAsync).not.toHaveBeenCalled();
   });
@@ -376,6 +376,13 @@ it.each(['m1:0', 'm1:0:detail'])(
     await act(async () => useOverlayStatusStore.setState({ statuses: {} }));
   },
 );
+
+describe('map rows say they can be selected (QA 2.6.1, #711)', () => {
+  it('a placed map, like a trail row, says "long-press to select"', async () => {
+    const view = await show(mapDoc({ georeferences: [geo(0)], activePages: [0] }));
+    expect(view.getByLabelText('Sheet — view on map, long-press to select')).toBeTruthy();
+  });
+});
 
 describe('per-map See-through white (⋮ Map options)', () => {
   const whiteKeyOf = (id: string) =>

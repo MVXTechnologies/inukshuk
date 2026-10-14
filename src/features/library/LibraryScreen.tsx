@@ -782,8 +782,8 @@ export function LibraryScreen() {
           sel.selecting
             ? selectLabel(m.name, selected)
             : unplaced
-              ? `${m.name} — open the PDF`
-              : `${m.name} — view on map`
+              ? `${m.name} — open the PDF, long-press to select`
+              : `${m.name} — view on map, long-press to select`
         }
         onPress={() => {
           if (sel.press(ref)) return;
