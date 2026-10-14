@@ -31,6 +31,7 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useUndoSnackbar } from '@features/common/useUndoSnackbar';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Platform, Vibration } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { space } from '@ui/tokens';
 
@@ -79,6 +80,18 @@ export interface LibrarySelectionArgs {
   requestRenameFolder: (folder: { id: string; name: string }) => void;
   /** Items just moved into a folder (null: out of folders): show where they landed. */
   onMoved: (folderId: string | null) => void;
+}
+
+/** The select-mode tick's length (Android): a light tap, not a buzz. */
+export const SELECT_TICK_MS = 12;
+
+/**
+ * A light haptic tick as a long-press enters select mode (#711), with RN's
+ * `Vibration` (no haptics dependency). Android only: iOS's `Vibration`
+ * ignores the duration and always buzzes ~400 ms, a buzz rather than a tick.
+ */
+function selectModeTick(): void {
+  if (Platform.OS === 'android') Vibration.vibrate(SELECT_TICK_MS);
 }
 
 /**
@@ -162,8 +175,23 @@ export function useLibrarySelection(args: LibrarySelectionArgs) {
     setSelection((sel) => toggleRef(sel, ref));
   }, []);
 
-  /** A row's long-press: select it (or, already selecting, toggle it). */
-  const longPress = toggle;
+  /**
+   * A row's long-press: select it (or, already selecting, toggle it). Into
+   * select mode, one light tick says the hold took (#711).
+   */
+  // Read through a ref: a stable callback keeps memoized rows from all
+  // re-rendering as select mode starts (see the per-row cost above).
+  const activeRef = useRef(active);
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
+  const longPress = useCallback(
+    (ref: ItemRef) => {
+      if (!activeRef.current) selectModeTick();
+      toggle(ref);
+    },
+    [toggle],
+  );
 
   /**
    * A row's tap. True when select mode took it (toggled the row, or put a
@@ -185,6 +213,7 @@ export function useLibrarySelection(args: LibrarySelectionArgs) {
   );
 
   const longPressFolder = useCallback((id: string) => {
+    if (!activeRef.current) selectModeTick();
     setSelection([]);
     setFolderId(id);
   }, []);

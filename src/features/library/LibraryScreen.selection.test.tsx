@@ -11,10 +11,11 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useScreenSheetStore } from '@state/screenSheetStore';
 import { darkTheme, lightTheme } from '@ui/theme';
 import { act, fireEvent, render, type RenderResult } from '@testing-library/react-native';
-import { BackHandler, StyleSheet } from 'react-native';
+import { BackHandler, Platform, StyleSheet, Vibration } from 'react-native';
 import { PaperProvider, type MD3Theme } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { SELECT_TICK_MS } from './selection/useLibrarySelection';
 import { sendCopy } from './share/sendCopy';
 
 jest.useFakeTimers();
@@ -260,6 +261,48 @@ describe('entering and leaving select mode', () => {
     expect(view.getByLabelText('Deselect all')).toBeOnTheScreen();
     await press(view.getByLabelText('Deselect all'));
     expect(view.queryByTestId('library-action-bar')).toBeNull();
+  });
+});
+
+describe('the hold into select mode ticks (#711)', () => {
+  const os = Platform.OS;
+  afterEach(() => {
+    Platform.OS = os;
+  });
+
+  it('one light tick on Android as a hold enters select mode, none while selecting', async () => {
+    Platform.OS = 'android';
+    const vibrate = jest.spyOn(Vibration, 'vibrate').mockImplementation(() => {});
+    const view = await show({});
+    await hold(row(view, 'Cap-Chat'));
+    expect(vibrate.mock.calls).toEqual([[SELECT_TICK_MS]]);
+    // Already selecting: a hold toggles, without a tick.
+    await hold(row(view, 'Mont Jacques-Cartier'));
+    expect(vibrate).toHaveBeenCalledTimes(1);
+    // Out and back in: a tick again.
+    await press(view.getByLabelText('Exit selection'));
+    await hold(row(view, 'Cap-Chat'));
+    expect(vibrate).toHaveBeenCalledTimes(2);
+  });
+
+  it('a folder held by its header ticks too', async () => {
+    Platform.OS = 'android';
+    const vibrate = jest.spyOn(Vibration, 'vibrate').mockImplementation(() => {});
+    const view = await show({
+      tracks: [track('t1', 'A', { folderId: 'f1' })],
+      folders: [{ id: 'f1', name: 'Gaspésie 2026', createdAt: 1 }],
+    });
+    await hold(view.getByText(/^Gaspésie 2026/));
+    expect(vibrate.mock.calls).toEqual([[SELECT_TICK_MS]]);
+  });
+
+  it('no tick on iOS (its Vibration is a 400 ms buzz, not a tick)', async () => {
+    Platform.OS = 'ios';
+    const vibrate = jest.spyOn(Vibration, 'vibrate').mockImplementation(() => {});
+    const view = await show({});
+    await hold(row(view, 'Cap-Chat'));
+    expect(view.getByText('1 selected')).toBeOnTheScreen();
+    expect(vibrate).not.toHaveBeenCalled();
   });
 });
 
