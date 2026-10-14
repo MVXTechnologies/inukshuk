@@ -24,6 +24,10 @@ turns out to be the binding constraint on marine charts (§2).
 **79,468 items** total. Every item is `kind: topo`; FSTopo uses the legacy
 `forest` category so its shards don't split the US Topo ones (see §1.4).
 
+Wired and permitted, published by its first weekly crawl: **Cartes Plein-air**
+(~368 Québec canoe maps, plain PDF, `river` / `trail` / paddling), linked with
+the publisher's written permission (see §1.6).
+
 ### 1.1 USGS US Topo — INCLUDE
 
 - **Licence.** <https://www.usgs.gov/faqs/what-are-terms-uselicensing-map-services-and-data-national-map>:
@@ -183,7 +187,8 @@ Licence"`.
   - Canot Kayak Québec (353 rivers) grants only a personal, non-commercial
     licence.
   - Cartes Plein-air (366 maps) and COBARIC (6 GeoPDF fiches) are "tous droits
-    réservés".
+    réservés". Cartes Plein-air has since granted written permission
+    (2026-10-13) and ships through its own crawler (§1.6), not this list.
   - Parks Canada's reproduction grant is non-commercial, which this policy
     excludes (§2, Brazil).
 - **How it ships when a publisher agrees.**
@@ -196,6 +201,65 @@ Licence"`.
     unchanged.
   - The 6 COBARIC fiches are already curated, with bboxes read from their own
     `/GPTS`.
+
+### 1.6 Cartes Plein-air canoe maps — INCLUDE, with written permission (2026-10-13, #680)
+
+- **What.** ~368 river-descent and canoe-camping maps by many authors
+  (1989–2026), plain PDF (LibreOffice exports, no georeferencing), served from
+  the publisher's S3 bucket behind `assets.cartespleinair.org`. Listed as
+  category `river`, kind `trail`, activity paddling, source
+  `cartes-plein-air`, under "Collections" in Explore.
+- **Permission.** Written permission from Cartes Plein-air, received
+  2026-10-13 and kept privately by the owner (no personal contact details in
+  this public repository). The publisher is open to providing a metadata feed
+  later; until then, we crawl.
+- **Terms — binding on the code, the catalog and the UI:**
+  1. **Link, never copy.** The map downloads straight from cartespleinair.org
+     / its S3 to the user's device. We never mirror, cache, re-host or proxy a
+     map: not on our servers, not in this repository, not in tests (the test
+     fixtures are tiny synthetic HTML snippets; no PDF). On-device storage
+     after the user's own download is fine.
+  2. **Credit the original author(s) on every map.** Each catalog row carries
+     the author and year verbatim (`author`, `year`) and a link to the map's
+     page (`pageUrl`). Cards, list rows, the detail page and the Library row
+     show them (`@core/catalog/credit`). Where an author is unknown the map is
+     not listed: a map is never attributed to anyone else, the site included.
+  3. **Never paid content.** Every card and detail page says "Available free
+     at cartespleinair.org" ("Disponible gratuitement sur cartespleinair.org"
+     on a French device), driven by the source's `freeAt`. Paid app features,
+     if any, stay distinct and never gate these maps.
+- **Discovery.** The site has no feed and the map URLs cannot be guessed;
+  maps are published, withdrawn and republished often. So
+  `scripts/catalog/fetch-cartespleinair.ts` crawls the listing
+  (`https://cartespleinair.org/cartes`) weekly
+  (`.github/workflows/catalog-cartespleinair.yml`):
+  - It reads the listing's own data (the Next.js flight payload's `rows`), one
+    row per map and river section; `/cartes/<slug>` redirects to the current
+    PDF (`assets.cartespleinair.org/maps/<slug>-<hash>.pdf`).
+  - Politeness: User-Agent `InukshukCatalogBot/1.0
+(+https://inukshuk.mvxtechnologies.com)`, robots.txt obeyed on every host
+    (the site disallows `/api`, so its river geometry is never fetched), at
+    most one request per second per host, conditional requests where the
+    server gives validators, and **no PDF download**: one `HEAD` per new file
+    for its size and ETag. Files are immutable (content hash in the name), so a
+    known URL costs nothing. A full crawl is ~370 requests to the site.
+  - It diffs added / withdrawn / republished maps into the weekly PR. A crawl
+    that would withdraw more than a fifth of the maps at once (a broken page)
+    is refused, not published.
+  - Republished maps change `version` (the file's ETag): a Library copy then
+    says "A newer version is available" and offers Update.
+- **Location.** The listing gives river names and administrative regions,
+  not coordinates. Each river is looked up once in the Canadian Geographical
+  Names Database (NRCan geonames API, OGL-Canada 2.0) and cached in
+  `scripts/catalog/sources/cartespleinair-rivers.json` for review; a single
+  official feature with the same name, generic and region gives
+  `bboxPrecision: 'river'`, anything else falls back to the regions' extent
+  (`'region'`). The detail page labels both "approximate area". A sample of
+  31 rivers matched 28 by name; the rest were ambiguous or unnamed.
+- **Georeferencing.** None in 2.5.2: the maps download and open as PDFs
+  ("Not placed on the map yet"), without a GPS position. Placing a map with
+  control points is a separate feature (#694); we ship no control points of
+  our own.
 
 ## 2. Marine charts — nothing shippable, and the reason is format
 

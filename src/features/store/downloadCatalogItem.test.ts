@@ -2,6 +2,7 @@ import type { CatalogItem } from '@core/catalog/schema';
 import type { MapDocument } from '@core/models';
 import { downloadCatalogPdf } from '@data/catalogDownload';
 import * as storage from '@data/storage';
+import { reportError } from '@lib/errorReporting';
 import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { mapDocumentFromStoredPdf } from '../library/importMap';
@@ -124,6 +125,74 @@ describe('downloadCatalogItemToLibrary', () => {
     // Progress cleared once the download settles; folder remembered.
     expect(useCatalogStore.getState().downloads).toEqual({});
     expect(useCatalogStore.getState().lastFolderId).toBe('folder-9');
+  });
+
+  it('a Cartes Plein-air map (#680) keeps its credit and file version, and no georeference is expected', async () => {
+    const cpa: CatalogItem = {
+      id: 'cpa-41ad13f6',
+      sourceId: 'cartes-plein-air',
+      title: 'Aigle-Désert',
+      category: 'river',
+      format: 'pdf',
+      packaging: 'none',
+      url: 'https://assets.cartespleinair.org/maps/aigle-desert-x-2022-e06f583d13bd.pdf',
+      pageUrl: 'https://cartespleinair.org/cartes/aigle-desert-x-2022',
+      author: 'Auteur Exemple',
+      year: 2022,
+      version: 'd0357cf3',
+    };
+    useCatalogStore.setState({
+      index: {
+        schemaVersion: 2,
+        sources: [
+          {
+            id: 'cartes-plein-air',
+            name: 'Cartes Plein-air',
+            licence: 'x',
+            attribution: 'y',
+            freeAt: 'cartespleinair.org',
+          },
+        ],
+        shards: [],
+        items: [cpa],
+        categoryCounts: { river: 1 },
+      },
+    });
+    downloadMock.mockImplementation((_item, mapId: string) => ({
+      promise: Promise.resolve(`file://maps/${mapId}.pdf`),
+      cancel: jest.fn(),
+    }));
+    parseMock.mockResolvedValue({
+      ...parsedDoc('new-file-id'),
+      georeferences: [],
+      activePages: [],
+    });
+
+    await downloadCatalogItemToLibrary(cpa, null);
+
+    expect(useLibraryStore.getState().maps[0]).toMatchObject({
+      sourceItemId: 'cpa-41ad13f6',
+      sourceVersion: 'd0357cf3',
+      sourceCredit: 'Auteur Exemple · 2022',
+      sourceFreeAt: 'cartespleinair.org',
+      sourcePageUrl: 'https://cartespleinair.org/cartes/aigle-desert-x-2022',
+    });
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it('still reports a GeoPDF that parsed with no georeference', async () => {
+    downloadMock.mockImplementation((_item, mapId: string) => ({
+      promise: Promise.resolve(`file://maps/${mapId}.pdf`),
+      cancel: jest.fn(),
+    }));
+    parseMock.mockResolvedValue({
+      ...parsedDoc('new-file-id'),
+      georeferences: [],
+      activePages: [],
+    });
+    await downloadCatalogItemToLibrary(item, null);
+    expect(reportError).toHaveBeenCalledWith(expect.any(Error), 'catalog-georef cantopo-021l14');
+    expect(useLibraryStore.getState().maps[0]).not.toHaveProperty('sourceCredit');
   });
 
   it('publishes progress into the catalog store while downloading', async () => {

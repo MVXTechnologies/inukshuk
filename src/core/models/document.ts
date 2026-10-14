@@ -34,6 +34,20 @@ export interface MapDocument {
    */
   sourceUpdatedAt?: string;
   /**
+   * The catalog item's publisher file `version` (ETag / content hash) at
+   * download time. A catalog version that differs shows "Update" (#680).
+   */
+  sourceVersion?: string;
+  /**
+   * The map's author credit as the catalog gave it ("Charles Leduc · 2023"),
+   * kept so the Library row names the author offline (#680).
+   */
+  sourceCredit?: string;
+  /** The host the publisher gives this map away on ("cartespleinair.org"). */
+  sourceFreeAt?: string;
+  /** The map's page on the publisher's site. */
+  sourcePageUrl?: string;
+  /**
    * This map's own "See-through white" level, overriding the global one from
    * the Overlays menu (`@core/geo/pdfWhiteKey`). Absent = follow the global.
    */

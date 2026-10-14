@@ -130,6 +130,58 @@ describe('parseCatalogManifest', () => {
     expect(parsedItem?.packaging).toBe('none'); // unknown packaging → plain file
   });
 
+  it('keeps a credited map’s author, year, page, file version and bbox precision (#680)', () => {
+    const credited = {
+      ...item,
+      format: 'pdf',
+      author: '  Charles Leduc ',
+      year: 2023,
+      pageUrl: 'https://cartespleinair.org/cartes/riviere-desert-charles-leduc-2023',
+      version: 'd0357cf364417ee3ad0fd108d4828eac',
+      bboxPrecision: 'river',
+    };
+    const { manifest: parsed, warnings } = parseCatalogManifest(
+      manifest({
+        sources: [{ ...source, freeAt: 'cartespleinair.org' }],
+        items: [credited],
+      }),
+    );
+    expect(warnings).toEqual([]);
+    expect(parsed?.sources[0]?.freeAt).toBe('cartespleinair.org');
+    expect(parsed?.items[0]).toMatchObject({
+      author: 'Charles Leduc',
+      year: 2023,
+      pageUrl: 'https://cartespleinair.org/cartes/riviere-desert-charles-leduc-2023',
+      version: 'd0357cf364417ee3ad0fd108d4828eac',
+      bboxPrecision: 'river',
+    });
+  });
+
+  it('drops malformed credit fields, never the item', () => {
+    const { manifest: parsed } = parseCatalogManifest(
+      manifest({
+        sources: [{ ...source, freeAt: 'https://cartespleinair.org/' }],
+        items: [
+          {
+            ...item,
+            author: '',
+            year: 2023.5,
+            pageUrl: 'javascript:alert(1)',
+            version: 42,
+            bboxPrecision: 'exact',
+          },
+          { ...item, id: 'no-bbox', bbox: undefined, bboxPrecision: 'region', year: 1700 },
+        ],
+      }),
+    );
+    expect(parsed?.sources[0]).not.toHaveProperty('freeAt');
+    expect(parsed?.items).toHaveLength(2);
+    for (const key of ['author', 'year', 'pageUrl', 'version', 'bboxPrecision']) {
+      expect(parsed?.items[0]).not.toHaveProperty(key);
+      expect(parsed?.items[1]).not.toHaveProperty(key);
+    }
+  });
+
   it('accepts http URLs (the e2e fixture manifest serves from loopback)', () => {
     const { manifest: parsed } = parseCatalogManifest(
       manifest({ items: [{ ...item, url: 'http://127.0.0.1:8787/fixture.zip' }] }),

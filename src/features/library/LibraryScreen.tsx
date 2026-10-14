@@ -56,7 +56,12 @@ import { isSearchActive, searchTracks } from '@core/library/searchTracks';
 import { sortTracks, type SortKey } from '@core/library/sortTracks';
 import { groupByFolder } from '@core/library/folders';
 import { libraryListItems, type LibraryListItem } from '@core/library/libraryListItems';
-import { georeferenceNotice } from '@core/library/overlayPages';
+import { georeferenceNotice, isUnplacedCatalogMap } from '@core/library/overlayPages';
+import { creditLine } from '@core/catalog/credit';
+import { mapsWithNewerVersion, NEWER_VERSION_NOTICE } from '@core/catalog/installStatus';
+import { useCatalogStore } from '@state/catalogStore';
+import { useCreditLanguage } from '../store/useCreditLanguage';
+import { openMapPdf } from './openMapPdf';
 import {
   overlayDetailStatusKey,
   overlayStatusKey,
@@ -146,6 +151,7 @@ export function LibraryScreen() {
   const isFocused = useIsFocused();
   const theme = useTheme();
   const tokens = useSchemeTokens();
+  const creditLang = useCreditLanguage();
   const night = useDisplayCondition() === 'night';
 
   const maps = useLibraryStore((s) => s.maps);
@@ -160,6 +166,12 @@ export function LibraryScreen() {
   const retryMapPage = useLibraryStore((s) => s.retryMapPage);
   // Per-page render outcome from the map's overlay pipeline (#269).
   const overlayStatuses = useOverlayStatusStore((s) => s.statuses);
+  // Catalog maps whose publisher replaced the file since the download (#680).
+  const catalogItems = useCatalogStore((s) => s.items);
+  const newerVersionIds = useMemo(
+    () => mapsWithNewerVersion(maps, catalogItems),
+    [maps, catalogItems],
+  );
   const addTrack = useLibraryStore((s) => s.addTrack);
   const addTracks = useLibraryStore((s) => s.addTracks);
   const removeTrack = useLibraryStore((s) => s.removeTrack);
@@ -419,6 +431,14 @@ export function LibraryScreen() {
     const bbox = doc ? mapDocumentBounds(doc) : null;
     if (bbox) setFocusBounds(bbox);
     router.navigate('/');
+  };
+
+  const openPdf = async (m: MapDocument) => {
+    try {
+      if (!(await openMapPdf(m))) showSnack('Opening PDFs is not available on this device');
+    } catch (err) {
+      showSnack(`Could not open the PDF: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   const viewTrack = (id: string) => {
@@ -755,6 +775,9 @@ export function LibraryScreen() {
     // that never appears on the map always says why, here, not only in a
     // four-second snackbar on the map screen (#269).
     const renderStatus = renderStatusLine(m, overlayStatuses);
+    // A catalog map not placed yet (#680) opens as a PDF, and credits its author.
+    const unplaced = isUnplacedCatalogMap(m);
+    const credit = creditLine(m.sourceCredit, m.sourceFreeAt, creditLang);
     const rendering = m.activePages.some((page) => {
       const key = overlayStatusKey(m.id, page);
       return (
@@ -772,12 +795,17 @@ export function LibraryScreen() {
           primaries.length > 1 ? `${m.activePages.length}/${primaries.length} pages on map` : null
         }
         status={
-          renderStatus ? { text: renderStatus.text, failed: renderStatus.kind === 'failed' } : null
+          renderStatus
+            ? { text: renderStatus.text, failed: renderStatus.kind === 'failed' }
+            : newerVersionIds.has(m.id)
+              ? { text: `${NEWER_VERSION_NOTICE} — update it in Explore`, failed: false }
+              : null
         }
+        credit={credit}
         rendering={rendering}
         renderingLabel={`Rendering ${m.name}`}
-        accessibilityLabel={`${m.name} — view on map`}
-        onPress={() => openMap(m.id)}
+        accessibilityLabel={unplaced ? `${m.name} — open the PDF` : `${m.name} — view on map`}
+        onPress={() => (unplaced ? void openPdf(m) : openMap(m.id))}
         leading={dragHandle({ kind: 'map', id: m.id, label: m.name })}
         toggle={
           notice === null && hasPages ? (

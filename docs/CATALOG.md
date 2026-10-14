@@ -210,6 +210,14 @@ npx tsx scripts/catalog/make-fixture.ts     # → .maestro/fixtures/catalog/ (e2
   `scripts/catalog/sources/quebec-rivers.json`, and emits only the maps whose
   publisher has granted permission. Until one does, it writes no fragment
   (CATALOG-SOURCES §1.5).
+- `fetch-cartespleinair.ts` crawls cartespleinair.org (no feed exists) into
+  `fragments/cartes-plein-air.json`. A weekly workflow
+  (`catalog-cartespleinair.yml`) runs it and opens one pull request with the
+  added / withdrawn / republished maps; after merging, publish with
+  `build-manifest.ts` as for every source (CATALOG-SOURCES §1.6). Its rows carry
+  the author credit (`author`, `year`, `pageUrl`), the file `version` and a
+  `bboxPrecision`; the source carries `freeAt`. All optional and additive:
+  older apps ignore them.
 - `build-manifest.ts` merges them, drops duplicate ids, refuses items whose
   `sourceId` was never declared, plans the shards with the **same**
   `planCatalogShards` the client's ranking assumes, and validates every shard

@@ -129,11 +129,14 @@ export const MapCard = memo(function MapCard({
   position = null,
   marker = false,
   external = false,
+  note,
   onPress,
 }: {
   id: string;
   title: string;
   meta: string;
+  /** A line the publisher's terms require under the meta ("Available free at …", #680). */
+  note?: string | undefined;
   distance: string | null;
   thumbnailUrl: string | undefined;
   bbox?: CatalogBbox | undefined;
@@ -149,7 +152,7 @@ export const MapCard = memo(function MapCard({
     <Pressable
       onPress={onPress}
       accessibilityRole={external ? 'link' : 'button'}
-      accessibilityLabel={[title, meta, distance].filter(Boolean).join(', ')}
+      accessibilityLabel={[title, meta, note, distance].filter(Boolean).join(', ')}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
       <View style={[styles.cardImage, { borderColor: t.outlineVariant }]}>
@@ -188,6 +191,11 @@ export const MapCard = memo(function MapCard({
       <Text numberOfLines={1} style={[styles.cardMeta, { color: t.inkMuted }]}>
         {meta}
       </Text>
+      {note !== undefined && note !== '' && (
+        <Text numberOfLines={2} style={[styles.cardMeta, { color: t.inkMuted }]}>
+          {note}
+        </Text>
+      )}
     </Pressable>
   );
 });

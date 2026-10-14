@@ -1,5 +1,5 @@
 {
-  "_comment": "Hand-curated (2026-10-02). Québec river-descent maps, permission-gated: a map reaches the catalog only when its publisher's permission.status is \"granted\" with quoted evidence (see src/core/catalog/riverMaps.ts). Nothing here is granted yet, so fetch-quebec-rivers.ts writes no fragment and the published catalog is unchanged. Research, licences and outreach drafts: docs/research/quebec-river-maps.md. Bboxes come from each file's own GeoPDF /GPTS, read on 2026-10-02.",
+  "_comment": "Hand-curated (2026-10-02). Québec river-descent maps, permission-gated: a map reaches the catalog only when its publisher's permission.status is \"granted\" with quoted evidence (see src/core/catalog/riverMaps.ts). No listed map belongs to a granted publisher yet (Cartes Plein-air, granted 2026-10-13, is crawled by fetch-cartespleinair.ts instead), so fetch-quebec-rivers.ts writes no fragment. Research, licences and outreach drafts: docs/research/quebec-river-maps.md. Bboxes come from each file's own GeoPDF /GPTS, read on 2026-10-02.",
   "publishers": [
     {
       "id": "cobaric",
@@ -30,8 +30,8 @@
       "attribution": "Cartes Plein-air (cartespleinair.org) and the map's author",
       "homepage": "https://cartespleinair.org/cartes",
       "permission": {
-        "status": "pending",
-        "evidence": "Footer: \"© 2026 Cartes Plein-air. All rights reserved.\" (https://cartespleinair.org/en/maps, read 2026-10-02). No maps listed until the site and authors answer; outreach draft in docs/research/quebec-river-maps.md, not sent."
+        "status": "granted",
+        "evidence": "Written permission from Cartes Plein-air received 2026-10-13 (kept privately by the owner): link, never copy; credit each map's author; never paid content (docs/CATALOG-SOURCES.md §1.6, #680). Its maps are crawled by scripts/catalog/fetch-cartespleinair.ts into their own fragment: do not list them here (the source id would be declared twice and build-manifest refuses that)."
       }
     }
   ],

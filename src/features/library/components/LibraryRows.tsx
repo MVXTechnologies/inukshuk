@@ -182,6 +182,7 @@ export function MapRow({
   notice,
   pagesLine,
   status,
+  credit,
   rendering,
   renderingLabel,
   accessibilityLabel,
@@ -199,6 +200,8 @@ export function MapRow({
   pagesLine: string | null;
   /** A second caption line (rendering progress / failure), if any. */
   status: { text: string; failed: boolean } | null;
+  /** The map author's credit, for catalog maps whose publisher requires it (#680). */
+  credit?: string | null | undefined;
   rendering: boolean;
   renderingLabel: string;
   accessibilityLabel: string;
@@ -258,6 +261,11 @@ export function MapRow({
             >
               {caption}
             </Text>
+            {credit ? (
+              <Text numberOfLines={2} style={[styles.caption, { color: t.inkMuted }]}>
+                {credit}
+              </Text>
+            ) : null}
             {status && (
               <Text
                 numberOfLines={2}

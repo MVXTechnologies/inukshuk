@@ -1,7 +1,13 @@
 import type { GeoReference } from '@core/models';
 import { parseGeoPdf } from '@core/geo/geopdf';
 import { buildClassicPdf } from '@core/geo/geopdf/testUtils';
-import { NO_GEOREFERENCE_NOTICE, defaultActivePages, georeferenceNotice } from './overlayPages';
+import {
+  NO_GEOREFERENCE_NOTICE,
+  NOT_PLACED_NOTICE,
+  defaultActivePages,
+  georeferenceNotice,
+  isUnplacedCatalogMap,
+} from './overlayPages';
 
 /**
  * #236: an imported GeoPDF must land with EVERY georeferenced page active, and
@@ -108,6 +114,15 @@ function unplaceable(pageIndex: number, sourceCrs?: string): GeoReference {
 describe('georeferenceNotice', () => {
   it('explains, in plain language, that an ungeoreferenced PDF cannot be placed', () => {
     expect(georeferenceNotice({ georeferences: [] })).toBe(NO_GEOREFERENCE_NOTICE);
+  });
+
+  it('says a catalog plain PDF is not placed yet and opens as a PDF (#680)', () => {
+    const map = { georeferences: [], sourceItemId: 'cpa-x' };
+    expect(isUnplacedCatalogMap(map)).toBe(true);
+    expect(georeferenceNotice(map)).toBe(NOT_PLACED_NOTICE);
+    expect(NOT_PLACED_NOTICE).toBe('Not placed on the map yet — tap to open the PDF');
+    expect(isUnplacedCatalogMap({ georeferences: [] })).toBe(false);
+    expect(isUnplacedCatalogMap({ georeferences: [geo(0, 600)], sourceItemId: 'x' })).toBe(false);
   });
 
   it('is silent for a map that has georeferenced pages', () => {

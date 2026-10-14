@@ -767,8 +767,9 @@ export function SettingsScreen() {
               <List.Item
                 title="Maps & data"
                 // paper truncates descriptions at 2 lines by default; the
-                // credit roll must stay fully readable.
-                descriptionNumberOfLines={14}
+                // credit roll must stay fully readable. 0 = no limit: the roll
+                // is ~1,500 characters, past any fixed count on a phone.
+                descriptionNumberOfLines={0}
                 description={MAP_DATA_CREDITS}
               />
             </View>

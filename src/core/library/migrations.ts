@@ -222,6 +222,18 @@ function whiteKeyOverride(v: unknown): Pick<MapDocument, 'whiteKey'> {
   return level === undefined ? {} : { whiteKey: level };
 }
 
+/** `{ [key]: value }` for a non-empty string of at most `max` chars, else `{}`. */
+function optionalText<K extends 'sourceVersion' | 'sourceCredit' | 'sourceFreeAt'>(
+  doc: Partial<MapDocument>,
+  key: K,
+  max: number,
+): Partial<Pick<MapDocument, K>> {
+  const value = doc[key];
+  return typeof value === 'string' && value.trim() !== '' && value.length <= max
+    ? ({ [key]: value } as Partial<Pick<MapDocument, K>>)
+    : {};
+}
+
 /**
  * Normalize one persisted map document to the current shape. Older builds
  * stored a single `georeference` (or none); the current model stores
@@ -284,6 +296,14 @@ function normalizeMapDoc(raw: RawDoc): MapDocument {
     ...(typeof legacy.sourceItemId === 'string' ? { sourceItemId: legacy.sourceItemId } : {}),
     ...(typeof legacy.sourceUpdatedAt === 'string'
       ? { sourceUpdatedAt: legacy.sourceUpdatedAt }
+      : {}),
+    // Catalog credit and file version (#680): optional, absent on every map
+    // downloaded before them, so they ride through without a version bump.
+    ...optionalText(legacy, 'sourceVersion', 200),
+    ...optionalText(legacy, 'sourceCredit', 300),
+    ...optionalText(legacy, 'sourceFreeAt', 200),
+    ...(typeof legacy.sourcePageUrl === 'string' && /^https:\/\/\S+$/.test(legacy.sourcePageUrl)
+      ? { sourcePageUrl: legacy.sourcePageUrl }
       : {}),
     ...whiteKeyOverride(raw.whiteKey),
   };

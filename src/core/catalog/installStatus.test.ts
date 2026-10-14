@@ -1,5 +1,11 @@
 import type { MapDocument } from '@core/models';
-import { findInstalledMap, indexInstallStatus, installStatusFor } from './installStatus';
+import {
+  findInstalledMap,
+  indexInstallStatus,
+  installStatusFor,
+  mapsWithNewerVersion,
+  NEWER_VERSION_NOTICE,
+} from './installStatus';
 import type { CatalogItem } from './schema';
 
 const item = (overrides: Partial<CatalogItem> = {}): CatalogItem => ({
@@ -38,6 +44,39 @@ describe('findInstalledMap', () => {
     const local = doc();
     delete local.sourceItemId;
     expect(findInstalledMap([local], 'cantopo-021l14')).toBeUndefined();
+  });
+});
+
+describe('installStatusFor — file versions (#680)', () => {
+  it('a different publisher file version is an update, whatever the dates say', () => {
+    expect(
+      installStatusFor(item({ version: 'v2', updatedAt: '2019-01-01' }), [
+        doc({ sourceVersion: 'v1' }),
+      ]),
+    ).toBe('update-available');
+    expect(
+      installStatusFor(item({ version: 'v1', updatedAt: '2030-01-01' }), [
+        doc({ sourceVersion: 'v1' }),
+      ]),
+    ).toBe('installed');
+  });
+
+  it('falls back to the dates when either side has no version', () => {
+    expect(installStatusFor(item({ version: 'v2', updatedAt: '2021-01-01' }), [doc()])).toBe(
+      'update-available',
+    );
+    expect(installStatusFor(item(), [doc({ sourceVersion: 'v1' })])).toBe('installed');
+  });
+
+  it('lists the Library maps with a newer file among the loaded items', () => {
+    const maps = [
+      doc({ id: 'old', sourceVersion: 'v1' }),
+      doc({ id: 'local', sourceItemId: undefined }),
+      doc({ id: 'gone', sourceItemId: 'not-loaded' }),
+    ];
+    expect([...mapsWithNewerVersion(maps, [item({ version: 'v2' })])]).toEqual(['old']);
+    expect(mapsWithNewerVersion(maps, []).size).toBe(0);
+    expect(NEWER_VERSION_NOTICE).toBe('A newer version is available');
   });
 });
 

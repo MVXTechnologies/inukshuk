@@ -14,9 +14,11 @@
  * georeferencing; and that toggling a page writes `activePages`.
  */
 import type { GeoReference, MapDocument } from '@core/models';
-import { NO_GEOREFERENCE_NOTICE } from '@core/library/overlayPages';
+import { NO_GEOREFERENCE_NOTICE, NOT_PLACED_NOTICE } from '@core/library/overlayPages';
 import { LibraryScreen } from '@features/library/LibraryScreen';
+import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
+import * as Sharing from 'expo-sharing';
 import { useOverlayStatusStore } from '@state/overlayStatusStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { act, fireEvent, render, type RenderResult } from '@testing-library/react-native';
@@ -65,6 +67,12 @@ jest.mock('@data/storage', () => ({
   fileSizeAt: () => 0,
 }));
 jest.mock('@features/library/importMap', () => ({ pickAndImportMaps: jest.fn() }));
+jest.mock('@features/map/search/deviceLanguage', () => ({ deviceSearchLanguage: () => 'en' }));
+jest.mock('@data/catalogCache', () => ({
+  loadCatalogManifest: jest.fn(),
+  loadCatalogShard: jest.fn(),
+  loadCatalogSearchDigest: jest.fn(),
+}));
 jest.mock('@features/library/importActivities', () => ({
   pickAndImportActivityFiles: jest.fn(),
   activityImportMessage: jest.fn(),
@@ -189,6 +197,64 @@ it('counts one checkbox per PAGE, not per viewport, on a multi-viewport sheet', 
   );
   await expandOverlayPages(view);
   expect(view.getAllByRole('checkbox')).toHaveLength(1);
+});
+
+describe('a Cartes Plein-air map, not placed yet (#680)', () => {
+  const cpa = mapDoc({
+    id: 'cpa',
+    name: 'Aigle-Désert',
+    fileUri: 'maps/cpa.pdf',
+    sourceItemId: 'cpa-41ad13f6',
+    sourceVersion: 'v1',
+    sourceCredit: 'Auteur Exemple · 2022',
+    sourceFreeAt: 'cartespleinair.org',
+  });
+
+  beforeEach(() => useCatalogStore.setState({ items: [] }));
+
+  it('says it is not placed yet, credits its author, and opens as a PDF', async () => {
+    jest.mocked(Sharing.isAvailableAsync).mockResolvedValue(true);
+    const view = await show(cpa);
+    expect(view.getByText(NOT_PLACED_NOTICE)).toBeOnTheScreen();
+    expect(
+      view.getByText('Auteur Exemple · 2022 · Available free at cartespleinair.org'),
+    ).toBeOnTheScreen();
+    expect(view.queryByLabelText('Overlay pages')).toBeNull();
+    await press(view, 'Aigle-Désert — open the PDF');
+    expect(Sharing.shareAsync).toHaveBeenCalledWith('maps/cpa.pdf', {
+      mimeType: 'application/pdf',
+      UTI: 'com.adobe.pdf',
+      dialogTitle: 'Aigle-Désert',
+    });
+    expect(useLibraryStore.getState().activeMapId).not.toBe('cpa');
+  });
+
+  it('says so when the device cannot open files', async () => {
+    jest.mocked(Sharing.isAvailableAsync).mockResolvedValue(false);
+    const view = await show(cpa);
+    await press(view, 'Aigle-Désert — open the PDF');
+    expect(await view.findByText('Opening PDFs is not available on this device')).toBeTruthy();
+    expect(Sharing.shareAsync).not.toHaveBeenCalled();
+  });
+
+  it('says a newer version is available once the catalog has a newer file', async () => {
+    useCatalogStore.setState({
+      items: [
+        {
+          id: 'cpa-41ad13f6',
+          sourceId: 'cartes-plein-air',
+          title: 'Aigle-Désert',
+          category: 'river',
+          format: 'pdf',
+          packaging: 'none',
+          url: 'https://assets.cartespleinair.org/maps/a-2.pdf',
+          version: 'v2',
+        },
+      ],
+    });
+    const view = await show(cpa);
+    expect(view.getByText('A newer version is available — update it in Explore')).toBeTruthy();
+  });
 });
 
 it('explains an ungeoreferenced PDF instead of showing an empty section', async () => {
