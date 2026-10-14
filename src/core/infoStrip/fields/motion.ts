@@ -141,4 +141,5 @@ export const SUNSET = defineField<Record<string, never>>({
     return { glyph: 'wb_twilight', value: sunset === null ? '—' : formatClockTime(sunset) };
   },
   sample: { glyph: 'wb_twilight', value: '18:12' },
+  sampleClockMin: 18 * 60 + 12,
 });

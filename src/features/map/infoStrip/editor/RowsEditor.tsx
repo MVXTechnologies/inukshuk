@@ -192,14 +192,22 @@ export function RowsEditor({ rows, data, ctx, onChange, onOpenField, onAdd }: Ro
                     <Pressable
                       onPress={() => onOpenField(at)}
                       accessibilityRole="button"
-                      accessibilityLabel={spokenValue(pv.descriptor.label, pv.value)}
+                      accessibilityLabel={
+                        pv.live
+                          ? spokenValue(pv.descriptor.label, pv.value)
+                          : `${pv.descriptor.label}, no value now`
+                      }
                       accessibilityHint="Opens its settings. Hold to drag it."
                       accessibilityActions={FIELD_ACTIONS}
                       onAccessibilityAction={fieldAction(at)}
                       style={styles.chipBody}
                       testID={`strip-edit-field-${r}-${i}`}
                     >
-                      <StripField value={pv.value} shrink={pv.descriptor.spaces > 1} />
+                      <StripField
+                        value={pv.value}
+                        shrink={pv.descriptor.spaces > 1}
+                        muted={!pv.live}
+                      />
                     </Pressable>
                     <Pressable
                       onPress={() => onChange(removeField(rows, at))}

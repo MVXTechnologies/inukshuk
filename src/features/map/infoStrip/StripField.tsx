@@ -11,6 +11,11 @@ export interface StripFieldProps {
   value: StripValue;
   /** Coordinates and the like: one type step smaller before they ellipsise. */
   shrink?: boolean;
+  /**
+   * Not a live value (the editor's "—" placeholder, a preset's sample): drawn
+   * muted and italic so it never reads as a reading (QA 2.6.0).
+   */
+  muted?: boolean;
   /** Test ids: the field's box, its text (2.5.1's chip ids live on for the coordinates). */
   testID?: string;
   textTestID?: string;
@@ -28,12 +33,18 @@ export interface StripFieldProps {
 export const StripField = memo(function StripField({
   value,
   shrink = false,
+  muted = false,
   testID,
   textTestID,
 }: StripFieldProps) {
   const t = useSchemeTokens();
-  const ink =
-    value.tone === 'ok' ? t.status.gnssFixed : value.tone === 'warn' ? t.status.pausedInk : t.ink;
+  const ink = muted
+    ? t.inkMuted
+    : value.tone === 'ok'
+      ? t.status.gnssFixed
+      : value.tone === 'warn'
+        ? t.status.pausedInk
+        : t.ink;
   return (
     <View style={styles.field} testID={testID}>
       {value.tag !== undefined && (
@@ -49,7 +60,7 @@ export const StripField = memo(function StripField({
         />
       )}
       <Text
-        style={[styles.value, { color: ink }]}
+        style={[styles.value, { color: ink }, muted && styles.muted]}
         numberOfLines={1}
         adjustsFontSizeToFit={shrink}
         minimumFontScale={0.85}
@@ -68,6 +79,7 @@ function propsEqual(a: StripFieldProps, b: StripFieldProps): boolean {
   return (
     sameValue(a.value, b.value) &&
     a.shrink === b.shrink &&
+    a.muted === b.muted &&
     a.testID === b.testID &&
     a.textTestID === b.textTestID
   );
@@ -83,4 +95,5 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   unit: { fontSize: 11, fontWeight: '500' },
+  muted: { fontStyle: 'italic', fontWeight: '600' },
 });

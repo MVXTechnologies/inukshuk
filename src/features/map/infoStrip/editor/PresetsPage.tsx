@@ -2,6 +2,7 @@ import type { AnyExtensionKey } from '@core/extensions/keys';
 import { extensionBasics } from '@core/extensions/registry';
 import { stripTitle } from '@core/infoStrip/edit';
 import { isEditedPreset, missingExtensions, PRESETS, type Preset } from '@core/infoStrip/presets';
+import { sampleValue } from '@core/infoStrip/preview';
 import { fieldDescriptor } from '@core/infoStrip/registry';
 import type { InfoStrip } from '@core/infoStrip/types';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -32,7 +33,7 @@ function Miniature({
             }
             return (
               <View key={`${f.field}-${i}`} style={[styles.miniCell, { flex: d.spaces }]}>
-                <StripField value={d.sample} shrink />
+                <StripField value={sampleValue(d)} shrink muted />
               </View>
             );
           })}

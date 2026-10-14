@@ -98,7 +98,7 @@ export function FieldSettings({
                 i === at.index && { borderColor: t.ink },
               ]}
             >
-              <StripField value={pv.value} shrink={pv.descriptor.spaces > 1} />
+              <StripField value={pv.value} shrink={pv.descriptor.spaces > 1} muted={!pv.live} />
             </View>
           );
         })}

@@ -357,6 +357,16 @@ export interface FieldDescriptor<P extends Params = Params> {
   recordingMetric?: HeroField;
   /** Null: leave the field out, the row re-fits. Method syntax: params are checked per descriptor. */
   compute(data: DepsSnapshot, params: P, ctx: ComputeContext): StripValue | null;
-  /** The picker's preview, without data. */
+  /** The presets' miniatures, without data (a made-up value: never shown as live). */
   sample: StripValue;
+  /**
+   * The sample is a clock time at this many minutes past midnight: shown in
+   * the phone's 12/24 h form (`sampleValue`), never as a fixed "14:32".
+   */
+  sampleClockMin?: number;
+  /**
+   * The editor's placeholder when there is no live value (`placeholderValue`):
+   * this glyph and tag with "—". Absent: the sample's glyph and tag.
+   */
+  placeholder?: { glyph?: string; tag?: string };
 }

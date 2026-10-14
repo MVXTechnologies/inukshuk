@@ -132,6 +132,7 @@ export const TARGET_DISTANCE = defineField<TargetDistanceParams>({
     return d === null ? null : splitUnit(formatDistanceIn(d.m, params.unit, ctx.units));
   },
   sample: { value: '1.23', unit: 'km' },
+  placeholder: { glyph: 'straighten' },
 });
 
 export type TargetBearingParams = { target: Target | null; reference: NorthReference };
@@ -203,6 +204,7 @@ export const ETA = defineField<TargetOnly>({
     return { tag: 'ETA', value: `${ete.straight ? '≈' : ''}${at}` };
   },
   sample: { tag: 'ETA', value: '14:32' },
+  sampleClockMin: 14 * 60 + 32,
 });
 
 /**
@@ -228,4 +230,5 @@ export const OFF_TRAIL = defineField<Record<string, never>>({
     return { glyph: 'wrong_location', value: `Off ${value}`, unit, tone: 'warn' };
   },
   sample: { glyph: 'check_circle', value: 'On trail', tone: 'ok' },
+  placeholder: { glyph: 'route' },
 });

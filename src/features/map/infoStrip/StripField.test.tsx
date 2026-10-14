@@ -20,10 +20,18 @@ jest.mock('@ui/useSchemeTokens', () => {
   };
 });
 
-function Tree({ value, dark = false }: { value: StripValue; dark?: boolean }) {
+function Tree({
+  value,
+  dark = false,
+  muted = false,
+}: {
+  value: StripValue;
+  dark?: boolean;
+  muted?: boolean;
+}) {
   return (
     <PaperProvider theme={dark ? darkTheme : lightTheme}>
-      <StripField value={value} testID="f" textTestID="t" />
+      <StripField value={value} muted={muted} testID="f" textTestID="t" />
     </PaperProvider>
   );
 }
@@ -49,6 +57,20 @@ describe('StripField (the one renderer)', () => {
     await render(<Tree value={{ value: 'Off 62', unit: 'm', tone: 'warn' }} dark={dark} />);
     expect(ink()).toBe(s.status.pausedInk);
   });
+
+  it.each([
+    ['light', false, lightScheme],
+    ['dark', true, darkScheme],
+  ] as const)(
+    'a muted value (not live) is muted italic, whatever its tone, in %s',
+    async (_n, dark, s) => {
+      await render(<Tree value={{ value: 'On trail', tone: 'ok' }} dark={dark} muted />);
+      expect(StyleSheet.flatten(screen.getByTestId('t').props.style)).toMatchObject({
+        color: s.inkMuted,
+        fontStyle: 'italic',
+      });
+    },
+  );
 
   it('is memoised on the CONTENT of its value: an equal new object does not render', async () => {
     const { rerender } = await render(<Tree value={{ value: '3.6', unit: 'km/h' }} />);

@@ -59,6 +59,36 @@ beforeEach(() => {
   useLibraryStore.setState({ waypoints: [] });
 });
 
+describe('previews without live data (QA 2.6.0)', () => {
+  it.each([
+    ['light', false, lightScheme],
+    ['dark', true, darkScheme],
+  ] as const)(
+    'a field with no data shows a muted "—", never a made-up value (%s)',
+    async (_n, dark, scheme) => {
+      // Navigation: target name, distance, ETE, … with no destination set.
+      putStrip('navigation');
+      await openEditor(dark);
+      for (const fake of [/Camp lac/, /1\.23/, /0:21/, /On trail/]) {
+        expect(screen.queryByText(fake)).toBeNull();
+      }
+      // Target name and distance (row 1's first two): placeholders, muted.
+      for (const id of ['strip-edit-field-0-0', 'strip-edit-field-0-1']) {
+        const dash = within(screen.getByTestId(id)).getByText('—');
+        expect(StyleSheet.flatten(dash.props.style)).toMatchObject({
+          color: scheme.inkMuted,
+          fontStyle: 'italic',
+        });
+      }
+      // The picker too: no sample reads as live.
+      await fireEvent.press(screen.getByTestId('strip-add-field-2'));
+      expect(screen.getByText('Add to row 3')).toBeOnTheScreen();
+      expect(screen.queryByText(/Camp lac/)).toBeNull();
+      expect(screen.queryByText(/On trail/)).toBeNull();
+    },
+  );
+});
+
 describe('the editor sheet', () => {
   it.each([
     ['light', false, lightScheme],

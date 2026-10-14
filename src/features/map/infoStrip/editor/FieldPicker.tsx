@@ -136,7 +136,7 @@ export function FieldPicker({
                     </Text>
                   </View>
                   <View style={[styles.preview, { backgroundColor: t.surfaceVariant }]}>
-                    <StripField value={pv.value} shrink />
+                    <StripField value={pv.value} shrink muted={!pv.live} />
                   </View>
                 </Pressable>
               );

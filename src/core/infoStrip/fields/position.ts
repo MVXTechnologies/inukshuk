@@ -219,6 +219,7 @@ export const ACCURACY = defineField<Record<string, never>>({
     return out;
   },
   sample: { value: '±2.0', unit: 'cm', tone: 'ok' },
+  placeholder: { glyph: 'gps_fixed' },
 });
 
 /**

@@ -104,7 +104,8 @@ export const TIDE_LEVEL = defineField<TideParams>({
       unit: `m${arrow}`,
     };
   },
-  sample: { glyph: 'waves', tag: 'Lauzon', value: '+3.84', unit: 'm ↑' },
+  // "Tide", never a real station's name: a made-up one read as the station picked (QA 2.6.0).
+  sample: { glyph: 'waves', tag: 'Tide', value: '+3.84', unit: 'm ↑' },
 });
 
 /** The next high tide at the station, clock time; it steps aside once it has passed. */
@@ -126,4 +127,5 @@ export const TIDE_NEXT_HIGH = defineField<TideParams>({
     return { tag: 'High', value: formatClockTime(next.atMs) };
   },
   sample: { tag: 'High', value: '14:52' },
+  sampleClockMin: 14 * 60 + 52,
 });
