@@ -28,6 +28,7 @@ import {
   type TeamState,
 } from './membership';
 import { isAdminRole, type Audience, type Priority } from './roles';
+import { hasCap } from '@core/teamdraw/caps';
 
 /**
  * One device's copy of one team (#589): the op log, the resolved membership,
@@ -81,6 +82,8 @@ export const MAX_GAP_BYTES = 8 * 1024 * 1024;
 export const MAX_GAP_BYTES_PER_AUTHOR = 1024 * 1024;
 /** An admin replica auto-rotates for a given leaking author at most this often. */
 export const AUTO_ROTATE_INTERVAL_MS = 30 * 60 * 1000;
+/** A live stroke (`pen`) outlives its sender by this long if the phone drops (#683). */
+export const PEN_TTL_S = 30;
 
 export class TeamReplica {
   readonly log = new OpLog();
@@ -173,6 +176,11 @@ export class TeamReplica {
 
   liveEphemeral(now: number): SignedOp[] {
     return this.log.liveEphemeral(now);
+  }
+
+  /** Whether `member` advertises capability `cap` (#683: gates `pen` in the sync session). */
+  canReceive(member: string, cap: string): boolean {
+    return hasCap(this.data(), member, cap);
   }
 
   /** Is this a genesis op for *our* team id (cheap pre-check before storing it)? */
@@ -547,7 +555,8 @@ export class TeamReplica {
           id: this.id,
           boxSecret: this.keys.boxSecret,
         });
-    if (body !== undefined) this.decoded.set(op.id, body);
+    // Live strokes come 4 a second and are superseded at once: never cached (#683).
+    if (body !== undefined && op.env.t !== 'pen') this.decoded.set(op.id, body);
     return body;
   }
 
@@ -573,7 +582,8 @@ export class TeamReplica {
       const scratch = emptyData();
       let validUntil = Infinity;
       for (const op of this.log.liveEphemeral(now)) {
-        if (!admitEphemeral(this.state, op)) continue;
+        // Positions only: live strokes (`pen`) are read by `@core/teamdraw/pen`.
+        if (op.env.t !== 'pos' || !admitEphemeral(this.state, op)) continue;
         applyDataOp(scratch, this.state, op, (o) => this.decode(o));
         validUntil = Math.min(validUntil, expiresAt(op.env) ?? Infinity);
       }
@@ -633,6 +643,15 @@ export class TeamReplica {
     const enc = this.encryptionFor(sealedTo);
     if (enc === undefined) return undefined;
     const op = this.writer.ephemeral(now, { t: 'pos', secret: pos, enc, ttl: ttlS });
+    this.commit(op, now);
+    return op;
+  }
+
+  /** Send my stroke in progress (#683): ephemeral, group-encrypted, latest wins. */
+  stroke(now: number, body: Json, ttlS = PEN_TTL_S): SignedOp | undefined {
+    const enc = this.encryptionFor(undefined);
+    if (enc === undefined) return undefined;
+    const op = this.writer.ephemeral(now, { t: 'pen', secret: body, enc, ttl: ttlS });
     this.commit(op, now);
     return op;
   }

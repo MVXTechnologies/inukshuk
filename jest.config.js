@@ -31,6 +31,7 @@ module.exports = {
     '!src/core/terrain3d/testUtils.ts',
     // Team protocol test doubles (Node crypto, PRNG, fixtures) — never shipped.
     '!src/core/team/testing/**',
+    '!src/core/teamdraw/testUtils.ts',
     '!src/core/gnss/testUtils.ts',
     '!src/core/geo/pdfjsRealm.testUtils.ts',
   ],
@@ -45,6 +46,14 @@ module.exports = {
     // The external-receiver core parses untrusted bytes from radios and casters:
     // every line and branch is exercised (fuzzed streams included).
     './src/core/gnss/': {
+      branches: 100,
+      functions: 100,
+      lines: 100,
+      statements: 100,
+    },
+    // Team drawing (#683) validates peer input and decides what goes on the
+    // wire to older phones: every line and branch is exercised.
+    './src/core/teamdraw/': {
       branches: 100,
       functions: 100,
       lines: 100,

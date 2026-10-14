@@ -52,6 +52,7 @@ describe('PeerGuard', () => {
     expect(categoryOf('pos')).toBe('pos');
     expect(categoryOf('msg')).toBe('msg');
     expect(categoryOf('e.set')).toBe('data');
+    expect(categoryOf('pen')).toBe('draw');
     expect(categoryOf('m.add')).toBe('control');
     expect(categoryOf('???')).toBe('control');
   });

@@ -40,7 +40,8 @@ export class TokenBucket {
   }
 }
 
-export type OpCategory = 'control' | 'data' | 'msg' | 'pos';
+/** `draw`: live strokes (`pen`, #683), in their own bucket so they never drain `control`. */
+export type OpCategory = 'control' | 'data' | 'msg' | 'pos' | 'draw';
 
 export interface PeerLimits {
   maxFrameBytes: number;
@@ -54,6 +55,11 @@ export interface PeerLimits {
   strikesToBan: number;
   strikeWindowMs: number;
   banMs: number;
+  /**
+   * A transport shared with strangers (Nostr relays): live strokes (`pen`)
+   * are never sent over it (#683), only finished shapes.
+   */
+  thirdParty?: true;
 }
 
 /** Phones on the same Wi-Fi or hotspot. */
@@ -69,6 +75,8 @@ export const LAN_LIMITS: PeerLimits = {
     msg: [10, 100],
     // 500 members relaying positions every ~10 s.
     pos: [60, 600],
+    // Live strokes: ≤ 4/s per drawer (`@core/teamdraw/pen`), two at once at full rate.
+    draw: [8, 40],
   },
   strikesToBan: 20,
   strikeWindowMs: 60_000,
@@ -82,10 +90,12 @@ export const RELAY_LIMITS: PeerLimits = {
   burstBytes: 512 * 1024,
   framesPerSec: 20,
   burstFrames: 60,
-  ops: { control: [1, 20], data: [5, 50], msg: [5, 50], pos: [10, 100] },
+  // `pen` is never sent over a relay: an honest peer uses none of `draw`.
+  ops: { control: [1, 20], data: [5, 50], msg: [5, 50], pos: [10, 100], draw: [1, 4] },
   strikesToBan: 10,
   strikeWindowMs: 60_000,
   banMs: 30 * 60_000,
+  thirdParty: true,
 };
 
 export type StrikeReason =
@@ -106,6 +116,7 @@ export class PeerGuard {
       data: new TokenBucket(...limits.ops.data),
       msg: new TokenBucket(...limits.ops.msg),
       pos: new TokenBucket(...limits.ops.pos),
+      draw: new TokenBucket(...limits.ops.draw),
     };
   }
 
@@ -138,6 +149,7 @@ export class PeerGuard {
 
 export function categoryOf(type: string): OpCategory {
   if (type === 'pos') return 'pos';
+  if (type === 'pen') return 'draw';
   if (type === 'msg') return 'msg';
   if (type.startsWith('e.')) return 'data';
   return 'control';

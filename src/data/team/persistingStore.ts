@@ -47,6 +47,9 @@ export class PersistingStore implements SyncStore {
   isActiveMember(memberId: string) {
     return this.replica.isActiveMember(memberId);
   }
+  canReceive(member: string, cap: string) {
+    return this.replica.canReceive(member, cap);
+  }
   flush(now: number) {
     this.track(() => {
       this.replica.flush(now);

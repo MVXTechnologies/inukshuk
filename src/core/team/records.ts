@@ -1,7 +1,16 @@
 import type { Json } from './canonical';
 import { isLive, visibleFields, type EntityState } from './crdt';
 import { isMemberId, isShortId } from './ids';
+import { decodeLine } from './polyline';
+import {
+  drawWrite,
+  liveDrawings,
+  MAX_LIVE_PER_AUTHOR,
+  validCapFields,
+} from '@core/teamdraw/record';
 import { isAdminRole, type Role } from './roles';
+
+export { decodeLine };
 
 /**
  * Team records beyond tasks (#589, owner 2026-10-07): collaborative trails,
@@ -16,12 +25,14 @@ import { isAdminRole, type Role } from './roles';
  * | `sos` | owned (raiser) | raiser (guests too); raiser or admin: the resolution | raiser or admin |
  * | `rly` rally point | owned (creator) | creator (members) | creator or admin |
  * | `mres` message resolved | owned by the MESSAGE's author, id = message id | its author, an admin, or someone it mentions (guests too) | — |
+ * | `drw` map drawing (#683) | owned (creator) | creator (members), whole; later only `tx`; ≤ 30 live | creator or admin |
+ * | `cap` capabilities (#683) | owned, id = the member | the member (guests too) | member or admin |
  *
  * Status-like fields are written whole (the "done by the wrong person" lesson):
  * `res: true` with `rby` = the author and `rat`; `res: false` with both null.
  */
 
-export const RECORD_KINDS = ['trl', 'tve', 'sos', 'rly', 'mres'] as const;
+export const RECORD_KINDS = ['trl', 'tve', 'sos', 'rly', 'mres', 'drw', 'cap'] as const;
 export type RecordKind = (typeof RECORD_KINDS)[number];
 
 export const MAX_TRAIL_NAME = 80;
@@ -55,39 +66,6 @@ export const TRAIL_ID = /^[A-Za-z0-9-]{1,40}$/;
 /** Live vertices a trail may hold, and vertex records it may ever collect. */
 export const MAX_LIVE_VERTICES = 2_000;
 export const MAX_VERTEX_RECORDS = 4_000;
-
-/** Encoded polyline (1e5) → `[lng, lat]` points; null for anything malformed. Total. */
-export function decodeLine(src: string, maxPoints: number): [number, number][] | null {
-  const out: [number, number][] = [];
-  let i = 0;
-  let la = 0;
-  let lo = 0;
-  const next = (): number | null => {
-    let shift = 0;
-    let result = 0;
-    for (;;) {
-      if (i >= src.length || shift > 30) return null;
-      const b = src.charCodeAt(i++) - 63;
-      if (b < 0 || b > 63) return null;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-      if (b < 0x20) break;
-    }
-    return result & 1 ? ~(result >> 1) : result >> 1;
-  };
-  while (i < src.length) {
-    const dla = next();
-    const dlo = next();
-    if (dla === null || dlo === null) return null;
-    la += dla;
-    lo += dlo;
-    if (out.length >= maxPoints) return null;
-    const p: [number, number] = [lo / 1e5, la / 1e5];
-    if (Math.abs(p[0]) > 180 || Math.abs(p[1]) > 90) return null;
-    out.push(p);
-  }
-  return out;
-}
 
 /** `res`/`rby`/`rat` written whole, `rby` = the author. */
 function validResolution(f: Record<string, Json>, author: string): boolean {
@@ -216,10 +194,18 @@ export interface RecordIndex {
   vtx: Map<string, { total: number; liveInserted: number; deletedBase: number }>;
   sosOpen: Map<string, Set<string>>;
   sosLastResolved: Map<string, number>;
+  /** Per member, their live drawings: id → expiry (null = never), #683. */
+  drw: Map<string, Map<string, number | null>>;
 }
 
 export function emptyIndex(): RecordIndex {
-  return { baseLen: new Map(), vtx: new Map(), sosOpen: new Map(), sosLastResolved: new Map() };
+  return {
+    baseLen: new Map(),
+    vtx: new Map(),
+    sosOpen: new Map(),
+    sosLastResolved: new Map(),
+    drw: new Map(),
+  };
 }
 
 /** Work done by the index (decodes): the linear-time regression test counts it. */
@@ -259,6 +245,12 @@ export function reindex(
     c.liveInserted += b.liveInserted - a.liveInserted;
     c.deletedBase += b.deletedBase - a.deletedBase;
     idx.vtx.set(key, c);
+  } else if (rec.kind === 'drw') {
+    const mine = idx.drw.get(owner) ?? new Map<string, number | null>();
+    const x = rec.state.fields['x']?.value;
+    if (isLive(rec.state)) mine.set(rec.id, typeof x === 'number' ? x : null);
+    else mine.delete(rec.id);
+    idx.drw.set(owner, mine);
   } else if (rec.kind === 'sos') {
     const open = idx.sosOpen.get(owner) ?? new Set<string>();
     const alive = isLive(rec.state);
@@ -359,6 +351,21 @@ export function authorizeRecord(
         return 'invalid';
       return { owner: author };
     }
+    case 'drw': {
+      // Members draw; a shape is written whole, and later only its note changes.
+      if (role === 'guest') return 'forbidden';
+      const write = w.o === undefined ? drawWrite(f, wall) : null;
+      if (write === null) return 'invalid';
+      if (live(get('drw', id, author))) return write === 'note' ? { owner: author } : 'forbidden';
+      if (write === 'note') return 'forbidden';
+      // New (or revived by an Undo): within the author's live cap at this op's time.
+      if (liveDrawings(idx.drw.get(author), wall) >= MAX_LIVE_PER_AUTHOR) return 'forbidden';
+      return { owner: author };
+    }
+    case 'cap':
+      // One record per member, its id the member's own.
+      if (w.o !== undefined || id !== author || !validCapFields(f)) return 'invalid';
+      return { owner: author };
     case 'mres': {
       if (!validResolutionFields(f, author)) return 'invalid';
       const owner = w.o ?? author;

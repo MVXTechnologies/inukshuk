@@ -1,5 +1,5 @@
 import { concatBytes, fromB64u, fromB64uLen, isB64uLen, toB64u, utf8, utf8Decode } from './bytes';
-import { dict } from './crdt';
+import { dict, own } from './crdt';
 import { canonicalize, hasOnlyKeys, isRecord, parseJson, type Json } from './canonical';
 import {
   derive,
@@ -83,7 +83,19 @@ export interface SyncStore {
   admit(proof: JoinProof, now: number): { op: SignedOp } | { error: string };
   /** Fold anything the store deferred (called from {@link SyncSession.tick}). */
   flush?(now: number): void;
+  /**
+   * Whether `member` advertises capability `cap` (a logged `cap` record,
+   * #683). Absent: no peer has any, and gated ops are never sent.
+   */
+  canReceive?(member: string, cap: string): boolean;
 }
+
+/**
+ * Op types a peer only receives when its member advertises the capability
+ * (#683). Peers before 2.5.2 refuse an unknown ephemeral type and strike the
+ * sender for it; 4 strokes a second would get the drawer banned in seconds.
+ */
+export const GATED_TYPES: Readonly<Record<string, string>> = { pen: 'pen' };
 
 export type SessionEvent =
   | { type: 'open'; peer: string; joining: boolean }
@@ -661,8 +673,12 @@ export class SyncSession {
         typeof author === 'string' &&
         typeof sq === 'number' &&
         sq <= (this.outstanding.get(author) ?? 0);
-      if (!asked && !this.guard.admitOp(categoryOf(String(env?.['t'] ?? '')), now)) {
-        overRate = true;
+      const category = categoryOf(String(env?.['t'] ?? ''));
+      if (!asked && !this.guard.admitOp(category, now)) {
+        // An over-rate live stroke is dropped without a strike: each one holds the
+        // whole stroke so far (the next heals it), and three teammates drawing at
+        // once must not get a relaying phone banned. Frames and bytes still strike.
+        if (category !== 'draw') overRate = true;
         continue;
       }
       if (asked)
@@ -709,7 +725,16 @@ export class SyncSession {
     }
   }
 
-  private sendOps(ops: readonly SignedOp[], solicited: boolean, step: Step): void {
+  /** A gated op goes only to a capable peer, and never over a third-party relay. */
+  private mayCarry(op: SignedOp): boolean {
+    const cap = own(GATED_TYPES, op.env.t);
+    if (cap === undefined) return true;
+    if (this.guard.limits.thirdParty === true || this.peer === undefined) return false;
+    return this.store.canReceive?.(this.peer, cap) === true;
+  }
+
+  private sendOps(all: readonly SignedOp[], solicited: boolean, step: Step): void {
+    const ops = all.filter((op) => this.mayCarry(op));
     const budget = this.guard.limits.maxFrameBytes - FRAME_OVERHEAD;
     let batch: Json[] = [];
     let size = 0;

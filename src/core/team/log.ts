@@ -12,7 +12,7 @@ import { compareStamp } from './hlc';
  *   {@link MAX_FORKS} per seq. Which candidate counts is decided by the
  *   per-author hash chain (`chain.ts`), not by arrival order, so every peer
  *   holding the same ops agrees.
- * - **Ephemeral ops** (`pos`) have `seq` 0 and no chain. Only the newest
+ * - **Ephemeral ops** (`pos`, `pen`) have `seq` 0 and no chain. Only the newest
  *   unexpired one per (author, type) is kept.
  */
 export type InsertResult = 'new' | 'duplicate' | 'fork' | 'stale' | 'full';
