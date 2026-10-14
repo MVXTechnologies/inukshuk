@@ -1,4 +1,4 @@
-import type { Folder, MapDocument, TrackSummary, Waypoint } from '@core/models';
+import type { Area, Folder, MapDocument, TrackSummary, Waypoint } from '@core/models';
 
 /**
  * Pure helpers for the folder feature (organizing maps, trails and waypoints
@@ -18,6 +18,8 @@ export interface FolderGroup<T extends TrackSummary = TrackSummary> {
   maps: MapDocument[];
   tracks: T[];
   waypoints: Waypoint[];
+  /** Drawn areas filed in the folder (#711; areas could not be filed before). */
+  areas: Area[];
 }
 
 /** The full folder view: one group per folder, plus the un-foldered leftovers. */
@@ -26,10 +28,11 @@ export interface FolderGrouping<T extends TrackSummary = TrackSummary> {
   ungroupedMaps: MapDocument[];
   ungroupedTracks: T[];
   ungroupedWaypoints: Waypoint[];
+  ungroupedAreas: Area[];
 }
 
 /**
- * Bucket maps, trails and waypoints into their folders. Groups are returned in
+ * Bucket maps, trails, waypoints and areas into their folders. Groups are returned in
  * `folders` order (each folder always appears, even when empty). Items whose
  * `folderId` is unset — or points at a folder that no longer exists — fall
  * through to the ungrouped leftovers, preserving their original order.
@@ -42,6 +45,7 @@ export function groupByFolder<T extends TrackSummary>(
   maps: readonly MapDocument[],
   tracks: readonly T[],
   waypoints: readonly Waypoint[],
+  areas: readonly Area[] = [],
 ): FolderGrouping<T> {
   const indexOf = new Map(folders.map((f, i) => [f.id, i]));
   const groups: FolderGroup<T>[] = folders.map((f) => ({
@@ -49,10 +53,12 @@ export function groupByFolder<T extends TrackSummary>(
     maps: [],
     tracks: [],
     waypoints: [],
+    areas: [],
   }));
   const ungroupedMaps: MapDocument[] = [];
   const ungroupedTracks: T[] = [];
   const ungroupedWaypoints: Waypoint[] = [];
+  const ungroupedAreas: Area[] = [];
 
   const bucket = <I extends { folderId?: string }>(
     items: readonly I[],
@@ -68,11 +74,12 @@ export function groupByFolder<T extends TrackSummary>(
   bucket(maps, (g) => g.maps, ungroupedMaps);
   bucket(tracks, (g) => g.tracks, ungroupedTracks);
   bucket(waypoints, (g) => g.waypoints, ungroupedWaypoints);
+  bucket(areas, (g) => g.areas, ungroupedAreas);
 
-  return { groups, ungroupedMaps, ungroupedTracks, ungroupedWaypoints };
+  return { groups, ungroupedMaps, ungroupedTracks, ungroupedWaypoints, ungroupedAreas };
 }
 
-/** Total number of items (maps + trails + waypoints) in a folder group. */
+/** Total number of items (maps + trails + waypoints + areas) in a folder group. */
 export function folderItemCount<T extends TrackSummary>(group: FolderGroup<T>): number {
-  return group.maps.length + group.tracks.length + group.waypoints.length;
+  return group.maps.length + group.tracks.length + group.waypoints.length + group.areas.length;
 }

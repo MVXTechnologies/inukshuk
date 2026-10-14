@@ -1,4 +1,12 @@
-import { pdfShareName } from './shareName';
+import { pdfShareName, shareFileName } from './shareName';
+
+describe('shareFileName', () => {
+  it('names any shared file after its title, with its own extension and fallback', () => {
+    expect(shareFileName('Mont Jacques-Cartier', 'gpx', 'Trail')).toBe('Mont Jacques-Cartier.gpx');
+    expect(shareFileName('Gaspésie: 2026', 'zip', 'Inukshuk')).toBe('Gaspésie 2026.zip');
+    expect(shareFileName(' ', 'gpx', 'Trail')).toBe('Trail.gpx');
+  });
+});
 
 describe('pdfShareName', () => {
   it('is the map title, readable, accents kept', () => {

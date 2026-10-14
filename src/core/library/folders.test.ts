@@ -1,4 +1,4 @@
-import type { Folder, MapDocument, TrackSummary, Waypoint } from '@core/models';
+import type { Area, Folder, MapDocument, TrackSummary, Waypoint } from '@core/models';
 
 import { folderItemCount, groupByFolder } from './folders';
 
@@ -133,5 +133,39 @@ describe('groupByFolder (widened trail types)', () => {
   it('still counts a widened group', () => {
     const { groups } = groupByFolder([folder('A', 'Alpha')], [], [richTrack('t1', 'A')], []);
     expect(folderItemCount(groups[0]!)).toBe(1);
+  });
+});
+
+describe('groupByFolder — areas (#711)', () => {
+  const area = (id: string, folderId?: string): Area => ({
+    id,
+    name: id,
+    ring: [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+    ],
+    color: '#2563EB',
+    createdAt: 0,
+    ...(folderId ? { folderId } : {}),
+  });
+
+  it('files areas like every other kind, and counts them', () => {
+    const grouping = groupByFolder(
+      [folder('A', 'Alpha')],
+      [],
+      [],
+      [],
+      [area('a1', 'A'), area('a2'), area('a3', 'gone')],
+    );
+    expect(grouping.groups[0]!.areas.map((a) => a.id)).toEqual(['a1']);
+    expect(grouping.ungroupedAreas.map((a) => a.id)).toEqual(['a2', 'a3']);
+    expect(folderItemCount(grouping.groups[0]!)).toBe(1);
+  });
+
+  it('defaults to no areas', () => {
+    const grouping = groupByFolder([folder('A', 'Alpha')], [], [], []);
+    expect(grouping.groups[0]!.areas).toEqual([]);
+    expect(grouping.ungroupedAreas).toEqual([]);
   });
 });
