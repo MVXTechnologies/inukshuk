@@ -14,6 +14,9 @@
  *   "Gather · Lac-Delage" / "1.2 km · by Noé", its creator's
  *   "You called it · 4 of 5 received".
  */
+import type { Units } from '@core/format';
+import { formatLatLng } from '@core/geo/formatCoords';
+
 import { rallyArrivals, type TeamRally, type TeamSos } from './field';
 import { rallyEntity, sosEntity } from './alertLedger';
 import { rangeAndBearing, shortAge, STALE_MS } from './positions';
@@ -47,8 +50,6 @@ export interface AlertInputs {
   /** Teammates' live positions (an SOS follows its raiser). */
   positions: readonly { id: string; lat: number; lon: number }[];
 }
-
-const coords = (lat: number, lng: number) => `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
 /** Every active SOS and gather, ranked (see the module doc). */
 export function activeAlerts(i: AlertInputs): ActiveAlert[] {
@@ -84,7 +85,7 @@ export function activeAlerts(i: AlertInputs): ActiveAlert[] {
       lat: r.lat,
       lng: r.lng,
       since: r.at,
-      place: r.text.trim() || coords(r.lat, r.lng),
+      place: r.text.trim() || formatLatLng(r.lat, r.lng),
     });
   }
   return out;
@@ -114,6 +115,8 @@ export function bandModel(
     /** "3 of 5 received" / "Sent" (for my own alerts). */
     receipts: string;
     isAdmin: boolean;
+    /** The user's display units (#702). */
+    units: Units;
   },
 ): BandModel {
   const rb = o.here ? rangeAndBearing(o.here, { lat: a.lat, lon: a.lng }) : null;
@@ -129,7 +132,7 @@ export function bandModel(
         actions: ['resolve'],
       };
     }
-    const where = rb ? `${distanceText(rb.meters)} ${rb.compass}` : null;
+    const where = rb ? `${distanceText(rb.meters, o.units)} ${rb.compass}` : null;
     const sub = [where, age].filter(Boolean).join(' · ');
     return {
       title: `SOS · ${a.ownerName}`,
@@ -143,7 +146,9 @@ export function bandModel(
     const sub = `You called it · ${o.receipts}`;
     return { title, sub, a11y: `${title}, ${sub}`, actions: ['end'] };
   }
-  const sub = [rb ? distanceText(rb.meters) : null, `by ${first}`].filter(Boolean).join(' · ');
+  const sub = [rb ? distanceText(rb.meters, o.units) : null, `by ${first}`]
+    .filter(Boolean)
+    .join(' · ');
   return {
     title,
     sub,
@@ -164,7 +169,7 @@ export interface GatherEta {
   arrived: boolean;
   /** "there", "~12 min" or "—". */
   eta: string;
-  /** "640 m" or "—". */
+  /** "640 m" (in the user's units) or "—". */
   distance: string;
 }
 
@@ -179,6 +184,7 @@ export function gatherEtas(
   members: readonly { id: string; name: string; isMe: boolean; active: boolean }[],
   positions: readonly { id: string; lat: number; lon: number; ageMs: number }[],
   here: { latitude: number; longitude: number } | null,
+  units: Units,
 ): GatherEta[] {
   const active = members.filter((m) => m.active);
   const people = active.map((m) => {
@@ -197,7 +203,7 @@ export function gatherEtas(
       etaMin: a.etaMin,
       arrived: a.arrived,
       eta: a.arrived ? 'there' : a.etaMin === null ? '—' : `~${a.etaMin} min`,
-      distance: a.distanceM === null ? '—' : distanceText(a.distanceM),
+      distance: a.distanceM === null ? '—' : distanceText(a.distanceM, units),
     };
   });
   const FAR = Number.MAX_SAFE_INTEGER;

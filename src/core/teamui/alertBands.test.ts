@@ -1,3 +1,5 @@
+import { IMPERIAL, METRIC, NAUTICAL } from '@core/format';
+
 import { activeAlerts, bandModel, bandStack, gatherEtas, MAX_STACKED_BANDS } from './alertBands';
 import type { TeamRally, TeamSos } from './field';
 
@@ -66,12 +68,19 @@ describe('activeAlerts: ranking', () => {
       positions: [{ id: 'julie', lat: 46.9, lon: -71.3 }],
     });
     expect(s).toMatchObject({ lat: 46.9, lng: -71.3 });
-    expect(g).toMatchObject({ place: '46.8123, -71.2046', ownerName: 'A teammate' });
+    // The app-wide 6-decimal readout (#701).
+    expect(g).toMatchObject({ place: '46.812345, -71.204560', ownerName: 'A teammate' });
   });
 });
 
 describe('bandModel', () => {
-  const opts = { here: HERE, now: NOW, receipts: '3 of 5 received', isAdmin: false };
+  const opts = {
+    here: HERE,
+    now: NOW,
+    receipts: '3 of 5 received',
+    isAdmin: false,
+    units: METRIC,
+  };
   const [other, mine, gather] = activeAlerts({
     soses: [sos('julie', 's1'), sos('me', 's0', { at: NOW - MIN })],
     rally: rally('noe'),
@@ -114,6 +123,12 @@ describe('bandModel', () => {
       actions: ['end'],
     });
   });
+
+  it('distances in the user’s units (#702)', () => {
+    expect(bandModel(other!, { ...opts, units: IMPERIAL }).sub).toBe('0.4 mi NE · 2 min');
+    expect(bandModel(gather!, { ...opts, units: IMPERIAL }).sub).toBe('0.7 mi · by Noé');
+    expect(bandModel(gather!, { ...opts, units: NAUTICAL }).sub).toBe('0.6 NM · by Noé');
+  });
 });
 
 describe('gatherEtas (the old rally pill’s ETA list)', () => {
@@ -134,7 +149,7 @@ describe('gatherEtas (the old rally pill’s ETA list)', () => {
   ];
 
   it('arrived first, then by ETA; no recent position last with "—"; never the inactive', () => {
-    const rows = gatherEtas(r, members, positions, { latitude: 46.79, longitude: -71.2 });
+    const rows = gatherEtas(r, members, positions, { latitude: 46.79, longitude: -71.2 }, METRIC);
     expect(rows.map((x) => x.id)).toEqual(['noe', 'julie', 'me', 'lea', 'sam']);
     expect(rows[0]).toMatchObject({ arrived: true, eta: 'there', distance: '11 m' });
     expect(rows[1]).toMatchObject({ eta: '~15 min', distance: '1.1 km' });
@@ -144,8 +159,16 @@ describe('gatherEtas (the old rally pill’s ETA list)', () => {
   });
 
   it('without my fix, my row is "—" too', () => {
-    const rows = gatherEtas(r, members, positions, null);
+    const rows = gatherEtas(r, members, positions, null, METRIC);
     expect(rows.find((x) => x.isMe)).toMatchObject({ eta: '—', distance: '—' });
+  });
+
+  it('distances in the user’s units (#702)', () => {
+    const here = { latitude: 46.79, longitude: -71.2 };
+    const imperial = gatherEtas(r, members, positions, here, IMPERIAL);
+    expect(imperial.map((x) => x.distance)).toEqual(['36 ft', '0.7 mi', '1.4 mi', '—', '—']);
+    const nautical = gatherEtas(r, members, positions, here, NAUTICAL);
+    expect(nautical.map((x) => x.distance)).toEqual(['11 m', '0.6 NM', '1.2 NM', '—', '—']);
   });
 });
 

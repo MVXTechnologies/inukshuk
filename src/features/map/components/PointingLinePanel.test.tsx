@@ -175,7 +175,7 @@ describe('PointingLinePanel', () => {
 
   it('Custom in imperial: typed in feet, stored in metres', async () => {
     useSettingsStore.setState({
-      units: 'imperial',
+      units: IMPERIAL,
       pointingLine: { ...DEFAULT_POINTING_LINE, length: 'custom', customLengthM: 457.2 },
     });
     await mount();

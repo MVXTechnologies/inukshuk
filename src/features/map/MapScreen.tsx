@@ -104,6 +104,7 @@ import { MapCreditsButton, MapCreditsSheet } from './components/MapCredits';
 import { mapCredits } from '@core/map/mapCredits';
 import { bareTapAfterFocus } from '@core/map/mapTap';
 import { centreCursorPoint } from '@core/map/centreCursor';
+import { topChipLayout } from '@core/map/topChips';
 import { HeadingCone } from './components/HeadingCone';
 import { PointingLine } from './components/PointingLine';
 import { MapSearchPill } from './components/MapSearchPill';
@@ -349,12 +350,6 @@ function windBoundsOf(vs: ViewState): WindBbox {
 // session. Generous on purpose: a slightly larger pad is a smaller trail
 // on-screen, never a trail hidden under the panel.
 const INSPECT_PANEL_H_ESTIMATE = 300;
-/**
- * Top-centre chips (marine notice, destination readout) sit under the
- * "Search places" pill: its 8 dp top margin + 48 dp height + an 8 dp gap.
- */
-const TOP_CHIP_OFFSET = 8 + 48 + 8;
-
 // Breathing room between the panel's top edge and the fitted trail.
 const INSPECT_PANEL_PAD = 24;
 
@@ -2804,7 +2799,13 @@ export function MapScreen() {
     movingWp === null &&
     shownTrail === null &&
     !searchOpen;
-  const topChipOffset = teamBarShown && teamBarHeight > 0 ? 8 + teamBarHeight + 8 : TOP_CHIP_OFFSET;
+  // The top-centre chip rows (lane, On map #710, receiver) under the slot.
+  const topChips = topChipLayout({
+    teamBarHeight: teamBarShown ? teamBarHeight : 0,
+    laneTaken: topLaneTaken,
+    onMapChip: onMapChip !== null,
+  });
+  const topChipOffset = topChips.lane;
   return (
     <MapAreaBottomContext.Provider value={mapAreaBottom}>
       <View
@@ -3623,10 +3624,7 @@ export function MapScreen() {
           (#707) never covers it. */}
         {onMapChip !== null && makeMapState === null && (
           <View
-            style={[
-              styles.topCenterChip,
-              { top: insets.top + topChipOffset + (topLaneTaken ? 44 : 0) },
-            ]}
+            style={[styles.topCenterChip, { top: insets.top + topChips.onMap }]}
             pointerEvents="box-none"
           >
             <OnMapTrailChip trail={onMapChip} />
@@ -4029,12 +4027,7 @@ export function MapScreen() {
           above the panel. Below the destination / night / marine chip when
           one holds the lane. */}
         {makeMapState === null && (
-          <ReceiverMapOverlay
-            top={
-              insets.top + topChipOffset + (topLaneTaken ? 44 : 0) + (onMapChip !== null ? 44 : 0)
-            }
-            showChip={!recordingPanelUp}
-          />
+          <ReceiverMapOverlay top={insets.top + topChips.receiver} showChip={!recordingPanelUp} />
         )}
 
         {/* Team mode (#589): the team chip under the receiver chip's lane and

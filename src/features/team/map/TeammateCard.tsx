@@ -9,6 +9,8 @@ import { rangeAndBearing, shortAge, type TeammatePosition } from '@core/teamui/p
 import { STATUS_LABEL } from '@core/teamui/system';
 import { distanceText } from '@core/teamui/teamBar';
 import type { MemberRow } from '@core/teamui/view';
+import { formatAccuracy } from '@core/format';
+import { useSettingsStore } from '@state/settingsStore';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -33,6 +35,7 @@ export function TeammateCard({
   onClose: () => void;
 }) {
   const t = useSchemeTokens();
+  const units = useSettingsStore((s) => s.units);
   const router = useRouter();
   const view = useTeamStore((s) => s.view);
   const status = useTeamStore((s) => s.statuses.get(member.id));
@@ -94,14 +97,16 @@ export function TeammateCard({
             numberOfLines={1}
             testID="team-card-fresh"
           >
-            {member.accuracy !== null ? `${fresh} · ±${Math.round(member.accuracy)} m` : fresh}
+            {member.accuracy !== null
+              ? `${fresh} · ${formatAccuracy(member.accuracy, units)}`
+              : fresh}
           </Text>
         </View>
         <IconButton icon="close" size={22} onPress={onClose} accessibilityLabel="Close" />
       </View>
 
       <View style={[styles.facts, { borderColor: t.outlineVariant }]} testID="team-card-range">
-        <Fact label="Distance" value={rb ? distanceText(rb.meters) : '—'} />
+        <Fact label="Distance" value={rb ? distanceText(rb.meters, units) : '—'} />
         <Fact
           label="Bearing"
           value={rb ? `${Math.round((rb.bearingDeg + 360) % 360)}° ${rb.compass}` : '—'}

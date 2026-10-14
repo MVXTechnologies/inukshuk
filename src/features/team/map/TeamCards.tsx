@@ -7,6 +7,7 @@
 import { findMentions } from '@core/teamui/compose';
 import { STATUS_IDS, type StatusId } from '@core/teamui/system';
 import { teamService, useTeamStore } from '@state/teamStore';
+import { useCoordinateFormatter } from '@state/useCoordinateFormatter';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
@@ -418,10 +419,12 @@ function PressCard({
   const router = useRouter();
   const open = useTeamSheet((s) => s.open);
   const guest = useTeamStore((s) => s.view?.members.find((m) => m.isMe)?.role === 'guest');
+  // The user's coordinate format (#677; 6-decimal DD by default, #701).
+  const formatCoords = useCoordinateFormatter();
   return (
     <Card
       title="Here"
-      sub={`${at[1].toFixed(5)}, ${at[0].toFixed(5)}`}
+      sub={formatCoords(at[1], at[0])}
       icon="crosshairs"
       onClose={onClose}
       testID="team-press-card"

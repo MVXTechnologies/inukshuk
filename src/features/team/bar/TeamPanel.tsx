@@ -15,6 +15,7 @@
  */
 import { STATUS_LABEL } from '@core/teamui/system';
 import { distanceText, panelMembers } from '@core/teamui/teamBar';
+import { useSettingsStore } from '@state/settingsStore';
 import { useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -44,6 +45,7 @@ export function TeamPanel({
   focused?: boolean;
 }) {
   const t = useSchemeTokens();
+  const units = useSettingsStore((s) => s.units);
   const router = useRouter();
   const close = useTeamSheet((s) => s.close);
   const openSheet = useTeamSheet((s) => s.open);
@@ -214,7 +216,9 @@ export function TeamPanel({
                       m.name,
                       status ? STATUS_LABEL[status.id] : null,
                       m.line,
-                      m.distanceM !== null ? `${distanceText(m.distanceM)} ${m.compass}` : null,
+                      m.distanceM !== null
+                        ? `${distanceText(m.distanceM, units)} ${m.compass}`
+                        : null,
                     ]
                       .filter(Boolean)
                       .join(', ')}
@@ -271,7 +275,7 @@ export function TeamPanel({
                     {m.distanceM !== null && (
                       <View style={[styles.right, m.band !== 'fresh' && styles.dim]}>
                         <Text style={[styles.dist, { color: t.ink }]}>
-                          {`${distanceText(m.distanceM)} ${m.compass}`}
+                          {`${distanceText(m.distanceM, units)} ${m.compass}`}
                         </Text>
                         {m.lastPosition && (
                           <Text style={[styles.lastPos, { color: t.inkMuted }]}>last position</Text>

@@ -1,9 +1,10 @@
-import { IMPERIAL, METRIC } from '@core/format';
+import { IMPERIAL, METRIC, NAUTICAL } from '@core/format';
 import {
   CUSTOM_LENGTH_MAX_M,
   CUSTOM_LENGTH_MIN_M,
   clampCustomLengthM,
   customLengthInputText,
+  customLengthInputUnit,
   parseCustomLength,
   pointingLineChoiceM,
   DEFAULT_POINTING_LINE,
@@ -226,39 +227,48 @@ describe('Custom length (#703)', () => {
   });
 
   it('parses typed text in metres, or feet in imperial', () => {
-    expect(parseCustomLength('1250', 'metric')).toBe(1250);
-    expect(parseCustomLength(' 12.5 ', 'metric')).toBe(12.5);
-    expect(parseCustomLength('12,5', 'metric')).toBe(12.5);
-    expect(parseCustomLength('1500', 'imperial')).toBeCloseTo(457.2, 9);
-    expect(parseCustomLength('', 'metric')).toBeNull();
-    expect(parseCustomLength('.', 'metric')).toBeNull();
-    expect(parseCustomLength('1.2.3', 'metric')).toBeNull();
-    expect(parseCustomLength('-5', 'metric')).toBeNull();
-    expect(parseCustomLength('0', 'metric')).toBeNull();
-    expect(parseCustomLength('3', 'metric')).toBe(10);
+    expect(parseCustomLength('1250', METRIC)).toBe(1250);
+    expect(parseCustomLength(' 12.5 ', METRIC)).toBe(12.5);
+    expect(parseCustomLength('12,5', METRIC)).toBe(12.5);
+    expect(parseCustomLength('1500', IMPERIAL)).toBeCloseTo(457.2, 9);
+    expect(parseCustomLength('', METRIC)).toBeNull();
+    expect(parseCustomLength('.', METRIC)).toBeNull();
+    expect(parseCustomLength('1.2.3', METRIC)).toBeNull();
+    expect(parseCustomLength('-5', METRIC)).toBeNull();
+    expect(parseCustomLength('0', METRIC)).toBeNull();
+    expect(parseCustomLength('3', METRIC)).toBe(10);
+  });
+
+  it('types Custom in the ruler’s short unit (#702): NM takes the elevation unit', () => {
+    expect(customLengthInputUnit(METRIC)).toBe('m');
+    expect(customLengthInputUnit(IMPERIAL)).toBe('ft');
+    expect(customLengthInputUnit(NAUTICAL)).toBe('m');
+    const nmFt = { distance: 'nmi', elevation: 'ft' } as const;
+    expect(customLengthInputUnit(nmFt)).toBe('ft');
+    expect(parseCustomLength('1500', nmFt)).toBeCloseTo(457.2, 9);
+    expect(pointingLineLengthText('custom', NAUTICAL, 1250)).toBe('1.25 km');
+    expect(pointingLineLengthText('custom', nmFt, 457.2)).toBe('1500 ft');
   });
 
   it('shows the stored metres back in the input unit, whole', () => {
-    expect(customLengthInputText(1250, 'metric')).toBe('1250');
-    expect(customLengthInputText(457.2, 'imperial')).toBe('1500');
-    expect(customLengthInputText(12.6, 'metric')).toBe('13');
+    expect(customLengthInputText(1250, METRIC)).toBe('1250');
+    expect(customLengthInputText(457.2, IMPERIAL)).toBe('1500');
+    expect(customLengthInputText(12.6, METRIC)).toBe('13');
   });
 
   it('reads as a distance in summaries, captions and the note', () => {
     const s = { ...DEFAULT_POINTING_LINE, length: 'custom' as const, customLengthM: 1250 };
     expect(pointingLineSummary(s)).toBe('1.25 km along your heading');
-    expect(pointingLineCaption(s, 'metric')).toBe(
-      'From you · heading · 1.25 km · ticks every 50 m',
-    );
-    expect(pointingLineLengthText('custom', 'metric', 640)).toBe('640 m');
-    expect(pointingLineLengthText('custom', 'imperial', 457.2)).toBe('1500 ft');
-    expect(pointingLineLengthText('custom', 'imperial', 3218.688)).toBe('2 mi');
-    expect(pointingLineGroundNote('custom', 'metric', 640)).toMatch(/so 640 m is 640 m on/);
+    expect(pointingLineCaption(s, METRIC)).toBe('From you · heading · 1.25 km · ticks every 50 m');
+    expect(pointingLineLengthText('custom', METRIC, 640)).toBe('640 m');
+    expect(pointingLineLengthText('custom', IMPERIAL, 457.2)).toBe('1500 ft');
+    expect(pointingLineLengthText('custom', IMPERIAL, 3218.688)).toBe('2 mi');
+    expect(pointingLineGroundNote('custom', METRIC, 640)).toMatch(/so 640 m is 640 m on/);
   });
 
   it('draws the typed metres; Edge has none', () => {
-    expect(pointingLineChoiceM('custom', 'imperial', 1250)).toBe(1250);
-    expect(pointingLineChoiceM(500, 'metric', 1250)).toBe(500);
-    expect(pointingLineChoiceM('edge', 'metric', 1250)).toBeNull();
+    expect(pointingLineChoiceM('custom', IMPERIAL, 1250)).toBe(1250);
+    expect(pointingLineChoiceM(500, METRIC, 1250)).toBe(500);
+    expect(pointingLineChoiceM('edge', METRIC, 1250)).toBeNull();
   });
 });

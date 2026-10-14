@@ -241,11 +241,11 @@ describe('resolveLengthM', () => {
   });
 
   it('Custom (#703) is the typed distance, in either unit system, without bounds', () => {
-    expect(resolveLengthM('custom', QC, 0, null, 'metric', 1250)).toBe(1250);
-    expect(resolveLengthM('custom', QC, 0, null, 'imperial', 1250)).toBe(1250);
+    expect(resolveLengthM('custom', QC, 0, null, METRIC, 1250)).toBe(1250);
+    expect(resolveLengthM('custom', QC, 0, null, IMPERIAL, 1250)).toBe(1250);
     expect(resolveLengthM('custom', QC, 0, null)).toBe(750);
     // A hand-edited out-of-range value is clamped, never drawn as is.
-    expect(resolveLengthM('custom', QC, 0, null, 'metric', 1e9)).toBe(50_000);
+    expect(resolveLengthM('custom', QC, 0, null, METRIC, 1e9)).toBe(50_000);
   });
 });
 

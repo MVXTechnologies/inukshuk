@@ -4,6 +4,7 @@
  * the in-app alarm, in both themes. Timers are jest's (modern fake timers):
  * no real sleeps; the clock moves only when a test advances it.
  */
+import { IMPERIAL, METRIC } from '@core/format';
 import { defaultExtensionPrefs } from '@core/extensions/prefs';
 import { nodeCrypto } from '@core/team/testing/nodeCrypto';
 import type { TeamRally, TeamSos } from '@core/teamui/field';
@@ -85,7 +86,7 @@ beforeEach(() => {
   const d = defaultExtensionPrefs();
   useSettingsStore.setState({
     extensions: { ...d, team: { ...d.team, installedAt: Date.now() } },
-    units: 'metric',
+    units: METRIC,
   });
   useTeamSheet.getState().close();
   useTeamMapSelection.getState().select(null);
@@ -252,6 +253,14 @@ describe('the team panel (#707)', () => {
     },
   );
 
+  it('distances in the user’s units (#702)', async () => {
+    crew();
+    useSettingsStore.setState({ units: IMPERIAL });
+    await render(wrap(<TeamPanel top={0} here={HERE} />));
+    expect(screen.getByText('0.2 mi NE')).toBeTruthy();
+    expect(screen.queryByText(/\d m /)).toBeNull();
+  });
+
   it('a teammate without a position opens their page; Manage team goes to the team', async () => {
     crew();
     await render(wrap(<TeamPanel top={0} here={HERE} />));
@@ -292,6 +301,10 @@ describe('the alert bands (#708)', () => {
     expect(screen.getByText('SOS · Julie Tremblay')).toBeTruthy();
     // Julie's live position (her SOS follows her).
     expect(screen.getByText('338 m NE · 2 min')).toBeTruthy();
+    // In the user's units (#702).
+    await act(() => useSettingsStore.setState({ units: IMPERIAL }));
+    expect(screen.getByText('0.2 mi NE · 2 min')).toBeTruthy();
+    await act(() => useSettingsStore.setState({ units: METRIC }));
     await fireEvent.press(screen.getByTestId('team-band-sos-navigate'));
     expect(nav).toHaveBeenCalledWith(46.8026, -71.1977);
     await fireEvent.press(screen.getByTestId('team-band-sos-centre'));

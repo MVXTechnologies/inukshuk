@@ -1,3 +1,5 @@
+import { IMPERIAL, METRIC, NAUTICAL } from '@core/format';
+
 import { distanceText, memberAgeMs, panelMembers, teamBarSummary, type BarMember } from './teamBar';
 
 const NOW = 1_800_000_000_000;
@@ -138,7 +140,7 @@ describe('panelMembers', () => {
       band: 'lost',
       lastPosition: true,
     });
-    expect(distanceText(by.get('julie')!.distanceM!)).toBe('338 m');
+    expect(distanceText(by.get('julie')!.distanceM!, METRIC)).toBe('338 m');
   });
 
   it('without my position: no distance, fresh ones by age', () => {
@@ -150,8 +152,13 @@ describe('panelMembers', () => {
   });
 
   it('distanceText', () => {
-    expect(distanceText(640.4)).toBe('640 m');
-    expect(distanceText(1234)).toBe('1.2 km');
-    expect(distanceText(12_345)).toBe('12 km');
+    expect(distanceText(640.4, METRIC)).toBe('640 m');
+    expect(distanceText(1234, METRIC)).toBe('1.2 km');
+    expect(distanceText(12_345, METRIC)).toBe('12 km');
+    // In the user's units (#702).
+    expect(distanceText(200, IMPERIAL)).toBe('656 ft');
+    expect(distanceText(1234, IMPERIAL)).toBe('0.8 mi');
+    expect(distanceText(12_345, NAUTICAL)).toBe('6.7 NM');
+    expect(distanceText(120, NAUTICAL)).toBe('120 m');
   });
 });

@@ -25,6 +25,7 @@ import {
   type BandAction,
 } from '@core/teamui/alertBands';
 import { receiptLine } from '@core/teamui/receipts';
+import { useSettingsStore } from '@state/settingsStore';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -119,6 +120,7 @@ function Band({
   onCentre: (latitude: number, longitude: number) => void;
 }) {
   const t = useSchemeTokens();
+  const units = useSettingsStore((s) => s.units);
   const isAdmin = useTeamStore((s) => s.view?.isAdmin === true);
   // Receipts are re-read whenever team data changes.
   useTeamStore((s) => s.dataVersion);
@@ -132,7 +134,7 @@ function Band({
         teamService()?.active?.receipts(alert.ref) ?? { received: 0, capable: 0, others: 0 },
       )
     : '';
-  const m = bandModel(alert, { here, now, receipts, isAdmin });
+  const m = bandModel(alert, { here, now, receipts, isAdmin, units });
   const id = sos ? 'team-band-sos' : 'team-band-gather';
   const finish = () => {
     const session = teamService()?.active;
@@ -303,9 +305,10 @@ function GatherEtaList({ here }: { here: { latitude: number; longitude: number }
   const rally = useTeamStore((s) => s.rally);
   const view = useTeamStore((s) => s.view);
   const positions = useTeamStore((s) => s.positions);
+  const units = useSettingsStore((s) => s.units);
   const rows = useMemo(
-    () => (rally && view ? gatherEtas(rally, view.members, positions, here) : []),
-    [rally, view, positions, here],
+    () => (rally && view ? gatherEtas(rally, view.members, positions, here, units) : []),
+    [rally, view, positions, here, units],
   );
   return (
     <View

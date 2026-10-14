@@ -36,6 +36,7 @@ export const ALARM_MAX_MS = 2 * 60_000;
 
 export function SosAlarmBanner() {
   const t = useSchemeTokens();
+  const units = useSettingsStore((s) => s.units);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const alarm = useTeamStore((s) => s.sosAlarm);
@@ -84,7 +85,7 @@ export function SosAlarmBanner() {
   const at: [number, number] | null = live ? [live.lon, live.lat] : sos ? [sos.lng, sos.lat] : null;
   const where =
     at && here
-      ? `${distanceText(metres([here.longitude, here.latitude], at))} ${compassPoint(
+      ? `${distanceText(metres([here.longitude, here.latitude], at), units)} ${compassPoint(
           initialBearingDeg(here, { latitude: at[1], longitude: at[0] }),
         )} of you`
       : null;

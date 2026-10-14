@@ -12,6 +12,7 @@
  *
  * Ages are banded the way the map bands them (`ageBand`), never continuous.
  */
+import { formatDistance, type Units } from '@core/format';
 import { ageBand, FRESH_MS, rangeAndBearing, shortAge, type AgeBand } from './positions';
 
 export type SyncState = 'lan' | 'look' | 'off';
@@ -195,7 +196,10 @@ export function panelMembers(
   );
 }
 
-/** "640 m", "1.2 km", "12 km". */
-export function distanceText(m: number): string {
-  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(m < 10_000 ? 1 : 0)} km`;
+/**
+ * A teammate's range in the user's units (#702), glance-short: "640 m",
+ * "1.2 km", "12 km"; "0.8 mi", "2.1 NM".
+ */
+export function distanceText(m: number, units: Units): string {
+  return formatDistance(m, units, { style: 'short' });
 }

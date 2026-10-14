@@ -14,6 +14,7 @@ import { TeamService } from '@data/team/teamService';
 import type { CreatedInvite } from '@data/team/teamSession';
 import { ExtensionsSection } from '@features/settings/ExtensionsSection';
 import { useSettingsStore } from '@state/settingsStore';
+import { IMPERIAL, METRIC } from '@core/format';
 import { useTeamStore, wireTeamStore } from '@state/teamStore';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
@@ -253,6 +254,13 @@ describe('the map card', () => {
     expect(screen.getByTestId('team-card-fresh').props.children).toBe('Live · updated now · ±5 m');
     expect(screen.getByLabelText('Distance: 1.1 km')).toBeTruthy();
     expect(screen.getByLabelText('Bearing: 0° N')).toBeTruthy();
+    // In the user's units (#702), live: the card follows a Settings change.
+    await act(() => useSettingsStore.setState({ units: IMPERIAL }));
+    expect(screen.getByTestId('team-card-fresh').props.children).toBe(
+      'Live · updated now · ±16 ft',
+    );
+    expect(screen.getByLabelText('Distance: 0.7 mi')).toBeTruthy();
+    await act(() => useSettingsStore.setState({ units: METRIC }));
     expect(screen.getByText('Julie')).toBeTruthy();
     for (const id of ['message', 'goto', 'centre', 'where'])
       expect(screen.getByTestId(`team-member-${id}`)).toBeTruthy();
