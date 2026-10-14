@@ -39,6 +39,7 @@ async function openEditor(dark = false) {
         bottomLift={0}
         hidden={false}
         onCopied={() => undefined}
+        onOpenTarget={() => undefined}
       />
     </Providers>,
   );

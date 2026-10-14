@@ -26,3 +26,10 @@ export const REFERENCE_PARAM = {
 } as const;
 
 export type NorthReference = 'true' | 'magnetic';
+
+/** The tide station a tide field reads (#695): the nearest by default, or one picked. */
+export const STATION_PARAM = {
+  kind: 'station',
+  label: 'Station',
+  hint: 'The nearest station with a live gauge, or one you pick',
+} as const;

@@ -84,6 +84,19 @@ describe('settings.infoStrip', () => {
     expect(normaliseInfoStripSettings(roundTrip(s))).toEqual(s);
   });
 
+  it('a 2.6.0 tide field (no station param yet) reads the nearest; a picked one is kept (#695)', () => {
+    const s = normaliseStrip({
+      rows: [
+        [
+          { field: 'tides:level', params: {} },
+          { field: 'tides:nextHigh', params: { station: '100:03250' } },
+          { field: 'tides:level', params: { station: '' } },
+        ],
+      ],
+    })!;
+    expect(s.rows[0]!.map((f) => f.params.station)).toEqual(['nearest', '100:03250', 'nearest']);
+  });
+
   it('sanitises a corrupt strip field by field', () => {
     const s = normaliseStrip({
       name: '   ',

@@ -1,9 +1,11 @@
-import { destinationName, effectiveTarget, resolveTarget } from './target';
+import { destinationName, effectiveTarget, resolveTarget, targetOpen } from './target';
 import { QC, snapshot } from './testUtils';
 import type { FollowSnapshot } from './types';
 
 const PIN = { name: 'Camp lac', point: { latitude: 46.82, longitude: -71.2 } };
 const FOLLOW: FollowSnapshot = {
+  targetKind: 'note',
+  targetId: 'n1',
   targetName: 'Source',
   targetPoint: { latitude: 46.815, longitude: -71.205 },
   targetDistanceM: 620,
@@ -66,6 +68,47 @@ describe('resolveTarget', () => {
       point: QC,
       glyph: 'my_location',
       alongTrailM: null,
+    });
+  });
+});
+
+describe('targetOpen (#696: a tap on the target name)', () => {
+  it('a saved waypoint opens its card, while it exists', () => {
+    const waypoints = { w1: PIN };
+    const t = { kind: 'waypoint', waypointId: 'w1' } as const;
+    expect(targetOpen(t, snapshot({ waypoints }))).toEqual({ kind: 'waypoint', waypointId: 'w1' });
+    expect(targetOpen(t, snapshot())).toBeNull();
+  });
+
+  it("the followed trail's next target: a waypoint's card, else the point chip on it", () => {
+    const onWaypoint = { ...FOLLOW, targetKind: 'waypoint' as const, targetId: 'w9' };
+    const end = { ...FOLLOW, targetKind: 'end' as const, targetId: 'end' };
+    for (const kind of ['navTarget', 'nextOnTrail'] as const) {
+      expect(targetOpen({ kind }, snapshot({ navTarget: PIN, follow: onWaypoint }))).toEqual({
+        kind: 'waypoint',
+        waypointId: 'w9',
+      });
+      expect(targetOpen({ kind }, snapshot({ follow: FOLLOW }))).toEqual({
+        kind: 'point',
+        point: FOLLOW.targetPoint,
+      });
+      expect(targetOpen({ kind }, snapshot({ follow: end }))).toEqual({
+        kind: 'point',
+        point: FOLLOW.targetPoint,
+      });
+    }
+    expect(targetOpen({ kind: 'nextOnTrail' }, snapshot({ navTarget: PIN }))).toBeNull();
+  });
+
+  it('the destination pin, or a typed coordinate: the point chip there', () => {
+    expect(targetOpen({ kind: 'navTarget' }, snapshot({ navTarget: PIN }))).toEqual({
+      kind: 'point',
+      point: PIN.point,
+    });
+    expect(targetOpen({ kind: 'navTarget' }, snapshot())).toBeNull();
+    expect(targetOpen({ kind: 'coordinate', point: QC }, snapshot())).toEqual({
+      kind: 'point',
+      point: QC,
     });
   });
 });

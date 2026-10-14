@@ -50,6 +50,8 @@ export function paramValid(spec: AnyParamSpec, value: unknown): boolean {
       return typeof value === 'boolean';
     case 'target':
       return value === null || normaliseTarget(value) !== null;
+    case 'station':
+      return typeof value === 'string' && value !== '';
     default:
       return spec.options.some((o) => o.value === value);
   }

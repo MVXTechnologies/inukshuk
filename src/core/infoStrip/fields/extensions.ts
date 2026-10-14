@@ -9,8 +9,8 @@ import { formatHeight, kindLabel } from '@core/gnss/chip';
 import { stateOf } from '@core/gnss/quality';
 
 import { splitUnit } from '../format';
-import type { StripValue } from '../types';
-import { defineField } from './define';
+import { NEAREST_STATION, type DepsSnapshot, type StripValue, type TideSnapshot } from '../types';
+import { defineField, STATION_PARAM } from './define';
 
 /** Ellipsoidal height from the receiver, with the decimals its accuracy supports. */
 export const GNSS_HEIGHT = defineField<Record<string, never>>({
@@ -57,8 +57,20 @@ export const GNSS_FIX = defineField<Record<string, never>>({
   sample: { glyph: 'satellite_alt', value: 'RTK fixed', tone: 'ok' },
 });
 
-/** The water level at the chosen tide station, with its trend arrow. */
-export const TIDE_LEVEL = defineField<Record<string, never>>({
+/** A tide field's params: which station it reads (#695). */
+export type TideParams = { station: string };
+
+/** The readout of the station a tide field names, or null (not loaded, nothing near). */
+function tideOf(data: DepsSnapshot, params: TideParams): TideSnapshot | null {
+  return data.tides[params.station] ?? null;
+}
+
+/**
+ * The water level at the chosen tide station, with its trend arrow. Per
+ * minute tick: one record lookup and a format; the level itself is fetched
+ * by the platform every few minutes, never per tick.
+ */
+export const TIDE_LEVEL = defineField<TideParams>({
   id: 'tides:level',
   label: 'Tide at a station',
   summary: 'The level now and whether it rises',
@@ -66,13 +78,13 @@ export const TIDE_LEVEL = defineField<Record<string, never>>({
   group: 'extension',
   spaces: 1,
   requires: 'tides',
-  params: {},
-  defaults: {},
+  params: { station: STATION_PARAM },
+  defaults: { station: NEAREST_STATION },
   deps: ['ext:tides'],
   tick: 'minute',
-  compute(data) {
-    const t = data.tides;
-    if (t === null) return null;
+  compute(data, params) {
+    const t = tideOf(data, params);
+    if (t === null || t.levelM === null) return null;
     const arrow = t.trend === 'rising' ? ' ↑' : t.trend === 'falling' ? ' ↓' : '';
     const sign = t.levelM < 0 ? '−' : '+';
     return {
@@ -85,8 +97,8 @@ export const TIDE_LEVEL = defineField<Record<string, never>>({
   sample: { glyph: 'waves', tag: 'Lauzon', value: '+3.84', unit: 'm ↑' },
 });
 
-/** The next high tide at the station, clock time. */
-export const TIDE_NEXT_HIGH = defineField<Record<string, never>>({
+/** The next high tide at the station, clock time; it steps aside once it has passed. */
+export const TIDE_NEXT_HIGH = defineField<TideParams>({
   id: 'tides:nextHigh',
   label: 'Next high tide',
   summary: 'When the water is highest next',
@@ -94,13 +106,13 @@ export const TIDE_NEXT_HIGH = defineField<Record<string, never>>({
   group: 'extension',
   spaces: 1,
   requires: 'tides',
-  params: {},
-  defaults: {},
+  params: { station: STATION_PARAM },
+  defaults: { station: NEAREST_STATION },
   deps: ['ext:tides', 'clock'],
   tick: 'minute',
-  compute(data) {
-    const next = data.tides?.nextHigh;
-    if (next == null) return null;
+  compute(data, params) {
+    const next = tideOf(data, params)?.nextHigh;
+    if (next == null || next.atMs <= data.nowMs) return null;
     return { tag: 'High', value: formatClockTime(next.atMs) };
   },
   sample: { tag: 'High', value: '14:52' },

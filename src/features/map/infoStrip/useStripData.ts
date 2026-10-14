@@ -2,6 +2,7 @@ import { fixAltitude } from '@core/gnss/receiver';
 import { stripNeeds } from '@core/infoStrip/deps';
 import { datumTag } from '@core/infoStrip/edit';
 import { createMovingSpeedWindow } from '@core/infoStrip/movingSpeed';
+import { stripStationParams } from '@core/infoStrip/tides';
 import { destinationName } from '@core/infoStrip/target';
 import type {
   DatumView,
@@ -26,6 +27,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCenterElevation } from '../centerElevation';
 import type { FollowState } from '../nav/useFollowTrail';
 import { subscribeHeading } from '../useCompass';
+import { useInstalledExtensions } from './stripSettings';
+import { useStripTides } from './useStripTides';
 
 /** What MapScreen already holds per fix, handed to the strip (no new MapScreen work). */
 export interface StripInputs {
@@ -145,7 +148,10 @@ function referencedWaypoints(strip: InfoStrip, rows: readonly (readonly FieldRef
  * - course: the tracker, only with a field that can show COG;
  * - clock: 1 Hz with ETE or a recording metric, each minute with sunset or
  *   ETA, none otherwise;
- * - moving speed: the 10-minute window, fed per fix, only with ETE/ETA.
+ * - moving speed: the 10-minute window, fed per fix, only with ETE/ETA;
+ * - tides: only with a tide field and the extension installed; the station
+ *   re-resolved per ~1 km cell, its level fetched every 10 min
+ *   (`useStripTides`), the fields computed on the minute clock.
  * Each tick builds one snapshot; the fields' compute() run over it (O(fields),
  * each O(1)) and only a field whose value changed re-renders (`StripField`).
  */
@@ -177,6 +183,13 @@ export function useStripSnapshot(
   const gnssUse = useGnssStore((s) => s.use);
   const gnssFix = useGnssStore((s) => (s.use === 'external' ? s.fix : null));
   const gnssProject = useGnssStore((s) => (s.use === 'external' ? s.project : null));
+
+  // Tide stations (#695): "nearest" to you, or to the map centre before a fix.
+  const installed = useInstalledExtensions();
+  const tidesOn = deps.has('ext:tides') && installed.has('tides');
+  const tideParams = useMemo(() => stripStationParams(rows), [rows]);
+  const tideCentre = useMapStore((s) => (tidesOn && location === null ? s.mapCenter : null));
+  const tides = useStripTides(tidesOn, tideParams, location ?? tideCentre);
 
   const destination = useNavigationStore((s) => s.destination);
   const waypointList = useLibraryStore((s) => s.waypoints);
@@ -215,6 +228,8 @@ export function useStripSnapshot(
       readout === null
         ? null
         : {
+            targetKind: readout.target.kind,
+            targetId: readout.target.id,
             targetName: readout.target.name,
             targetPoint: readout.target.at,
             targetDistanceM: readout.targetDistanceM,
@@ -259,8 +274,7 @@ export function useStripSnapshot(
       coordinateFormat,
       datums,
       gnss,
-      // A tide field needs a station to read; the station picker is a follow-up.
-      tides: null,
+      tides,
     };
   }, [
     nowMs,
@@ -280,6 +294,7 @@ export function useStripSnapshot(
     gnssUse,
     gnssFix,
     gnssProject,
+    tides,
   ]);
 }
 

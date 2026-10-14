@@ -1,7 +1,7 @@
 import { formatClockTime } from '@core/format';
 
 import { METRIC, NOW, snapshot } from '../testUtils';
-import type { GnssSnapshot, TideSnapshot } from '../types';
+import { NEAREST_STATION, type GnssSnapshot, type TideSnapshot } from '../types';
 import { GNSS_FIX, GNSS_HEIGHT, TIDE_LEVEL, TIDE_NEXT_HIGH } from './extensions';
 
 const RTK: GnssSnapshot = { kind: 'rtk-fixed', ellipsoidalHeightM: 183.4231, heightAccuracyM: 0.4 };
@@ -42,31 +42,52 @@ describe('GNSS fields', () => {
 });
 
 describe('tide fields', () => {
+  const NEAREST = { station: NEAREST_STATION };
+  const at = (t: TideSnapshot) => snapshot({ tides: { [NEAREST_STATION]: t } });
+
   it('the level at the station, signed, with its trend', () => {
-    expect(TIDE_LEVEL.compute(snapshot({ tides: TIDE }), {}, METRIC)).toEqual({
+    expect(TIDE_LEVEL.compute(at(TIDE), NEAREST, METRIC)).toEqual({
       glyph: 'waves',
       tag: 'Lauzon',
       value: '+3.84',
       unit: 'm ↑',
     });
     const falling = { ...TIDE, levelM: -0.31, trend: 'falling' as const };
-    expect(TIDE_LEVEL.compute(snapshot({ tides: falling }), {}, METRIC)).toMatchObject({
+    expect(TIDE_LEVEL.compute(at(falling), NEAREST, METRIC)).toMatchObject({
       value: '−0.31',
       unit: 'm ↓',
     });
     const slack = { ...TIDE, trend: null };
-    expect(TIDE_LEVEL.compute(snapshot({ tides: slack }), {}, METRIC)?.unit).toBe('m');
-    expect(TIDE_LEVEL.compute(snapshot(), {}, METRIC)).toBeNull();
+    expect(TIDE_LEVEL.compute(at(slack), NEAREST, METRIC)?.unit).toBe('m');
+    expect(TIDE_LEVEL.compute(snapshot(), NEAREST, METRIC)).toBeNull();
+    // No fresh observation: no level (the next high may still show).
+    expect(TIDE_LEVEL.compute(at({ ...TIDE, levelM: null }), NEAREST, METRIC)).toBeNull();
   });
 
-  it('the next high tide, clock time', () => {
-    expect(TIDE_NEXT_HIGH.compute(snapshot({ tides: TIDE }), {}, METRIC)).toEqual({
+  it('reads the station its param names, not another', () => {
+    const picked = { station: '100:03250' };
+    const data = snapshot({ tides: { '100:03250': { ...TIDE, stationName: 'Rimouski' } } });
+    expect(TIDE_LEVEL.compute(data, picked, METRIC)?.tag).toBe('Rimouski');
+    expect(TIDE_LEVEL.compute(data, NEAREST, METRIC)).toBeNull();
+    expect(TIDE_NEXT_HIGH.compute(data, picked, METRIC)).not.toBeNull();
+  });
+
+  it('the next high tide, clock time, until it has passed', () => {
+    expect(TIDE_NEXT_HIGH.compute(at(TIDE), NEAREST, METRIC)).toEqual({
       tag: 'High',
       value: formatClockTime(NOW + 3 * 3600_000),
     });
-    expect(
-      TIDE_NEXT_HIGH.compute(snapshot({ tides: { ...TIDE, nextHigh: null } }), {}, METRIC),
-    ).toBeNull();
-    expect(TIDE_NEXT_HIGH.compute(snapshot(), {}, METRIC)).toBeNull();
+    expect(TIDE_NEXT_HIGH.compute(at({ ...TIDE, nextHigh: null }), NEAREST, METRIC)).toBeNull();
+    const passed = { ...TIDE, nextHigh: { atMs: NOW - 60_000, levelM: 5.1 } };
+    expect(TIDE_NEXT_HIGH.compute(at(passed), NEAREST, METRIC)).toBeNull();
+    expect(TIDE_NEXT_HIGH.compute(snapshot(), NEAREST, METRIC)).toBeNull();
+  });
+
+  it('refresh each minute, never faster, and default to the nearest station', () => {
+    for (const d of [TIDE_LEVEL, TIDE_NEXT_HIGH]) {
+      expect(d.tick).toBe('minute');
+      expect(d.defaults).toEqual({ station: NEAREST_STATION });
+      expect(d.params.station.kind).toBe('station');
+    }
   });
 });

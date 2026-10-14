@@ -57,6 +57,44 @@ function fromFollow(follow: FollowSnapshot): ResolvedTarget {
   };
 }
 
+/**
+ * What a tap on the target-name field opens (#696), on the map's own card
+ * paths: a saved waypoint's card, or the point chip (coordinates, Navigate,
+ * Waypoint, Convert) on any other point.
+ */
+export type TargetOpen =
+  { kind: 'waypoint'; waypointId: string } | { kind: 'point'; point: LatLng };
+
+/**
+ * The card a target opens, or null when it names nothing right now (its
+ * field is not even drawn then):
+ * - a saved waypoint → its card;
+ * - the followed trail's next target → the waypoint's card, or the point
+ *   chip on the note or the trail's end;
+ * - the destination pin, or a typed coordinate → the point chip there.
+ */
+export function targetOpen(target: Target, data: DepsSnapshot): TargetOpen | null {
+  switch (target.kind) {
+    case 'navTarget':
+      if (data.follow !== null) return followOpen(data.follow);
+      return data.navTarget === null ? null : { kind: 'point', point: data.navTarget.point };
+    case 'nextOnTrail':
+      return data.follow === null ? null : followOpen(data.follow);
+    case 'waypoint':
+      return data.waypoints[target.waypointId] === undefined
+        ? null
+        : { kind: 'waypoint', waypointId: target.waypointId };
+    case 'coordinate':
+      return { kind: 'point', point: target.point };
+  }
+}
+
+function followOpen(follow: FollowSnapshot): TargetOpen {
+  return follow.targetKind === 'waypoint'
+    ? { kind: 'waypoint', waypointId: follow.targetId }
+    : { kind: 'point', point: follow.targetPoint };
+}
+
 /** A destination this close to a saved waypoint takes its name, metres. */
 export const DESTINATION_NAME_RADIUS_M = 2;
 

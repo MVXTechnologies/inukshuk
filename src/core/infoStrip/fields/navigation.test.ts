@@ -19,6 +19,8 @@ import {
 
 const CAMP = { name: 'Camp lac', point: { latitude: 46.8222, longitude: -71.1952 } };
 const FOLLOW: FollowSnapshot = {
+  targetKind: 'note',
+  targetId: 'n1',
   targetName: 'Source',
   targetPoint: { latitude: 46.815, longitude: -71.205 },
   targetDistanceM: 1500,

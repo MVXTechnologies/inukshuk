@@ -34,6 +34,8 @@ export interface InfoStripViewProps {
   onEdit: () => void;
   /** A tap on a field that copies (coordinates): the text it copies. */
   onCopy: (p: PlacedValue) => void;
+  /** A tap on the target name (#696): open its target's card. */
+  onOpenTarget?: (p: PlacedValue) => void;
   onLayout?: (e: LayoutChangeEvent) => void;
 }
 
@@ -48,7 +50,8 @@ export interface InfoStripViewProps {
  * dock: its surface reaches up behind the status bar.
  *
  * A long-press anywhere opens the editor; a tap keeps a field's own action
- * (the coordinates copy). Pure layout: values come in computed.
+ * (the coordinates copy, the target name opens its target). Pure layout:
+ * values come in computed.
  */
 export const InfoStripView = memo(function InfoStripView({
   rows,
@@ -57,6 +60,7 @@ export const InfoStripView = memo(function InfoStripView({
   topInset,
   onEdit,
   onCopy,
+  onOpenTarget,
   onLayout,
 }: InfoStripViewProps) {
   const t = useSchemeTokens();
@@ -89,6 +93,7 @@ export const InfoStripView = memo(function InfoStripView({
               const copies =
                 p.descriptor.id === 'coords' && (p.ref.params.tapToCopy as boolean) !== false;
               const isCoords = p.descriptor.id === 'coords';
+              const opens = p.descriptor.id === 'targetName' && onOpenTarget !== undefined;
               const field = (
                 <StripField
                   value={p.value}
@@ -106,14 +111,14 @@ export const InfoStripView = memo(function InfoStripView({
               return (
                 <Fragment key={`${p.row}:${p.index}`}>
                   {i > 0 && <View style={[styles.fieldDivider, { backgroundColor: t.divider }]} />}
-                  {copies ? (
+                  {copies || opens ? (
                     <Pressable
-                      onPress={() => onCopy(p)}
+                      onPress={() => (copies ? onCopy(p) : onOpenTarget?.(p))}
                       onLongPress={onEdit}
                       delayLongPress={EDIT_HOLD_MS}
                       accessibilityRole="button"
                       accessibilityLabel={spoken}
-                      accessibilityHint="Copies the coordinates"
+                      accessibilityHint={copies ? 'Copies the coordinates' : 'Opens the target'}
                       accessibilityActions={EDIT_ACTION}
                       onAccessibilityAction={onAction}
                       style={({ pressed }) => [
@@ -121,7 +126,7 @@ export const InfoStripView = memo(function InfoStripView({
                         { flex: p.descriptor.spaces },
                         pressed && styles.pressed,
                       ]}
-                      testID="map-center-coords"
+                      testID={copies ? 'map-center-coords' : `strip-field-${p.descriptor.id}`}
                     >
                       {field}
                     </Pressable>

@@ -1,16 +1,21 @@
 import { formatCoordinate } from '@core/convert/coordinateDisplay';
+import { formatDistance, type Units } from '@core/format';
 import { haversineMeters } from '@core/geo/geomath';
 import type { Slot } from '@core/infoStrip/edit';
 import { fieldDescriptor } from '@core/infoStrip/registry';
-import type {
-  AnyParamSpec,
-  ComputeContext,
-  DepsSnapshot,
-  InfoStrip,
-  Params,
-  ParamValue,
-  Target,
+import { nearbyStations, nearestStation, STATIONS_LISTED } from '@core/infoStrip/tides';
+import {
+  NEAREST_STATION,
+  type AnyParamSpec,
+  type ComputeContext,
+  type DepsSnapshot,
+  type InfoStrip,
+  type Params,
+  type ParamValue,
+  type StationSpec,
+  type Target,
 } from '@core/infoStrip/types';
+import { stationKey } from '@core/tides/station';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Fragment, useMemo } from 'react';
@@ -26,6 +31,7 @@ import {
   useSheetAccent,
 } from '../../components/mapSheet';
 import { StripField } from '../StripField';
+import { useLiveTideStations } from '../useStripTides';
 import { previewValue } from './preview';
 
 /** A choice with more options than this is a list of rows, not a segmented control. */
@@ -43,7 +49,8 @@ type TargetKind = Target['kind'];
 /**
  * A field's settings page (mockup §3 `cfgDist` / `cfgCoords`), GENERATED from
  * its params schema: a choice is a segmented control (a list when it has
- * many options), a toggle a switch row, a target the target picker. The row
+ * many options), a toggle a switch row, a target the target picker, a
+ * station the nearby tide stations. The row
  * it sits in is previewed on top, live.
  *
  * Targets (owner Q4): the page edits the strip's shared target, which every
@@ -107,6 +114,14 @@ export function FieldSettings({
             />
           ) : spec.kind === 'choice' ? (
             <ChoiceParam spec={spec} value={params[key] as string} onSelect={(v) => set(key, v)} />
+          ) : spec.kind === 'station' ? (
+            <StationParam
+              spec={spec}
+              value={typeof params[key] === 'string' ? params[key] : NEAREST_STATION}
+              data={data}
+              units={ctx.units}
+              onSelect={(v) => set(key, v)}
+            />
           ) : (
             <TargetParam
               label={spec.label}
@@ -167,6 +182,98 @@ function ChoiceParam({
       )}
       {spec.hint !== undefined && (
         <Text style={[styles.hint, { color: t.inkMuted }]}>{spec.hint}</Text>
+      )}
+    </>
+  );
+}
+
+/**
+ * A tide field's station (#695): "Nearest" (the default, naming the station
+ * it is right now), then the stations with a live gauge near you, nearest
+ * first, from the Tide stations extension's own list. A picked station far
+ * from here stays listed on top so the choice is always visible.
+ */
+function StationParam({
+  spec,
+  value,
+  data,
+  units,
+  onSelect,
+}: {
+  spec: StationSpec;
+  value: string;
+  data: DepsSnapshot;
+  units: Units;
+  onSelect: (v: string) => void;
+}) {
+  const t = useSchemeTokens();
+  const { accent } = useSheetAccent();
+  const stations = useLiveTideStations(true);
+  const here = data.position ?? data.centre;
+  const near = useMemo(
+    () => (here === null ? [] : nearbyStations(stations, here, STATIONS_LISTED)),
+    [stations, here],
+  );
+  const nearest = here === null ? null : nearestStation(stations, here);
+  const picked =
+    value === NEAREST_STATION ? null : (stations.find((s) => stationKey(s) === value) ?? null);
+  const rows: { key: string; name: string; hint: string | null }[] = [
+    {
+      key: NEAREST_STATION,
+      name: 'Nearest',
+      hint: nearest === null ? null : nearest.name,
+    },
+  ];
+  if (picked !== null && !near.some((n) => n.station === picked)) {
+    rows.push({ key: value, name: picked.name, hint: null });
+  }
+  for (const n of near) {
+    rows.push({
+      key: stationKey(n.station),
+      name: n.station.name,
+      hint: formatDistance(n.distanceM, units),
+    });
+  }
+  return (
+    <>
+      <SectionTitle>{spec.label}</SectionTitle>
+      <View accessibilityRole="radiogroup" accessibilityLabel={spec.label}>
+        {rows.map((r) => {
+          const on = r.key === value;
+          return (
+            <Pressable
+              key={r.key}
+              onPress={() => onSelect(r.key)}
+              accessibilityRole="radio"
+              accessibilityLabel={r.hint === null ? r.name : `${r.name}, ${r.hint}`}
+              accessibilityState={{ checked: on, selected: on }}
+              style={styles.radio}
+              testID={`strip-station-${r.key}`}
+            >
+              <Icon
+                source={on ? 'radiobox-marked' : 'waves'}
+                size={20}
+                color={on ? accent : t.inkMuted}
+              />
+              <Text style={[styles.radioText, { color: t.ink }]} numberOfLines={1}>
+                {r.name}
+              </Text>
+              {r.hint !== null && (
+                <Text style={[styles.radioHint, { color: t.inkMuted }]} numberOfLines={1}>
+                  {r.hint}
+                </Text>
+              )}
+            </Pressable>
+          );
+        })}
+      </View>
+      {spec.hint !== undefined && (
+        <Text style={[styles.hint, { color: t.inkMuted }]}>{spec.hint}</Text>
+      )}
+      {stations.length === 0 && (
+        <SheetNote icon="wifi-off">
+          The station list loads once online, then works offline.
+        </SheetNote>
       )}
     </>
   );
@@ -318,6 +425,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   radioText: { fontSize: 15, flex: 1 },
+  radioHint: { fontSize: 13, fontVariant: ['tabular-nums'], maxWidth: '45%' },
   coordRow: {
     flexDirection: 'row',
     alignItems: 'center',

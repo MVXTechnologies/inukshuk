@@ -42,6 +42,21 @@ describe('MapScreen ↔ info strip', () => {
     );
   });
 
+  it("a tap on the target name opens it on the map's own card paths (#696)", () => {
+    expect(map).toMatch(/<InfoStripHost[^>]*onOpenTarget=\{openStripTarget\}/);
+    const body = map.slice(map.indexOf('const openStripTarget = useCallback('));
+    const fn = body.slice(0, body.indexOf('\n  );\n'));
+    // A waypoint: the pin tap's viewer card (and no point chip under it).
+    expect(fn).toMatch(
+      /open\.kind === 'waypoint'[\s\S]*setPointAt\(null\);\s*setViewWp\(\{ source: 'saved', id: open\.waypointId \}\);/,
+    );
+    // A point: the point chip there, flown into view.
+    expect(fn).toMatch(
+      /setViewWp\(null\);\s*setPointAt\(open\.point\);\s*flyToPoint\(open\.point\);/,
+    );
+    expect(fn).toMatch(/setExtensionHit\(null\);/);
+  });
+
   it('the destination chip is the name and ✕ (the strip carries the numbers)', () => {
     expect(map).toMatch(/<DestinationChip onClear=\{\(\) => setDestination\(null\)\} \/>/);
   });

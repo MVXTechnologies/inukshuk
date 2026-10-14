@@ -128,8 +128,22 @@ export interface TargetSpec {
   label: string;
 }
 
+/**
+ * A tide station (#695): {@link NEAREST_STATION} by default, else a station's
+ * key (`@core/tides/station` stationKey). Its options are the stations near
+ * you, so the settings page lists them live rather than from the schema.
+ */
+export interface StationSpec {
+  kind: 'station';
+  label: string;
+  hint?: string;
+}
+
+/** The station param's default: the nearest live station to you (or the map centre). */
+export const NEAREST_STATION = 'nearest';
+
 /** Any param's spec. */
-export type AnyParamSpec = ChoiceSpec<string> | ToggleSpec | TargetSpec;
+export type AnyParamSpec = ChoiceSpec<string> | ToggleSpec | TargetSpec | StationSpec;
 
 /** The spec for one param, by its value type (what `defineField` checks). */
 export type ParamSpec<V> = [V] extends [boolean]
@@ -137,7 +151,7 @@ export type ParamSpec<V> = [V] extends [boolean]
   : [V] extends [Target | null]
     ? TargetSpec
     : [V] extends [string]
-      ? ChoiceSpec<V>
+      ? ChoiceSpec<V> | StationSpec
       : never;
 
 /**
@@ -196,6 +210,10 @@ export interface StripFix extends LatLng {
 
 /** The followed trail's live readout (`@core/nav` FollowReadout, cut to what fields read). */
 export interface FollowSnapshot {
+  /** What the next target is: a saved waypoint, a trail note or the trail's end (#696 opens it). */
+  targetKind: 'waypoint' | 'note' | 'end';
+  /** The waypoint's or note's id, or "end". */
+  targetId: string;
   targetName: string;
   targetPoint: LatLng;
   /** Along the trail plus the way back to it, metres. */
@@ -226,7 +244,8 @@ export interface GnssSnapshot {
 /** A tide station's live level (Tide stations extension). */
 export interface TideSnapshot {
   stationName: string;
-  levelM: number;
+  /** The latest observed level above chart datum, metres; null when no fresh observation. */
+  levelM: number | null;
   trend: 'rising' | 'falling' | 'slack' | null;
   nextHigh: { atMs: number; levelM: number } | null;
 }
@@ -264,7 +283,12 @@ export interface DepsSnapshot {
   /** The centre and you in other datums, when the platform could convert them. */
   datums: { csrs?: DatumView; project?: DatumView };
   gnss: GnssSnapshot | null;
-  tides: TideSnapshot | null;
+  /**
+   * The tide readouts the placed tide fields name, by their `station` param
+   * ({@link NEAREST_STATION} or a station key); a station not loaded (no
+   * extension, offline, nothing near) is absent and its fields step aside.
+   */
+  tides: Readonly<Record<string, TideSnapshot>>;
 }
 
 // ------------------------------------------------------------------ values

@@ -50,6 +50,7 @@ const counts = { strip: 0 };
 const hostRendered = jest.fn();
 const hostRenders = () => hostRendered.mock.calls.length;
 const NO_INPUTS: Omit<InfoStripHostProps, 'onCopied'> = {
+  onOpenTarget: () => undefined,
   location: null,
   fix: null,
   follow: null,

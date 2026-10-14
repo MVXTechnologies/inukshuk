@@ -134,6 +134,7 @@ import { RenderingToasts } from './components/RenderingToasts';
 import { ScaleBar } from './components/ScaleBar';
 import { CenterCursor } from './components/CenterCursor';
 import { InfoStripHost } from './infoStrip/InfoStripHost';
+import type { TargetOpen } from '@core/infoStrip/target';
 import { useInfoStripBottomLift } from './infoStrip/stripRuntime';
 import { metersPerPixel } from '@core/geo/scaleBar';
 import { heatTapRadiusPx } from '@core/heat/heatStyle';
@@ -1887,6 +1888,25 @@ export function MapScreen() {
       }
     },
     [setDestination, composeWaypointAt, showSnack, router, formatCoords],
+  );
+
+  // A tap on the info strip's target name (#696): the waypoint's card (as a
+  // pin tap), or the point chip on the point, flown into view (as a search hit).
+  const openStripTarget = useCallback(
+    (open: TargetOpen) => {
+      setExtensionHit(null);
+      if (open.kind === 'waypoint') {
+        setPointAt(null);
+        setViewWp({ source: 'saved', id: open.waypointId });
+      } else {
+        setViewWp(null);
+        setPointAt(open.point);
+        flyToPoint(open.point);
+      }
+    },
+    // flyToPoint closes over refs only (see aimAt).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
 
   // Team mode (#589): "show on the map" from a task or a pin notification.
@@ -3843,6 +3863,7 @@ export function MapScreen() {
           bottomLift={bottomColumnLift}
           hidden={selecting || makeMapState !== null}
           onCopied={showSnack}
+          onOpenTarget={openStripTarget}
         />
 
         {/* Glove lock (revamp §3): a shield over the map and all its chrome;

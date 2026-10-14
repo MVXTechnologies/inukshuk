@@ -73,6 +73,11 @@ describe('paramValid / paramsValid', () => {
     expect(paramValid(SCHEMA.target, null)).toBe(true);
     expect(paramValid(SCHEMA.target, { kind: 'navTarget' })).toBe(true);
     expect(paramValid(SCHEMA.target, { kind: 'nope' })).toBe(false);
+    const station = { kind: 'station', label: 'Station' } as const;
+    expect(paramValid(station, 'nearest')).toBe(true);
+    expect(paramValid(station, '100:03250')).toBe(true);
+    expect(paramValid(station, '')).toBe(false);
+    expect(paramValid(station, null)).toBe(false);
   });
 
   it('checks a whole params object', () => {

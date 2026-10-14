@@ -1,5 +1,7 @@
 import { computeRows, type PlacedValue } from '@core/infoStrip/compute';
 import { stripHeroMetrics, visibleRows } from '@core/infoStrip/layout';
+import { effectiveTarget, targetOpen, type TargetOpen } from '@core/infoStrip/target';
+import type { Target } from '@core/infoStrip/types';
 import { useSettingsStore } from '@state/settingsStore';
 import * as Clipboard from 'expo-clipboard';
 import { memo, useCallback, useContext, useEffect, useMemo } from 'react';
@@ -18,6 +20,11 @@ export interface InfoStripHostProps extends StripInputs {
   /** The region selector or the map maker owns the screen: no strip. */
   hidden: boolean;
   onCopied: (message: string) => void;
+  /**
+   * A tap on the target name (#696): MapScreen opens the card on its own
+   * paths (a waypoint's card, or the point chip on a point).
+   */
+  onOpenTarget: (open: TargetOpen) => void;
 }
 
 /**
@@ -38,6 +45,7 @@ export const InfoStripHost = memo(function InfoStripHost({
   bottomLift,
   hidden,
   onCopied,
+  onOpenTarget,
   ...inputs
 }: InfoStripHostProps) {
   const strip = useCurrentStrip();
@@ -84,6 +92,15 @@ export const InfoStripHost = memo(function InfoStripHost({
     },
     [onCopied],
   );
+  // Resolved at the tap, on the snapshot the field was drawn from.
+  const onOpen = useCallback(
+    (p: PlacedValue) => {
+      const own = (p.ref.params.target as Target | null | undefined) ?? null;
+      const open = targetOpen(effectiveTarget(own, strip.target), data);
+      if (open !== null) onOpenTarget(open);
+    },
+    [data, strip.target, onOpenTarget],
+  );
 
   return (
     <>
@@ -99,6 +116,7 @@ export const InfoStripHost = memo(function InfoStripHost({
             topInset={topInset}
             onEdit={openStripEditor}
             onCopy={onCopy}
+            onOpenTarget={onOpen}
             onLayout={onLayout}
           />
         </View>

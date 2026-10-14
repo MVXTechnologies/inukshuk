@@ -24,7 +24,7 @@ export function snapshot(over: Partial<DepsSnapshot> = {}): DepsSnapshot {
     coordinateFormat: 'dd',
     datums: {},
     gnss: null,
-    tides: null,
+    tides: {},
     ...over,
   };
 }
