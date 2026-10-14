@@ -1,7 +1,15 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-29T04:34:18.005Z",
+  "generatedAt": "2026-10-14T05:51:43.450Z",
   "sources": [
+    {
+      "id": "cartes-plein-air",
+      "name": "Cartes Plein-air",
+      "licence": "© each map’s author · linked with permission, never copied",
+      "attribution": "Published on cartespleinair.org; each map is credited to its own author",
+      "homepage": "https://cartespleinair.org/cartes",
+      "freeAt": "cartespleinair.org"
+    },
     {
       "id": "ga-austopo",
       "name": "Geoscience Australia AUSTopo",
@@ -954,6 +962,71 @@
         61.75
       ],
       "byteSize": 126263
+    },
+    {
+      "id": "river-n40w070",
+      "category": "river",
+      "path": "shards/river-n40w070.json",
+      "itemCount": 28,
+      "bbox": [
+        -70.802,
+        46.83,
+        -60.4,
+        51.2123
+      ],
+      "byteSize": 18364
+    },
+    {
+      "id": "river-n40w080",
+      "category": "river",
+      "path": "shards/river-n40w080.json",
+      "itemCount": 262,
+      "bbox": [
+        -79.7862,
+        44.0872,
+        -64.073,
+        52.7
+      ],
+      "byteSize": 171731
+    },
+    {
+      "id": "river-n50w060",
+      "category": "river",
+      "path": "shards/river-n50w060.json",
+      "itemCount": 1,
+      "bbox": [
+        -59.7226,
+        51.0805,
+        -58.4989,
+        52.6945
+      ],
+      "byteSize": 715
+    },
+    {
+      "id": "river-n50w070",
+      "category": "river",
+      "path": "shards/river-n50w070.json",
+      "itemCount": 35,
+      "bbox": [
+        -70.08,
+        48.05,
+        -57.1,
+        59.001
+      ],
+      "byteSize": 23507
+    },
+    {
+      "id": "river-n50w080",
+      "category": "river",
+      "path": "shards/river-n50w080.json",
+      "itemCount": 42,
+      "bbox": [
+        -79.77,
+        46.2,
+        -63.31,
+        62.59
+      ],
+      "byteSize": 27922
     },
     {
       "id": "topo-n10w070",
@@ -4611,12 +4684,12 @@
   ],
   "search": {
     "path": "search.json",
-    "byteSize": 741381,
-    "tokenCount": 34764
+    "byteSize": 776011,
+    "tokenCount": 36967
   },
   "facets": {
     "path": "facets.json",
-    "byteSize": 47842
+    "byteSize": 48459
   },
   "collections": {
     "path": "collections.json",
@@ -4624,21 +4697,25 @@
   },
   "categoryCounts": {
     "topo": 67983,
+    "river": 368,
     "forest": 11485
   },
   "kindCounts": {
-    "topo": 79468
+    "topo": 79468,
+    "trail": 368
   },
   "activityCounts": {
     "hiking": 27849,
-    "paddling": 27881,
-    "fishing": 21859,
-    "climbing": 2163
+    "paddling": 28249,
+    "fishing": 21861,
+    "climbing": 2163,
+    "camping": 5,
+    "hunting": 1
   },
   "terrainCounts": {
-    "mountains": 27849,
-    "coast": 6515,
-    "water": 21859,
-    "glacier": 2163
+    "mountains": 27985,
+    "coast": 6666,
+    "water": 22113,
+    "glacier": 2168
   }
 }

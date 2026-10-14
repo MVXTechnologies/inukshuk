@@ -58,10 +58,10 @@ bboxes — deliberately not the cell, so a sheet whose coverage spills into the
 next cell is still found by nearest-shard ranking. `byteSize` lets the client
 budget a prefetch instead of guessing.
 
-**As published today (2026-09-29):** 79,468 items in **352 shards** (281 topo,
-71 forest), index **87.5 KB** (8.7 KB gzipped), search digest **724 KB**
-(204 KB gzipped, lazy), facets digest 46.7 KB (6.5 KB gzipped, lazy), shard
-bodies 31.2 MB in total, largest shard 166 KB / 400 items. (First-paint
+**As published today (2026-10-14):** 79,836 items in **357 shards** (281 topo,
+71 forest, 5 river), index **87.1 KB** (8.3 KB gzipped), search digest **758 KB**
+(215 KB gzipped, lazy), facets digest 47.3 KB (6.3 KB gzipped, lazy), shard
+bodies 31.5 MB in total, largest shard 168 KB / 262 items. (First-paint
 measurements from 2026-09-02, before FSTopo: Québec City 367 KB, Denver
 501 KB, Iqaluit 275 KB, Alice Springs 118 KB.)
 
@@ -175,8 +175,8 @@ generator publishes a search digest and the client consults it.
 
   | Document      | Raw       | Gzipped | Fetched                |
   | ------------- | --------- | ------- | ---------------------- |
-  | `index.json`  | 87.5 KB   | 8.7 KB  | every cold start       |
-  | `search.json` | 724 KB    | 204 KB  | first search, then 7 d |
+  | `index.json`  | 87.1 KB   | 8.3 KB  | every cold start       |
+  | `search.json` | 758 KB    | 215 KB  | first search, then 7 d |
   | one shard     | 37–166 KB | 4–15 KB | 6 per fetch round      |
 
   So the digest costs roughly what a dozen shards cost, once, only for someone
@@ -199,10 +199,22 @@ generator publishes a search digest and the client consults it.
 ## 4. Generating it
 
 ```
+npx tsx scripts/catalog/recover-fragments-from-published.ts  # → the missing fragments, from docs/catalog/v2
 npx tsx scripts/catalog/fetch-<source>.ts   # → scripts/catalog/fragments/<source>.json
 npx tsx scripts/catalog/build-manifest.ts   # → docs/catalog/v2/{index,search,facets,collections}.json + shards/
 npx tsx scripts/catalog/make-fixture.ts     # → .maestro/fixtures/catalog/ (e2e)
 ```
+
+- **Never publish from a checkout that lacks a fragment.** `build-manifest.ts`
+  rebuilds the whole catalog from the fragments on disk, and the bulk ones
+  (`usgs-ustopo`, `usfs-fstopo`) are gitignored: a missing fragment silently
+  drops that source for every installed app. `recover-fragments-from-published.ts`
+  writes each missing fragment back from the published index + shards (rows
+  verbatim, minus the `terrain` the build recomputes) and checks the committed
+  ones still match. Run it, then `build-manifest.ts` **before** fetching the
+  new source: `git diff --stat docs/catalog` must show only the two
+  `generatedAt` lines. Proven on the 2026-09-29 catalog (all 352 shards and
+  side documents byte-identical, with the full terrain pass).
 
 - Fragments are plain `{ sources, items }` JSON: one per source, either crawled
   by a `fetch-*.ts` or hand-curated.
