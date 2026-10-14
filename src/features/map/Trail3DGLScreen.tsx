@@ -37,6 +37,7 @@ import { formatDistance } from '@state/formatters';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore, type MapBasemap } from '@state/mapStore';
 import { useNavigationStore } from '@state/navigationStore';
+import { useOnMapTrailStore } from '@state/onMapTrailStore';
 import { useSettingsStore } from '@state/settingsStore';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
@@ -664,8 +665,11 @@ export function Trail3DGLScreen({ trackId }: Props) {
       });
     } else showSnack('Sharing is not available on this device');
   };
+  // "On map" (#710): drawn alone on the map with a chip whose ✕ gives the map
+  // back its previous trails. Never a write to the Library's shown set (the
+  // eye toggles), which is what used to leave it there for good.
   const onShowOnMap = () => {
-    setActiveTrackIds([track.id]);
+    useOnMapTrailStore.getState().show(track.id);
     if (track.stats.bbox) setFocusBounds(track.stats.bbox);
     router.navigate('/');
   };
@@ -673,7 +677,10 @@ export function Trail3DGLScreen({ trackId }: Props) {
   // compass guiding along it.
   const onFollow = () => {
     const shown = useLibraryStore.getState().activeTrackIds;
-    if (!shown.includes(track.id)) setActiveTrackIds([...shown, track.id]);
+    // Already on the map with "On map": it stays that look (its chip waits
+    // out the follow), so stopping does not leave it shown for good.
+    const onMap = useOnMapTrailStore.getState().trackId === track.id;
+    if (!onMap && !shown.includes(track.id)) setActiveTrackIds([...shown, track.id]);
     useNavigationStore.getState().follow({ trackId: track.id, name: track.name });
     router.navigate('/');
   };

@@ -1,6 +1,7 @@
 # Follow a trail e2e (#678): the trail view's "Follow" sends you back to the
 # map following that trail — the "Following · <name>" chip with its ✕ — and
-# the ✕ stops it.
+# the ✕ stops it. Then "On map" (#710): the trail comes back to the map with
+# its own chip, and that chip's ✕ takes it off again.
 #
 # Portability notes:
 # - Runs after category-record.yaml (needs >= 1 saved trail). Cards' a11y
@@ -44,5 +45,26 @@ appId: com.inukshuk.app
 - tapOn: 'Stop following'
 - extendedWaitUntil:
     notVisible: 'Stop following'
+    timeout: 10000
+- assertVisible: 'Map actions'
+# "On map" (#710): a look with a chip, closed from the map.
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- assertVisible: 'Recorded trails.*'
+- tapOn: '.* — open trail view, long-press to select'
+- extendedWaitUntil:
+    visible: 'On map'
+    timeout: 30000
+- tapOn: 'On map'
+- extendedWaitUntil:
+    visible:
+      id: 'onmap-trail-close'
+    timeout: 30000
+- tapOn:
+    id: 'onmap-trail-close'
+- extendedWaitUntil:
+    notVisible:
+      id: 'onmap-trail-close'
     timeout: 10000
 - assertVisible: 'Map actions'
