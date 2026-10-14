@@ -3163,9 +3163,8 @@ export function MapScreen() {
               selectedKey={viewWp ? `${viewWp.source}-${viewWp.id}` : null}
               hiddenKey={movingWp ? `saved-${movingWp.id}` : null}
               glyphs={style.glyphs}
-              topLayerId={style.layers[style.layers.length - 1]?.id}
             />
-            <MoveWaypointLayers topLayerId={style.layers[style.layers.length - 1]?.id} />
+            <MoveWaypointLayers />
 
             {/* Destination pin (#97). Visual only, like the waypoint pins —
               it is cleared from the chip's ✕, never by tapping the map, so a
@@ -3267,10 +3266,7 @@ export function MapScreen() {
               <FollowGuideLine from={location} to={follow.readout.nearest} />
             )}
             {/* Team mode (#589): teammates' positions, shared waypoints and trails. */}
-            <TeamMapLayers
-              glyphs={style.glyphs}
-              topLayerId={style.layers[style.layers.length - 1]?.id}
-            />
+            <TeamMapLayers glyphs={style.glyphs} />
             {/* Team mode (#589): teammates' trail photos (the trail-photo
               layers), then comment bubbles, pins and tasks (visual Markers,
               hit-tested in onMapPress). */}

@@ -3,6 +3,7 @@
  * no-magnetometer COG fallback, Edge, the layers, both themes — and, measured,
  * that heading ticks re-render this leaf only, at 4 Hz at most.
  */
+import { LIVE_LAYER_ORDER, liveLayerAnchor, type LiveLayerId } from '@core/map/liveLayerOrder';
 import { haversineMeters, initialBearingDeg } from '@core/geo/geomath';
 import { DEFAULT_POINTING_LINE, type PointingLineSettings } from '@core/map/pointingLineSettings';
 import type { LatLng } from '@core/models';
@@ -133,7 +134,13 @@ describe('PointingLine: when it shows', () => {
       POINTING_LINE_LAYERS.end,
       POINTING_LINE_LAYERS.labels,
     ]);
-    expect(mockLayers.every((l) => l.beforeId === PUCK_RING_LAYER_ID)).toBe(true);
+    // Each under its own live anchor: below the pins and the puck's ring (2.5.1).
+    for (const l of mockLayers) {
+      expect(l.beforeId).toBe(liveLayerAnchor(l.id as LiveLayerId));
+    }
+    expect(LIVE_LAYER_ORDER.indexOf('pointing-line')).toBeLessThan(
+      LIVE_LAYER_ORDER.indexOf(PUCK_RING_LAYER_ID),
+    );
   });
 
   it('hides during waypoint move, region select and the map maker, and without a fix', async () => {
@@ -161,10 +168,13 @@ describe('PointingLine: when it shows', () => {
     configure({ enabled: true, direction: 'fixed', fixedBearingDeg: 0, labelEvery5th: true });
     useSettingsStore.setState({ units: 'imperial' });
     await render(wrap({}));
-    // 50 m stands for 200 ft: 8 ticks over 500 m (7 minor), the 5th at 1000 ft.
+    // The 500 m stop is 0.5 mi in imperial (2.5.1 final QA): 2640 ft long, and
+    // 50 m stands for 200 ft: 13 ticks (11 minor), the 5th and 10th labelled.
     let fc = drawn()!;
-    expect(fc.features.filter((f) => f.properties.kind === 'tick')).toHaveLength(7);
-    expect(labels(fc)).toEqual(['1000 ft']);
+    const { from, to } = lineOf(fc);
+    expect(haversineMeters(from, to)).toBeCloseTo(2640 * 0.3048, 0);
+    expect(fc.features.filter((f) => f.properties.kind === 'tick')).toHaveLength(11);
+    expect(labels(fc)).toEqual(['1000 ft', '2000 ft']);
     await act(async () => useSettingsStore.setState({ units: 'metric' }));
     fc = drawn()!;
     expect(labels(fc)).toEqual(['250 m', '500 m']);

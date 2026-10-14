@@ -1,3 +1,4 @@
+import { LIVE_LAYER_ORDER, liveLayerAnchor } from '@core/map/liveLayerOrder';
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
 import {
   ALWAYS_PRESENT_ANCHORS,
@@ -54,8 +55,14 @@ describe('buildOsmStyle', () => {
   it('renders a plain raster base with no relief by default (offline-pack style)', () => {
     const s = buildOsmStyle(TILE, 'map');
     expect(s.sources.dem).toBeUndefined();
-    // The three puck anchors ride along in every style (#332); invisible, sourceless.
-    expect(layerIds(s)).toEqual(['background', 'osm', ...ALWAYS_PRESENT_ANCHORS]);
+    // The puck anchors ride along in every style (#332), and the live
+    // layers' anchors on top (2.5.1); all invisible, sourceless.
+    expect(layerIds(s)).toEqual([
+      'background',
+      'osm',
+      ...ALWAYS_PRESENT_ANCHORS,
+      ...LIVE_LAYER_ORDER.map(liveLayerAnchor),
+    ]);
     expect(s.terrain).toBeUndefined();
   });
 

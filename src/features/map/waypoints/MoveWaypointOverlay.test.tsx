@@ -46,7 +46,7 @@ async function setup(dark = false, zoom: number | null = null) {
   await render(
     <PaperProvider theme={dark ? darkTheme : lightTheme}>
       <MoveWaypointOverlay units="metric" zoom={zoom} {...handlers} />
-      <MoveWaypointLayers topLayerId="top" />
+      <MoveWaypointLayers />
     </PaperProvider>,
   );
   return handlers;

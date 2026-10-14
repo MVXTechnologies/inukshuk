@@ -1,3 +1,4 @@
+import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import type { LineLayerSpecification } from '@maplibre/maplibre-gl-style-spec';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -36,8 +37,20 @@ export function FollowedTrailLine({ path }: { path: [number, number][][] }) {
   );
   return (
     <GeoJSONSource id="followed-trail" data={data}>
-      <Layer id="followed-trail-casing" type="line" layout={LAYOUT} paint={casing} />
-      <Layer id="followed-trail-line" type="line" layout={LAYOUT} paint={line} />
+      <Layer
+        id="followed-trail-casing"
+        beforeId={liveLayerAnchor('followed-trail-casing')}
+        type="line"
+        layout={LAYOUT}
+        paint={casing}
+      />
+      <Layer
+        id="followed-trail-line"
+        beforeId={liveLayerAnchor('followed-trail-line')}
+        type="line"
+        layout={LAYOUT}
+        paint={line}
+      />
     </GeoJSONSource>
   );
 }

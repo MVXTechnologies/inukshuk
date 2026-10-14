@@ -1,10 +1,14 @@
 import {
   DEFAULT_POINTING_LINE,
+  IMPERIAL_LENGTH_FT,
   POINTING_LINE_COLORS,
   formatFixedBearing,
   parseBearing,
   pointingLineCaption,
   pointingLineCasing,
+  pointingLineGroundNote,
+  pointingLineLengthLabels,
+  pointingLineLengthM,
   pointingLineLengthText,
   pointingLineSummary,
   pointingLineTicksLabel,
@@ -130,7 +134,7 @@ describe('pointing line labels', () => {
       ),
     ).toBe('From you · course · 500 m · auto ticks');
     expect(pointingLineCaption(DEFAULT_POINTING_LINE, 'imperial')).toBe(
-      'From you · heading · 500 m · ticks every 200 ft',
+      'From you · heading · 0.5 mi · ticks every 200 ft',
     );
   });
 
@@ -139,5 +143,53 @@ describe('pointing line labels', () => {
     expect(new Set(POINTING_LINE_COLORS.map((c) => c.hex)).size).toBe(9);
     expect(pointingLineCasing('#D32F2F')).toBe('#F2ECE0');
     expect(pointingLineCasing('#fbf8f2')).toBe('#2D3740');
+  });
+});
+
+describe('imperial lengths (2.5.1 final QA)', () => {
+  it('reads every stop in round feet and miles, Edge as Edge', () => {
+    expect(pointingLineLengthLabels('imperial')).toEqual([
+      '500 ft',
+      '1000 ft',
+      '0.5 mi',
+      '1 mi',
+      '2 mi',
+      'Edge',
+    ]);
+    expect(pointingLineLengthLabels('metric')).toEqual([
+      '100 m',
+      '250 m',
+      '500 m',
+      '1 km',
+      '2 km',
+      'Edge',
+    ]);
+  });
+
+  it('draws the round imperial distance, keeps the metric one in metric', () => {
+    expect(pointingLineLengthM(100, 'imperial')).toBeCloseTo(152.4, 6);
+    expect(pointingLineLengthM(1000, 'imperial')).toBeCloseTo(1609.344, 6);
+    expect(pointingLineLengthM(1000, 'metric')).toBe(1000);
+    for (const l of [100, 250, 500, 1000, 2000] as const) {
+      expect(IMPERIAL_LENGTH_FT[l]).toBeGreaterThan(0);
+    }
+  });
+
+  it("says the summary and the ground note in the user's units", () => {
+    expect(pointingLineSummary(DEFAULT_POINTING_LINE, 'imperial')).toBe(
+      '0.5 mi along your heading',
+    );
+    expect(pointingLineLengthText(250, 'imperial')).toBe('1000 ft');
+    expect(pointingLineGroundNote(500, 'imperial')).toMatch(
+      /^Drawn on the map, so 0\.5 mi is 0\.5 mi on/,
+    );
+    expect(pointingLineGroundNote(500, 'metric')).toMatch(/so 500 m is 500 m on/);
+    expect(pointingLineGroundNote('edge', 'metric')).toMatch(/so 500 m is 500 m on/);
+  });
+
+  it('stores one value: the choice survives a units switch', () => {
+    const s = sanitizePointingLine({ ...DEFAULT_POINTING_LINE, length: 250 });
+    expect(pointingLineLengthText(s.length, 'imperial')).toBe('1000 ft');
+    expect(pointingLineLengthText(s.length, 'metric')).toBe('250 m');
   });
 });

@@ -1,3 +1,4 @@
+import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import { WAYPOINT_ICONS } from '@core/library/waypointIcons';
 import type { PinInput } from '@core/map/waypointPinStyle';
 import { render } from '@testing-library/react-native';
@@ -52,7 +53,6 @@ async function draw(p: PinInput[], glyphs: string | null = OFM_GLYPHS) {
         selectedKey={null}
         hiddenKey={null}
         glyphs={glyphs ?? undefined}
-        topLayerId="top"
       />
     </PaperProvider>,
   );
@@ -71,8 +71,12 @@ describe('WaypointPinLayers (#675)', () => {
       WAYPOINT_PIN_LAYERS.label,
     ]);
     expect(mockLayers.every((l) => l.type === 'symbol')).toBe(true);
-    // The pins sit above the whole style, as the old markers did.
-    expect(mockLayers[0]?.afterId).toBe('top');
+    // Each pin layer sits under its own anchor in the style's live slot.
+    expect(mockLayers.map((l) => l.beforeId)).toEqual([
+      liveLayerAnchor('waypoint-pin'),
+      liveLayerAnchor('waypoint-pin-photo'),
+      liveLayerAnchor('waypoint-pin-label'),
+    ]);
   });
 
   it('registers the SDF body, the photo badge and only the glyphs in use', async () => {
@@ -103,13 +107,7 @@ describe('WaypointPinLayers (#675)', () => {
     const first = mockSources[0]?.data;
     await rerender(
       <PaperProvider>
-        <WaypointPinLayers
-          pins={p}
-          selectedKey={null}
-          hiddenKey={null}
-          glyphs={OFM_GLYPHS}
-          topLayerId="top"
-        />
+        <WaypointPinLayers pins={p} selectedKey={null} hiddenKey={null} glyphs={OFM_GLYPHS} />
       </PaperProvider>,
     );
     expect(mockSources[mockSources.length - 1]?.data).toBe(first);

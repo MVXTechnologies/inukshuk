@@ -66,7 +66,8 @@ export const MARINE_SOUNDINGS_ANCHOR = 'drape-soundings';
  * as a MapView child after first paint — PDF overviews and detail tiles
  * (whose ids change per image), terrain overlays, trail lines — is inserted
  * `beforeId` one of them, so a late layer can never land on top of the
- * position puck and heading cone, which the map appends above them all.
+ * position puck, the heading cone or the pins, which sit above them all at
+ * their own anchors (`@core/map/liveLayerOrder`).
  *
  * Which slot of the map's stack each anchor tops — and therefore which
  * overlay names which anchor — is defined once, for both base maps, in

@@ -448,6 +448,34 @@ describe('both themes', () => {
     return StyleSheet.flatten(sheet.props.style) as { backgroundColor?: string };
   };
 
+  it('sizes a short editor to its content, capped under the status bar (2.5.1 final QA)', async () => {
+    // A recording pin's editor: name, note, photo — no icon, colour or size.
+    await setup({ live: true });
+    const sheet = StyleSheet.flatten(screen.getByTestId('waypoint-editor-sheet').props.style) as {
+      top?: number;
+      maxHeight?: number;
+      bottom?: number;
+    };
+    expect(sheet.top).toBeUndefined(); // no fixed top: no blank band
+    expect(sheet.bottom).toBe(0);
+    expect(sheet.maxHeight).toBeGreaterThan(0); // tall content scrolls instead
+    const scroll = StyleSheet.flatten(screen.getByTestId('waypoint-editor-scroll').props.style) as {
+      flexGrow?: number;
+      flexShrink?: number;
+    };
+    expect(scroll).toMatchObject({ flexGrow: 0, flexShrink: 1 });
+  });
+
+  it('gives the icon picker the full height its list needs', async () => {
+    await setup();
+    await fireEvent.press(screen.getByLabelText('All icons'));
+    await screen.findByLabelText('Search icons');
+    const sheet = StyleSheet.flatten(screen.getByTestId('waypoint-editor-sheet').props.style) as {
+      top?: number;
+    };
+    expect(sheet.top).toBeGreaterThan(0);
+  });
+
   it.each([
     ['light', false],
     ['dark', true],

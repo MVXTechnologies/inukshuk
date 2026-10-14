@@ -160,6 +160,15 @@ describe('WaypointScreenReaderList', () => {
     expect(screen.queryByTestId('waypoint-a11y-list')).toBeNull();
   });
 
+  it('gives a long name two lines in its row (2.5.1 final QA)', async () => {
+    const long = 'Stationnement du belvédère de la Citadelle, côté nord';
+    await setup({ pins: [pin('l', long, 50, 0)] });
+    await fireEvent.press(button()!);
+    const name = screen.getByTestId('waypoint-a11y-row-name');
+    expect(name.props.children).toBe(long);
+    expect(name.props.numberOfLines).toBe(2);
+  });
+
   it('says so when there are no pins', async () => {
     await setup({ pins: [] });
     expect(button()?.props.accessibilityLabel).toBe('Waypoints on the map (0)');

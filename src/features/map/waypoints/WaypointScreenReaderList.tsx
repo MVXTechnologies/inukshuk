@@ -159,7 +159,12 @@ function ListControl({ pins, here, units, onOpen, available, screenFocused, top 
                       pressed && { backgroundColor: tokens.surfaceVariant },
                     ]}
                   >
-                    <Text style={[styles.rowName, { color: tokens.ink }]} numberOfLines={1}>
+                    {/* Two lines: long names were cut short (2.5.1 final QA). */}
+                    <Text
+                      style={[styles.rowName, { color: tokens.ink }]}
+                      numberOfLines={2}
+                      testID="waypoint-a11y-row-name"
+                    >
                       {row.pin.label}
                     </Text>
                     {row.detail !== null && (

@@ -1,3 +1,4 @@
+import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import { useMapStore } from '@state/mapStore';
 import { useWaypointMoveStore } from '@state/waypointMoveStore';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
@@ -11,7 +12,7 @@ import { useMemo } from 'react';
  * Updated once per settled camera, like the bar's coordinates — never per
  * frame — so during a pan the line keeps its last end until the map settles.
  */
-export function MoveWaypointLayers({ topLayerId }: { topLayerId: string | undefined }) {
+export function MoveWaypointLayers() {
   const target = useWaypointMoveStore((s) => s.moving);
   const center = useMapStore((s) => s.mapCenter);
   const { mapInk, mapHalo } = useSchemeTokens().team;
@@ -40,7 +41,7 @@ export function MoveWaypointLayers({ topLayerId }: { topLayerId: string | undefi
       <Layer
         key="line"
         id="waypoint-move-line"
-        {...(topLayerId !== undefined ? { afterId: topLayerId } : {})}
+        beforeId={liveLayerAnchor('waypoint-move-line')}
         type="line"
         filter={['==', ['get', 'kind'], 'line']}
         layout={{ 'line-cap': 'round' }}
@@ -54,7 +55,7 @@ export function MoveWaypointLayers({ topLayerId }: { topLayerId: string | undefi
       <Layer
         key="from"
         id="waypoint-move-from"
-        afterId="waypoint-move-line"
+        beforeId={liveLayerAnchor('waypoint-move-from')}
         type="circle"
         filter={['==', ['get', 'kind'], 'from']}
         paint={{
@@ -69,7 +70,7 @@ export function MoveWaypointLayers({ topLayerId }: { topLayerId: string | undefi
       <Layer
         key="from-halo"
         id="waypoint-move-from-halo"
-        beforeId="waypoint-move-from"
+        beforeId={liveLayerAnchor('waypoint-move-from-halo')}
         type="circle"
         filter={['==', ['get', 'kind'], 'from']}
         paint={{
@@ -82,7 +83,7 @@ export function MoveWaypointLayers({ topLayerId }: { topLayerId: string | undefi
         }}
       />,
     ],
-    [topLayerId, mapInk, mapHalo],
+    [mapInk, mapHalo],
   );
   if (data === null) return null;
   return (

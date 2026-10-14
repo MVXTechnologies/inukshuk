@@ -1,3 +1,4 @@
+import { LIVE_LAYER_ORDER, liveLayerAnchor } from '@core/map/liveLayerOrder';
 import { act, render } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { PaperProvider } from 'react-native-paper';
@@ -47,7 +48,7 @@ describe('HeadingCone anchor', () => {
     expect(mockLayers.map((l) => l.id)).toContain(PUCK_RING_LAYER_ID);
   });
 
-  it('inserts its fill before that ring layer, not the default puck', async () => {
+  it('inserts its fill under the ring layer, not the default puck', async () => {
     await render(
       <PaperProvider>
         <HeadingCone location={{ latitude: 46.81, longitude: -71.21 }} />
@@ -55,7 +56,11 @@ describe('HeadingCone anchor', () => {
     );
     await act(async () => mockHeading?.({ headingDeg: 90, accuracy: 3 }));
     const fill = mockLayers.find((l) => l.id === 'heading-cone-fill');
-    expect(fill?.beforeId).toBe(PUCK_RING_LAYER_ID);
+    // Its own live anchor, which the style keeps under the puck's ring.
+    expect(fill?.beforeId).toBe(liveLayerAnchor('heading-cone-fill'));
     expect(fill?.beforeId).not.toBe('mlrn-user-location-puck-white');
+    expect(LIVE_LAYER_ORDER.indexOf('heading-cone-fill')).toBeLessThan(
+      LIVE_LAYER_ORDER.indexOf(PUCK_RING_LAYER_ID),
+    );
   });
 });

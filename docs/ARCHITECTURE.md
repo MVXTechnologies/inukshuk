@@ -154,7 +154,11 @@ four stages:
   never one view per pin; Move (#676) pans the map under a fixed centre pin
   (`waypointMoveStore`). Symbols have no accessibility nodes, so while a
   screen reader is on the map offers the pins as a list, nearest first
-  (`WaypointScreenReaderList`); a row opens the pin's card.
+  (`WaypointScreenReaderList`); a row opens the pin's card. The map's own
+  live layers (followed trail, puck, heading cone, pointing line, team,
+  pins) draw in ONE order, `@core/map/liveLayerOrder`: each sits under its own
+  invisible anchor at the top of the style, so the order survives every style
+  reload (theme or base-map switch).
 
 ## Activity-file import (Strava / Garmin exports)
 

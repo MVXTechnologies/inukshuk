@@ -1,3 +1,4 @@
+import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import type { LatLng } from '@core/models';
 import type { LineLayerSpecification } from '@maplibre/maplibre-gl-style-spec';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
@@ -40,7 +41,13 @@ export function FollowGuideLine({ from, to }: { from: LatLng; to: LatLng }) {
   );
   return (
     <GeoJSONSource id="follow-guide" data={data}>
-      <Layer id="follow-guide-line" type="line" layout={LAYOUT} paint={paint} />
+      <Layer
+        id="follow-guide-line"
+        beforeId={liveLayerAnchor('follow-guide-line')}
+        type="line"
+        layout={LAYOUT}
+        paint={paint}
+      />
     </GeoJSONSource>
   );
 }

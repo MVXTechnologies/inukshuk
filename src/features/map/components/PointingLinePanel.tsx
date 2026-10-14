@@ -4,7 +4,6 @@ import {
   POINTING_LINE_COLORS,
   POINTING_LINE_DIRECTIONS,
   POINTING_LINE_LENGTHS,
-  POINTING_LINE_LENGTH_LABELS,
   POINTING_LINE_TICKS,
   POINTING_LINE_WIDTHS,
   POINTING_LINE_WIDTH_DP,
@@ -12,6 +11,9 @@ import {
   formatFixedBearing,
   parseBearing,
   pointingLineCaption,
+  pointingLineGroundNote,
+  pointingLineLengthLabels,
+  pointingLineLengthM,
   pointingLineCasing,
   pointingLineSummary,
   pointingLineTicksLabel,
@@ -66,7 +68,8 @@ function usePointingLine(): [PointingLineSettings, (patch: Partial<PointingLineS
  */
 export function PointingLineRow({ onOpen }: { onOpen: () => void }) {
   const [cfg, update] = usePointingLine();
-  const summary = pointingLineSummary(cfg);
+  const units = useSettingsStore((s) => s.units);
+  const summary = pointingLineSummary(cfg, units);
   return (
     <SwitchRow
       icon="ray-start-arrow"
@@ -101,7 +104,8 @@ function Preview({ cfg }: { cfg: PointingLineSettings }) {
   const casing = pointingLineCasing(cfg.color);
   // The preview's ground length: the setting, or a nominal 1 km for Edge;
   // ticks as set (Auto: five), dropped when they would fuse.
-  const lengthM = cfg.length === 'edge' ? 1000 : cfg.length;
+  // In the user's units: 0.5 mi is drawn as 0.5 mi of ticks.
+  const lengthM = cfg.length === 'edge' ? 1000 : pointingLineLengthM(cfg.length, units);
   const step = previewTickStep(cfg.ticks, lengthM, units);
   const px = step === null ? 0 : ((x1 - x0) * step.stepM) / lengthM;
   const ticks =
@@ -262,7 +266,7 @@ export function PointingLinePanel({ onBack }: { onBack: () => void }) {
       <SwitchRow
         icon="ray-start-arrow"
         label="Show pointing line"
-        hint={cfg.enabled ? pointingLineSummary(cfg) : 'Hidden on the map'}
+        hint={cfg.enabled ? pointingLineSummary(cfg, units) : 'Hidden on the map'}
         value={cfg.enabled}
         onToggle={() => update({ enabled: !cfg.enabled })}
       />
@@ -290,7 +294,7 @@ export function PointingLinePanel({ onBack }: { onBack: () => void }) {
       )}
       <ControlRow icon="ruler" label="Length">
         <StepSlider
-          labels={POINTING_LINE_LENGTH_LABELS}
+          labels={pointingLineLengthLabels(units)}
           value={lengthIndex}
           onChange={(i) => {
             const length = POINTING_LINE_LENGTHS[i];
@@ -346,10 +350,7 @@ export function PointingLinePanel({ onBack }: { onBack: () => void }) {
         value={cfg.labelEvery5th}
         onToggle={() => update({ labelEvery5th: !cfg.labelEvery5th })}
       />
-      <SheetNote icon="compass-outline">
-        Drawn on the map, so 500 m is 500 m on the ground at any zoom. Without a compass it follows
-        your course while you move (COG), and hides when you stop.
-      </SheetNote>
+      <SheetNote icon="compass-outline">{pointingLineGroundNote(cfg.length, units)}</SheetNote>
     </>
   );
 }

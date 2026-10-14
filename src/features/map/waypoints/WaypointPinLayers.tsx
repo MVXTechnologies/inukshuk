@@ -1,3 +1,4 @@
+import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import {
   PHOTO_IMAGE,
   PIN_IMAGE,
@@ -36,12 +37,7 @@ interface Props {
   hiddenKey: string | null;
   /** The style's glyph host; no host = no labels (raster and satellite styles). */
   glyphs: string | undefined;
-  /** The style's top-most layer: pins draw above everything, as markers did. */
-  topLayerId: string | undefined;
 }
-
-const afterOf = (id: string | undefined): { afterId?: string } =>
-  id === undefined ? {} : { afterId: id };
 
 /**
  * The main map's waypoint pins (#675): one GeoJSON source, SDF sprites tinted
@@ -59,7 +55,6 @@ export const WaypointPinLayers = memo(function WaypointPinLayers({
   selectedKey,
   hiddenKey,
   glyphs,
-  topLayerId,
 }: Props) {
   const data = useMemo(
     () => pinFeatureCollection(pins, selectedKey, hiddenKey),
@@ -87,7 +82,7 @@ export const WaypointPinLayers = memo(function WaypointPinLayers({
       <Layer
         key="pin"
         id={WAYPOINT_PIN_LAYERS.pin}
-        {...afterOf(topLayerId)}
+        beforeId={liveLayerAnchor('waypoint-pin')}
         type="symbol"
         layout={pinLayout}
         paint={pinPaint}
@@ -95,7 +90,7 @@ export const WaypointPinLayers = memo(function WaypointPinLayers({
       <Layer
         key="photo"
         id={WAYPOINT_PIN_LAYERS.photo}
-        afterId={WAYPOINT_PIN_LAYERS.pin}
+        beforeId={liveLayerAnchor('waypoint-pin-photo')}
         type="symbol"
         filter={pinPhotoFilter}
         layout={pinPhotoLayout}
@@ -105,7 +100,7 @@ export const WaypointPinLayers = memo(function WaypointPinLayers({
             <Layer
               key="label"
               id={WAYPOINT_PIN_LAYERS.label}
-              afterId={WAYPOINT_PIN_LAYERS.photo}
+              beforeId={liveLayerAnchor('waypoint-pin-label')}
               type="symbol"
               minzoom={PIN_LABEL_MIN_ZOOM}
               filter={pinLabelFilter}
@@ -115,7 +110,7 @@ export const WaypointPinLayers = memo(function WaypointPinLayers({
           ]
         : []),
     ],
-    [topLayerId, font, mapInk, mapHalo],
+    [font, mapInk, mapHalo],
   );
 
   if (pins.length === 0) return null;

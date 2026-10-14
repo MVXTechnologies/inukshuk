@@ -1,3 +1,4 @@
+import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import {
   pointingLineFeatures,
   resolveLengthM,
@@ -22,7 +23,6 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { subscribeHeading } from '../useCompass';
-import { PUCK_RING_LAYER_ID } from './PuckLayers';
 
 /** With no magnetometer, re-read the course this often so a stop hides the line, ms. */
 const COG_REFRESH_MS = 3000;
@@ -141,7 +141,7 @@ function LivePointingLine({
 
   const data = useMemo(() => {
     if (bearingDeg === null) return null;
-    const lengthM = resolveLengthM(cfg.length, location, bearingDeg, bounds);
+    const lengthM = resolveLengthM(cfg.length, location, bearingDeg, bounds, units);
     if (lengthM === null || !(lengthM > 0)) return null;
     return pointingLineFeatures({
       origin: location,
@@ -175,7 +175,7 @@ function LivePointingLine({
       <Layer
         key="casing"
         id={POINTING_LINE_LAYERS.casing}
-        beforeId={PUCK_RING_LAYER_ID}
+        beforeId={liveLayerAnchor('pointing-line-casing')}
         type="line"
         filter={strokes as never}
         layout={{ 'line-cap': 'round' }}
@@ -188,7 +188,7 @@ function LivePointingLine({
       <Layer
         key="line"
         id={POINTING_LINE_LAYERS.line}
-        beforeId={PUCK_RING_LAYER_ID}
+        beforeId={liveLayerAnchor('pointing-line')}
         type="line"
         filter={strokes as never}
         layout={{ 'line-cap': 'round' }}
@@ -200,7 +200,7 @@ function LivePointingLine({
       <Layer
         key="end"
         id={POINTING_LINE_LAYERS.end}
-        beforeId={PUCK_RING_LAYER_ID}
+        beforeId={liveLayerAnchor('pointing-line-end')}
         type="circle"
         filter={['==', ['get', 'kind'], 'end'] as never}
         paint={{
@@ -216,7 +216,7 @@ function LivePointingLine({
             <Layer
               key="labels"
               id={POINTING_LINE_LAYERS.labels}
-              beforeId={PUCK_RING_LAYER_ID}
+              beforeId={liveLayerAnchor('pointing-line-labels')}
               type="symbol"
               filter={['==', ['get', 'kind'], 'label'] as never}
               layout={{

@@ -1,3 +1,4 @@
+import { liveAnchorLayers } from '@core/map/liveLayerOrder';
 import { NIGHT_MAP } from '@ui/tokens';
 import { NATIVE_MAX_ZOOM, type PackFormat } from '@core/geo/tiles';
 import type {
@@ -1152,6 +1153,13 @@ export function buildOsmStyle(
     Object.assign(style.sources, block.sources);
     put('trails', ...block.layers);
   }
+
+  // The live layers' anchors (`@core/map/liveLayerOrder`): one invisible
+  // marker per live layer, in their one order, at the very top — so the
+  // followed trail, puck, cone, pointing line, team and pins keep the same
+  // order after every style reload (2.5.1 final QA: a theme switch put the
+  // followed trail over the location dot).
+  put('live', ...liveAnchorLayers());
 
   style.layers = stackLayers(slots);
   return style;

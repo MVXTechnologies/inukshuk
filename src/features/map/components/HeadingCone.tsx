@@ -1,3 +1,4 @@
+import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import { coneHalfAngleDeg, headingConeFeature } from '@core/geo/headingCone';
 import type { LatLng } from '@core/models';
 import { signedDeltaDeg } from '@core/signal/heading';
@@ -5,7 +6,6 @@ import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { subscribeHeading } from '../useCompass';
-import { PUCK_RING_LAYER_ID } from './PuckLayers';
 
 /** Ground radius of the beam, metres. Sized to read clearly at the zooms the
  * map is actually navigated at (z14–18) without dominating the screen. */
@@ -30,13 +30,9 @@ interface HeadingConeProps {
  * Its angular width tracks the sensor's reported calibration: the worse the
  * compass accuracy, the wider (vaguer) the beam.
  *
- * Render inside <Map>. `beforeId` slots the fill beneath the puck's ring —
- * OUR ring (`PuckLayers`' {@link PUCK_RING_LAYER_ID}): PuckLayers are the
- * children of <UserLocation>, which replaces MapLibre's default puck, so its
- * `mlrn-user-location-puck-white` layer (the old anchor) never exists and
- * the cone was never inserted (2.5.1 review). The native side waits for the
- * anchor layer to exist before inserting, so mount order relative to
- * <UserLocation> doesn't matter. The translucent blue
+ * Render inside <Map>. It is inserted below its own anchor in the style
+ * (`@core/map/liveLayerOrder`): above the puck's halo, under the pointing
+ * line, the pins and the puck's ring and dot — after every style reload. The translucent blue
  * stays subtle on both the light and dark basemaps (same approach Google Maps
  * uses in both themes), and it fades out below z12 where the cone would
  * collapse into the dot anyway.
@@ -82,7 +78,7 @@ export function HeadingCone({ location }: HeadingConeProps) {
       <Layer
         id="heading-cone-fill"
         type="fill"
-        beforeId={PUCK_RING_LAYER_ID}
+        beforeId={liveLayerAnchor('heading-cone-fill')}
         paint={{
           'fill-color': tokens.map.puck,
           'fill-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0, 13, 0.18],

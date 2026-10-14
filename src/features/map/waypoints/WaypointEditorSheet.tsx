@@ -137,7 +137,7 @@ function EditorContent({
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height: windowHeight } = useWindowDimensions();
   const keyboardHeight = useIosKeyboardHeight();
   const [error, setError] = useState<string | null>(null);
   const [pendingPhoto, setPendingPhoto] = useState<string | null>(null);
@@ -285,8 +285,13 @@ function EditorContent({
         testID="waypoint-editor-sheet"
         style={[
           styles.sheet,
+          // Sized to its content (2.5.1 final QA: a recording pin's short
+          // editor was 60 % blank), up to just under the status bar, then it
+          // scrolls. The icon picker's virtualized list needs the full height.
+          page === 'icons'
+            ? { top: insets.top + 40 }
+            : { maxHeight: windowHeight - (insets.top + 40) },
           {
-            top: insets.top + 40,
             width: sheetWidth,
             backgroundColor: tokens.surface,
             paddingBottom: keyboardHeight > 0 ? keyboardHeight : insets.bottom,
@@ -319,6 +324,7 @@ function EditorContent({
             </View>
             <ScrollView
               keyboardShouldPersistTaps="handled"
+              style={styles.scroll}
               contentContainerStyle={styles.body}
               testID="waypoint-editor-scroll"
             >
@@ -585,6 +591,8 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     overflow: 'hidden',
   },
+  // Its content's height, shrinking (and scrolling) when the sheet is capped.
+  scroll: { flexGrow: 0, flexShrink: 1 },
   grab: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 10, opacity: 0.8 },
   head: {
     flexDirection: 'row',

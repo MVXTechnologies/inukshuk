@@ -44,7 +44,7 @@ describe('PointingLinePanel', () => {
     expect(state('Label every 5th tick').checked).toBe(false);
     expect(screen.getByLabelText('Length').props.accessibilityValue).toMatchObject({
       now: 2,
-      text: '500',
+      text: '500 m',
     });
     expect(screen.getByText('From you · heading · 500 m · ticks every 50 m')).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('Show pointing line'));
@@ -60,10 +60,40 @@ describe('PointingLinePanel', () => {
     expect(screen.getByLabelText('50 ft')).toBeTruthy();
     expect(screen.getByLabelText('500 ft')).toBeTruthy();
     expect(screen.queryByLabelText('50 m')).toBeNull();
-    expect(screen.getByText('From you · heading · 500 m · ticks every 200 ft')).toBeTruthy();
+    expect(screen.getByText('From you · heading · 0.5 mi · ticks every 200 ft')).toBeTruthy();
     // The choice is one setting: 500 ft is the 100 m choice.
     await fireEvent.press(screen.getByLabelText('500 ft'));
     expect(cfg().ticks).toBe(100);
+  });
+
+  it('in imperial, the length reads in feet and miles everywhere (2.5.1 final QA)', async () => {
+    useSettingsStore.setState({ units: 'imperial' });
+    await mount();
+    // The slider's value, the caption and the note: no metres anywhere.
+    expect(screen.getByLabelText('Length').props.accessibilityValue).toMatchObject({
+      now: 2,
+      text: '0.5 mi',
+    });
+    expect(screen.getByText(/so 0\.5 mi is 0\.5 mi on the ground/)).toBeTruthy();
+    expect(screen.queryByText(/\b500 m\b/)).toBeNull();
+    expect(screen.queryByText(/ km\b/)).toBeNull();
+    // Stepping down: 1000 ft, then 500 ft — the stored value stays the metric stop.
+    const down = () =>
+      act(async () => {
+        fireEvent(screen.getByLabelText('Length'), 'accessibilityAction', {
+          nativeEvent: { actionName: 'decrement' },
+        });
+      });
+    await down();
+    expect(cfg().length).toBe(250);
+    expect(screen.getByLabelText('Length').props.accessibilityValue.text).toBe('1000 ft');
+    await down();
+    expect(cfg().length).toBe(100);
+    expect(screen.getByText(/· 500 ft ·/)).toBeTruthy();
+    // Back to metric: the same choice, in metres.
+    await act(async () => useSettingsStore.setState({ units: 'metric' }));
+    expect(screen.getByLabelText('Length').props.accessibilityValue.text).toBe('100 m');
+    expect(screen.getByText(/so 100 m is 100 m on the ground/)).toBeTruthy();
   });
 
   it('a fixed bearing: picked, typed in whole degrees, normalised', async () => {

@@ -46,15 +46,48 @@ export const POINTING_LINE_LENGTHS: readonly PointingLineLength[] = [
   2000,
   'edge',
 ];
-/** The length slider's stop labels (mockup: "100 m · 250 · 500 · 1 km · 2 km · Edge"). */
-export const POINTING_LINE_LENGTH_LABELS: readonly string[] = [
-  '100 m',
-  '250',
-  '500',
-  '1 km',
-  '2 km',
-  'Edge',
-];
+/** A fixed length choice (the persisted value is its metric distance). */
+export type PointingLineFixedLength = Exclude<PointingLineLength, 'edge'>;
+
+const M_PER_FT = 0.3048;
+const FT_PER_MI = 5280;
+
+/**
+ * The imperial length each stop stands for, feet (2.5.1 final QA: the panel
+ * read metres in imperial). Round imperial distances, one per stop: 500 ft,
+ * 1000 ft, 0.5 mi, 1 mi, 2 mi. Like the ticks, the setting itself stays one
+ * value — the metric stop — so switching units keeps your choice.
+ */
+export const IMPERIAL_LENGTH_FT: Record<PointingLineFixedLength, number> = {
+  100: 500,
+  250: 1000,
+  500: FT_PER_MI / 2,
+  1000: FT_PER_MI,
+  2000: 2 * FT_PER_MI,
+};
+
+/** The ground length a stop draws, metres, in the user's units' round values. */
+export function pointingLineLengthM(length: PointingLineFixedLength, units: Units): number {
+  return units === 'imperial' ? IMPERIAL_LENGTH_FT[length] * M_PER_FT : length;
+}
+
+/** An imperial stop as words: "500 ft", "0.5 mi", "1 mi". */
+function imperialLengthText(length: PointingLineFixedLength): string {
+  const ft = IMPERIAL_LENGTH_FT[length];
+  return ft < FT_PER_MI / 2 ? `${ft} ft` : `${ft / FT_PER_MI} mi`;
+}
+
+/**
+ * The length slider's stops as its value reads them, each with its unit (the
+ * value shows alone at the slider's end, so a bare "500" or "1000" was
+ * ambiguous): "100 m · 250 m · 500 m · 1 km · 2 km · Edge", and in imperial
+ * "500 ft · 1000 ft · 0.5 mi · 1 mi · 2 mi · Edge".
+ */
+export function pointingLineLengthLabels(units: Units): string[] {
+  return POINTING_LINE_LENGTHS.map((l) =>
+    l === 'edge' ? 'Edge' : pointingLineLengthText(l, units),
+  );
+}
 
 export const POINTING_LINE_DIRECTIONS: readonly PointingLineDirection[] = [
   'heading',
@@ -179,16 +212,33 @@ export function formatFixedBearing(deg: number): string {
   return `${String(Math.round(normalizeDeg(deg)) % 360).padStart(3, '0')}°`;
 }
 
-/** A length as the row reads it: "500 m", "1 km", "To the edge". */
-export function pointingLineLengthText(length: PointingLineLength): string {
+/** A length as the row reads it: "500 m", "1 km", "0.5 mi", "To the edge". */
+export function pointingLineLengthText(
+  length: PointingLineLength,
+  units: Units = 'metric',
+): string {
   if (length === 'edge') return 'To the edge';
+  if (units === 'imperial') return imperialLengthText(length);
   return length >= 1000 ? `${length / 1000} km` : `${length} m`;
+}
+
+/**
+ * The note under the panel: the line's length is true on the ground, said
+ * with the user's current length ("500 m is 500 m", "0.5 mi is 0.5 mi"; Edge:
+ * the default stop).
+ */
+export function pointingLineGroundNote(length: PointingLineLength, units: Units): string {
+  const len = pointingLineLengthText(length === 'edge' ? 500 : length, units);
+  return (
+    `Drawn on the map, so ${len} is ${len} on the ground at any zoom. Without a compass it ` +
+    'follows your course while you move (COG), and hides when you stop.'
+  );
 }
 
 /** The preview's caption (mockup): "From you · heading · 500 m · ticks every 50 m". */
 export function pointingLineCaption(s: PointingLineSettings, units: Units): string {
   const dir = s.direction === 'fixed' ? formatFixedBearing(s.fixedBearingDeg) : s.direction;
-  const len = s.length === 'edge' ? 'to the edge' : pointingLineLengthText(s.length);
+  const len = s.length === 'edge' ? 'to the edge' : pointingLineLengthText(s.length, units);
   const ticks =
     s.ticks === 'off'
       ? 'no ticks'
@@ -199,12 +249,12 @@ export function pointingLineCaption(s: PointingLineSettings, units: Units): stri
 }
 
 /** The row's one-line summary: "500 m along your heading", "To the edge at 062°". */
-export function pointingLineSummary(s: PointingLineSettings): string {
+export function pointingLineSummary(s: PointingLineSettings, units: Units = 'metric'): string {
   const how =
     s.direction === 'heading'
       ? 'along your heading'
       : s.direction === 'course'
         ? 'along your course'
         : `at ${formatFixedBearing(s.fixedBearingDeg)}`;
-  return `${pointingLineLengthText(s.length)} ${how}`;
+  return `${pointingLineLengthText(s.length, units)} ${how}`;
 }
