@@ -1,4 +1,4 @@
-import { estimateWidthDp, fitStripValue, shortUnit, VALUE_SMALL_SP, VALUE_SP } from './fit';
+import { estimateWidthDp, fitStripValue, isName, shortUnit, VALUE_SMALL_SP, VALUE_SP } from './fit';
 
 // A 1-space cell on a 411 dp phone: (411 − 24 padding − 3 dividers of 17) / 4.
 const ONE_SPACE = 84;
@@ -6,7 +6,7 @@ const ONE_SPACE = 84;
 describe('fitStripValue (QA 2.6.0: values are never cut)', () => {
   it('keeps a value that fits whole', () => {
     const v = { glyph: 'speed', value: '3.6', unit: 'km/h' };
-    expect(fitStripValue(v, ONE_SPACE)).toEqual({ value: v, valueSp: VALUE_SP });
+    expect(fitStripValue(v, ONE_SPACE)).toEqual({ value: v, valueSp: VALUE_SP, shrinkToFit: true });
   });
 
   it('drops the tag first when a glyph still names the field ("COG 300°…")', () => {
@@ -46,16 +46,32 @@ describe('fitStripValue (QA 2.6.0: values are never cut)', () => {
     expect(fitStripValue(v, w)).toEqual({
       value: { glyph: 'straighten', value: '1.24', unit: 'NM' },
       valueSp: VALUE_SMALL_SP,
+      shrinkToFit: true,
     });
   });
 
-  it('a long name that fits nowhere keeps only its text, for native shrinking', () => {
-    expect(fitStripValue({ glyph: 'flag', value: 'Kiosque Edwin-Bélanger' }, 60)).toEqual({
-      value: { value: 'Kiosque Edwin-Bélanger' },
+  it('a long name keeps its glyph, takes the type step and ellipsises: never shrunk unreadable', () => {
+    const name = { glyph: 'flag', value: 'Kiosque Edwin-Bélanger' };
+    expect(fitStripValue(name, 60)).toEqual({
+      value: name,
       valueSp: VALUE_SMALL_SP,
+      shrinkToFit: false,
     });
-    expect(fitStripValue({ value: 'Kiosque Edwin-Bélanger' }, 60).value).toEqual({
-      value: 'Kiosque Edwin-Bélanger',
+    expect(fitStripValue({ glyph: 'flag', value: 'Camp' }, 84)).toEqual({
+      value: { glyph: 'flag', value: 'Camp' },
+      valueSp: VALUE_SP,
+      shrinkToFit: false,
+    });
+    expect(isName({ value: '—' })).toBe(true);
+    expect(isName({ value: '≈9:35 AM' })).toBe(false);
+  });
+
+  it('a number too long for anything is left to native shrinking, bare', () => {
+    const v = { glyph: 'speed', value: '12345.6', unit: 'km/h' };
+    expect(fitStripValue(v, 20)).toEqual({
+      value: { value: '12345.6', unit: 'km/h' },
+      valueSp: VALUE_SMALL_SP,
+      shrinkToFit: true,
     });
   });
 

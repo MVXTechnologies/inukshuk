@@ -33,7 +33,7 @@ function Miniature({
             }
             return (
               <View key={`${f.field}-${i}`} style={[styles.miniCell, { flex: d.spaces }]}>
-                <StripField value={sampleValue(d)} shrink muted />
+                <StripField value={sampleValue(d)} shrink muted fit />
               </View>
             );
           })}

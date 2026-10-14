@@ -7,8 +7,11 @@
  *   3. unit detail: a compass point after degrees ("300°" says it), the
  *      arrow-only tide trend, "nmi" → "NM";
  *   4. its glyph.
- * The renderer then lets the native text shrink as the last resort, so only a
- * NAME (a target's) can still ellipsise, never a number.
+ * The renderer then lets the native text shrink as the last resort
+ * (`shrinkToFit`), so a number is never cut. A NAME (a target's: no digit in
+ * it) only takes the type step and then ellipsises behind its glyph: shrunk
+ * to fit, a long name became unreadably small on Android, which ignores the
+ * minimum font scale (QA 2.6.0 re-test).
  *
  * Widths are estimates (dp per character, measured on the strip's font on
  * Android at font scale 1), deliberately a little generous: dropping a tag
@@ -57,34 +60,45 @@ export interface FittedValue {
   value: StripValue;
   /** The value's type size, sp. */
   valueSp: number;
+  /** A number: the renderer may shrink it natively rather than cut it. */
+  shrinkToFit: boolean;
+}
+
+/** A name rather than a reading: no digit in it ("Kiosque Edwin-Bélanger"). */
+export function isName(v: StripValue): boolean {
+  return !/\d/.test(v.value);
 }
 
 /** The fullest form of `v` that fits `widthDp` (see the module note). */
 export function fitStripValue(v: StripValue, widthDp: number, fontScale = 1): FittedValue {
+  const shrinkToFit = !isName(v);
+  const out = (value: StripValue, valueSp: number) => ({ value, valueSp, shrinkToFit });
   const fits = (x: StripValue, sp: number) => estimateWidthDp(x, sp, fontScale) <= widthDp;
-  if (fits(v, VALUE_SP)) return { value: v, valueSp: VALUE_SP };
+  if (fits(v, VALUE_SP)) return out(v, VALUE_SP);
+  // A name keeps its glyph and tag, takes the type step, then ellipsises.
+  if (!shrinkToFit) return out(v, VALUE_SMALL_SP);
   let cur: StripValue = v;
   // 1. The tag, when a glyph still names the field; else it stays to the end.
   if (cur.tag !== undefined && cur.glyph !== undefined) {
     cur = without(cur, 'tag');
-    if (fits(cur, VALUE_SP)) return { value: cur, valueSp: VALUE_SP };
+    if (fits(cur, VALUE_SP)) return out(cur, VALUE_SP);
   }
   // 2. One type step.
-  if (fits(cur, VALUE_SMALL_SP)) return { value: cur, valueSp: VALUE_SMALL_SP };
+  if (fits(cur, VALUE_SMALL_SP)) return out(cur, VALUE_SMALL_SP);
   // 3. Unit detail.
   if (cur.unit !== undefined) {
     const u = shortUnit(cur.value, cur.unit);
     cur = u === undefined ? without(cur, 'unit') : { ...cur, unit: u };
-    if (fits(cur, VALUE_SMALL_SP)) return { value: cur, valueSp: VALUE_SMALL_SP };
+    if (fits(cur, VALUE_SMALL_SP)) return out(cur, VALUE_SMALL_SP);
   }
   // 4. The glyph (a tag-only field keeps its tag: it is what names it).
   if (cur.glyph !== undefined) {
     cur = without(cur, 'glyph');
-    if (fits(cur, VALUE_SMALL_SP)) return { value: cur, valueSp: VALUE_SMALL_SP };
+    if (fits(cur, VALUE_SMALL_SP)) return out(cur, VALUE_SMALL_SP);
   }
   // A tag with no glyph goes last.
   if (cur.tag !== undefined) cur = without(cur, 'tag');
-  return { value: cur, valueSp: VALUE_SMALL_SP };
+  return out(cur, VALUE_SMALL_SP);
 }
 
 function without(v: StripValue, key: 'tag' | 'unit' | 'glyph'): StripValue {

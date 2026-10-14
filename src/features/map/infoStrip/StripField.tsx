@@ -59,7 +59,7 @@ export const StripField = memo(function StripField({
     () =>
       fit && width !== null
         ? fitStripValue(given, width, PixelRatio.getFontScale())
-        : { value: given, valueSp: VALUE_SP },
+        : { value: given, valueSp: VALUE_SP, shrinkToFit: false },
     [fit, width, given],
   );
   const value = fitted.value;
@@ -93,8 +93,8 @@ export const StripField = memo(function StripField({
         ]}
         numberOfLines={1}
         // The last resort when fitted: the native text shrinks rather than cut.
-        adjustsFontSizeToFit={shrink || fit}
-        minimumFontScale={fit ? 0.7 : 0.85}
+        adjustsFontSizeToFit={shrink || fitted.shrinkToFit}
+        minimumFontScale={fitted.shrinkToFit ? 0.7 : 0.85}
         testID={textTestID}
       >
         {value.value}
