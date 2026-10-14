@@ -78,6 +78,10 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Add to row 1'
     timeout: 10000
+# The picker lists every group under All; Speed (Motion) sits below the fold
+# of a 1080x2400 screen once Navigation and Position are listed, and tapOn
+# does not scroll. Filter to Motion first: Speed is then near the top.
+- tapOn: 'Motion fields'
 - tapOn:
     id: 'strip-pick-speed'
 - extendedWaitUntil:
