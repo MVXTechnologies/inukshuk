@@ -73,7 +73,10 @@ export const InfoStripHost = memo(function InfoStripHost({
   const units = useSettingsStore((s) => s.units);
   const heroFields = useStripRuntime((s) => s.heroFields);
   const editorOpen = useStripRuntime((s) => s.editorOpen);
-  const topInset = useRealSafeAreaInsets().top;
+  const realInsets = useRealSafeAreaInsets();
+  const topInset = realInsets.top;
+  const panelMini = useStripRuntime((s) => s.panelMini);
+  const panelPaused = useStripRuntime((s) => s.panelPaused);
   const router = useRouter();
   const recording = inputs.recording !== null;
 
@@ -90,6 +93,10 @@ export const InfoStripHost = memo(function InfoStripHost({
   const top = strip.dock === 'top';
   const shown = !hidden && !(bottomSheetUp && !top) && placed.length > 0;
   const onPanel = shown && !top && recording && heroFields.length > 0;
+  // The panel minimised to its pill (QA 2.6.0, 06b): the strip takes the
+  // screen's edge (the tab bar hides while recording), over the system bar,
+  // and the pill floats on it — never the strip floating over the map.
+  const atEdge = !top && recording && panelMini;
 
   // What the strip tells the others: its metrics (the panel's cycling) and
   // whether it sits on the panel.
@@ -135,7 +142,7 @@ export const InfoStripHost = memo(function InfoStripHost({
     <>
       {shown && (
         <View
-          style={[styles.dock, top ? styles.top : { bottom: bottomLift }]}
+          style={[styles.dock, top ? styles.top : { bottom: atEdge ? 0 : bottomLift }]}
           pointerEvents="box-none"
           testID="info-strip-dock"
         >
@@ -143,7 +150,9 @@ export const InfoStripHost = memo(function InfoStripHost({
             rows={placed}
             dock={strip.dock}
             onPanel={onPanel}
+            panelPaused={panelPaused}
             topInset={topInset}
+            bottomInset={atEdge ? realInsets.bottom : 0}
             onEdit={openStripEditor}
             onCopy={onCopy}
             onOpenTarget={onOpen}

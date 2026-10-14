@@ -20,6 +20,9 @@ import { create } from 'zustand';
  * - `onPanel`: the strip sits on the recording panel (the panel squares its
  *   top, the strip takes the rounded one).
  * - `editorOpen`: the editor is open (a long-press on the strip, or Map layers).
+ * - `panelMini` / `panelPaused`: the recording panel is minimised to its pill
+ *   (the strip then takes the screen's edge and the pill floats on it), and
+ *   paused (the strip on the panel draws the panel's amber status bar).
  */
 export interface StripRuntime {
   dock: Dock;
@@ -28,6 +31,8 @@ export interface StripRuntime {
   stripMetrics: ReadonlySet<HeroField>;
   onPanel: boolean;
   editorOpen: boolean;
+  panelMini: boolean;
+  panelPaused: boolean;
 }
 
 const INITIAL: StripRuntime = {
@@ -37,6 +42,8 @@ const INITIAL: StripRuntime = {
   stripMetrics: new Set(),
   onPanel: false,
   editorOpen: false,
+  panelMini: false,
+  panelPaused: false,
 };
 
 export const useStripRuntime = create<StripRuntime>(() => ({ ...INITIAL }));

@@ -444,6 +444,40 @@ describe('recording: the strip stacks on the panel, one owner per metric', () =>
     });
   });
 
+  it.each([
+    ['light', false],
+    ['dark', true],
+  ] as const)(
+    "draws the panel's status bar on top of the pair, amber and thicker when paused (QA 06a, %s)",
+    async (_n, dark) => {
+      const scheme = dark ? darkScheme : lightScheme;
+      putStrip({ ...currentStrip(), rows: [[{ field: 'hero:moving', params: {} }]] });
+      setStripRuntime({ heroFields: DEFAULT_HERO_FIELDS });
+      await renderStrip({ recording, location: QC, bottomLift: 166 }, dark);
+      const bar = () => StyleSheet.flatten(screen.getByTestId('info-strip-panel-bar').props.style);
+      expect(bar()).toMatchObject({ height: 4, backgroundColor: scheme.status.recording });
+      await act(async () => setStripRuntime({ panelPaused: true }));
+      expect(bar()).toMatchObject({ height: 6, backgroundColor: scheme.status.paused });
+    },
+  );
+
+  it('minimised to the pill: the strip takes the screen edge over the system bar (QA 06b)', async () => {
+    putStrip({ ...currentStrip(), rows: [[{ field: 'hero:gain', params: {} }]] });
+    setStripRuntime({ heroFields: [], panelMini: true });
+    await renderStrip({ recording, bottomLift: 64 });
+    expect(StyleSheet.flatten(screen.getByTestId('info-strip-dock').props.style).bottom).toBe(0);
+    const strip = StyleSheet.flatten(screen.getByTestId('info-strip').props.style);
+    // The test safe area's bottom inset is 24: the strip pads over it.
+    expect(strip.paddingBottom).toBeGreaterThanOrEqual(24);
+    expect(screen.queryByTestId('info-strip-panel-bar')).toBeNull();
+  });
+
+  it('not recording, a stale minimised flag changes nothing: it sits on its lift', async () => {
+    setStripRuntime({ panelMini: true });
+    await renderStrip({ bottomLift: 40 });
+    expect(StyleSheet.flatten(screen.getByTestId('info-strip-dock').props.style).bottom).toBe(40);
+  });
+
   it('with the panel minimised the strip shows them all and is not on the panel', async () => {
     putStrip({ ...currentStrip(), rows: [[{ field: 'hero:gain', params: {} }]] });
     setStripRuntime({ heroFields: [] });

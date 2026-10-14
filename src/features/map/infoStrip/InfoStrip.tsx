@@ -27,10 +27,16 @@ const EDIT_ACTION = [{ name: 'longpress', label: 'Customize info strip' }] as co
 export interface InfoStripViewProps {
   rows: readonly (readonly PlacedValue[])[];
   dock: Dock;
-  /** Sitting on the recording panel: the strip takes the panel's rounded top. */
+  /**
+   * Sitting on the recording panel: the strip takes the panel's rounded top
+   * and its status bar (stone, amber and thicker when `panelPaused`).
+   */
   onPanel: boolean;
+  panelPaused?: boolean;
   /** Top dock: the status bar's height, which the strip's surface reaches behind. */
   topInset: number;
+  /** At the screen's bottom edge (recording minimised): the system bar it reaches behind. */
+  bottomInset?: number;
   onEdit: () => void;
   /** A tap on a field that copies (coordinates): the text it copies. */
   onCopy: (p: PlacedValue) => void;
@@ -57,7 +63,9 @@ export const InfoStripView = memo(function InfoStripView({
   rows,
   dock,
   onPanel,
+  panelPaused = false,
   topInset,
+  bottomInset = 0,
   onEdit,
   onCopy,
   onOpenTarget,
@@ -82,9 +90,25 @@ export const InfoStripView = memo(function InfoStripView({
           ? [styles.top, { paddingTop: topInset + STRIP_PAD_DP / 2 }]
           : onPanel
             ? styles.onPanel
-            : styles.bottom,
+            : [
+                styles.bottom,
+                bottomInset > 0 && { paddingBottom: styles.bottom.paddingBottom + bottomInset },
+              ],
       ]}
     >
+      {onPanel && (
+        // Clipped to the strip's rounded top by a full-size layer, so the strip
+        // itself keeps its shadow (overflow on it would clip that on iOS).
+        <View style={styles.panelBarClip} pointerEvents="none">
+          <View
+            testID="info-strip-panel-bar"
+            style={{
+              height: panelPaused ? 6 : 4,
+              backgroundColor: panelPaused ? t.status.paused : t.status.recording,
+            }}
+          />
+        </View>
+      )}
       {rows.map((row, r) => (
         <Fragment key={`r${row[0]!.row}`}>
           {r > 0 && <View style={[styles.rowDivider, { backgroundColor: t.divider }]} />}
@@ -166,13 +190,29 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -2 },
     elevation: 6,
   },
-  // On the recording panel: its rounded top (+4 dp), one surface with it.
+  // On the recording panel: its rounded top and its status bar, one surface
+  // with it (the panel draws neither then); the pair's shadow up onto the map.
   onPanel: {
-    borderTopWidth: 1,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingTop: (STRIP_PAD_DP - 1) / 2 + STRIP_MERGED_EXTRA_DP,
     paddingBottom: (STRIP_PAD_DP - 1) / 2,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 8,
+  },
+  // The panel's status bar, flush with the strip's top (under its padding).
+  panelBarClip: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    overflow: 'hidden',
   },
   top: {
     borderBottomWidth: 1,

@@ -5,7 +5,7 @@ import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSettingsStore } from '@state/settingsStore';
 import { EXPANDED_FIELDS } from '@core/recording/panel';
-import { RecordingPanel } from './RecordingPanel';
+import { MINI_ON_STRIP_GAP, RecordingPanel } from './RecordingPanel';
 import { resetStripRuntime, setStripRuntime, useStripRuntime } from '../infoStrip/stripRuntime';
 
 jest.mock('@data/storage', () => ({
@@ -217,6 +217,42 @@ describe('RecordingPanel', () => {
       expect(StyleSheet.flatten(sheet().props.style).borderTopLeftRadius).toBe(24);
       await act(async () => setStripRuntime({ onPanel: true }));
       expect(StyleSheet.flatten(sheet().props.style).borderTopLeftRadius).toBe(0);
+    });
+
+    it('under the strip it leaves its status bar and shadow to the strip: one surface (QA 06a)', async () => {
+      await renderPanel();
+      const sheet = () => screen.getByLabelText('Recording instruments');
+      expect(
+        StyleSheet.flatten(screen.getByTestId('recording-status-bar').props.style),
+      ).toMatchObject({ height: 4 });
+      await act(async () => setStripRuntime({ onPanel: true }));
+      expect(screen.queryByTestId('recording-status-bar')).toBeNull();
+      expect(StyleSheet.flatten(sheet().props.style)).toMatchObject({
+        elevation: 0,
+        shadowOpacity: 0,
+      });
+    });
+
+    it('tells the strip when it is minimised and when paused', async () => {
+      await renderPanel({ status: 'paused' });
+      expect(useStripRuntime.getState()).toMatchObject({ panelMini: false, panelPaused: true });
+      await fireEvent.press(screen.getByLabelText('Minimize to a small overlay'));
+      expect(useStripRuntime.getState().panelMini).toBe(true);
+      await screen.unmount();
+      expect(useStripRuntime.getState()).toMatchObject({ panelMini: false, panelPaused: false });
+    });
+
+    it('minimised on a bottom strip, the pill floats on it and reports its height without it (QA 06b)', async () => {
+      setStripRuntime({ dock: 'bottom', stripH: 70 });
+      const onHeightChange = jest.fn();
+      await renderPanel({ onHeightChange });
+      await fireEvent.press(screen.getByLabelText('Minimize to a small overlay'));
+      const wrap = screen.getByTestId('recording-mini-wrap');
+      expect(StyleSheet.flatten(wrap.props.style).paddingBottom).toBe(70 + MINI_ON_STRIP_GAP);
+      await fireEvent(wrap, 'layout', {
+        nativeEvent: { layout: { height: 70 + MINI_ON_STRIP_GAP + 52 } },
+      });
+      expect(onHeightChange).toHaveBeenLastCalledWith(MINI_ON_STRIP_GAP + 52);
     });
   });
 });

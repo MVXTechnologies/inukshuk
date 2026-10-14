@@ -62,6 +62,9 @@ interface Props {
   onHeightChange?: (height: number) => void;
 }
 
+/** Minimised on a bottom info strip: the pill's gap above the strip, dp. */
+export const MINI_ON_STRIP_GAP = 12;
+
 /** Split "3.42 km" into value and unit so the unit can be set smaller (board). */
 function splitUnit(text: string): { value: string; unit: string } {
   const m = /^(.*?\d[^\s]*)\s+(\D.*)$/.exec(text);
@@ -114,6 +117,9 @@ export function RecordingPanel(props: Props) {
   // whether it sits on this panel (then it takes the rounded top).
   const stripMetrics = useStripRuntime((s) => s.stripMetrics);
   const stripOnTop = useStripRuntime((s) => s.onPanel);
+  // Minimised, a bottom strip takes the screen's edge and the pill floats on
+  // it (QA 2.6.0, 06b): the pill rides on the strip's measured height.
+  const stripBelow = useStripRuntime((s) => (s.dock === 'bottom' ? s.stripH : 0));
   // Tell the strip which metrics the hero row (and the expanded grid) owns:
   // it drops those (one owner per metric). None while minimised.
   useEffect(() => {
@@ -127,6 +133,12 @@ export function RecordingPanel(props: Props) {
     });
   }, [panel, fields]);
   useEffect(() => () => setStripRuntime({ heroFields: [] }), []);
+  // The strip's dock and status bar follow the panel's state.
+  const paused = status === 'paused';
+  useEffect(() => {
+    setStripRuntime({ panelMini: panel === 'mini', panelPaused: paused });
+  }, [panel, paused]);
+  useEffect(() => () => setStripRuntime({ panelMini: false, panelPaused: false }), []);
 
   const lastAccuracyM = useRecorderStore((s) => s.lastAccuracyM);
   const lastFixAt = useRecorderStore((s) => s.lastFixAt);
@@ -141,7 +153,6 @@ export function RecordingPanel(props: Props) {
   // A one-second clock for the paused duration, the GPS age and the sunset
   // countdown (all keep moving while paused, when `elapsedS` stands still).
   const now = useNow(1000);
-  const paused = status === 'paused';
   const chip = gpsChip(gpsQuality, lastAccuracyM, lastFixAt, now);
   const receiverChip = useReceiverChip();
   const setReceiverSheetOpen = useGnssStore((s) => s.setSheetOpen);
@@ -176,12 +187,22 @@ export function RecordingPanel(props: Props) {
 
   // --- A · mini overlay -----------------------------------------------------
   if (panel === 'mini') {
+    // On a bottom strip: the pill floats MINI_ON_STRIP_GAP above it, and the
+    // height it reports leaves the strip out (MapScreen adds the strip's lift
+    // itself, as for the full panel).
+    const onStrip = stripBelow > 0;
     return (
       <GestureDetector gesture={swipe}>
         <View
-          style={[styles.miniWrap, { paddingBottom: insets.bottom + 16 }]}
+          style={[
+            styles.miniWrap,
+            { paddingBottom: onStrip ? stripBelow + MINI_ON_STRIP_GAP : insets.bottom + 16 },
+          ]}
           pointerEvents="box-none"
-          onLayout={onLayout}
+          testID="recording-mini-wrap"
+          onLayout={(e) =>
+            onHeightChange?.(e.nativeEvent.layout.height - (onStrip ? stripBelow : 0))
+          }
         >
           <Pressable
             onPress={() => setPanel(expandPanel)}
@@ -272,13 +293,18 @@ export function RecordingPanel(props: Props) {
           },
         ]}
       >
-        {/* Status bar: stone while recording, a thicker amber bar when paused. */}
-        <View
-          style={{
-            height: paused ? 6 : 4,
-            backgroundColor: paused ? tokens.status.paused : tokens.status.recording,
-          }}
-        />
+        {/* Status bar: stone while recording, a thicker amber bar when paused.
+          Under the info strip the strip draws it on top of the pair, so the
+          two read as one surface (QA 2.6.0, 06a). */}
+        {!stripOnTop && (
+          <View
+            testID="recording-status-bar"
+            style={{
+              height: paused ? 6 : 4,
+              backgroundColor: paused ? tokens.status.paused : tokens.status.recording,
+            }}
+          />
+        )}
 
         {/* Status row: REC/PAUSED chip + GPS chip · minimize + options. */}
         <View style={styles.statusRow}>
@@ -689,7 +715,13 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   // The info strip sits on the panel and takes its rounded top: one surface.
-  sheetUnderStrip: { borderTopLeftRadius: 0, borderTopRightRadius: 0 },
+  // No shadow up onto the strip either: the strip carries the pair's.
+  sheetUnderStrip: {
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   statusRow: {
     height: 52,
     flexDirection: 'row',
