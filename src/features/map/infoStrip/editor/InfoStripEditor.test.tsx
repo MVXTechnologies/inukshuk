@@ -17,6 +17,7 @@ import { State } from 'react-native-gesture-handler';
 
 import { InfoStripHost } from '../InfoStripHost';
 import { openStripEditor, useStripRuntime } from '../stripRuntime';
+import { PREVIEW_MAP } from './CursorSettings';
 import { SAVED_LIMIT_MESSAGE } from './InfoStripEditor';
 import { currentStrip, Providers, putStrip, QC, resetStores } from '../testUtils';
 
@@ -125,6 +126,10 @@ describe('the editor sheet', () => {
     // The centre cursor.
     await tap('Centre cursor');
     expect(inkOf('Centre cursor')).toBe(scheme.ink);
+    // The preview is a map swatch the paper halo stands out on (QA 2.6.0).
+    const swatch = StyleSheet.flatten(screen.getByTestId('cursor-preview').props.style);
+    expect(swatch.backgroundColor).toBe(PREVIEW_MAP);
+    expect(swatch.backgroundColor).not.toBe(scheme.map.cursorRing);
     await tap('Back to info strip');
     // Presets.
     await tap('Presets');

@@ -23,6 +23,9 @@ const SIZES: readonly { value: CursorSize; label: string }[] = [
   { value: 'XL', label: 'XL' },
 ];
 
+/** The preview's stand-in for the map: mid-tone, so both the paper halo and a dark cursor read. */
+export const PREVIEW_MAP = palette.granite;
+
 /** "Dot · S · Stone", "Crosshair · M · Red", or "Off". */
 export function cursorSummary(c: Cursor): string {
   if (!c.enabled) return 'Off';
@@ -51,7 +54,10 @@ export function CursorSettings({
   return (
     <View>
       <SubPanelHeader title="Centre cursor" backLabel="Back to info strip" onBack={onBack} />
-      <View style={[styles.preview, { backgroundColor: t.surfaceVariant }]}>
+      {/* A mid-grey map swatch, not the sheet's paper: the paper halo vanished
+        on it in the light theme (QA 2.6.0). Same swatch in both themes, as
+        the map under the cursor does not follow the sheet's theme. */}
+      <View style={[styles.preview, { backgroundColor: PREVIEW_MAP }]} testID="cursor-preview">
         <CursorGlyph cursor={{ ...cursor, enabled: true }} />
       </View>
       <SwitchRow
