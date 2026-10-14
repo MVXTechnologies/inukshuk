@@ -136,6 +136,56 @@ describe('PointingLinePanel', () => {
     expect(cfg().length).toBe(100);
   });
 
+  it('Custom (#703): the last stop opens a distance field, typed and clamped', async () => {
+    await mount();
+    const step = () =>
+      act(async () => {
+        fireEvent(screen.getByLabelText('Length'), 'accessibilityAction', {
+          nativeEvent: { actionName: 'increment' },
+        });
+      });
+    expect(screen.queryByLabelText('Custom length in metres')).toBeNull();
+    for (let i = 0; i < 4; i++) await step();
+    expect(cfg().length).toBe('custom');
+    expect(screen.getByLabelText('Length').props.accessibilityValue.text).toBe('Custom');
+    const input = screen.getByLabelText('Custom length in metres');
+    expect(input.props.value).toBe('750');
+    await fireEvent.changeText(input, '1250');
+    expect(cfg().customLengthM).toBe(1250);
+    expect(screen.getByText('From you · heading · 1.25 km · ticks every 50 m')).toBeTruthy();
+    expect(screen.getByText(/so 1\.25 km is 1\.25 km on the ground/)).toBeTruthy();
+    // Not a number yet: nothing is written; too short: clamped, shown on leaving.
+    await fireEvent.changeText(input, '');
+    expect(cfg().customLengthM).toBe(1250);
+    await fireEvent.changeText(input, '3');
+    expect(cfg().customLengthM).toBe(10);
+    await fireEvent(input, 'blur');
+    expect(input.props.value).toBe('10');
+    // A preset keeps the custom distance for next time.
+    await act(async () => {
+      fireEvent(screen.getByLabelText('Length'), 'accessibilityAction', {
+        nativeEvent: { actionName: 'decrement' },
+      });
+    });
+    expect(cfg().length).toBe('edge');
+    expect(cfg().customLengthM).toBe(10);
+    expect(screen.queryByLabelText('Custom length in metres')).toBeNull();
+  });
+
+  it('Custom in imperial: typed in feet, stored in metres', async () => {
+    useSettingsStore.setState({
+      units: 'imperial',
+      pointingLine: { ...DEFAULT_POINTING_LINE, length: 'custom', customLengthM: 457.2 },
+    });
+    await mount();
+    const input = screen.getByLabelText('Custom length in feet');
+    expect(input.props.value).toBe('1500');
+    expect(screen.getByText('From you · heading · 1500 ft · ticks every 200 ft')).toBeTruthy();
+    await fireEvent.changeText(input, '5280');
+    expect(cfg().customLengthM).toBeCloseTo(1609.344, 6);
+    expect(screen.getByText(/· 1 mi ·/)).toBeTruthy();
+  });
+
   it('colour, width, ticks and labels each write their field only', async () => {
     await mount();
     await fireEvent.press(screen.getByLabelText('Blue'));
@@ -174,5 +224,13 @@ describe('PointingLinePanel', () => {
     const input = StyleSheet.flatten(screen.getByLabelText('Fixed bearing in degrees').props.style);
     expect(input.color).toBe(scheme.ink);
     expect(input.backgroundColor).toBe(scheme.surfaceVariant);
+    await act(async () =>
+      useSettingsStore.setState({
+        pointingLine: { ...useSettingsStore.getState().pointingLine, length: 'custom' },
+      }),
+    );
+    const custom = StyleSheet.flatten(screen.getByLabelText('Custom length in metres').props.style);
+    expect(custom.color).toBe(scheme.ink);
+    expect(custom.backgroundColor).toBe(scheme.surfaceVariant);
   });
 });
