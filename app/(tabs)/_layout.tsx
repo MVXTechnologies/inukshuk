@@ -7,6 +7,7 @@ import {
   tabBarHidden,
   tabLabelStyle,
 } from '@ui/tabBarStyle';
+import { TabBarButton } from '@ui/TabBarButton';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRecorderStore } from '@state/recorderStore';
 import { useScreenSheetStore } from '@state/screenSheetStore';
@@ -105,6 +106,9 @@ export default function TabsLayout() {
           // through the (transparent) screen roots — unreadable in dark mode.
           sceneStyle: { backgroundColor: theme.colors.background },
           tabBarLabel: label,
+          // No long-press on tabs: a quick tap whose release reaches JS late
+          // (UI-thread stall) must still switch tabs (TabBarButton).
+          tabBarButton: TabBarButton,
           ...tabBar,
           tabBarStyle: tabBarHidden(route.name, { recording, movingWaypoint, sheetUp })
             ? { ...tabBar.tabBarStyle, display: 'none' }
