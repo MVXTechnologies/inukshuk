@@ -139,6 +139,12 @@ appId: com.inukshuk.app
     timeout: 15000
 - tapOn: 'Settings'
 - assertVisible: 'App settings.*'
+# Expand App settings (guarded retry: the accordion animates), THEN scroll to
+# the Theme segment with the standard timeout, as settings.yaml does. Rows
+# keep landing above Theme (Coordinates 2.5.1, Pin size 2.5.2) and each swipe
+# takes ~3 s on the CI emulator, so a 5 s scroll inside the retry ran out
+# with Dark just reached; the retry then found the section scrolled past its
+# sentinel and tapped the off-screen header (run 38547458212).
 - retry:
     maxRetries: 3
     commands:
@@ -147,11 +153,13 @@ appId: com.inukshuk.app
             notVisible: 'Keep screen awake.*'
           commands:
             - tapOn: 'App settings.*'
-      - scrollUntilVisible:
-          element:
-            text: 'Dark'
-          direction: DOWN
+      - extendedWaitUntil:
+          visible: 'Keep screen awake.*'
           timeout: 5000
+- scrollUntilVisible:
+    element:
+      text: 'Dark'
+    direction: DOWN
 - tapOn: 'Dark'
 - scrollUntilVisible:
     element: 'Extensions.*'
@@ -227,10 +235,12 @@ appId: com.inukshuk.app
             notVisible: 'Keep screen awake.*'
           commands:
             - tapOn: 'App settings.*'
-      - scrollUntilVisible:
-          element:
-            text: 'System'
-          direction: DOWN
+      - extendedWaitUntil:
+          visible: 'Keep screen awake.*'
           timeout: 5000
+- scrollUntilVisible:
+    element:
+      text: 'System'
+    direction: DOWN
 - tapOn: 'System'
 - assertVisible: 'Theme.*'
