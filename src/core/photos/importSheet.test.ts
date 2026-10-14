@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 import type { ClockEstimate } from './clock';
 import {
   addButtonLabel,
@@ -82,16 +83,16 @@ describe('group texts', () => {
   });
 
   it('explains the location group with the distance from the trail', () => {
-    expect(byGpsText([gps('a', 9.2)], true)).toBe(
+    expect(byGpsText([gps('a', 9.2)], true, METRIC)).toBe(
       'No time in the file. Placed at its GPS position, 9 m from the trail.',
     );
-    expect(byGpsText([gps('a', 9), gps('b', 41.6)], true)).toBe(
+    expect(byGpsText([gps('a', 9), gps('b', 41.6)], true, METRIC)).toBe(
       'No time in the file. Placed at their GPS position, all within 42 m of the trail.',
     );
-    expect(byGpsText([gps('a', 3)], false)).toBe(
+    expect(byGpsText([gps('a', 3)], false, METRIC)).toBe(
       'Placed on the route by its GPS position, 3 m from the trail.',
     );
-    expect(byGpsText([], true)).toBe('No time in the file. Placed at their GPS position.');
+    expect(byGpsText([], true, METRIC)).toBe('No time in the file. Placed at their GPS position.');
   });
 
   it('explains the outsiders with their times', () => {

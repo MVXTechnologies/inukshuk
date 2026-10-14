@@ -908,7 +908,7 @@ export function MapScreen() {
   const marineChart = useMarineChart(
     marineActive && screenFocused && mapLoaded,
     settledBounds,
-    units === 'imperial',
+    units.elevation === 'ft',
     installedPacks,
     installedPacks.size + packTotalBytes,
   );

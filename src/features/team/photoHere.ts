@@ -8,6 +8,7 @@
  * and syncs later when offline (it is an ordinary signed op).
  */
 import { normalizeExif } from '@core/photos/exif';
+import { formatDistance } from '@state/formatters';
 import { MAX_THUMB_B64 } from '@core/teamui/comments';
 import type { TeamSession } from '@data/team/teamSession';
 import * as ImagePicker from 'expo-image-picker';
@@ -63,7 +64,7 @@ export async function photoHere(
     if (d > FAR_M) {
       const here = await choose(
         'Where does it go?',
-        `It was taken ${d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1)} km`} from this spot.`,
+        `It was taken ${formatDistance(d, { style: 'tenths' })} from this spot.`,
         'Place it here',
         'Where it was taken',
       );

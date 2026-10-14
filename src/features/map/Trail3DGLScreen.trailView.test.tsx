@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 import { buildGpx } from '@core/geo/gpx';
 import { computeSegmentedTrackStats } from '@core/geo/track';
 import { walk } from '@core/geo/track/__fixtures__/walk';
@@ -112,7 +113,7 @@ beforeEach(() => {
   clearOutingAnalysisCache();
   mockNavigate.mockReset();
   useOnMapTrailStore.setState({ trackId: null });
-  useSettingsStore.setState({ hydrated: true, units: 'metric', trailViewTab: 'overview' });
+  useSettingsStore.setState({ hydrated: true, units: METRIC, trailViewTab: 'overview' });
 });
 
 it('opens on Overview: tiles, compact elevation chart, jump chips, photo strip', async () => {

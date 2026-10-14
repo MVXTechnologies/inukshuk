@@ -1,3 +1,4 @@
+import { formatDistance, type Units } from '@core/format';
 import type { ClockEstimate } from './clock';
 import { describeClock } from './clock';
 import type { ImportPlan, PlannedPhoto } from './placement';
@@ -62,16 +63,20 @@ export function sheetSubtitle(
 export const BY_TIME_TEXT = 'Taken during the outing. Each one goes where you were at that minute.';
 
 /** "By location only": why, and how far from the trail. */
-export function byGpsText(group: readonly PlannedPhoto[], timedTrail: boolean): string {
+export function byGpsText(
+  group: readonly PlannedPhoto[],
+  timedTrail: boolean,
+  units: Units,
+): string {
   const offs = group.flatMap((p) => (p.result.kind === 'gps' ? [p.result.offTrackM] : []));
   const why = timedTrail ? 'No time in the file' : 'Placed on the route';
-  const max = offs.length > 0 ? Math.round(Math.max(...offs)) : null;
+  const max = offs.length > 0 ? formatDistance(Math.max(...offs), units) : null;
   const where =
     max === null
       ? ''
       : offs.length === 1
-        ? `, ${max} m from the trail`
-        : `, all within ${max} m of the trail`;
+        ? `, ${max} from the trail`
+        : `, all within ${max} of the trail`;
   return timedTrail
     ? `${why}. Placed at ${offs.length === 1 ? 'its' : 'their'} GPS position${where}.`
     : `${why} by ${offs.length === 1 ? 'its' : 'their'} GPS position${where}.`;

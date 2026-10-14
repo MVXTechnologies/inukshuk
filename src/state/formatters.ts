@@ -20,11 +20,13 @@
  */
 
 import {
+  formatAccuracy as formatAccuracyIn,
   formatDistance as formatDistanceIn,
   formatElevation as formatElevationIn,
   formatElevationChange as formatElevationChangeIn,
   formatPace as formatPaceIn,
   formatSpeed as formatSpeedIn,
+  type DistanceOptions,
   type Units,
 } from '@core/format';
 import { useSettingsStore } from './settingsStore';
@@ -34,8 +36,12 @@ export type { Units } from '@core/format';
 
 const currentUnits = (): Units => useSettingsStore.getState().units;
 
-/** Metres -> "1.23 km" / "840 m", or the imperial equivalent. */
-export const formatDistance = (meters: number): string => formatDistanceIn(meters, currentUnits());
+/** Metres -> "1.23 km" / "840 m", or in miles / nautical miles (`options.style` for fewer decimals). */
+export const formatDistance = (meters: number, options?: DistanceOptions): string =>
+  formatDistanceIn(meters, currentUnits(), options);
+
+/** A position's accuracy: "±5 m" / "±16 ft". */
+export const formatAccuracy = (meters: number): string => formatAccuracyIn(meters, currentUnits());
 
 /** Metres -> "1234 m" / "4049 ft" (elevation, no decimals). */
 export const formatElevation = (meters: number): string =>
@@ -45,7 +51,7 @@ export const formatElevation = (meters: number): string =>
 export const formatElevationChange = (meters: number, direction: 'up' | 'down'): string =>
   formatElevationChangeIn(meters, direction, currentUnits());
 
-/** m/s -> "4.2 km/h" / "2.6 mph". */
+/** m/s -> "4.2 km/h" / "2.6 mph" / "2.3 kn". */
 export const formatSpeed = (mps: number): string => formatSpeedIn(mps, currentUnits());
 
 /** m/s -> "6:00/km" / "9:39/mi" pace, or "—". */

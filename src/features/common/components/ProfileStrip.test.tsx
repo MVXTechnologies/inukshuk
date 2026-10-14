@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 /**
  * The drawing tool's elevation strip (#515): its chart, the dimmed "updating"
  * state, and scrubbing — a finger on the strip reports the point under it
@@ -44,7 +45,7 @@ async function mount(props: Partial<Parameters<typeof ProfileStrip>[0]> = {}) {
   const onScrub = jest.fn();
   await render(
     <PaperProvider>
-      <ProfileStrip profile={PROFILE} units="metric" onScrub={onScrub} {...props} />
+      <ProfileStrip profile={PROFILE} units={METRIC} onScrub={onScrub} {...props} />
     </PaperProvider>,
   );
   const strip = screen.getByTestId('route-profile');

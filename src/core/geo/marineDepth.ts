@@ -1,3 +1,4 @@
+import { toElevationUnit, type Units } from '@core/format';
 import type { FloatGrid } from './floatTiff';
 
 /**
@@ -241,17 +242,13 @@ export function nearestValidDepth(grid: FloatGrid): number | null {
   return best;
 }
 
-const M_TO_FT = 3.28084;
-
 /**
  * Chip line for a sampled NONNA value (negative = below chart datum,
  * positive = drying height): "Depth 26.5 m · chart datum" /
- * "Drying 3.8 m · chart datum" (feet under imperial units).
+ * "Drying 3.8 m · chart datum" (in the user's elevation unit, #702).
  */
-export function formatDepthReadout(valueM: number, imperial: boolean): string {
+export function formatDepthReadout(valueM: number, units: Units): string {
   const drying = valueM > 0;
-  const magnitude = Math.abs(valueM) * (imperial ? M_TO_FT : 1);
-  const rounded = Math.round(magnitude * 10) / 10;
-  const unit = imperial ? 'ft' : 'm';
-  return `${drying ? 'Drying' : 'Depth'} ${rounded} ${unit} · chart datum`;
+  const rounded = Math.round(toElevationUnit(Math.abs(valueM), units) * 10) / 10;
+  return `${drying ? 'Drying' : 'Depth'} ${rounded} ${units.elevation} · chart datum`;
 }

@@ -10,24 +10,12 @@
  * Pure: units and "now" are arguments.
  */
 
-import { formatElevation, type Units } from '@core/format';
+import { formatDistance, formatElevation, type Units } from '@core/format';
 import type { TrackStats } from '@core/models';
 
-const M_PER_FT = 0.3048;
-const M_PER_MI = 1609.344;
-
-/** Metres → "840 m" / "11.2 km" / "142 km" (one decimal under 100 km), or imperial. */
+/** Metres → "840 m" / "11.2 km" / "142 km" (one decimal under 100), in the user's units. */
 export function compactDistance(meters: number, units: Units): string {
-  const m = Number.isFinite(meters) && meters > 0 ? meters : 0;
-  if (units === 'imperial') {
-    const feet = m / M_PER_FT;
-    if (Math.round(feet) < 1000) return `${Math.round(feet)} ft`;
-    const miles = m / M_PER_MI;
-    return miles < 100 ? `${miles.toFixed(1)} mi` : `${Math.round(miles)} mi`;
-  }
-  if (Math.round(m) < 1000) return `${Math.round(m)} m`;
-  const km = m / 1000;
-  return km < 100 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`;
+  return formatDistance(meters, units, { style: 'tenths' });
 }
 
 /** Seconds → "3:31" (h:mm) from an hour up, "42 min" below it. */

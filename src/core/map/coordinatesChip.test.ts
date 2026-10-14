@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC } from '@core/format';
 import {
   ALTITUDE_MIN_SCALE,
   ALTITUDE_SEPARATOR,
@@ -10,13 +11,13 @@ import {
 
 describe('chipAltitudeText', () => {
   it('marks DEM ground elevation as approximate, GPS altitude as read', () => {
-    expect(chipAltitudeText(412.4, 'metric', 'dem')).toBe('≈412 m');
-    expect(chipAltitudeText(412.6, 'metric', 'gps')).toBe('413 m');
+    expect(chipAltitudeText(412.4, METRIC, 'dem')).toBe('≈412 m');
+    expect(chipAltitudeText(412.6, METRIC, 'gps')).toBe('413 m');
   });
 
   it('follows the unit setting, rounded to the foot', () => {
-    expect(chipAltitudeText(412, 'imperial', 'dem')).toBe('≈1352 ft');
-    expect(chipAltitudeText(-3.2, 'metric', 'gps')).toBe('-3 m');
+    expect(chipAltitudeText(412, IMPERIAL, 'dem')).toBe('≈1352 ft');
+    expect(chipAltitudeText(-3.2, METRIC, 'gps')).toBe('−3 m');
   });
 });
 

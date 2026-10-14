@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 import { computeTrackStats } from '@core/geo/track';
 import type { TrackPoint, TrackSummary } from '@core/models';
 import { setTrailStatsStoreForTests, TrailStatsStore } from '@data/trailStatsStore';
@@ -57,7 +58,7 @@ let store: TrailStatsStore;
 
 async function show(ui: React.ReactElement, tracks: TrackSummary[], maxHeartRateBpm = 0) {
   useLibraryStore.setState({ tracks, customCategories: [], hydrated: true });
-  useSettingsStore.setState({ units: 'metric', maxHeartRateBpm });
+  useSettingsStore.setState({ units: METRIC, maxHeartRateBpm });
   await render(
     <SafeAreaProvider
       initialMetrics={{

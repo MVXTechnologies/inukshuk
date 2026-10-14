@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 /**
  * A catalog row's credit lines (#680): a Cartes Plein-air map names its
  * author and says it is free on the publisher's site, in light and dark, and
@@ -27,7 +28,7 @@ function mount(props: Partial<CatalogItemRowProps>, dark = false) {
         installStatus="not-installed"
         downloading={false}
         expanded={false}
-        units="metric"
+        units={METRIC}
         onToggleExpand={noop}
         onDownload={noop}
         onUpdate={noop}

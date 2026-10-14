@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 import { pinGeometry, WAYPOINT_PIN_DIAMETER } from '@core/library/waypointStyle';
 import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
@@ -48,7 +49,7 @@ async function setup(dark = false, zoom: number | null = null) {
   const handlers = { onCancel: jest.fn(), onConfirm: jest.fn(), onLocate: jest.fn() };
   await render(
     <PaperProvider theme={dark ? darkTheme : lightTheme}>
-      <MoveWaypointOverlay units="metric" zoom={zoom} {...handlers} />
+      <MoveWaypointOverlay units={METRIC} zoom={zoom} {...handlers} />
       <MoveWaypointLayers />
     </PaperProvider>,
   );
@@ -132,7 +133,7 @@ describe('MoveWaypointOverlay (#676)', () => {
       const r = await render(
         <PaperProvider theme={lightTheme}>
           <MoveWaypointOverlay
-            units="metric"
+            units={METRIC}
             onCancel={jest.fn()}
             onConfirm={jest.fn()}
             onLocate={jest.fn()}

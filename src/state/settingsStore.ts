@@ -1,4 +1,4 @@
-import { type Units } from '@core/format';
+import { sameUnits, sanitizeUnits, type Units } from '@core/format';
 import {
   DEFAULT_COORDINATE_FORMAT,
   isCoordinateFormat,
@@ -70,6 +70,7 @@ import {
   type PhotoCirclesAppear,
   type PhotoCopySize,
 } from '@core/photos/settings';
+import { deviceDefaultUnits } from './deviceUnits';
 import { Platform } from 'react-native';
 import { create } from 'zustand';
 
@@ -121,7 +122,12 @@ export interface Settings {
   elevationProfileStyle: ElevationProfileStyle;
   /** Use only offline maps; don't fetch from OSM. */
   offlineOnly: boolean;
-  /** Display units for distances, elevation, speed and pace. */
+  /**
+   * Display units (#702): distance (km / mi / NM, which also sets speed and
+   * pace) and elevation (m / ft). A pre-2.6.1 file holds `'metric'` or
+   * `'imperial'` here; it migrates on read (`sanitizeUnits`). First launch
+   * takes the device's region (US → mi + ft).
+   */
   units: Units;
   /** App theme: follow the OS ('system') or force light/dark. */
   themeMode: 'system' | 'light' | 'dark';
@@ -396,7 +402,7 @@ const DEFAULTS: Settings = {
   minDisplacementM: 5,
   elevationProfileStyle: 'gradient',
   offlineOnly: false,
-  units: 'metric',
+  units: deviceDefaultUnits(),
   themeMode: 'system',
   compactMapChrome: false,
   showNavigationButtons: false,
@@ -710,6 +716,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // An object default: the ladder's typeof check would pass object junk.
       next.waypointIcons = sanitizeWaypointIconPrefs(next.waypointIcons);
       next.pointingLine = sanitizePointingLine(next.pointingLine);
+      // An object default now (#702): the ladder's typeof check would DROP a
+      // pre-2.6.1 string ('metric' / 'imperial') and pass object junk.
+      // Recover the raw value; nothing usable falls back to the device default.
+      next.units =
+        sanitizeUnits(
+          typeof saved === 'object' && saved !== null
+            ? (saved as { units?: unknown }).units
+            : undefined,
+        ) ?? DEFAULTS.units;
       // The strip's own file, else a pre-release's settings key (moved to the
       // file below), else 2.5.1's chip-and-dot switch (an upgrade).
       const strip = readInfoStrip(savedStrip, saved);
@@ -758,6 +773,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     // moves a file on the JS thread). Re-setting the value a toggle already
     // holds is common — bail before paying for it.
     if (Object.is(get()[key], value)) return;
+    // Units are an object (#702): the segment already selected re-sends an
+    // equal one, which is no change either.
+    if (key === 'units' && sameUnits(get().units, value as Units)) return;
     set({ [key]: value } as Pick<Settings, typeof key>);
     if (!get().hydrated) {
       // Not read yet: never write DEFAULTS over the file (see pendingWrites).

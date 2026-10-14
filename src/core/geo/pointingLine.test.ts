@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC, NAUTICAL } from '@core/format';
 import { signedDeltaDeg } from '@core/signal/heading';
 import { haversineMeters, initialBearingDeg } from './geomath';
 import {
@@ -117,12 +118,12 @@ describe('ticks', () => {
 
   it('auto: the smallest round step at least 24 dp apart, at every zoom', () => {
     // z16 at the equator: 1.19 m/dp → 28.7 m → 50 m.
-    expect(autoTickStep(16, 0, 'metric')).toEqual({ stepM: 50, unit: 'm' });
+    expect(autoTickStep(16, 0, METRIC)).toEqual({ stepM: 50, unit: 'm' });
     // z14 over Québec: 3.27 m/dp → 78.5 m → 100 m.
-    expect(autoTickStep(14, QC.latitude, 'metric')).toEqual({ stepM: 100, unit: 'm' });
+    expect(autoTickStep(14, QC.latitude, METRIC)).toEqual({ stepM: 100, unit: 'm' });
     for (let z = 2; z <= 22; z += 0.25) {
       const mpp = metersPerPixel(z, QC.latitude)!;
-      const step = autoTickStep(z, QC.latitude, 'metric')!.stepM;
+      const step = autoTickStep(z, QC.latitude, METRIC)!.stepM;
       expect(step / mpp).toBeGreaterThanOrEqual(AUTO_TICK_MIN_DP - 1e-9);
       // …and the next smaller round step would be too close (or it is the 1 m floor).
       if (step > 1) {
@@ -130,21 +131,21 @@ describe('ticks', () => {
         expect(smaller / mpp).toBeLessThan(AUTO_TICK_MIN_DP);
       }
     }
-    expect(autoTickStep(NaN, 0, 'metric')).toBeNull();
+    expect(autoTickStep(NaN, 0, METRIC)).toBeNull();
   });
 
   it('auto in imperial: round feet up to 500 ft, then round miles, at every zoom', () => {
     // z16 at the equator: 28.7 m = 94 ft → 100 ft.
-    const z16 = autoTickStep(16, 0, 'imperial')!;
+    const z16 = autoTickStep(16, 0, IMPERIAL)!;
     expect(z16.unit).toBe('ft');
     expect(z16.stepM / 0.3048).toBeCloseTo(100, 9);
     // z12 over Québec: 13.1 m/dp → 314 m = 1030 ft = 0.195 mi → 0.2 mi.
-    const z12 = autoTickStep(12, QC.latitude, 'imperial')!;
+    const z12 = autoTickStep(12, QC.latitude, IMPERIAL)!;
     expect(z12.unit).toBe('mi');
     expect(z12.stepM / 1609.344).toBeCloseTo(0.2, 9);
     for (let z = 2; z <= 22; z += 0.25) {
       const mpp = metersPerPixel(z, QC.latitude)!;
-      const { stepM, unit } = autoTickStep(z, QC.latitude, 'imperial')!;
+      const { stepM, unit } = autoTickStep(z, QC.latitude, IMPERIAL)!;
       expect(stepM / mpp).toBeGreaterThanOrEqual(AUTO_TICK_MIN_DP - 1e-9);
       // The step is a round number in its own unit: 1, 2 or 5 × 10ⁿ.
       const n = stepM / (unit === 'ft' ? 0.3048 : 1609.344);
@@ -153,47 +154,55 @@ describe('ticks', () => {
       if (unit === 'ft') expect(n).toBeLessThanOrEqual(500);
       else expect(n).toBeGreaterThanOrEqual(0.1);
     }
-    expect(autoTickStep(NaN, 0, 'imperial')).toBeNull();
+    expect(autoTickStep(NaN, 0, IMPERIAL)).toBeNull();
+  });
+
+  it('graduates a nautical ruler in the short unit (#702)', () => {
+    expect(roundTickStep(40, NAUTICAL)).toEqual({ stepM: 50, unit: 'm' });
+    expect(roundTickStep(40, { distance: 'nmi', elevation: 'ft' })).toEqual({
+      stepM: 200 * 0.3048,
+      unit: 'ft',
+    });
   });
 
   it('rounds a minimum step in either unit system', () => {
-    expect(roundTickStep(0.2, 'metric')).toEqual({ stepM: 1, unit: 'm' });
-    expect(roundTickStep(0.1, 'imperial')).toEqual({ stepM: 0.3048, unit: 'ft' });
-    expect(roundTickStep(500 * 0.3048, 'imperial')).toEqual({ stepM: 500 * 0.3048, unit: 'ft' });
+    expect(roundTickStep(0.2, METRIC)).toEqual({ stepM: 1, unit: 'm' });
+    expect(roundTickStep(0.1, IMPERIAL)).toEqual({ stepM: 0.3048, unit: 'ft' });
+    expect(roundTickStep(500 * 0.3048, IMPERIAL)).toEqual({ stepM: 500 * 0.3048, unit: 'ft' });
     // Just past 500 ft: the next round step is 0.1 mi (528 ft).
-    expect(roundTickStep(501 * 0.3048, 'imperial')).toEqual({
+    expect(roundTickStep(501 * 0.3048, IMPERIAL)).toEqual({
       stepM: 0.1 * 1609.344,
       unit: 'mi',
     });
   });
 
   it('maps the fixed choices to round feet in imperial', () => {
-    expect(fixedTickStep(50, 'metric')).toEqual({ stepM: 50, unit: 'm' });
-    expect(fixedTickStep(10, 'imperial')).toEqual({ stepM: 50 * 0.3048, unit: 'ft' });
-    expect(fixedTickStep(50, 'imperial')).toEqual({ stepM: 200 * 0.3048, unit: 'ft' });
-    expect(fixedTickStep(100, 'imperial')).toEqual({ stepM: 500 * 0.3048, unit: 'ft' });
+    expect(fixedTickStep(50, METRIC)).toEqual({ stepM: 50, unit: 'm' });
+    expect(fixedTickStep(10, IMPERIAL)).toEqual({ stepM: 50 * 0.3048, unit: 'ft' });
+    expect(fixedTickStep(50, IMPERIAL)).toEqual({ stepM: 200 * 0.3048, unit: 'ft' });
+    expect(fixedTickStep(100, IMPERIAL)).toEqual({ stepM: 500 * 0.3048, unit: 'ft' });
   });
 
   it('resolves the setting: off, unknown zoom, fused fixed ticks → none', () => {
-    expect(resolveTickStep('off', 16, 0, 'metric')).toBeNull();
-    expect(resolveTickStep(50, null, 0, 'metric')).toBeNull();
-    expect(resolveTickStep(50, 16, 0, 'metric')).toEqual({ stepM: 50, unit: 'm' });
-    expect(resolveTickStep(50, 16, 0, 'imperial')).toEqual({ stepM: 200 * 0.3048, unit: 'ft' });
+    expect(resolveTickStep('off', 16, 0, METRIC)).toBeNull();
+    expect(resolveTickStep(50, null, 0, METRIC)).toBeNull();
+    expect(resolveTickStep(50, 16, 0, METRIC)).toEqual({ stepM: 50, unit: 'm' });
+    expect(resolveTickStep(50, 16, 0, IMPERIAL)).toEqual({ stepM: 200 * 0.3048, unit: 'ft' });
     // 10 m at z10 is 0.07 dp apart: a solid bar, so none (50 ft too).
-    expect(resolveTickStep(10, 10, 0, 'metric')).toBeNull();
-    expect(resolveTickStep(10, 10, 0, 'imperial')).toBeNull();
-    expect(resolveTickStep('auto', 16, 0, 'metric')).toEqual({ stepM: 50, unit: 'm' });
-    expect(resolveTickStep('auto', 16, 0, 'imperial')?.unit).toBe('ft');
+    expect(resolveTickStep(10, 10, 0, METRIC)).toBeNull();
+    expect(resolveTickStep(10, 10, 0, IMPERIAL)).toBeNull();
+    expect(resolveTickStep('auto', 16, 0, METRIC)).toEqual({ stepM: 50, unit: 'm' });
+    expect(resolveTickStep('auto', 16, 0, IMPERIAL)?.unit).toBe('ft');
   });
 
   it('previews five auto ticks (round in imperial), and the fixed step as set', () => {
-    expect(previewTickStep('off', 500, 'metric')).toBeNull();
-    expect(previewTickStep('auto', 500, 'metric')).toEqual({ stepM: 100, unit: 'm' });
-    expect(previewTickStep('auto', 2000, 'metric')).toEqual({ stepM: 400, unit: 'm' });
+    expect(previewTickStep('off', 500, METRIC)).toBeNull();
+    expect(previewTickStep('auto', 500, METRIC)).toEqual({ stepM: 100, unit: 'm' });
+    expect(previewTickStep('auto', 2000, METRIC)).toEqual({ stepM: 400, unit: 'm' });
     // 500 m / 5 = 328 ft → 500 ft.
-    expect(previewTickStep('auto', 500, 'imperial')).toEqual({ stepM: 500 * 0.3048, unit: 'ft' });
-    expect(previewTickStep(100, 500, 'imperial')).toEqual({ stepM: 500 * 0.3048, unit: 'ft' });
-    expect(previewTickStep(10, 500, 'metric')).toEqual({ stepM: 10, unit: 'm' });
+    expect(previewTickStep('auto', 500, IMPERIAL)).toEqual({ stepM: 500 * 0.3048, unit: 'ft' });
+    expect(previewTickStep(100, 500, IMPERIAL)).toEqual({ stepM: 500 * 0.3048, unit: 'ft' });
+    expect(previewTickStep(10, 500, METRIC)).toEqual({ stepM: 10, unit: 'm' });
   });
 
   it('places ticks every step up to the length, capped', () => {
@@ -301,7 +310,7 @@ describe('pointingLineFeatures', () => {
   });
 
   it('labels the majors of an imperial line in round feet', () => {
-    const step = fixedTickStep(50, 'imperial'); // 200 ft
+    const step = fixedTickStep(50, IMPERIAL); // 200 ft
     const fc = pointingLineFeatures({
       origin: QC,
       bearingDeg: 90,

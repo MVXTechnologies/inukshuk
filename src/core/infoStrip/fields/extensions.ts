@@ -4,7 +4,7 @@
  * tide). Listed in the picker, and kept when a preset applies, only with
  * their extension installed (`requires`).
  */
-import { formatClockTime } from '@core/format';
+import { elevationParts, formatClockTime } from '@core/format';
 import { formatHeight, kindLabel } from '@core/gnss/chip';
 import { stateOf } from '@core/gnss/quality';
 import { LIVE_MAX_AGE_MS } from '@core/tides/live';
@@ -91,17 +91,18 @@ export const TIDE_LEVEL = defineField<TideParams>({
   defaults: { station: NEAREST_STATION },
   deps: ['ext:tides'],
   tick: 'minute',
-  compute(data, params) {
+  compute(data, params, ctx) {
     const t = tideOf(data, params);
     // An hour-old level is not "now" (a refresh failing for a while, a sleeping phone).
     if (t === null || t.levelM === null || !levelIsLive(t, data.nowMs)) return null;
     const arrow = t.trend === 'rising' ? ' ↑' : t.trend === 'falling' ? ' ↓' : '';
-    const sign = t.levelM < 0 ? '−' : '+';
+    // A height: the elevation unit (#702), signed, two decimals.
+    const q = elevationParts(t.levelM, ctx.units, { decimals: 2 });
     return {
       glyph: 'waves',
       tag: t.stationName,
-      value: `${sign}${Math.abs(t.levelM).toFixed(2)}`,
-      unit: `m${arrow}`,
+      value: q.value.startsWith('−') ? q.value : `+${q.value}`,
+      unit: `${q.unit}${arrow}`,
     };
   },
   // "Tide", never a real station's name: a made-up one read as the station picked (QA 2.6.0).

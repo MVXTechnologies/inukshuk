@@ -8,6 +8,7 @@ import { isWaypointIcon } from '@core/library/waypointIcons';
 import { loadTrackGeometry } from '@data/trackGeometry';
 import { reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
+import { formatDistance } from '@state/formatters';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { useCoordinateFormatter } from '@state/useCoordinateFormatter';
 import { space } from '@ui/tokens';
@@ -21,7 +22,7 @@ import { ChoiceRow, Note, SectionLabel, TeamScreenFrame } from './components';
 import { actionMessage } from './messages';
 import { shareTrailPhotos } from './shareTrailPhotos';
 
-const km = (m: number) => (m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`);
+const km = (m: number) => formatDistance(m, { style: 'tenths' });
 
 export function ShareScreen() {
   const t = useSchemeTokens();

@@ -1,3 +1,4 @@
+import { IMPERIAL } from '@core/format';
 // src/state/settingsStore.extensions.test.ts — the extension registry's
 // settings migration, end to end through the store: settings.json files as
 // the builds before the registry wrote them hydrate with every install and
@@ -82,7 +83,7 @@ it('both installed (main, 39dd7848): kept, filter and tab too', async () => {
 it('writes `extensions` AND the flat keys, and reads its own file back the same', async () => {
   const { store, storage } = load(mainShaped);
   await store.getState().hydrate();
-  store.getState().set('units', 'imperial');
+  store.getState().set('units', IMPERIAL);
   const written = lastWrite(storage);
   expect(written.extensions).toEqual(store.getState().extensions);
   expect(written).toMatchObject({

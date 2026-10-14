@@ -10,7 +10,9 @@
 # - The tab reads "Logbook", or "Logbook, tab, N of 4" on iOS; the regex covers
 #   both.
 # - Distances use formatDistance ("N.N km" / "N m"); assert a loose distance
-#   regex, not an exact value (GPS fix jitter varies the sum).
+#   regex, not an exact value (GPS fix jitter varies the sum). Since #702 the
+#   first-launch units follow the device region, and the CI emulator and
+#   simulator are en-US: miles and feet there, so the regex takes both.
 # - The type chips carry accessibilityLabel "<Type>, <n> activit(y|ies)".
 # - The negative filter case (Ski) proves the filter is real: the suite never
 #   records a Ski activity, so the chart must flip to "No activities".
@@ -48,7 +50,7 @@ appId: com.inukshuk.app
     visible: 'Distance per week'
     timeout: 15000
 # The chart subtitle and the Recent row carry today's fixture trail → a real distance.
-- assertVisible: '.*(km|\d+ m).*'
+- assertVisible: '.*(km|mi|\d+ (m|ft)).*'
 # The fixture is inside the 12-week window, so the chart is not empty.
 - assertNotVisible: 'No activities'
 # Period switch: months, still data-bearing.

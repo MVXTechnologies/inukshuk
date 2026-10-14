@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC } from '@core/format';
 import type { Area } from '@core/models';
 
 import {
@@ -91,24 +92,24 @@ describe('nextAreaName', () => {
 
 describe('formatAreaSize', () => {
   it('metric: m², ha, km²', () => {
-    expect(formatAreaSize(850, 'metric')).toBe('850 m²');
-    expect(formatAreaSize(42_000, 'metric')).toBe('4.2 ha');
-    expect(formatAreaSize(420_000, 'metric')).toBe('0.42 km²');
-    expect(formatAreaSize(12_345_000, 'metric')).toBe('12.3 km²');
-    expect(formatAreaSize(Number.NaN, 'metric')).toBe('0 m²');
+    expect(formatAreaSize(850, METRIC)).toBe('850 m²');
+    expect(formatAreaSize(42_000, METRIC)).toBe('4.2 ha');
+    expect(formatAreaSize(420_000, METRIC)).toBe('0.42 km²');
+    expect(formatAreaSize(12_345_000, METRIC)).toBe('12.3 km²');
+    expect(formatAreaSize(Number.NaN, METRIC)).toBe('0 m²');
   });
 
   it('imperial: ft², acres, mi²', () => {
-    expect(formatAreaSize(100, 'imperial')).toBe('1,076 ft²');
-    expect(formatAreaSize(42_000, 'imperial')).toBe('10.4 ac');
-    expect(formatAreaSize(4046.8564224 * 2.5, 'imperial')).toBe('2.5 ac');
-    expect(formatAreaSize(5_179_976, 'imperial')).toBe('2 mi²');
+    expect(formatAreaSize(100, IMPERIAL)).toBe('1,076 ft²');
+    expect(formatAreaSize(42_000, IMPERIAL)).toBe('10.4 ac');
+    expect(formatAreaSize(4046.8564224 * 2.5, IMPERIAL)).toBe('2.5 ac');
+    expect(formatAreaSize(5_179_976, IMPERIAL)).toBe('2 mi²');
   });
 });
 
 describe('areaSummaryLine', () => {
   it('reads like the card subtitle', () => {
-    expect(areaSummaryLine(RING, 'metric')).toBe('Area · 0.42 km² · perimeter 3.2 km');
+    expect(areaSummaryLine(RING, METRIC)).toBe('Area · 0.42 km² · perimeter 3.2 km');
   });
 });
 

@@ -153,7 +153,7 @@ export function RecordingPanel(props: Props) {
   // A one-second clock for the paused duration, the GPS age and the sunset
   // countdown (all keep moving while paused, when `elapsedS` stands still).
   const now = useNow(1000);
-  const chip = gpsChip(gpsQuality, lastAccuracyM, lastFixAt, now);
+  const chip = gpsChip(gpsQuality, lastAccuracyM, lastFixAt, now, units);
   const receiverChip = useReceiverChip();
   const setReceiverSheetOpen = useGnssStore((s) => s.setSheetOpen);
 

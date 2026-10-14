@@ -8,7 +8,7 @@
  * the trail's own; ETE and ETA divide it by your moving speed and mark a
  * straight-line estimate "≈" (owner Q2).
  */
-import { formatDistance } from '@core/format';
+import { distanceUnitLabel, formatDistance } from '@core/format';
 import { haversineMeters, initialBearingDeg } from '@core/geo/geomath';
 import { trueToMagnetic } from '@core/geo/wmm';
 
@@ -117,9 +117,9 @@ export const TARGET_DISTANCE = defineField<TargetDistanceParams>({
       label: 'Units',
       options: [
         { value: 'app', label: 'App units' },
-        { value: 'km', label: 'km' },
-        { value: 'mi', label: 'mi' },
-        { value: 'nmi', label: 'nmi' },
+        { value: 'km', label: distanceUnitLabel('km') },
+        { value: 'mi', label: distanceUnitLabel('mi') },
+        { value: 'nmi', label: distanceUnitLabel('nmi') },
       ],
     },
   },

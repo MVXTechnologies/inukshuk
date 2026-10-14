@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC, NAUTICAL } from '@core/format';
 import {
   catalogItemCountry,
   catalogRowMeta,
@@ -136,33 +137,35 @@ describe('nearbySections', () => {
 
 describe('formatDistanceAway', () => {
   it('rounds to whole kilometres', () => {
-    expect(formatDistanceAway(12_345, 'metric')).toBe('12 km away');
-    expect(formatDistanceAway(106_499, 'metric')).toBe('106 km away');
-    expect(formatDistanceAway(1_500, 'metric')).toBe('2 km away');
+    expect(formatDistanceAway(12_345, METRIC)).toBe('12 km away');
+    expect(formatDistanceAway(106_499, METRIC)).toBe('106 km away');
+    expect(formatDistanceAway(1_500, METRIC)).toBe('2 km away');
   });
 
   it('never says "0 km"', () => {
-    expect(formatDistanceAway(0, 'metric')).toBe('< 1 km away');
-    expect(formatDistanceAway(499, 'metric')).toBe('< 1 km away');
-    expect(formatDistanceAway(Number.NaN, 'metric')).toBe('< 1 km away');
+    expect(formatDistanceAway(0, METRIC)).toBe('< 1 km away');
+    expect(formatDistanceAway(499, METRIC)).toBe('< 1 km away');
+    expect(formatDistanceAway(Number.NaN, METRIC)).toBe('< 1 km away');
   });
 
   it('groups thousands and supports miles', () => {
-    expect(formatDistanceAway(1_250_400, 'metric')).toBe('1,250 km away');
-    expect(formatDistanceAway(16_093.44, 'imperial')).toBe('10 mi away');
-    expect(formatDistanceAway(500, 'imperial')).toBe('< 1 mi away');
+    expect(formatDistanceAway(1_250_400, METRIC)).toBe('1\u202f250 km away');
+    expect(formatDistanceAway(16_093.44, IMPERIAL)).toBe('10 mi away');
+    expect(formatDistanceAway(500, IMPERIAL)).toBe('< 1 mi away');
+    expect(formatDistanceAway(18_520, NAUTICAL)).toBe('10 NM away');
+    expect(formatDistanceAway(900, NAUTICAL)).toBe('< 1 NM away');
   });
 });
 
 describe('catalogRowMeta', () => {
   it('joins size and distance', () => {
-    expect(catalogRowMeta(31 * 1024 * 1024, 12_000, 'metric')).toBe('31 MB · 12 km away');
+    expect(catalogRowMeta(31 * 1024 * 1024, 12_000, METRIC)).toBe('31 MB · 12 km away');
   });
 
   it('shows whichever half is known', () => {
-    expect(catalogRowMeta(undefined, 12_000, 'metric')).toBe('12 km away');
-    expect(catalogRowMeta(22 * 1024 * 1024, null, 'metric')).toBe('22 MB');
-    expect(catalogRowMeta(undefined, undefined, 'metric')).toBe('');
+    expect(catalogRowMeta(undefined, 12_000, METRIC)).toBe('12 km away');
+    expect(catalogRowMeta(22 * 1024 * 1024, null, METRIC)).toBe('22 MB');
+    expect(catalogRowMeta(undefined, undefined, METRIC)).toBe('');
   });
 });
 

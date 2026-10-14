@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 /**
  * A field's settings page re-renders with every snapshot (the live preview),
  * so its distance-sorted lists — the target picker's waypoints and the tide
@@ -65,7 +66,7 @@ async function mountAndTick(strip: InfoStrip, steps: readonly number[]) {
         strip={strip}
         at={{ row: 0, index: 0 }}
         data={data}
-        ctx={{ units: 'metric', target: strip.target }}
+        ctx={{ units: METRIC, target: strip.target }}
         onParams={() => undefined}
         onStripTarget={() => undefined}
         onBack={() => undefined}

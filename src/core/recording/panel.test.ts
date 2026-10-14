@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC } from '@core/format';
 import {
   collapsePanel,
   cycleHeroField,
@@ -123,23 +124,23 @@ describe('heroFieldText', () => {
   };
 
   it('formats every hero field in the given units', () => {
-    expect(heroFieldText('time', data, 'metric')).toBe('1:12:40');
-    expect(heroFieldText('distance', data, 'metric')).toBe('8.42 km');
-    expect(heroFieldText('distance', data, 'imperial')).toBe('5.23 mi');
-    expect(heroFieldText('gain', data, 'metric')).toBe('+412 m');
-    expect(heroFieldText('descent', data, 'metric')).toBe('−188 m');
-    expect(heroFieldText('speed', data, 'metric')).toBe('3.6 km/h');
-    expect(heroFieldText('pace', data, 'metric')).toBe('13:53/km');
-    expect(heroFieldText('altitude', data, 'metric')).toBe('412 m');
-    expect(heroFieldText('moving', data, 'metric')).toBe('58:10');
-    expect(heroFieldText('sunset', data, 'metric')).toMatch(/^\d+:\d\d:\d\d$/);
+    expect(heroFieldText('time', data, METRIC)).toBe('1:12:40');
+    expect(heroFieldText('distance', data, METRIC)).toBe('8.42 km');
+    expect(heroFieldText('distance', data, IMPERIAL)).toBe('5.23 mi');
+    expect(heroFieldText('gain', data, METRIC)).toBe('+412 m');
+    expect(heroFieldText('descent', data, METRIC)).toBe('−188 m');
+    expect(heroFieldText('speed', data, METRIC)).toBe('3.6 km/h');
+    expect(heroFieldText('pace', data, METRIC)).toBe('13:53/km');
+    expect(heroFieldText('altitude', data, METRIC)).toBe('412 m');
+    expect(heroFieldText('moving', data, METRIC)).toBe('58:10');
+    expect(heroFieldText('sunset', data, METRIC)).toMatch(/^\d+:\d\d:\d\d$/);
   });
 
   it('shows a dash for what it cannot know', () => {
     const none = { ...data, avgSpeedMps: 0, altitudeM: null, position: null };
-    expect(heroFieldText('pace', none, 'metric')).toBe('—');
-    expect(heroFieldText('altitude', none, 'metric')).toBe('—');
-    expect(heroFieldText('sunset', none, 'metric')).toBe('—');
+    expect(heroFieldText('pace', none, METRIC)).toBe('—');
+    expect(heroFieldText('altitude', none, METRIC)).toBe('—');
+    expect(heroFieldText('sunset', none, METRIC)).toBe('—');
   });
 
   it('labels every field', () => {

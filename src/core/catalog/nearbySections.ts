@@ -1,4 +1,4 @@
-import type { Units } from '@core/format';
+import { distanceUnitLabel, formatWholeDistance, toUnit, type Units } from '@core/format';
 import type { LatLng } from '@core/models';
 import { formatByteSize } from '@core/storage/diskBudget';
 import { nearbyCatalogItems, type NearbyCatalogItem } from './nearby';
@@ -131,21 +131,17 @@ export function sortCatalogItemsCanadianFirst(
   return sorted.sort((a, b) => rank(a) - rank(b));
 }
 
-const M_PER_MI = 1609.344;
-
 /**
- * "12 km away": a row's distance, rounded to whole kilometres (miles) — the
- * old two-decimal "≈ 12.34 km" read like a database dump. Anything under one
- * unit reads "< 1 km away" rather than a misleading "0 km".
+ * "12 km away": a row's distance, rounded to whole kilometres (miles,
+ * nautical miles) — the old two-decimal "≈ 12.34 km" read like a database
+ * dump. Anything under one unit reads "< 1 km away" rather than a
+ * misleading "0 km".
  */
 export function formatDistanceAway(meters: number, units: Units): string {
-  const unit = units === 'imperial' ? 'mi' : 'km';
+  const unit = distanceUnitLabel(units.distance);
   if (!Number.isFinite(meters) || meters < 0) return `< 1 ${unit} away`;
-  const value = meters / (units === 'imperial' ? M_PER_MI : 1000);
-  const rounded = Math.round(value);
-  if (rounded < 1) return `< 1 ${unit} away`;
-  const grouped = String(rounded).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return `${grouped} ${unit} away`;
+  if (Math.round(toUnit(meters, units.distance)) < 1) return `< 1 ${unit} away`;
+  return `${formatWholeDistance(meters, units)} away`;
 }
 
 /** Row meta line: `31 MB · 12 km away`, with whichever half is known. */

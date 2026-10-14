@@ -1,3 +1,4 @@
+import { speedUnit, toSpeedUnit, type Units } from '@core/format';
 import { haversineMeters } from '@core/geo/geomath';
 import type { LatLng } from '@core/models';
 
@@ -35,10 +36,26 @@ export interface ForecastCurrent {
   /** Text condition ("Light Rainshower") — often absent for smaller sites. */
   condition: string | null;
   relativeHumidityPct: number | null;
-  /** One-line wind summary, e.g. "SW 4 km/h, gusts 32". */
-  windSummary: string | null;
+  /** Observed wind (ECCC reports km/h); {@link formatWindSummary} words it. */
+  wind: ForecastWind | null;
   /** Observation timestamp, epoch ms. */
   observedAtMs: number | null;
+}
+
+export interface ForecastWind {
+  /** Compass point the wind blows from ("SW"), when reported. */
+  direction: string | null;
+  speedKmh: number;
+  /** Gust speed, only when above the sustained speed (a lower gust is noise). */
+  gustKmh: number | null;
+}
+
+/** One-line wind summary in the user's speed unit: "SW 4 km/h, gusts 32", "SW 2 kn, gusts 17". */
+export function formatWindSummary(wind: ForecastWind, units: Units): string {
+  const speed = (kmh: number) => Math.round(toSpeedUnit(kmh / 3.6, units));
+  const value = `${speed(wind.speedKmh)} ${speedUnit(units)}`;
+  const head = wind.direction !== null ? `${wind.direction} ${value}` : value;
+  return wind.gustKmh !== null ? `${head}, gusts ${speed(wind.gustKmh)}` : head;
 }
 
 export interface ForecastPeriod {
@@ -84,16 +101,17 @@ function num(v: unknown): number | null {
   return typeof u === 'number' && Number.isFinite(u) ? u : null;
 }
 
-function parseWindSummary(wind: unknown): string | null {
+function parseWind(wind: unknown): ForecastWind | null {
   if (!isRecord(wind)) return null;
   const speedRec = isRecord(wind.speed) ? wind.speed : {};
-  const speed = num(speedRec.value);
-  if (speed === null) return null;
-  const units = str(speedRec.units) ?? 'km/h';
+  const speedKmh = num(speedRec.value);
+  if (speedKmh === null) return null;
+  // The English citypage API reports km/h; anything else can't be converted
+  // honestly, so it isn't shown.
+  if ((str(speedRec.units) ?? 'km/h') !== 'km/h') return null;
   const direction = isRecord(wind.direction) ? str(wind.direction.value) : null;
   const gust = isRecord(wind.gust) ? num(wind.gust.value) : null;
-  const head = direction !== null ? `${direction} ${speed} ${units}` : `${speed} ${units}`;
-  return gust !== null && gust > speed ? `${head}, gusts ${gust}` : head;
+  return { direction, speedKmh, gustKmh: gust !== null && gust > speedKmh ? gust : null };
 }
 
 function parseCurrent(cc: unknown): ForecastCurrent | null {
@@ -101,15 +119,15 @@ function parseCurrent(cc: unknown): ForecastCurrent | null {
   const temperatureC = isRecord(cc.temperature) ? num(cc.temperature.value) : null;
   const condition = str(cc.condition);
   const relativeHumidityPct = isRecord(cc.relativeHumidity) ? num(cc.relativeHumidity.value) : null;
-  const windSummary = parseWindSummary(cc.wind);
+  const wind = parseWind(cc.wind);
   const observedAtIso = str(cc.timestamp);
   const observedAtMs = observedAtIso !== null ? Date.parse(observedAtIso) : NaN;
-  if (temperatureC === null && condition === null && windSummary === null) return null;
+  if (temperatureC === null && condition === null && wind === null) return null;
   return {
     temperatureC,
     condition,
     relativeHumidityPct,
-    windSummary,
+    wind,
     observedAtMs: Number.isFinite(observedAtMs) ? observedAtMs : null,
   };
 }

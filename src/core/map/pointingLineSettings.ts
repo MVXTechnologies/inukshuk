@@ -1,4 +1,13 @@
-import type { Units } from '@core/format';
+import {
+  FT_PER_MI,
+  M_PER_FT,
+  METRIC,
+  formatInUnit,
+  fromUnit,
+  rulerSystem,
+  toUnit,
+  type Units,
+} from '@core/format';
 import { normalizeDeg } from '@core/signal/heading';
 
 /**
@@ -61,9 +70,6 @@ export const POINTING_LINE_LENGTHS: readonly PointingLineLength[] = [
 /** A fixed length choice (the persisted value is its metric distance). */
 export type PointingLineFixedLength = Exclude<PointingLineLength, 'edge' | 'custom'>;
 
-const M_PER_FT = 0.3048;
-const FT_PER_MI = 5280;
-
 /** The shortest Custom length, metres: a line shorter than this hides under the puck. */
 export const CUSTOM_LENGTH_MIN_M = 10;
 /** The longest Custom length, metres: the same cap as Edge (`EDGE_MAX_M`). */
@@ -77,14 +83,14 @@ export function clampCustomLengthM(m: unknown): number | null {
   return Math.min(CUSTOM_LENGTH_MAX_M, Math.max(CUSTOM_LENGTH_MIN_M, m));
 }
 
-/** The unit a Custom length is typed in: metres, or feet in imperial. */
+/** The unit a Custom length is typed in: the ruler's short unit, metres or feet. */
 export function customLengthInputUnit(units: Units): 'm' | 'ft' {
-  return units === 'imperial' ? 'ft' : 'm';
+  return rulerSystem(units) === 'imperial' ? 'ft' : 'm';
 }
 
-/** A Custom length as its input shows it: whole metres, or whole feet in imperial. */
+/** A Custom length as its input shows it: whole metres, or whole feet on an imperial ruler. */
 export function customLengthInputText(m: number, units: Units): string {
-  return String(Math.round(units === 'imperial' ? m / M_PER_FT : m));
+  return String(Math.round(toUnit(m, customLengthInputUnit(units))));
 }
 
 /**
@@ -95,7 +101,7 @@ export function parseCustomLength(text: string, units: Units): number | null {
   const t = text.trim().replace(',', '.');
   if (!/^\d+(\.\d*)?$|^\.\d+$/.test(t)) return null;
   const v = Number(t);
-  return clampCustomLengthM(units === 'imperial' ? v * M_PER_FT : v);
+  return clampCustomLengthM(fromUnit(v, customLengthInputUnit(units)));
 }
 
 /**
@@ -103,12 +109,10 @@ export function parseCustomLength(text: string, units: Units): number | null {
  * two decimals, trailing zeros dropped.
  */
 function customLengthText(m: number, units: Units): string {
-  const round2 = (v: number) => String(Number(v.toFixed(2)));
-  if (units === 'imperial') {
-    const ft = m / M_PER_FT;
-    return ft < FT_PER_MI / 2 ? `${Math.round(ft)} ft` : `${round2(ft / FT_PER_MI)} mi`;
+  if (rulerSystem(units) === 'imperial') {
+    return m / M_PER_FT < FT_PER_MI / 2 ? formatInUnit(m, 'ft', 0) : formatInUnit(m, 'mi', 2);
   }
-  return m < 1000 ? `${Math.round(m)} m` : `${round2(m / 1000)} km`;
+  return m < 1000 ? formatInUnit(m, 'm', 0) : formatInUnit(m, 'km', 2);
 }
 
 /**
@@ -125,15 +129,21 @@ export const IMPERIAL_LENGTH_FT: Record<PointingLineFixedLength, number> = {
   2000: 2 * FT_PER_MI,
 };
 
-/** The ground length a stop draws, metres, in the user's units' round values. */
+/**
+ * The ground length a stop draws, metres, in the user's ruler's round values
+ * (`rulerSystem`: nautical-mile users get the stops of their short unit —
+ * this is a short-range ruler, not a passage plan).
+ */
 export function pointingLineLengthM(length: PointingLineFixedLength, units: Units): number {
-  return units === 'imperial' ? IMPERIAL_LENGTH_FT[length] * M_PER_FT : length;
+  return rulerSystem(units) === 'imperial' ? IMPERIAL_LENGTH_FT[length] * M_PER_FT : length;
 }
 
 /** An imperial stop as words: "500 ft", "0.5 mi", "1 mi". */
 function imperialLengthText(length: PointingLineFixedLength): string {
-  const ft = IMPERIAL_LENGTH_FT[length];
-  return ft < FT_PER_MI / 2 ? `${ft} ft` : `${ft / FT_PER_MI} mi`;
+  const m = IMPERIAL_LENGTH_FT[length] * M_PER_FT;
+  return IMPERIAL_LENGTH_FT[length] < FT_PER_MI / 2
+    ? formatInUnit(m, 'ft', 0)
+    : formatInUnit(m, 'mi', 2);
 }
 
 /**
@@ -196,7 +206,9 @@ export const IMPERIAL_TICK_FT: Record<PointingLineFixedTicks, number> = {
 export function pointingLineTicksLabel(t: PointingLineTicks, units: Units): string {
   if (t === 'off') return 'Off';
   if (t === 'auto') return 'Auto';
-  return units === 'imperial' ? `${IMPERIAL_TICK_FT[t]} ft` : `${t} m`;
+  return rulerSystem(units) === 'imperial'
+    ? formatInUnit(IMPERIAL_TICK_FT[t] * M_PER_FT, 'ft', 0)
+    : formatInUnit(t, 'm', 0);
 }
 
 /** The nine colours (mockup §7): red first, then earth, water, stone and paper. */
@@ -280,13 +292,13 @@ export function formatFixedBearing(deg: number): string {
  */
 export function pointingLineLengthText(
   length: PointingLineLength,
-  units: Units = 'metric',
+  units: Units = METRIC,
   customLengthM: number = DEFAULT_CUSTOM_LENGTH_M,
 ): string {
   if (length === 'edge') return 'To the edge';
   if (length === 'custom') return customLengthText(customLengthM, units);
-  if (units === 'imperial') return imperialLengthText(length);
-  return length >= 1000 ? `${length / 1000} km` : `${length} m`;
+  if (rulerSystem(units) === 'imperial') return imperialLengthText(length);
+  return length >= 1000 ? formatInUnit(length, 'km', 2) : formatInUnit(length, 'm', 0);
 }
 
 /**
@@ -336,7 +348,7 @@ export function pointingLineCaption(s: PointingLineSettings, units: Units): stri
 }
 
 /** The row's one-line summary: "500 m along your heading", "To the edge at 062°". */
-export function pointingLineSummary(s: PointingLineSettings, units: Units = 'metric'): string {
+export function pointingLineSummary(s: PointingLineSettings, units: Units = METRIC): string {
   const how =
     s.direction === 'heading'
       ? 'along your heading'

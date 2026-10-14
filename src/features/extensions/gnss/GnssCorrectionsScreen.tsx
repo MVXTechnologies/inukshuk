@@ -6,6 +6,7 @@ import { ntripSocketFactory } from '@data/gnss/ntripSocket';
 import { newId } from '@data/storage';
 import { fetchSourcetable } from '@features/gnss/ntripClient';
 import { useGnssStore } from '@state/gnssStore';
+import { formatWholeDistance, type Units } from '@core/format';
 import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
@@ -48,10 +49,10 @@ export function casterFrameId(f: CorrectionFrame | null): string {
   return hit?.id ?? 'unknown';
 }
 
-function mountLine(r: RankedStream): string {
+function mountLine(r: RankedStream, units: Units): string {
   const parts = [r.stream.format];
   if (r.stream.navSystem) parts.push(r.stream.navSystem);
-  if (r.distanceKm !== null) parts.push(`${r.distanceKm.toFixed(0)} km`);
+  if (r.distanceKm !== null) parts.push(formatWholeDistance(r.distanceKm * 1000, units));
   if (r.stream.networkSolution) parts.push('network (VRS)');
   if (!r.usable) parts.push('not RTCM 3 — not usable');
   return parts.join(' · ');
@@ -75,6 +76,7 @@ export function GnssCorrectionsScreen() {
   const update = useGnssStore((s) => s.updateConfig);
   const fix = useGnssStore((s) => s.fix);
   const lastKnown = useSettingsStore((s) => s.lastKnownPosition);
+  const units = useSettingsStore((s) => s.units);
 
   const [draft, setDraft] = useState<NtripProfile>(
     () => activeProfile(config) ?? config.profiles[0] ?? newProfile(newId(), 'rtk2go'),
@@ -380,7 +382,7 @@ export function GnssCorrectionsScreen() {
               <View style={styles.flex}>
                 <Text variant="titleSmall">{r.stream.mountpoint}</Text>
                 <Text variant="bodySmall" style={{ color: t.inkVariant }}>
-                  {mountLine(r)}
+                  {mountLine(r, units)}
                 </Text>
               </View>
             </Pressable>

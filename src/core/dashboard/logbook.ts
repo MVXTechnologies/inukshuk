@@ -1,4 +1,14 @@
-import type { Units } from '@core/format';
+import {
+  distanceParts,
+  distanceUnitLabel,
+  elevationParts,
+  formatDistance,
+  formatElevation,
+  groupThousands,
+  metresPer,
+  toElevationUnit,
+  type Units,
+} from '@core/format';
 import type { TrackStats, TrackSummary } from '@core/models';
 import {
   addLocalDays,
@@ -88,12 +98,9 @@ function finite(value: number | undefined): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
-const M_PER_MI = 1609.344;
-const M_PER_FT = 0.3048;
-
-/** Metres in one display distance unit (km / mi). */
+/** Metres in one display distance unit (km / mi / NM). */
 export function distanceUnitMeters(units: Units): number {
-  return units === 'imperial' ? M_PER_MI : 1000;
+  return metresPer(units.distance);
 }
 
 /**
@@ -149,21 +156,9 @@ function oneDecimalBelowTen(v: number): string {
   return v < 10 ? (Math.round(v * 10) / 10).toFixed(1).replace(/\.0$/, '') : String(Math.round(v));
 }
 
-function grouped(n: number): string {
-  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
-
-/** Lifetime distance: "412 km", "4.2 km", "840 m". */
+/** Lifetime distance: "412 km", "4.2 km", "840 m" (or mi / ft, NM). */
 export function heroDistance(meters: number, units: Units): HeroValue {
-  const m = finite(meters);
-  if (units === 'imperial') {
-    const mi = m / M_PER_MI;
-    if (mi < 0.1) return { value: String(Math.round(m / M_PER_FT)), unit: 'ft' };
-    return { value: mi < 10 ? oneDecimalBelowTen(mi) : grouped(Math.round(mi)), unit: 'mi' };
-  }
-  if (m < 1000) return { value: String(Math.round(m)), unit: 'm' };
-  const km = m / 1000;
-  return { value: km < 10 ? oneDecimalBelowTen(km) : grouped(Math.round(km)), unit: 'km' };
+  return distanceParts(finite(meters), units, { style: 'short' });
 }
 
 /** Lifetime time: "118 h", "4.5 h", "45 min". */
@@ -171,19 +166,19 @@ export function heroTime(seconds: number): HeroValue {
   const s = finite(seconds);
   if (s < 3600) return { value: String(Math.round(s / 60)), unit: 'min' };
   const h = s / 3600;
-  return { value: h < 10 ? oneDecimalBelowTen(h) : grouped(Math.round(h)), unit: 'h' };
+  return { value: h < 10 ? oneDecimalBelowTen(h) : groupThousands(Math.round(h)), unit: 'h' };
 }
 
-/** Lifetime climb: "845 m", "1,068 m", and "21.4 km" once it passes 10 km. */
+/** Lifetime climb: "845 m", "1 068 m", and "21.4 km" (or "12.3 k ft") once it passes 10 000. */
 export function heroClimb(meters: number, units: Units): HeroValue {
   const m = finite(meters);
-  if (units === 'imperial') {
-    const ft = Math.round(m / M_PER_FT);
-    if (ft < 10_000) return { value: grouped(ft), unit: 'ft' };
-    return { value: (Math.round(ft / 100) / 10).toFixed(1), unit: 'k ft' };
-  }
-  if (m < 10_000) return { value: grouped(Math.round(m)), unit: 'm' };
-  return { value: (Math.round(m / 100) / 10).toFixed(1), unit: 'km' };
+  const v = Math.round(toElevationUnit(m, units));
+  if (v < 10_000) return elevationParts(m, units, { grouped: true });
+  const thousands = (Math.round(v / 100) / 10).toFixed(1);
+  // Ten kilometres of climb reads in km; ten thousand feet as "k ft".
+  return units.elevation === 'ft'
+    ? { value: thousands, unit: `k ${units.elevation}` }
+    : { value: thousands, unit: distanceUnitLabel('km') };
 }
 
 /** Activity counts per category id, for the "Activities by type" chips. */
@@ -240,18 +235,13 @@ export function activityStatsLine(stats: TrackStats | undefined, units: Units): 
   const distanceM = finite(stats?.distanceM);
   const seconds = finite(stats?.movingTimeS) || finite(stats?.durationS);
   const ascentM = finite(stats?.ascentM);
-  const distance =
-    units === 'imperial'
-      ? `${(distanceM / M_PER_MI).toFixed(1)} mi`
-      : `${(distanceM / 1000).toFixed(1)} km`;
+  const distance = formatDistance(distanceM, units, { style: 'tenths' });
   const parts = [distance];
   if (seconds > 0) {
     const totalMin = Math.round(seconds / 60);
     parts.push(`${Math.floor(totalMin / 60)}:${String(totalMin % 60).padStart(2, '0')}`);
   }
-  parts.push(
-    units === 'imperial' ? `↑${Math.round(ascentM / M_PER_FT)} ft` : `↑${Math.round(ascentM)} m`,
-  );
+  parts.push(`↑${formatElevation(ascentM, units)}`);
   return parts.join(' · ');
 }
 

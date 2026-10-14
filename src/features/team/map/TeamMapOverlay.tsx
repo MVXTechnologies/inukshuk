@@ -10,6 +10,7 @@
  */
 import { rangeAndBearing } from '@core/teamui/positions';
 import { useExtensionPrefs } from '@features/extensions/prefs';
+import { formatDistance } from '@state/formatters';
 import { useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -81,8 +82,7 @@ export async function hitTestTeam(
   return null;
 }
 
-const dist = (m: number) =>
-  m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(m < 10_000 ? 1 : 0)} km`;
+const dist = (m: number) => formatDistance(m, { style: 'short' });
 
 export function TeamMapOverlay({
   here,

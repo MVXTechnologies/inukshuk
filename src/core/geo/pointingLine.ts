@@ -1,4 +1,12 @@
-import type { Units } from '@core/format';
+import {
+  FT_PER_MI,
+  M_PER_FT,
+  M_PER_MI,
+  METRIC,
+  formatInUnit,
+  rulerSystem,
+  type Units,
+} from '@core/format';
 import {
   IMPERIAL_TICK_FT,
   pointingLineChoiceM,
@@ -147,9 +155,6 @@ export function niceAtLeast(value: number): number {
   return (f === 1 ? 2 : f === 2 ? 5 : 10) * pow;
 }
 
-const M_PER_FT = 0.3048;
-const M_PER_MI = 1609.344;
-const FT_PER_MI = 5280;
 /** Imperial Auto steps above this many feet are in miles (0.1 mi = 528 ft is next). */
 const AUTO_FT_MAX = 500;
 
@@ -169,7 +174,7 @@ export interface TickStep {
 
 /** A fixed tick choice in the unit system: its metric step, or its imperial feet. */
 export function fixedTickStep(ticks: PointingLineFixedTicks, units: Units): TickStep {
-  return units === 'imperial'
+  return rulerSystem(units) === 'imperial'
     ? { stepM: IMPERIAL_TICK_FT[ticks] * M_PER_FT, unit: 'ft' }
     : { stepM: ticks, unit: 'm' };
 }
@@ -180,7 +185,7 @@ export function fixedTickStep(ticks: PointingLineFixedTicks, units: Units): Tick
  * 1 ft), then 0.1/0.2/0.5/1/2… mi.
  */
 export function roundTickStep(minM: number, units: Units): TickStep {
-  if (units !== 'imperial') return { stepM: Math.max(1, niceAtLeast(minM)), unit: 'm' };
+  if (rulerSystem(units) === 'metric') return { stepM: Math.max(1, niceAtLeast(minM)), unit: 'm' };
   const ft = minM / M_PER_FT;
   if (ft <= AUTO_FT_MAX) return { stepM: Math.max(1, niceAtLeast(ft)) * M_PER_FT, unit: 'ft' };
   return { stepM: niceAtLeast(ft / FT_PER_MI) * M_PER_MI, unit: 'mi' };
@@ -228,7 +233,7 @@ export function previewTickStep(
 ): TickStep | null {
   if (ticks === 'off') return null;
   if (ticks !== 'auto') return fixedTickStep(ticks, units);
-  return units === 'imperial'
+  return rulerSystem(units) === 'imperial'
     ? roundTickStep(lengthM / 5, units)
     : { stepM: lengthM / 5, unit: 'm' };
 }
@@ -239,7 +244,7 @@ export function resolveLengthM(
   origin: LatLng,
   bearingDeg: number,
   bounds: ViewBounds | null,
-  units: Units = 'metric',
+  units: Units = METRIC,
   customLengthM?: number,
 ): number | null {
   // A stop is a round distance in the user's units (500 ft, 0.5 mi in imperial);
@@ -260,10 +265,9 @@ export function tickDistances(lengthM: number, stepM: number): number[] {
  * "1.5 km"; "250 ft", "2500 ft"; "0.5 mi", "1.5 mi".
  */
 export function tickLabel(m: number, unit: TickUnit): string {
-  if (unit === 'ft') return `${Math.round(m / M_PER_FT)} ft`;
-  if (unit === 'mi') return `${Number((m / M_PER_MI).toFixed(2))} mi`;
-  if (m < 1000) return `${Math.round(m)} m`;
-  return `${Number((m / 1000).toFixed(2))} km`;
+  if (unit === 'ft') return formatInUnit(m, 'ft', 0);
+  if (unit === 'mi') return formatInUnit(m, 'mi', 2);
+  return m < 1000 ? formatInUnit(m, 'm', 0) : formatInUnit(m, 'km', 2);
 }
 
 /** The kinds of feature the layers style: the line, ticks, the end dot, labels. */

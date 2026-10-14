@@ -1,4 +1,4 @@
-import { formatClockTime } from '@core/format';
+import { formatClockTime, IMPERIAL, METRIC, NAUTICAL } from '@core/format';
 
 import {
   bearingValue,
@@ -20,13 +20,17 @@ describe('strip formatting', () => {
   });
 
   it('formats a distance in the app units or a fixed unit', () => {
-    expect(formatDistanceIn(1234, 'app', 'metric')).toBe('1.23 km');
-    expect(formatDistanceIn(250, 'app', 'imperial')).toBe('820 ft');
-    expect(formatDistanceIn(1234, 'km', 'imperial')).toBe('1.23 km');
-    expect(formatDistanceIn(5000, 'mi', 'metric')).toBe('3.11 mi');
-    expect(formatDistanceIn(1852 * 1.5, 'nmi', 'metric')).toBe('1.50 nmi');
-    expect(formatDistanceIn(1852 * 12.34, 'nmi', 'metric')).toBe('12.3 nmi');
-    expect(formatDistanceIn(-5, 'nmi', 'metric')).toBe('0.00 nmi');
+    expect(formatDistanceIn(1234, 'app', METRIC)).toBe('1.23 km');
+    expect(formatDistanceIn(250, 'app', IMPERIAL)).toBe('820 ft');
+    expect(formatDistanceIn(1234, 'km', IMPERIAL)).toBe('1.23 km');
+    expect(formatDistanceIn(5000, 'mi', METRIC)).toBe('3.11 mi');
+    expect(formatDistanceIn(1852 * 1.5, 'nmi', METRIC)).toBe('1.50 NM');
+    expect(formatDistanceIn(1852 * 12.34, 'nmi', METRIC)).toBe('12.3 NM');
+    // Under a cable, NM falls back to the app's elevation unit (#702).
+    expect(formatDistanceIn(-5, 'nmi', METRIC)).toBe('0 m');
+    expect(formatDistanceIn(100, 'nmi', IMPERIAL)).toBe('328 ft');
+    // The app's own NM setting.
+    expect(formatDistanceIn(1852 * 1.5, 'app', NAUTICAL)).toBe('1.50 NM');
   });
 
   it('formats bearings true and magnetic', () => {
