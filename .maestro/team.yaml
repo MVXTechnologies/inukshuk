@@ -351,6 +351,22 @@ tags:
       id: 'team-band-gather'
     timeout: 10000
 - takeScreenshot: team-gather-active
+# Its words open who gets there when (name, distance, ETA); again to fold.
+- tapOn:
+    id: 'team-band-gather-text'
+- extendedWaitUntil:
+    visible:
+      id: 'team-gather-etas'
+    timeout: 3000
+- assertVisible:
+    id: 'team-gather-eta-You'
+- takeScreenshot: team-gather-etas
+- tapOn:
+    id: 'team-band-gather-text'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-gather-etas'
+    timeout: 3000
 - tapOn:
     id: 'team-band-gather-end'
 - tapOn:
