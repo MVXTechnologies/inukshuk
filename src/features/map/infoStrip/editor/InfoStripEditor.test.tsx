@@ -11,7 +11,7 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { darkScheme, lightScheme } from '@ui/tokens';
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
-import { BackHandler, StyleSheet } from 'react-native';
+import { BackHandler, StyleSheet, View } from 'react-native';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { State } from 'react-native-gesture-handler';
 
@@ -210,6 +210,53 @@ describe('editing rows', () => {
       ]),
     );
     expect(fields()).toEqual([['coords'], ['elevation']]);
+  });
+
+  it('drops in the screen frame the gesture reports (measure, not measureInWindow)', async () => {
+    // Android's measureInWindow sits a status bar (here 52 dp) above the
+    // gesture's absoluteY: measured that way, a drop on row 1 read as below
+    // it and made a new row (QA 2.6.0). The rows are read with `measure`.
+    const statusBar = 52;
+    const frame = (id: string | undefined): [number, number, number, number] | null => {
+      if (id === 'strip-edit-row-0') return [0, 600, 400, 50];
+      if (id === 'strip-edit-chip-0-0') return [50, 600, 200, 50];
+      if (id === 'strip-edit-chip-0-1') return [260, 600, 100, 50];
+      return null;
+    };
+    type Cb = (...n: number[]) => void;
+    const proto = View.prototype as unknown as {
+      measure: (cb: Cb) => void;
+      measureInWindow: (cb: Cb) => void;
+    };
+    const measure = jest.spyOn(proto, 'measure').mockImplementation(function (
+      this: { props: { testID?: string } },
+      cb: Cb,
+    ) {
+      const f = frame(this.props.testID);
+      if (f !== null) cb(0, 0, f[2], f[3], f[0], f[1]);
+    });
+    const inWindow = jest.spyOn(proto, 'measureInWindow').mockImplementation(function (
+      this: { props: { testID?: string } },
+      cb: Cb,
+    ) {
+      const f = frame(this.props.testID);
+      if (f !== null) cb(f[0], f[1] - statusBar, f[2], f[3]);
+    });
+    try {
+      await openEditor();
+      // Elevation, held and dropped on the left half of the coordinates, in row 1.
+      await act(async () =>
+        fireGestureHandler(getByGestureTestId('strip-field-drag-0-1'), [
+          { state: State.BEGAN, absoluteX: 310, absoluteY: 625 },
+          { state: State.ACTIVE, translationX: -250, absoluteX: 60, absoluteY: 640 },
+          { state: State.END, translationX: -250, absoluteX: 60, absoluteY: 640 },
+        ]),
+      );
+      expect(fields()).toEqual([['elevation', 'coords']]);
+    } finally {
+      measure.mockRestore();
+      inWindow.mockRestore();
+    }
   });
 
   it('drags a row by its handle', async () => {

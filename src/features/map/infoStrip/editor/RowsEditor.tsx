@@ -69,7 +69,13 @@ export function RowsEditor({ rows, data, ctx, onChange, onOpenField, onAdd }: Ro
   const [drag] = useState(() => new Animated.ValueXY());
   const [dragging, setDragging] = useState<Slot | null>(null);
 
-  /** Window rects of every row and field, read when a drag starts (the sheet may have scrolled). */
+  /**
+   * Screen rects of every row and field, read when a drag starts (the sheet
+   * may have scrolled), in the gesture's own frame: `measure`'s pageX/pageY,
+   * like the drop point's absoluteX/Y. Never `measureInWindow`: on Android it
+   * sits a status bar higher, so every drop landed a row low (a drop on row 1
+   * made a new row; QA 2.6.0 on the emulator, a 52 dp status bar).
+   */
   const measure = () => {
     const next: RowRect[] = rows.map((r) => ({
       y: 0,
@@ -77,16 +83,16 @@ export function RowsEditor({ rows, data, ctx, onChange, onOpenField, onAdd }: Ro
       fields: r.map(() => ({ x: 0, w: 0 })),
     }));
     rows.forEach((_row, r) =>
-      views.rows.get(r)?.measureInWindow((_x, y, _w, h) => {
+      views.rows.get(r)?.measure((_x, _y, _w, h, _pageX, pageY) => {
         const row = next[r];
-        if (row !== undefined) Object.assign(row, { y, h });
+        if (row !== undefined) Object.assign(row, { y: pageY, h });
       }),
     );
     rows.forEach((row, r) =>
       row.forEach((_f, i) =>
-        views.chips.get(`${r}:${i}`)?.measureInWindow((x, _y, w) => {
+        views.chips.get(`${r}:${i}`)?.measure((_x, _y, w, _h, pageX) => {
           const f = next[r]?.fields[i];
-          if (f !== undefined) Object.assign(f, { x, w });
+          if (f !== undefined) Object.assign(f, { x: pageX, w });
         }),
       ),
     );
@@ -173,6 +179,7 @@ export function RowsEditor({ rows, data, ctx, onChange, onOpenField, onAdd }: Ro
                     ref={(v: View | null) => {
                       views.chips.set(`${r}:${i}`, v);
                     }}
+                    testID={`strip-edit-chip-${r}-${i}`}
                     style={[
                       styles.chip,
                       { flex: pv.descriptor.spaces, backgroundColor: t.surface },
