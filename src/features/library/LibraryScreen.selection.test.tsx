@@ -6,12 +6,12 @@
  * be held to select the folder itself. Both themes.
  */
 import type { Folder, MapDocument, TrackSummary, Waypoint } from '@core/models';
-import { LibraryScreen } from '@features/library/LibraryScreen';
+import { LibraryScreen, MOVED_HEADER_GAP } from '@features/library/LibraryScreen';
 import { useLibraryStore } from '@state/libraryStore';
 import { useScreenSheetStore } from '@state/screenSheetStore';
 import { darkTheme, lightTheme } from '@ui/theme';
 import { act, fireEvent, render, type RenderResult } from '@testing-library/react-native';
-import { BackHandler, Platform, StyleSheet, Vibration } from 'react-native';
+import { BackHandler, FlatList, Platform, StyleSheet, Vibration } from 'react-native';
 import { PaperProvider, type MD3Theme } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -313,6 +313,9 @@ describe('Move to…', () => {
   ];
 
   it('files the selection in a new folder, then Undo puts each item back', async () => {
+    const scrollToIndex = jest
+      .spyOn(FlatList.prototype, 'scrollToIndex')
+      .mockImplementation(() => undefined);
     const view = await show({
       tracks: [
         track('t1', 'Mont Jacques-Cartier', { folderId: 'f2' }),
@@ -341,11 +344,22 @@ describe('Move to…', () => {
     expect(view.queryByTestId('library-action-bar')).toBeNull();
     expect(view.getByText('Moved 2 trails to Parc')).toBeOnTheScreen();
     expect(view.getByText('Parc (2)')).toBeOnTheScreen();
+    // The destination's header lands fully below the chips, with a gap, once
+    // the moved rows have laid out (QA 2.6.1: it was tucked under the chips).
+    expect(scrollToIndex).not.toHaveBeenCalled();
+    await act(async () => {
+      jest.advanceTimersByTime(100);
+    });
+    expect(scrollToIndex).toHaveBeenCalledWith(
+      expect.objectContaining({ viewPosition: 0, viewOffset: MOVED_HEADER_GAP }),
+    );
+    expect(MOVED_HEADER_GAP).toBeGreaterThan(0);
 
     await press(view.getByLabelText('Undo'));
     expect(folderOf('t1')).toBe('f2');
     expect(folderOf('t2')).toBeUndefined();
     expect(view.queryByText('Moved 2 trails to Parc')).toBeNull();
+    scrollToIndex.mockRestore();
   });
 
   it('marks the current folder (a no-op) and leaves Remove out when nothing is filed', async () => {

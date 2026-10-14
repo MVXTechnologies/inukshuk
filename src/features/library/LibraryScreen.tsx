@@ -105,6 +105,9 @@ const SEARCH_DEBOUNCE_MS = 200;
 
 const keyOfItem = (item: LibraryListItem) => item.key;
 
+/** Space left above a folder header scrolled to after a Move, under the chips. */
+export const MOVED_HEADER_GAP = space.sm;
+
 /** Room the Undo bar takes, so a plain snackbar shows above it. */
 const UNDO_CLEARANCE = 64;
 
@@ -1172,7 +1175,22 @@ export function LibraryScreen() {
     if (section === null) return;
     pendingScrollRef.current = null;
     const index = items.findIndex((i) => i.kind === 'header' && i.section === section);
-    if (index >= 0) listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0 });
+    if (index < 0) return;
+    // After the moved rows have laid out (the list's frames are stale in this
+    // commit: the jump overshot and tucked the header under the chips, QA
+    // 2.6.1), and with a gap, so the header lands fully visible below them.
+    // Not cancelled by a later re-render (the request is already taken);
+    // after unmount the ref is null and nothing scrolls.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        listRef.current?.scrollToIndex({
+          index,
+          animated: true,
+          viewPosition: 0,
+          viewOffset: MOVED_HEADER_GAP,
+        }),
+      ),
+    );
   }, [items]);
 
   const renderItem: ListRenderItem<LibraryListItem> = ({ item }) => {
