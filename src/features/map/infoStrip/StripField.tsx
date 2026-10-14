@@ -127,6 +127,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   unit: { fontSize: 11, fontWeight: '500' },
-  muted: { fontStyle: 'italic', fontWeight: '600' },
+  // Android clips an italic run's last glyph at the text's edge ("−14.6ᶜ"):
+  // a hair of end padding leaves it room.
+  muted: { fontStyle: 'italic', fontWeight: '600', paddingRight: 2 },
   fill: { flexGrow: 1, alignSelf: 'stretch' },
 });
