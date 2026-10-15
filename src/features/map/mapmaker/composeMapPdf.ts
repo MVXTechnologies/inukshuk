@@ -1,4 +1,5 @@
-import { slopeOverlayRgba } from '@core/geo/terrainAnalysis';
+import { slopeOverlayMercator } from '@core/geo/terrainAnalysis';
+import { slopeStepFor } from '@core/geo/terrainJob';
 import { contourFeatures } from '@core/geo/contours';
 import { attachGeoViewport } from '@core/geo/geopdf/write';
 import { layoutMadeMap, RASTER_LONG_EDGE_PX, type PageFormat } from '@core/mapmaker/layout';
@@ -31,7 +32,7 @@ import {
   LineCapStyle,
 } from 'pdf-lib';
 import UPNG from 'upng-js';
-import { fetchHeightmap, fetchPrintBasemap, type DrapeSource } from '../dem';
+import { fetchDemMosaic, fetchPrintBasemap, heightmapFromMosaic, type DrapeSource } from '../dem';
 
 // jpeg-js's ENCODER returns `Buffer.from(...)` whenever `module` is defined
 // (always, under Metro) — Hermes has no Buffer global, so provide one before
@@ -185,28 +186,30 @@ export async function composeMapPdf(
   let effectiveIntervalM = 0;
   if (options.slope || options.contours) {
     onProgress('terrain', 0);
-    const hm = await fetchHeightmap(drawBbox, 256);
+    const mosaic = await fetchDemMosaic(drawBbox);
+    const hm = heightmapFromMosaic(mosaic, 256);
     if (handle.aborted) throw new Error('aborted');
     await nextTask();
     if (options.slope) {
-      const midLat = (hm.bbox.minLat + hm.bbox.maxLat) / 2;
-      const mPerDegLng = 111320 * Math.cos((midLat * Math.PI) / 180);
-      const cellXm = ((hm.bbox.maxLng - hm.bbox.minLng) * mPerDegLng) / 255;
-      const cellZm = ((hm.bbox.maxLat - hm.bbox.minLat) * 111320) / 255;
-      const rgba = slopeOverlayRgba(
-        hm.data,
-        256,
-        cellXm,
-        cellZm,
+      // Slope on every DEM pixel with its true ground size (#722) — the old
+      // 256-cell resample spread ~6 DEM pixels per cell and flattened short
+      // steep pitches, the same aliasing #461 removed from the live map.
+      const img = slopeOverlayMercator(
+        mosaic.data,
+        mosaic.width,
+        mosaic.height,
+        mosaic.range.z,
+        mosaic.range.minY * 256,
         options.slopeMinDeg,
         options.slopeMaxDeg,
+        slopeStepFor(mosaic.width, mosaic.height, 1024),
       );
       await nextTask();
-      // The heightmap covers its own tile-aligned bbox; crop the slope image
+      // The mosaic covers its own tile-aligned bbox; crop the slope image
       // to the drawn frame the same way the basemap is cropped.
       const slopeCrop = cropRasterToBbox(
-        { data: rgba, width: 256, height: 256 },
-        hm.range,
+        { data: img.rgba, width: img.width, height: img.height },
+        mosaic.range,
         drawBbox,
       );
       const buf = slopeCrop.data.buffer.slice(0) as ArrayBuffer;

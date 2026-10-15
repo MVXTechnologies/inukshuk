@@ -11,7 +11,8 @@ import { composeMapPdf, type ComposeHandle, type MakeMapOptions } from './compos
 
 jest.mock('../dem', () => ({
   fetchPrintBasemap: jest.fn(),
-  fetchHeightmap: jest.fn(),
+  fetchDemMosaic: jest.fn(),
+  heightmapFromMosaic: jest.fn(),
 }));
 
 const fetchBase = jest.mocked(fetchPrintBasemap);

@@ -119,6 +119,43 @@ export async function fetchDemMosaic(bounds: BoundingBox, maxTilesPerSide = 6): 
   return { data: full, width: fullW, height: fullH, range, bbox: rangeBbox(range) };
 }
 
+/** The raw (still PNG-encoded) Terrarium tiles of a tile range, row-major. */
+export interface DemTileBytes {
+  tiles: Uint8Array[];
+  /** `z/x/y` per tile (the decoded-tile cache key). */
+  keys: string[];
+  cols: number;
+  rows: number;
+  range: TileRange;
+  bbox: BoundingBox;
+}
+
+/**
+ * The tiles {@link fetchDemMosaic} would decode, left encoded (#722): the
+ * 2D overlays hand them to a worklet runtime that decodes and analyses them
+ * off the JS thread. Same zoom choice, range clamp, cache and failure rules.
+ */
+export async function fetchDemTileBytes(
+  bounds: BoundingBox,
+  maxTilesPerSide = 6,
+): Promise<DemTileBytes> {
+  const z = pickTerrainZoom(bounds, maxTilesPerSide);
+  const range = clampTileRange(tileRangeForBbox(bounds, z), maxTilesPerSide);
+  const planned = tilesInRange(range);
+  const cols = range.maxX - range.minX + 1;
+  const rows = range.maxY - range.minY + 1;
+  const tiles: Uint8Array[] = new Array<Uint8Array>(planned.length);
+  const failures = await fetchAllTiles(planned, async (t) => {
+    tiles[t.row * cols + t.col] = await storage.downloadBytes(
+      demUrl(t.z, t.x, t.y),
+      `dem-${t.z}-${t.x}-${t.y}.png`,
+    );
+  });
+  assessTileFailures('elevation', planned.length, failures, 0);
+  const keys = planned.map((t) => `${t.z}/${t.x}/${t.y}`);
+  return { tiles, keys, cols, rows, range, bbox: rangeBbox(range) };
+}
+
 /** Downsample a DEM mosaic to a `grid × grid` heightmap (for a mesh or contours). */
 export function heightmapFromMosaic(mosaic: DemMosaic, grid: number): Heightmap {
   const { data: full, width: fullW, height: fullH } = mosaic;

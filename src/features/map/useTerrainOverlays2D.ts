@@ -2,14 +2,15 @@ import { parseRegionPayload } from '@core/map/regionPayload';
 import { bytesToBase64 } from '@core/encoding/base64';
 import { contourFeatures, type ContourFeatures } from '@core/geo/contours';
 import { coverageScaleChanged, padBounds, viewStillCovered } from '@core/geo/overlayCoverage';
-import { slopeOverlayMercator } from '@core/geo/terrainAnalysis';
+import { slopeStepFor } from '@core/geo/terrainJob';
 import * as storage from '@data/storage';
 import type { MapRef } from '@maplibre/maplibre-react-native';
+import { beginBusyTask, type BusyTaskHandle } from '@state/busyTasksStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import UPNG from 'upng-js';
 import type { BoundingBox } from '@core/models';
-import { fetchDemMosaic, heightmapFromMosaic, prefetchDemTiles } from './dem';
+import { fetchDemTileBytes, prefetchDemTiles } from './dem';
+import { computeTerrain } from './terrainWorker';
 
 /**
  * The 2D map's terrain overlays: a slope-band raster (PNG draped via
@@ -26,6 +27,11 @@ import { fetchDemMosaic, heightmapFromMosaic, prefetchDemTiles } from './dem';
  * edge and most pans cost nothing. Once computed, the DEM tiles for the next
  * ring out are prefetched, so the eventual recompute doesn't wait on the
  * network either.
+ *
+ * The heavy part — Terrarium decode, slope, PNG encode, contour heightmap —
+ * runs on a worklet runtime (`terrainWorker`, #722): the JS thread only reads
+ * tile files, writes a small PNG and builds the contour GeoJSON. Each stage
+ * registers in the busy-task store for the status chip (#721).
  */
 
 /** ImageSource corners: [TL, TR, BR, BL] as [lng, lat]. */
@@ -95,6 +101,12 @@ export function useTerrainOverlays2D({
     error: null,
   });
   const reqIdRef = useRef(0);
+  // Which of the two slope files the map shows now. The next image goes to
+  // the OTHER one: MapLibre ignores a url it already has, so writing the
+  // shown file again left the OLD image stretched over the NEW corners
+  // (#722 — slot by request parity collided whenever a request in between
+  // was skipped or superseded, i.e. more often than not).
+  const shownSlotRef = useRef<0 | 1 | null>(null);
   // What the current result covers: its tile-aligned bbox and the settings it
   // was computed with. Kept while the view stays well inside the bbox.
   const coveredRef = useRef<{ bbox: BoundingBox; knobs: string } | null>(null);
@@ -137,50 +149,40 @@ export function useTerrainOverlays2D({
           return;
         }
 
-        // The slope raster, PNG encode and contour extraction each block the
-        // JS thread for a noticeable chunk on-device; yielding between stages
-        // keeps touches responsive and gives an abandoned request (new region,
-        // screen left) a checkpoint to bail at instead of finishing for
-        // nothing.
-        const stale = async () => {
-          await new Promise((resolve) => setTimeout(resolve, 0));
-          return reqId !== reqIdRef.current;
-        };
-
+        const busy: BusyTaskHandle[] = [];
         try {
-          const dem = await fetchDemMosaic(bounds, MAX_TILES);
+          busy.push(beginBusyTask('tiles'));
+          const dem = await fetchDemTileBytes(bounds, MAX_TILES);
+          busy.pop()?.finish();
           if (reqId !== reqIdRef.current) return;
 
+          const width = dem.cols * 256;
+          const height = dem.rows * 256;
+          busy.push(beginBusyTask(slopeOn ? 'slope' : 'contours'));
+          const out = await computeTerrain({
+            tiles: dem.tiles,
+            tileKeys: dem.keys,
+            cols: dem.cols,
+            rows: dem.rows,
+            z: dem.range.z,
+            topRow: dem.range.minY * 256,
+            slope: slopeOn
+              ? {
+                  minDeg: slopeMinDeg,
+                  maxDeg: slopeMaxDeg,
+                  step: slopeStepFor(width, height, SLOPE_MAX_PX),
+                }
+              : null,
+            heightmapGrid: contoursOn ? GRID : 0,
+          });
+          // Superseded while queued, or a newer request arrived meanwhile.
+          if (out === null || reqId !== reqIdRef.current) return;
+
           let slope: TerrainOverlays2D['slope'] = null;
-          if (slopeOn) {
-            if (await stale()) return;
-            const img = slopeOverlayMercator(
-              dem.data,
-              dem.width,
-              dem.height,
-              dem.range.z,
-              dem.range.minY * 256,
-              slopeMinDeg,
-              slopeMaxDeg,
-              Math.ceil(Math.max(dem.width, dem.height) / SLOPE_MAX_PX),
-            );
-            if (await stale()) return;
-            const png = new Uint8Array(
-              UPNG.encode(
-                [
-                  img.rgba.buffer.slice(
-                    img.rgba.byteOffset,
-                    img.rgba.byteOffset + img.rgba.byteLength,
-                  ) as ArrayBuffer,
-                ],
-                img.width,
-                img.height,
-                0,
-              ),
-            );
-            // Alternate between two file names: MapLibre caches by URL, so
-            // rewriting one fixed path would keep showing the stale image.
-            const uri = storage.writeOverlayPng(`slope2d-${reqId % 2}`, bytesToBase64(png));
+          if (out.slopePng !== null) {
+            const slot = shownSlotRef.current === 0 ? 1 : 0;
+            const uri = storage.writeOverlayPng(`slope2d-${slot}`, bytesToBase64(out.slopePng));
+            shownSlotRef.current = slot;
             slope = {
               uri,
               coordinates: [
@@ -191,12 +193,10 @@ export function useTerrainOverlays2D({
               ],
             };
           }
-
-          if (await stale()) return;
-          const contours = contoursOn
-            ? contourFeatures(heightmapFromMosaic(dem, GRID), intervalM)
-            : null;
-          if (reqId !== reqIdRef.current) return;
+          const contours =
+            out.heightmap !== null
+              ? contourFeatures({ ...out.heightmap, bbox: dem.bbox }, intervalM)
+              : null;
           coveredRef.current = { bbox: dem.bbox, knobs };
           setState({ slope, contours, error: null });
           // Head start for the next pan: cache the DEM tiles one ring out.
@@ -209,6 +209,8 @@ export function useTerrainOverlays2D({
             contours: null,
             error: err instanceof Error ? err.message : String(err),
           });
+        } finally {
+          for (const b of busy) b.finish();
         }
       })();
     }, DEBOUNCE_MS);

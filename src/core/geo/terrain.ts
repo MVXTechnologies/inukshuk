@@ -122,6 +122,7 @@ export function rangeBbox(range: TileRange): BoundingBox {
 
 /** Decode a Terrarium-encoded RGB pixel to metres of elevation. */
 export function terrariumToMeters(r: number, g: number, b: number): number {
+  'worklet';
   return r * 256 + g + b / 256 - 32768;
 }
 
@@ -136,6 +137,7 @@ export function sampleGridBilinear(
   fx: number,
   fy: number,
 ): number {
+  'worklet';
   const cx = Math.max(0, Math.min(width - 1, fx * (width - 1)));
   const cy = Math.max(0, Math.min(height - 1, fy * (height - 1)));
   const x0 = Math.floor(cx);

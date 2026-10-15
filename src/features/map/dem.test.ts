@@ -7,7 +7,8 @@ import {
 } from '@core/mapmaker/tilePlan';
 import * as storage from '@data/storage';
 import UPNG from 'upng-js';
-import { fetchHeightmap, fetchPrintBasemap } from './dem';
+import { terrariumMosaic } from '@core/geo/terrainJob';
+import { fetchDemMosaic, fetchDemTileBytes, fetchHeightmap, fetchPrintBasemap } from './dem';
 
 jest.mock('@data/storage', () => ({ downloadBytes: jest.fn() }));
 
@@ -168,5 +169,33 @@ describe('fetchHeightmap', () => {
     const names = download.mock.calls.map(([, name]) => name);
     const unique = new Set(names);
     expect(names.length).toBe(unique.size * 3);
+  }, 20000);
+});
+
+describe('fetchDemTileBytes (#722: tiles for the off-thread terrain job)', () => {
+  it('returns the encoded tiles row-major with z/x/y keys, decoding to fetchDemMosaic’s mosaic', async () => {
+    // Each tile a different flat elevation so order mistakes show.
+    download.mockImplementation(async (url: string) => {
+      const m = url.match(/\/(\d+)\/(\d+)\.png$/)!;
+      return pngTile(128, (Number(m[1]) * 7 + Number(m[2]) * 3) % 256, 0);
+    });
+    const bounds = { minLng: -71.25, maxLng: -71.15, minLat: 46.78, maxLat: 46.84 };
+    const bytes = await fetchDemTileBytes(bounds, 4);
+    expect(bytes.cols * bytes.rows).toBeGreaterThan(1);
+    expect(bytes.tiles).toHaveLength(bytes.cols * bytes.rows);
+    expect(bytes.keys[0]).toBe(`${bytes.range.z}/${bytes.range.minX}/${bytes.range.minY}`);
+    expect(bytes.keys.at(-1)).toBe(`${bytes.range.z}/${bytes.range.maxX}/${bytes.range.maxY}`);
+    const mosaic = await fetchDemMosaic(bounds, 4);
+    expect(mosaic.range).toEqual(bytes.range);
+    expect(mosaic.bbox).toEqual(bytes.bbox);
+    const decoded = terrariumMosaic(bytes.tiles, bytes.cols, bytes.rows);
+    expect(Buffer.compare(Buffer.from(decoded.buffer), Buffer.from(mosaic.data.buffer))).toBe(0);
+  });
+
+  it('fails like the mosaic when a tile cannot be downloaded', async () => {
+    download.mockRejectedValue(new Error('Unable to download a file: timeout'));
+    await expect(
+      fetchDemTileBytes({ minLng: -71.21, maxLng: -71.2, minLat: 46.81, maxLat: 46.815 }),
+    ).rejects.toThrow(/elevation tiles/);
   }, 20000);
 });
