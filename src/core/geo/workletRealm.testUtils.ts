@@ -27,8 +27,11 @@ export function asWorkletRuntime<F extends (...args: never[]) => unknown>(fn: F)
       ) => unknown;
       const bound = compiled.bind({ __closure: closure });
       seen.set(v, bound);
-      for (const [k, val] of Object.entries(w.__closure ?? {}))
-        closure[k] = unpack(val, `${path}.${k}`);
+      for (const [k, val] of Object.entries(w.__closure ?? {})) {
+        // Under `--coverage`, istanbul's counter functions (cov_*) get captured
+        // too; they only bump counters, so they pass through as they are.
+        closure[k] = k.startsWith('cov_') ? val : unpack(val, `${path}.${k}`);
+      }
       return bound;
     }
     if (Array.isArray(v)) return v.map((x, i) => unpack(x, `${path}[${i}]`));
