@@ -590,6 +590,15 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
       await Promise.all([pressIn, pressOut]);
     });
     expect(screen.getByTestId('team-sos-hint')).toBeTruthy();
+    // Laid out inside the dock (a row, left of the button), never absolutely
+    // outside its bounds: Android drops such a view from the accessibility
+    // tree, so TalkBack and E2E never saw the hint (QA 2.6.1, CI team shard).
+    expect(StyleSheet.flatten(screen.getByTestId('team-sos-hint').props.style).position).toBe(
+      undefined,
+    );
+    expect(StyleSheet.flatten(screen.getByTestId('team-sos-layer').props.style)).toMatchObject({
+      flexDirection: 'row',
+    });
     await act(async () => {
       jest.advanceTimersByTime(10_000);
     });
@@ -600,6 +609,56 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
     await press(2100);
     expect(usePendingAlert.getState().pending?.kind).toBe('sos');
     expect(screen.getByTestId('team-undo-snack')).toBeTruthy();
+  });
+
+  it('held past 2 s: armed ("Let go"); the full 5 s undo starts when the finger lifts', async () => {
+    await render(
+      wrap(
+        <>
+          <SosButton bottom={72} here={HERE} />
+          <UndoSnack style={{}} />
+        </>,
+      ),
+    );
+    const b = screen.getByTestId('team-sos-button');
+    await fireEvent(b, 'pressIn');
+    await act(async () => {
+      jest.advanceTimersByTime(3500);
+    });
+    // Still held: armed, but the undo (unreachable under the thumb) waits.
+    expect(screen.getByText('Let go')).toBeTruthy();
+    expect(usePendingAlert.getState().pending).toBeNull();
+    await fireEvent(b, 'pressOut');
+    expect(usePendingAlert.getState().pending?.kind).toBe('sos');
+    expect(screen.getByText('Sends in 5 s')).toBeTruthy();
+    await act(async () => {
+      jest.advanceTimersByTime(4900);
+    });
+    expect(app.active!.soses()).toHaveLength(0);
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+    });
+    expect(app.active!.soses()).toHaveLength(1);
+  });
+
+  it('a finger that never lifts still sends: the undo starts 5 s after arming', async () => {
+    await render(
+      wrap(
+        <>
+          <SosButton bottom={72} here={HERE} />
+          <UndoSnack style={{}} />
+        </>,
+      ),
+    );
+    await fireEvent(screen.getByTestId('team-sos-button'), 'pressIn');
+    await act(async () => {
+      jest.advanceTimersByTime(2000 + 4900);
+    });
+    expect(usePendingAlert.getState().pending).toBeNull();
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+    });
+    expect(usePendingAlert.getState().pending?.kind).toBe('sos');
   });
 
   it('Undo during the countdown sends nothing, ever', async () => {

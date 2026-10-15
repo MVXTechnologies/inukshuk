@@ -5,11 +5,19 @@
  * - **SOS:** hold the button {@link SOS_HOLD_MS} (the ring fills, a tick per
  *   second), then an {@link UNDO_MS} countdown with Undo. Nothing leaves the
  *   phone until the countdown ends; letting go early, or Undo, sends nothing.
+ *   The countdown starts when the finger lifts (QA 2.6.1): Undo cannot be
+ *   tapped while the thumb still holds the SOS button, so a countdown running
+ *   under it shortened the undo by every second held too long. A hold that
+ *   never lets go starts it {@link SOS_ARMED_MAX_MS} after the 2 s mark: a
+ *   resting finger never blocks a real SOS.
  * - **Rally here:** one tap starts the same countdown at my position.
  */
 
 /** How long the SOS button is held before the countdown starts. */
 export const SOS_HOLD_MS = 2_000;
+/** The longest an armed SOS (held past {@link SOS_HOLD_MS}) waits for the finger to lift. */
+export const SOS_ARMED_MAX_MS = 5_000;
+
 /** How long Undo stays offered before an SOS or a rally point is sent. */
 export const UNDO_MS = 5_000;
 

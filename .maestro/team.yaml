@@ -297,9 +297,14 @@ tags:
     timeout: 3000
 - assertNotVisible:
     id: 'team-undo-snack'
-# Hold (2 s), then the 5 s undo: Undo sends nothing.
+# Hold (2 s), then the 5 s undo: Undo sends nothing. The undo's countdown
+# ring animates until it ends, so Maestro's default wait for the screen to
+# settle after a press outlasts the 5 s window (the SOS was already sent when
+# the next step ran, local repro 2026-10-14): the presses on this live
+# countdown wait at most 500 ms to settle.
 - longPressOn:
     id: 'team-sos-button'
+    waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     visible:
       id: 'team-undo-snack'
@@ -307,6 +312,7 @@ tags:
 - takeScreenshot: team-sos-undo
 - tapOn:
     id: 'team-undo'
+    waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     notVisible:
       id: 'team-undo-snack'
@@ -317,6 +323,7 @@ tags:
 # under the pill, until I resolve it (confirmed inline).
 - longPressOn:
     id: 'team-sos-button'
+    waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     visible:
       id: 'team-undo-snack'
@@ -341,6 +348,7 @@ tags:
     id: 'team-bar-pill'
 - tapOn:
     id: 'team-panel-rally'
+    waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     visible:
       id: 'team-undo-snack'
