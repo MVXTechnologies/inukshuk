@@ -103,11 +103,9 @@ tags:
     timeout: 3000
 - inputText: 'Select711'
 - tapOn: 'Create'
-- runFlow:
-    when:
-      platform: Android
-    commands:
-      - hideKeyboard
+# No hideKeyboard: closing the dialog unmounts its field and the keyboard goes
+# with it (focus-block). Android's hideKeyboard with no keyboard up presses
+# BACK, which leaves the Library.
 - extendedWaitUntil:
     visible: 'Select711 \(3\)'
     timeout: 8000
