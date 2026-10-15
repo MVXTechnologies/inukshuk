@@ -2,6 +2,7 @@ import type { Json } from './canonical';
 import { isLive, visibleFields } from './crdt';
 import { entityKey, parseMsgBody, parseSetBody, reduceData } from './data';
 import { resolveTeam } from './membership';
+import { teamRegistry } from '@core/domains/team';
 import {
   canCompleteTask,
   canEditTask,
@@ -522,7 +523,7 @@ describe('property: tasks converge and stay authorized under any order', () => {
         const ops = [...k.w.root.log.logged()];
         const view = (list: typeof ops) => {
           const s = resolveTeam(c, k.w.teamId, list);
-          const d = reduceData(s, (op) => k.w.root.decode(op));
+          const d = reduceData(s, (op) => k.w.root.decode(op), teamRegistry());
           return teamTasks(d).map((x) => JSON.stringify(x));
         };
         const ref = view(ops);

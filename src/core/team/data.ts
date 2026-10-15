@@ -2,28 +2,18 @@ import { isRecord, type Json } from './canonical';
 import {
   deleteOp,
   dict,
-  isLive,
   mergeEntity,
   mergeRegister,
   setOp,
   type EntityState,
   type Register,
-  visibleFields,
 } from './crdt';
 import type { SignedOp } from './envelope';
 import { isMemberId, isShortId } from './ids';
 import type { TeamState } from './membership';
-import { isAdminRole, parseAudience, type Audience } from './roles';
-import {
-  authorizeRecord,
-  emptyIndex,
-  RECORD_KINDS,
-  reindex,
-  type RecordIndex,
-  type RecordKind,
-  vertexTrail,
-} from './records';
-import { isTaskStatusUpdate, validTaskFields } from './tasks';
+import { parseAudience, type Audience } from './roles';
+import { emptyIndex, RECORD_KINDS, type RecordIndex } from './records';
+import { KIND_NAME, recordKey, type DomainLookup, type KindWrite } from '@core/group/registry';
 
 /**
  * Team data, reduced from the valid data ops of a resolved team (#589).
@@ -50,6 +40,11 @@ import { isTaskStatusUpdate, validTaskFields } from './tasks';
  *
  * Everything here is a fold in the team's total order over CRDT merges, so the
  * result is a function of the op set alone.
+ *
+ * **Sync groups (2.7.0).** The fold below is group-generic: record writes are
+ * dispatched by kind to domain plug-ins (`@core/group/registry`). The team
+ * rules in this table live in the team plug-in (`@core/domains/team`), which
+ * wraps this module's parsers and `records.ts` / `tasks.ts` unchanged.
  */
 export const ENTITY_KINDS = [
   'wpt',
@@ -80,7 +75,7 @@ export const OWNED_KINDS: readonly EntityKind[] = [
 /** Entity kinds a guest may write (their own records only). */
 export const GUEST_KINDS: readonly EntityKind[] = ['comment', 'sos', 'mres', 'cap', 'rcp'];
 /** Kinds whose `e.set` may name another member's record (`o`). */
-const O_KINDS: readonly string[] = ['task', 'trl', 'sos', 'mres', 'tve'];
+export const OWNER_REF_KINDS: readonly string[] = ['task', 'trl', 'sos', 'mres', 'tve'];
 
 export const MAX_FIELDS = 64;
 export const MAX_MESSAGE_CHARS = 4000;
@@ -130,11 +125,43 @@ const only = (r: Record<string, unknown>, keys: string[]) =>
   Object.keys(r).every((k) => keys.includes(k));
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
+/** A record write as the group fold sees it, before any domain looked at its kind. */
+export interface KindWriteBody {
+  k: string;
+  id: string;
+  /** `e.set` only. */
+  f?: Record<string, Json>;
+  o?: string;
+}
+
+/**
+ * The domain-independent shape of an `e.set` / `e.del` body: known keys
+ * only, a well-formed kind name, a short id, a member id in `o`, and for a
+ * set 1–{@link MAX_FIELDS} well-named fields. Which kinds exist, and which
+ * take `o`, is the owning domain's call.
+ */
+export function parseKindWrite(t: 'e.set' | 'e.del', v: unknown): KindWriteBody | undefined {
+  if (!isRecord(v) || !only(v, t === 'e.set' ? ['k', 'id', 'f', 'o'] : ['k', 'id', 'o']))
+    return undefined;
+  if (typeof v['k'] !== 'string' || !KIND_NAME.test(v['k']) || !isShortId(v['id']))
+    return undefined;
+  if (v['o'] !== undefined && !isMemberId(v['o'])) return undefined;
+  if (t === 'e.del') return v as unknown as KindWriteBody;
+  const f = v['f'];
+  if (!isRecord(f)) return undefined;
+  const names = Object.keys(f);
+  if (names.length === 0 || names.length > MAX_FIELDS || !names.every((n) => FIELD_NAME.test(n))) {
+    return undefined;
+  }
+  return v as unknown as KindWriteBody;
+}
+
 export function parseSetBody(v: unknown): SetBody | undefined {
   if (!isRecord(v) || !only(v, ['k', 'id', 'f', 'o'])) return undefined;
   if (!isKind(v['k']) || v['k'] === 'msg' || !isShortId(v['id']) || !isRecord(v['f']))
     return undefined;
-  if (v['o'] !== undefined && (!O_KINDS.includes(v['k']) || !isMemberId(v['o']))) return undefined;
+  if (v['o'] !== undefined && (!OWNER_REF_KINDS.includes(v['k']) || !isMemberId(v['o'])))
+    return undefined;
   const names = Object.keys(v['f']);
   if (names.length === 0 || names.length > MAX_FIELDS || !names.every((n) => FIELD_NAME.test(n))) {
     return undefined;
@@ -189,7 +216,8 @@ export function parsePosBody(v: unknown): PosBody | undefined {
 }
 
 export interface EntityRecord {
-  kind: EntityKind;
+  /** A team kind ({@link EntityKind}) or another domain's (2.7.0 sync groups). */
+  kind: string;
   id: string;
   owner?: string;
   state: EntityState;
@@ -201,11 +229,17 @@ export interface EntityRecord {
 export interface TeamData {
   entities: Map<string, EntityRecord>;
   positions: Map<string, Register<PosBody & Record<string, Json>>>;
-  /** Ops we could not decrypt (missing key, not a sealed recipient) or whose body was invalid. */
-  skipped: { id: string; why: 'undecryptable' | 'invalid' | 'forbidden' }[];
+  /**
+   * Ops not folded: undecryptable (missing key, not a sealed recipient),
+   * invalid, forbidden at their fold position, or of a kind no domain here
+   * registers (`unknown`: a newer app's record, stored and relayed).
+   */
+  skipped: { id: string; why: SkipReason }[];
   /** Counters for constant-time record authorization (`records.ts`). */
   index: RecordIndex;
 }
+
+export type SkipReason = 'undecryptable' | 'invalid' | 'forbidden' | 'unknown';
 
 /** Decrypts one op's body (the replica caches this). */
 export type Decode = (op: SignedOp) => Json | undefined;
@@ -215,110 +249,82 @@ export function emptyData(): TeamData {
 }
 
 /**
- * Reduce a resolved team's data ops, plus the ephemeral ops the caller
- * admitted (`admitEphemeral`), into the data view.
+ * Reduce a resolved group's data ops, plus the ephemeral ops the caller
+ * admitted (`admitEphemeral`), into the data view, dispatching each record
+ * write to the domain plug-in that owns its kind (`registry`).
  */
 export function reduceData(
   state: TeamState,
   decode: Decode,
+  registry: DomainLookup,
   ephemeral: readonly SignedOp[] = [],
 ): TeamData {
   const out = emptyData();
-  for (const op of state.data) applyDataOp(out, state, op, decode);
-  for (const op of ephemeral) applyDataOp(out, state, op, decode);
+  for (const op of state.data) applyDataOp(out, state, op, decode, registry);
+  for (const op of ephemeral) applyDataOp(out, state, op, decode, registry);
   return out;
 }
+
+const NO_FIELDS: Readonly<Record<string, Json>> = Object.freeze({});
 
 /**
  * Fold one accepted op into a data view (incremental: the replica calls this
  * for appended ops instead of rebuilding, review M2).
+ *
+ * Record writes (`e.set` / `e.del`) go through the sync-group seam (2.7.0,
+ * `docs/design/sync-layer.md` §5.1): the generic shape check, then the
+ * plug-in owning the kind (none: skipped as `unknown`, a newer app's kind,
+ * still stored and relayed), its `validate`, the fail-closed role check, its
+ * `authorize` at the op's fold position, then the per-field LWW merge.
+ * Messages and positions are group-generic and folded here.
  */
-export function applyDataOp(out: TeamData, state: TeamState, op: SignedOp, decode: Decode): void {
-  const merge = (key: string, rec: Omit<EntityRecord, 'state'>, patch: EntityState) => {
-    const prev = out.entities.get(key);
-    const next = prev
-      ? { ...prev, state: mergeEntity(prev.state, patch) }
-      : { ...rec, state: patch };
-    out.entities.set(key, next);
-    if (next.kind === 'trl' || next.kind === 'tve' || next.kind === 'sos' || next.kind === 'drw')
-      reindex(out.index, next, prev?.state);
-  };
+export function applyDataOp(
+  out: TeamData,
+  state: TeamState,
+  op: SignedOp,
+  decode: Decode,
+  registry: DomainLookup,
+): void {
   const { env, stamp } = op;
   // Authority is the author's role at the op's position in the fold (review M4).
   const role = state.roleAt.get(op.id);
-  const forbid = () => {
-    out.skipped.push({ id: op.id, why: 'forbidden' });
+  const skip = (why: SkipReason) => {
+    out.skipped.push({ id: op.id, why });
   };
   const body = decode(op);
-  if (body === undefined) {
-    out.skipped.push({ id: op.id, why: 'undecryptable' });
-    return;
-  }
+  if (body === undefined) return skip('undecryptable');
   switch (env.t) {
-    case 'e.set': {
-      const b = parseSetBody(body);
-      if (!b) break;
-      // Fail closed: every accepted data op has a role; guests write comments only.
-      if (role === undefined || (role === 'guest' && !GUEST_KINDS.includes(b.k))) return forbid();
-      if (b.k === 'task') {
-        if (!validTaskFields(b.f, env.au)) break;
-        const owner = b.o ?? env.au;
-        const key = entityKey('task', b.id, owner);
-        if (owner !== env.au) {
-          // Someone else's task: it must exist (nobody, admins included, creates a
-          // task in another member's name); then an admin writes any field, the
-          // current assignee only the status.
-          const cur = out.entities.get(key);
-          if (cur === undefined || !isLive(cur.state)) return forbid();
-          const assignee = visibleFields(cur.state)['assignee'];
-          if (!isAdminRole(role) && (assignee !== env.au || !isTaskStatusUpdate(b.f)))
-            return forbid();
-        }
-        merge(key, { kind: 'task', id: b.id, owner }, setOp(b.f, stamp));
-        return;
-      }
-      if ((RECORD_KINDS as readonly string[]).includes(b.k)) {
-        const r = authorizeRecord(
-          { kind: b.k as RecordKind, id: b.id, o: b.o, f: b.f, author: env.au, role },
-          (kind, id, o) => out.entities.get(entityKey(kind as EntityKind, id, o)),
-          out.index,
-          stamp.wall,
-        );
-        if (r === 'invalid') break;
-        if (r === 'forbidden') return forbid();
-        const rrec: Omit<EntityRecord, 'state'> = { kind: b.k, id: b.id };
-        if (r.owner) rrec.owner = r.owner;
-        merge(entityKey(b.k, b.id, r.owner), rrec, setOp(b.f, stamp));
-        return;
-      }
-      const owner = OWNED_KINDS.includes(b.k) ? env.au : undefined;
-      const rec: Omit<EntityRecord, 'state'> = { kind: b.k, id: b.id };
-      if (owner) rec.owner = owner;
-      merge(entityKey(b.k, b.id, owner), rec, setOp(b.f, stamp));
-      return;
-    }
+    case 'e.set':
     case 'e.del': {
-      const b = parseDelBody(body);
+      const b = parseKindWrite(env.t, body);
       if (!b) break;
-      const owned = OWNED_KINDS.includes(b.k);
-      const owner = owned ? (b.o ?? env.au) : undefined;
-      if (role === undefined || (role === 'guest' && !GUEST_KINDS.includes(b.k))) return forbid();
-      // A resolution is reopened (res: false), never deleted.
-      if (b.k === 'mres') return forbid();
-      // Trail vertices: any member deletes one of a live trail (`o` = its owner).
-      const vertex =
-        b.k === 'tve' &&
-        owner !== undefined &&
-        (() => {
-          const tr = vertexTrail(b.id);
-          const t = tr === null ? undefined : out.entities.get(entityKey('trl', tr, owner));
-          return t !== undefined && isLive(t.state);
-        })();
-      if (b.k === 'tve' && !vertex) return forbid();
-      if (owned && owner !== env.au && !isAdminRole(role) && !vertex) return forbid();
+      const plugin = registry.forKind(b.k);
+      if (plugin === undefined) return skip('unknown');
+      const w: KindWrite = {
+        op: env.t === 'e.set' ? 'set' : 'del',
+        kind: b.k,
+        id: b.id,
+        f: b.f ?? NO_FIELDS,
+        o: b.o,
+        author: env.au,
+        wall: stamp.wall,
+      };
+      if (!plugin.validate(w)) break;
+      // Fail closed: every accepted data op has a role.
+      if (role === undefined) return skip('forbidden');
+      const r = plugin.authorize(w, role, out);
+      if (r === 'invalid') break;
+      if (r === 'forbidden') return skip('forbidden');
+      const key = recordKey(plugin.owned(b.k), b.k, b.id, r.owner);
       const rec: Omit<EntityRecord, 'state'> = { kind: b.k, id: b.id };
-      if (owner) rec.owner = owner;
-      merge(entityKey(b.k, b.id, owner), rec, deleteOp(stamp));
+      if (r.owner !== undefined) rec.owner = r.owner;
+      const patch = w.op === 'set' ? setOp(b.f ?? NO_FIELDS, stamp) : deleteOp(stamp);
+      const prev = out.entities.get(key);
+      const next = prev
+        ? { ...prev, state: mergeEntity(prev.state, patch) }
+        : { ...rec, state: patch };
+      out.entities.set(key, next);
+      plugin.merged?.(out, next, prev?.state);
       return;
     }
     case 'msg': {
@@ -327,7 +333,8 @@ export function applyDataOp(out: TeamData, state: TeamState, op: SignedOp, decod
       // Only the owner named in a pin thread can root it (review: pin hijack).
       if (b.ll && b.th !== `pin:${env.au}:${b.id}`) break;
       const key = entityKey('msg', b.id, env.au);
-      if (out.entities.get(key)?.state.created !== undefined) return; // immutable: first wins
+      const prev = out.entities.get(key);
+      if (prev?.state.created !== undefined) return; // immutable: first wins
       const fields = dict<Json>([
         ['th', b.th],
         ['tx', b.tx],
@@ -338,7 +345,11 @@ export function applyDataOp(out: TeamData, state: TeamState, op: SignedOp, decod
       const aud = env.aud === undefined ? undefined : parseAudience(env.aud);
       if (aud) rec.aud = aud;
       if (env.pr !== undefined) rec.pr = env.pr;
-      merge(key, rec, setOp(fields, stamp));
+      const patch = setOp(fields, stamp);
+      out.entities.set(
+        key,
+        prev ? { ...prev, state: mergeEntity(prev.state, patch) } : { ...rec, state: patch },
+      );
       return;
     }
     case 'pos': {
@@ -350,5 +361,5 @@ export function applyDataOp(out: TeamData, state: TeamState, op: SignedOp, decod
       return;
     }
   }
-  out.skipped.push({ id: op.id, why: 'invalid' });
+  skip('invalid');
 }

@@ -97,3 +97,93 @@ export interface DomainLookup {
   /** The plug-in that owns `kind`, or `undefined`: skip the op as `unknown` (a newer app's kind). */
   forKind(kind: string): DomainPlugin | undefined;
 }
+
+/**
+ * Kind names: 1–8 lowercase letters. Every v1 kind fits (`comment` is the
+ * longest); the design's "≤ 4 chars" is the guideline for NEW kinds, which
+ * each cost bytes in every op that carries them.
+ */
+export const KIND_NAME = /^[a-z]{1,8}$/;
+/** Thread prefixes and domain ids: the same alphabet as a `msg` thread's head. */
+const TOKEN = /^[a-z]{1,8}$/;
+
+/** The entity key of a record: `(kind, owner, id)` for an owned kind, `(kind, id)` for a shared one. */
+export function recordKey(owned: boolean, kind: string, id: string, owner?: string): string {
+  return owned ? `${kind}:${owner ?? ''}:${id}` : `${kind}:${id}`;
+}
+
+/**
+ * The plug-ins one group's fold dispatches to. Registration errors are
+ * programmer errors (a kind claimed twice would make the fold depend on
+ * registration order), so they throw; lookups are total. A registry is
+ * frozen once shared ({@link DomainRegistry.freeze}): a fold cache built
+ * under it must never see its rules change.
+ */
+export class DomainRegistry implements DomainLookup {
+  private readonly byKind = new Map<string, DomainPlugin>();
+  private readonly byThread = new Map<string, DomainPlugin>();
+  private readonly byId = new Map<string, DomainPlugin>();
+  private frozen = false;
+
+  constructor(plugins: readonly DomainPlugin[] = []) {
+    for (const p of plugins) this.register(p);
+  }
+
+  register(p: DomainPlugin): void {
+    if (this.frozen) throw new Error(`registry is frozen: cannot register '${p.id}'`);
+    if (!TOKEN.test(p.id)) throw new Error(`bad domain id '${p.id}'`);
+    if (this.byId.has(p.id)) throw new Error(`domain '${p.id}' registered twice`);
+    const kinds = new Set<string>();
+    for (const k of p.kinds) {
+      if (!KIND_NAME.test(k)) throw new Error(`bad kind '${k}' in domain '${p.id}'`);
+      const other = this.byKind.get(k);
+      if (other !== undefined || kinds.has(k))
+        throw new Error(`kind '${k}' claimed by '${other?.id ?? p.id}' and '${p.id}'`);
+      kinds.add(k);
+    }
+    const threads = new Set<string>();
+    for (const t of p.threads ?? []) {
+      if (!TOKEN.test(t)) throw new Error(`bad thread prefix '${t}' in domain '${p.id}'`);
+      const other = this.byThread.get(t);
+      if (other !== undefined || threads.has(t))
+        throw new Error(`thread '${t}' claimed by '${other?.id ?? p.id}' and '${p.id}'`);
+      threads.add(t);
+    }
+    this.byId.set(p.id, p);
+    for (const k of kinds) this.byKind.set(k, p);
+    for (const t of threads) this.byThread.set(t, p);
+  }
+
+  /** No more registrations (a shared registry is frozen before any fold uses it). */
+  freeze(): this {
+    this.frozen = true;
+    return this;
+  }
+
+  get isFrozen(): boolean {
+    return this.frozen;
+  }
+
+  forKind(kind: string): DomainPlugin | undefined {
+    return this.byKind.get(kind);
+  }
+
+  /** The plug-in owning a `msg` thread (`pin:<owner>:<id>` → `pin`), if any. */
+  forThread(thread: string): DomainPlugin | undefined {
+    const i = thread.indexOf(':');
+    return this.byThread.get(i < 0 ? thread : thread.slice(0, i));
+  }
+
+  plugin(id: string): DomainPlugin | undefined {
+    return this.byId.get(id);
+  }
+
+  plugins(): readonly DomainPlugin[] {
+    return [...this.byId.values()];
+  }
+
+  /** Every registered kind, sorted. */
+  kinds(): readonly string[] {
+    return [...this.byKind.keys()].sort();
+  }
+}

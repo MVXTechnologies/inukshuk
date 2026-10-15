@@ -1,6 +1,7 @@
 import { isLive, visibleFields } from './crdt';
 import { entityKey, reduceData } from './data';
 import { resolveTeam } from './membership';
+import { teamRegistry } from '@core/domains/team';
 import {
   authorizeRecord,
   baseKey,
@@ -262,7 +263,7 @@ describe('team trails (adversarial)', () => {
         for (const r of k.all) expect(JSON.stringify(verticesOf(r, k.bob.id, 't1'))).toBe(ref);
         const ops = [...k.w.root.log.logged()];
         const s = resolveTeam(c, k.w.teamId, shuffle(ops, mulberry32(int(rnd, 0, 1e6))));
-        const d = reduceData(s, (op) => k.w.root.decode(op));
+        const d = reduceData(s, (op) => k.w.root.decode(op), teamRegistry());
         const trl = d.entities.get(entityKey('trl', 't1', k.bob.id))!;
         const base = decodeLine(visibleFields(trl.state)['base'] as string, 2000)!;
         const again = trailVertices(
@@ -524,7 +525,7 @@ describe('review regressions (records)', () => {
     const ops = [...w.root.log.logged()];
     indexWork.decodes = 0;
     const started = Date.now();
-    const d = reduceData(resolveTeam(c, w.teamId, ops), (op) => w.root.decode(op));
+    const d = reduceData(resolveTeam(c, w.teamId, ops), (op) => w.root.decode(op), teamRegistry());
     // Work: the base is decoded once for the whole rebuild, not once per vertex.
     expect(indexWork.decodes).toBe(1);
     expect(d.index.vtx.get(`${bob.id}:t1`)).toEqual({

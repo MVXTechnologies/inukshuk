@@ -320,6 +320,7 @@ Two MUSTs are added at the group layer, so every domain gets them:
 There is one compat hazard. A 2.6.x phone that scans a _folder_ invite would join it as an empty "team". The 2.7 invite for a non-team group therefore sets a reserved **flags** bit.
 
 - **To verify in PR G1:** `decodeInvite` on 2.6.x must refuse unknown flag bits. If it ignores them instead, the joiner shows an empty team until it updates. That's harmless (no data leaks: the folder's members admitted a real phone) but ugly. Then the join screen should say it needs the update.
+  - _As built (G1):_ verified. `decodeInvite` (unchanged since 2.5) returns `undefined` when any flag bit other than bit 0 is set, so a 2.6.x phone refuses a 2.7 folder invite as malformed. Pinned by `src/core/domains/team/compat.test.ts`. The join screen still needs its "update the app" wording (G7).
 
 **Removal** works as today: `m.remove` with a cut, then a forced `k.rotate`, then the room secret changes with the epoch (R-RDV-2), then pending invites are revoked (R-INV-3).
 
@@ -519,6 +520,15 @@ The sketch above is the design intent; the authoritative types are in `src/core/
 
 The existing `data.ts` switch moves **as is** into the team plug-in's `authorize`/`validate`. A golden test refolds recorded fixture logs (`core/team/testing/fixtures.ts`, the e2e seed and the property-test generators) before and after, and asserts byte-identical canonical state. **Zero behaviour change is the merge gate for PR G1.**
 
+_As built (G1):_
+
+- **Seam.** `applyDataOp(out, state, op, decode, registry)`: the generic body shape (`parseKindWrite`), then `registry.forKind`, the plug-in's `validate(w)` (shape of the write: which kinds take `o`…), the fail-closed role check, the plug-in's `authorize(w, role, view)` (field validation lives here, in the order the domain needs, so the 2.6 skip reasons are kept), then `mergeEntity` keyed by `recordKey(plugin.owned(kind), …)`, then the plug-in's `merged` hook (the team's record index). `msg` and `pos` stay group-generic in `data.ts`; thread ownership is declarative (`forThread`) in 2.7.0.
+- **One intended change:** a well-formed write of a kind no plug-in registers is skipped as `unknown` (it was `invalid`); a malformed one stays `invalid`. The data views and every other skip reason are unchanged.
+- **Kind names** are 1–8 lowercase letters (`KIND_NAME`): v1 already has `comment`, `point`, `track`, `photo`, so "≤ 4 chars" is the guideline for new kinds, not a registration rule.
+- **Golden gate.** No recorded team logs existed in the repo, so G1 recorded one (`src/core/team/testing/golden/teamLog26.json`, 87 ops: every 2.6.1 kind, guests, removal and rotation, sealed DMs, positions, a newer app's kind) together with the canonical view the **pre-seam** fold produced for three viewers. `src/core/domains/team/index.test.ts` refolds it batch, op by op and shuffled, compares against the frozen 2.6.1 fold (`testing/legacyFold26.ts`), and runs 40 seeded random workloads with seeded crypto against that oracle.
+- **New kinds, validators only:** `gmeta` (group plug-in, `src/core/group/meta.ts`: admins write, nobody deletes, `app`/`parent`/`root` written once), `gref`, `irdv`, `net` (team plug-in, `src/core/domains/team/groupKinds.ts`). They are **forward-lenient**: known fields are checked strictly, unknown fields are accepted, so a 2.7.0 phone keeps a 2.7.x record that gained a field. `gref` is keyed by the child group id (no separate `g` field).
+- **Mixed versions:** `src/core/domains/team/compat.test.ts` runs the real replica and session code with the 2.6.1 fold against 2.7 phones: stored, relayed, skipped as `invalid`, chains whole, sessions without a strike.
+
 **Older apps ignore unknown types safely:**
 
 - **Kinds and threads:** already safe; the op is stored, relayed and skipped (verified in §0).
@@ -631,6 +641,7 @@ export interface GroupHandle {
   - New ephemeral type, later: `ev`.
   - These are announced by **capability fields** on the existing `cap` record. `validCapFields` already accepts any non-negative integers. 2.7 writes `{pen:1, v:1, x, lnk:1, rtc:1, blob:1}`, where each value is that feature's protocol version.
   - `capExpiry` is generalised to read a per-capability version (today it hard-codes `v == PEN_PROTOCOL`), keeping the pen semantics.
+    - _As built (G1):_ `CAP_SPECS` (`src/core/teamdraw/caps.ts`) names each capability's spoken versions, where its version lives (`pen` keeps `pen: 1` + `v`; every later one writes its version as the flag's value) and whether the claim is also bounded by the flag's own stamp (the rollback rule; true for `rc`, `lnk`, `rtc`, `blob`). A name not in the table is never held. `lnk`/`rtc`/`blob` are read, not advertised (`capBody` is unchanged until G5).
   - The rollback rule stays: claims expire after 7 days and are renewed on open.
 - **Link version:** `lk1.ver` = 1, with caps listed in the hello. A link with an unknown higher version falls back to the highest common version, or closes without a strike, as the mesh preamble does.
 - **Room protocol:** `/v1/` in the path.
@@ -682,7 +693,7 @@ native                    modules/inukshuk-mesh: unchanged in 2.7.0
                           react-native-webrtc pinned exactly + config plugin stripping camera/mic (R-RTC-5)
 ```
 
-**The pure core never imports `react-native` or `expo` (AGENTS.md).** Every new core file comes with a co-located `*.test.ts`. The path aliases already cover `@core/group` and `@core/domains`, because `@core` maps to `src/core/*`. Verify in `tsconfig`/`jest.config` in PR G1.
+**The pure core never imports `react-native` or `expo` (AGENTS.md).** Every new core file comes with a co-located `*.test.ts`. The path aliases already cover `@core/group` and `@core/domains`, because `@core` maps to `src/core/*`. Verify in `tsconfig`/`jest.config` in PR G1 (_as built: verified, no alias change needed_).
 
 **MUST → PR map:**
 
