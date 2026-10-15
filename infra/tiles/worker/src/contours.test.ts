@@ -214,6 +214,22 @@ describe('contourTile', () => {
     expect(fetched.filter((k) => k === OWN)).toHaveLength(2);
   });
 
+  it('reads its DEM through the fetcher it is given (the Worker passes /dem’s reader)', async () => {
+    const seen: string[] = [];
+    const tile = await contourTile(...TILE, {
+      decodeBudget: 9,
+      fetchDem: async (z, x, y) => {
+        seen.push(`${z}/${x}/${y}`);
+        return demPng(z, x, y);
+      },
+    });
+    // AWS (the global fetch) is never asked.
+    expect(fetched).toEqual([]);
+    expect([...seen].sort()).toEqual([OWN, REGION, ...NEIGHBOURS].sort());
+    expect(tile.partial).toBe(false);
+    expect(tile.levels).toEqual([10, 50]);
+  });
+
   it('draws the whole world at z0 from its one DEM tile', async () => {
     const tile = await contourTile(0, 0, 0);
     expect(fetched).toEqual(['0/0/0']);

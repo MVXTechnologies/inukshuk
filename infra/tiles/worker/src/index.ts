@@ -6,7 +6,10 @@
  *                                         /peaks/… from peaks.pmtiles — ../nas/peaks.sh,
  *                                         /parks/… from parks.pmtiles — ../nas/parks.sh)
  *   GET /{archive}.json                   TileJSON for the archive
- *   GET /contours/{z}/{x}/{y}.mvt         contour lines from DEM tiles, generated once
+ *   GET /dem/{z}/{x}/{y}.png              Terrarium elevation, 256 px, z0–16: LiDAR archives
+ *                                         (dem.index.json, ../nas/dem.sh) inside coverage,
+ *                                         AWS Terrarium elsewhere (./dem.ts)
+ *   GET /contours/{z}/{x}/{y}.mvt         contour lines from the /dem tiles, generated once
  *                                         and kept in R2 (./contours.ts)
  *   GET /fonts/{fontstack}/{range}.pbf    MapLibre glyphs (static objects)
  *   GET /trails/v1/index.json             long-distance trail index (trails-v1.index.json)
@@ -50,6 +53,15 @@ import {
   type PendingCode,
 } from './donorVerify';
 
+import {
+  AWS_TERRARIUM_URL,
+  demHeaders,
+  demTile,
+  parseDemIndex,
+  parseDemPath,
+  type DemDeps,
+  type DemIndex,
+} from './dem';
 import { handleRoute, type RouteEnv } from './route';
 import {
   allowRequest,
@@ -468,6 +480,86 @@ function corsHeaders(request: Request, env: Env): Record<string, string> {
   return {};
 }
 
+/**
+ * Elevation tiles (#725, ./dem.ts): `/dem/{z}/{x}/{y}.png` from the LiDAR
+ * archives listed in `dem.index.json` (../nas/dem.sh uploads it LAST), AWS
+ * Terrarium elsewhere. The index is re-read every few minutes per isolate.
+ */
+let demIndexCache: { at: number; index: DemIndex | null } | undefined;
+
+async function demIndex(env: Env): Promise<DemIndex | null> {
+  const age = demIndexCache === undefined ? -1 : Date.now() - demIndexCache.at;
+  if (demIndexCache && age >= 0 && age < INDEX_TTL_MS) return demIndexCache.index;
+  const object = await env.BUCKET.get('dem.index.json');
+  let index: DemIndex | null = null;
+  if (object !== null) {
+    try {
+      index = parseDemIndex(await object.json());
+    } catch {
+      index = null;
+    }
+    // A broken index must be loud in `wrangler tail`; tiles fall back to AWS.
+    if (index === null) console.error('dem.index.json is malformed; serving AWS everywhere');
+  }
+  demIndexCache = { at: Date.now(), index };
+  return index;
+}
+
+async function streamBytes(
+  data: Uint8Array,
+  stream: CompressionStream | DecompressionStream,
+): Promise<Uint8Array> {
+  const piped = new Blob([data]).stream().pipeThrough(stream);
+  return new Uint8Array(await new Response(piped).arrayBuffer());
+}
+
+function demDeps(env: Env): DemDeps {
+  return {
+    index: () => demIndex(env),
+    readTile: async (piece, z, x, y) => {
+      const pmtiles = new PMTiles(new R2Source(env.BUCKET, `${piece}.pmtiles`), CACHE, decompress);
+      const header = await pmtiles.getHeader();
+      if (header.tileType !== TileType.Png) throw new Error(`${piece} is not a PNG archive`);
+      const found = await pmtiles.getZxy(z, x, y);
+      return found === undefined ? undefined : new Uint8Array(found.data);
+    },
+    fetchAws: async (z, x, y) => {
+      const url = AWS_TERRARIUM_URL.replace('{z}', String(z))
+        .replace('{x}', String(x))
+        .replace('{y}', String(y));
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(15_000),
+        cf: { cacheTtl: 2_592_000, cacheEverything: true },
+      });
+      if (res.status === 404 || res.status === 403) return null;
+      if (!res.ok) throw new Error(`AWS Terrarium ${res.status}`);
+      return new Uint8Array(await res.arrayBuffer());
+    },
+    inflate: (data) => streamBytes(data, new DecompressionStream('deflate')),
+    deflate: (data) => streamBytes(data, new CompressionStream('deflate')),
+  };
+}
+
+async function serveDem(
+  env: Env,
+  cors: Record<string, string>,
+  cacheControl: string,
+  z: number,
+  x: number,
+  y: number,
+): Promise<Response> {
+  const tile = await demTile(z, x, y, demDeps(env));
+  if (tile === null) {
+    return new Response('no elevation tile', {
+      status: 404,
+      headers: { ...cors, 'Cache-Control': EMPTY_CACHE_CONTROL },
+    });
+  }
+  return new Response(tile.png, {
+    headers: demHeaders(tile, cacheControl, cors, demIndexCache?.index?.built),
+  });
+}
+
 /** Terrain doesn't change: contour tiles are cached for 30 days. */
 const CONTOUR_CACHE_CONTROL = 'public, max-age=2592000';
 /**
@@ -525,8 +617,16 @@ async function serveContours(
   if (!(await allowRequest(env.CONTOUR_LIMITER, floor, `contours:${client}`))) {
     return tooManyRequests(cors, 30);
   }
+  // The DEM through /dem's own reader (no HTTP round trip to ourselves):
+  // LiDAR inside coverage, AWS Terrarium elsewhere — the heights the app sees.
+  const deps = demDeps(env);
   const { mvt, partial } = await contourTile(z, x, y, {
     decodeBudget: decodeBudgetFrom(env.CONTOUR_DECODE_BUDGET),
+    fetchDem: async (dz, dx, dy) => {
+      const tile = await demTile(dz, dx, dy, deps);
+      if (tile === null) throw new Error(`no DEM tile ${dz}/${dx}/${dy}`);
+      return tile.png;
+    },
   });
   const gzipped = await new Response(
     new Response(mvt).body!.pipeThrough(new CompressionStream('gzip')),
@@ -560,6 +660,10 @@ async function serve(
 ): Promise<Response> {
   const cacheControl = env.CACHE_CONTROL ?? 'public, max-age=86400';
   const cors = corsHeaders(request, env);
+
+  const dem = parseDemPath(url.pathname);
+  if (dem === 'bad') return new Response('bad tile', { status: 400, headers: cors });
+  if (dem !== null) return serveDem(env, cors, cacheControl, ...dem);
 
   const [, cz, cx, cy] = CONTOUR_PATH.exec(url.pathname) ?? [];
   if (cz !== undefined && cx !== undefined && cy !== undefined) {
