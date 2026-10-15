@@ -51,6 +51,8 @@ export function SosAlarmBanner() {
   );
   const here = useSettingsStore((s) => s.lastKnownPosition);
   const entity = alarm?.entity ?? null;
+  // A new ring for the same SOS (reopened after a resolve): the alarm starts over.
+  const rangAt = alarm?.at ?? null;
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -79,7 +81,7 @@ export function SosAlarmBanner() {
       clearInterval(id);
       Vibration.cancel();
     };
-  }, [entity]);
+  }, [entity, rangAt]);
 
   if (alarm === null) return null;
   const at: [number, number] | null = live ? [live.lon, live.lat] : sos ? [sos.lng, sos.lat] : null;

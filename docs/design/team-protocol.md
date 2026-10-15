@@ -721,7 +721,7 @@ base length, vertex records, live inserts, deleted base points; per member:
 open SOS ids, newest resolve), never by scanning. The raiser's live position is the
 ordinary position register.
 
-A resolved SOS opens again only with the whole trio (`res: false, rby: null, rat: null`); that write alerts like a raise. Each phone also caps SOS alarms at one per raiser per 5 minutes (more update the banner).
+A resolved SOS opens again only with the whole trio (`res: false, rby: null, rat: null`); that write alerts like a raise, and it is how the app raises an SOS within the 60 s after a resolve (2.6.1). Each phone also caps SOS alarms at one per raiser per 5 minutes while that SOS stays open (more update the banner); since 2.6.1 a resolve ends that window, so an SOS raised after it (a reopen, even one synced together with its resolve) always rings (owner 2026-10-15). 2.6.0 phones keep the plain 5-minute cap.
 
 **Resolved messages** (pins, notifies) leave the map and the unread counts and
 stay listed under "Resolved"; nothing is deleted (an `e.del` of `mres` is forbidden). Resolving is reversible by

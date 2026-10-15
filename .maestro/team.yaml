@@ -301,7 +301,34 @@ tags:
 # ring animates until it ends, so Maestro's default wait for the screen to
 # settle after a press outlasts the 5 s window (the SOS was already sent when
 # the next step ran, local repro 2026-10-14): the presses on this live
-# countdown wait at most 500 ms to settle.
+# countdown wait at most 500 ms to settle. Even so, Maestro's release-to-tap
+# time reached 5.4 s on CI (run 38750352646: the tap landed after the 5 s
+# ended, so the SOS was sent) and 6.8 s locally: the E2E build's undo lasts
+# 20 s (EXPO_PUBLIC_E2E_UNDO_MS), and Undo is the very next step (tapOn waits
+# for it to appear). The undo's screenshot is taken on the next hold.
+- longPressOn:
+    id: 'team-sos-button'
+    waitToSettleTimeoutMs: 500
+- tapOn:
+    id: 'team-undo'
+    waitToSettleTimeoutMs: 500
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-undo-snack'
+    timeout: 3000
+# Then longer than the armed limit and the E2E undo together (5 s + 20 s): a
+# stray timer, or an Undo that came too late, shows here as an SOS band,
+# never as a later flake.
+- extendedWaitUntil:
+    visible: 'never-shown-sentinel'
+    timeout: 27000
+    optional: true
+- assertNotVisible:
+    id: 'team-band-sos'
+- assertNotVisible:
+    id: 'team-undo-snack'
+# Hold again and let the countdown run out (20 s in the E2E build): my SOS is
+# active, in a band under the pill, until I resolve it (confirmed inline).
 - longPressOn:
     id: 'team-sos-button'
     waitToSettleTimeoutMs: 500
@@ -310,28 +337,10 @@ tags:
       id: 'team-undo-snack'
     timeout: 5000
 - takeScreenshot: team-sos-undo
-- tapOn:
-    id: 'team-undo'
-    waitToSettleTimeoutMs: 500
-- extendedWaitUntil:
-    notVisible:
-      id: 'team-undo-snack'
-    timeout: 3000
-- assertNotVisible:
-    id: 'team-band-sos'
-# Hold again and let the countdown run out: my SOS is active, in a band
-# under the pill, until I resolve it (confirmed inline).
-- longPressOn:
-    id: 'team-sos-button'
-    waitToSettleTimeoutMs: 500
-- extendedWaitUntil:
-    visible:
-      id: 'team-undo-snack'
-    timeout: 5000
 - extendedWaitUntil:
     visible:
       id: 'team-band-sos'
-    timeout: 10000
+    timeout: 30000
 - assertVisible: 'Your SOS is active'
 - takeScreenshot: team-sos-active
 - tapOn:
@@ -354,7 +363,7 @@ tags:
 - extendedWaitUntil:
     visible:
       id: 'team-band-sos'
-    timeout: 10000
+    timeout: 30000
 - assertVisible: 'Your SOS is active'
 - assertNotVisible:
     id: 'team-undo-error'
@@ -381,7 +390,7 @@ tags:
 - extendedWaitUntil:
     visible:
       id: 'team-band-gather'
-    timeout: 10000
+    timeout: 30000
 - takeScreenshot: team-gather-active
 # Its words open who gets there when (name, distance, ETA); again to fold.
 - tapOn:

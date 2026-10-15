@@ -493,6 +493,57 @@ describe('the in-app SOS alarm (#708)', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/');
     expect(useTeamStore.getState().sosAlarm).toBeNull();
   });
+  it('the same SOS raised again (reopened after a resolve) rings again from the start', async () => {
+    fakeClock();
+    crew({
+      soses: [
+        {
+          id: 's1',
+          owner: 'julie',
+          lat: 46.804,
+          lng: -71.195,
+          text: '',
+          at: Date.now(),
+          resolved: false,
+          resolvedBy: null,
+        },
+      ],
+    });
+    const ring = () =>
+      act(async () =>
+        useTeamStore.setState({
+          sosAlarm: {
+            entity: 'sos:julie:s1',
+            owner: 'julie',
+            authorName: 'Julie Tremblay',
+            teamName: 'T',
+            text: '',
+            at: Date.now(),
+          },
+        }),
+      );
+    await ring();
+    const vibrate = jest.spyOn(Vibration, 'vibrate');
+    vibrate.mockClear();
+    await render(wrap(<SosAlarmBanner />));
+    expect(vibrate).toHaveBeenCalledTimes(1);
+    // The first alarm has run its course (silent now, banner still up).
+    await act(async () => {
+      jest.advanceTimersByTime(ALARM_MAX_MS + RESOUND_MS);
+    });
+    const first = mockNotify.mock.calls.length;
+    await act(async () => {
+      jest.advanceTimersByTime(RESOUND_MS * 2);
+    });
+    expect(mockNotify.mock.calls.length).toBe(first);
+    // Resolved and raised again in one sync: the store rings the same entity anew.
+    await ring();
+    expect(vibrate).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      jest.advanceTimersByTime(RESOUND_MS * 2);
+    });
+    expect(mockNotify.mock.calls.length).toBe(first + 2);
+  });
 });
 
 // ── A real team (one phone): hold + undo, Rally here + undo, Resolve ────────
@@ -728,6 +779,41 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
     });
     expect(app.active!.soses()).toHaveLength(1);
     expect(starts()).toBe(1);
+  });
+
+  // E2E team shard, run 38750352646: an SOS went out after Undo. Every way a
+  // hold can end (released while arming, armed, at or past the armed limit),
+  // then Undo at the start or the very end of the countdown: nothing is sent,
+  // by any path (the armed limit, the countdown, a stale timer), ever.
+  it.each(
+    [2100, 3000, 6950, 7000, 7050, 9000].flatMap((held) =>
+      [0, 2500, 4990].map((undoAt) => [held, undoAt] as const),
+    ),
+  )('held %i ms, Undo %i ms into the countdown: never sent', async (held, undoAt) => {
+    await render(sender());
+    const s = app.active!;
+    const raise = jest.spyOn(s, 'raiseSos');
+    const starts = countStarts();
+    const b = screen.getByTestId('team-sos-button');
+    await fireEvent(b, 'pressIn');
+    await act(async () => {
+      jest.advanceTimersByTime(held);
+    });
+    await fireEvent(b, 'pressOut');
+    expect(usePendingAlert.getState().pending?.kind).toBe('sos');
+    await act(async () => {
+      jest.advanceTimersByTime(undoAt);
+    });
+    await fireEvent.press(screen.getByTestId('team-undo'));
+    expect(usePendingAlert.getState().pending).toBeNull();
+    await act(async () => {
+      jest.advanceTimersByTime(30_000);
+    });
+    expect(raise).not.toHaveBeenCalled();
+    expect(s.soses()).toHaveLength(0);
+    expect(starts()).toBe(1);
+    expect(screen.queryByTestId('team-undo-snack')).toBeNull();
+    raise.mockRestore();
   });
 
   it('Undo during the countdown sends nothing, ever', async () => {

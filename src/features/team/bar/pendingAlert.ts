@@ -1,6 +1,6 @@
 /**
  * The sender's side of an SOS or "Rally here" (#708): a pending alert with a
- * {@link UNDO_MS} countdown. Nothing leaves the phone until the countdown
+ * 5 s countdown (`UNDO_MS`). Nothing leaves the phone until the countdown
  * ends; Undo drops it without a trace, so an undone alert never notifies
  * anyone. One at a time: a new one replaces (and cancels) the previous.
  *
@@ -11,7 +11,7 @@
  * screen with Retry until the user retries or dismisses it: never a timer's
  * call (QA 2.6.1: an SOS refused by the team vanished with its countdown).
  */
-import { countdown, UNDO_MS, type Countdown } from '@core/teamui/undo';
+import { countdown, undoWindowMs, type Countdown } from '@core/teamui/undo';
 import type { ActionError } from '@data/team/teamSession';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { create } from 'zustand';
@@ -46,6 +46,9 @@ interface PendingStore {
   fail(error: AlertFailure): void;
   clearError(): void;
 }
+
+/** The undo window: 5 s, or longer in an E2E build only (see `undoWindowMs`). */
+const UNDO_WINDOW_MS = undoWindowMs(process.env.EXPO_PUBLIC_E2E_UNDO_MS);
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -114,12 +117,12 @@ export const usePendingAlert = create<PendingStore>((set, get) => ({
   error: null,
   start: (kind, at) => {
     stop();
-    const p: PendingAlert = { kind, at, clock: countdown(Date.now()) };
+    const p: PendingAlert = { kind, at, clock: countdown(Date.now(), UNDO_WINDOW_MS) };
     set({ pending: p, error: null });
     timer = setTimeout(() => {
       timer = null;
       send(p.kind, p.at);
-    }, UNDO_MS);
+    }, UNDO_WINDOW_MS);
   },
   undo: () => {
     stop();

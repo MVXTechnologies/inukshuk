@@ -142,6 +142,11 @@ jobs:
           # teammates' phones inside the app. E2E builds only; store builds never
           # set it (src/data/team/index.ts).
           EXPO_PUBLIC_MESH_LOOPBACK: '1'
+          # A 20 s team undo (SOS, Rally here) instead of 5 s: Maestro's
+          # press-to-press time on a loaded emulator reached 5.4-6.8 s, so a
+          # flow's Undo raced the real window (run 38750352646). E2E builds
+          # only (src/core/teamui/undo.ts undoWindowMs); unit tests pin 5 s.
+          EXPO_PUBLIC_E2E_UNDO_MS: '20000'
 
       # The Gradle build already refused anything else (verifyPatchedHermes*,
       # plugins/withPatchedHermes.js); this checks the APK itself, logs the

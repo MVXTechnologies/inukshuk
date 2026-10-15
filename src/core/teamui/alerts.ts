@@ -48,6 +48,12 @@ export interface TeamAlert {
    * the entity is resolved or ended (`@core/teamui/alertLedger`).
    */
   entity?: string;
+  /**
+   * For a teammate's SOS: `raise` (its creating write), `reopen` (raised
+   * again after a resolve) or `resolve`. A resolve resets the per-raiser
+   * alarm limit, and a reopen always rings (owner 2026-10-15, QA 2.6.1).
+   */
+  sosPhase?: 'raise' | 'reopen' | 'resolve';
 }
 
 /** What alert routing needs to know about shared trails and photos (from the data view). */
@@ -261,7 +267,11 @@ function taskAlert(
   };
 }
 
-/** One SOS alarm per raiser per this long; more within it only update the banner. */
+/**
+ * One SOS alarm per raiser per this long while their SOS stays open (a
+ * resync, a re-send): more within it only update the banner. A resolve ends
+ * the window, so an SOS raised after it always rings.
+ */
 export const SOS_ALARM_WINDOW_MS = 5 * 60_000;
 
 /** How long task alerts from one teammate collapse into one notification. */
@@ -275,14 +285,24 @@ export const TASK_ALERT_WINDOW_MS = 60_000;
 export class TaskAlertThrottle {
   private readonly bursts = new Map<string, { start: number; count: number }>();
 
-  private readonly alarms = new Map<string, number>();
+  /** Per raiser: their last SOS alarm (when, and which write). */
+  private readonly alarms = new Map<string, { at: number; key: string }>();
 
   admit(alert: TeamAlert, now: number): TeamAlert {
+    if (alert.kind === 'sos' && alert.sosPhase === 'resolve') {
+      // Resolved: the raiser's next SOS is a new emergency, never a repeat.
+      this.alarms.delete(alert.author);
+      return alert;
+    }
     if (alert.kind === 'sos' && alert.level === 'alert') {
       const last = this.alarms.get(alert.author);
-      if (last !== undefined && now - last < SOS_ALARM_WINDOW_MS)
+      // A reopen rings even when its resolve came in the same sync (no
+      // resolve alert then: the merged record is open again); the same
+      // write synced twice does not.
+      const fresh = alert.sosPhase === 'reopen' && last?.key !== alert.key;
+      if (!fresh && last !== undefined && now - last.at < SOS_ALARM_WINDOW_MS)
         return { ...alert, level: 'badge' };
-      this.alarms.set(alert.author, now);
+      this.alarms.set(alert.author, { at: now, key: alert.key });
       return alert;
     }
     if (alert.kind !== 'task') return alert;
@@ -334,7 +354,8 @@ function sosAlert(
   // Only the creating write, or the write that reopens it, alerts; moving an
   // open SOS's place is silent (review: alarm spam).
   const same = (s: Stamp | undefined) => s !== undefined && compareStamp(s, op.stamp) === 0;
-  const raise = !sos.resolved && (same(sos.created) || (f['res'] === false && same(sos.reopened)));
+  const reopen = !sos.resolved && f['res'] === false && same(sos.reopened);
+  const raise = reopen || (!sos.resolved && same(sos.created));
   const resolved = f['res'] === true && sos.resolved;
   if (!raise && !resolved) return null;
   return {
@@ -346,6 +367,7 @@ function sosAlert(
     priority: raise ? 2 : 0,
     url: sosUrl(owner, id),
     entity: `sos:${owner}:${id}`,
+    sosPhase: reopen ? 'reopen' : raise ? 'raise' : 'resolve',
   };
 }
 

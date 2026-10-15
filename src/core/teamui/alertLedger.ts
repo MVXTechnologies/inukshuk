@@ -47,19 +47,24 @@ export interface Routed {
 }
 
 export class AlertLedger {
-  private readonly notified = new Set<string>();
+  /** Notified entities, each with the write that rang for it. */
+  private readonly notified = new Map<string, string>();
 
   /**
    * Whether `alert` raises a phone notification now, and on which channel;
-   * records SOS and rally entities so a resync never notifies twice.
+   * records SOS and rally entities so a resync never notifies twice. An SOS
+   * reopened after a resolve rings again even when the resolve and the reopen
+   * arrived in one sync (never settled in between, QA 2.6.1).
    */
   route(alert: TeamAlert, me: string): Routed | null {
     const channel = alertChannel(alert);
     if (channel === null || alert.author === me) return null;
     if (channel === 'team') return { channel, id: null };
     const entity = alert.entity;
-    if (entity === undefined || this.notified.has(entity)) return null;
-    this.notified.add(entity);
+    if (entity === undefined) return null;
+    const rang = this.notified.get(entity);
+    if (rang !== undefined && !(alert.sosPhase === 'reopen' && rang !== alert.key)) return null;
+    this.notified.set(entity, alert.key);
     return { channel, id: entity };
   }
 
@@ -74,7 +79,7 @@ export class AlertLedger {
    */
   settle(active: ReadonlySet<string>): string[] {
     const gone: string[] = [];
-    for (const e of this.notified) if (!active.has(e)) gone.push(e);
+    for (const e of this.notified.keys()) if (!active.has(e)) gone.push(e);
     for (const e of gone) this.notified.delete(e);
     return gone;
   }
