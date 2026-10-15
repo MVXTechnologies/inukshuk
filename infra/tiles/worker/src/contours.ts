@@ -1,6 +1,6 @@
 /**
  * Contour-line vector tiles, generated on demand from the same Terrarium DEM
- * the app already uses:
+ * the app reads (`/dem`, ./dem.ts — LiDAR inside coverage, AWS elsewhere):
  *
  *   GET /contours/{z}/{x}/{y}.mvt   layer "contours", properties ele (m), level (0 minor, 1 major)
  *
@@ -97,14 +97,22 @@ function decodeSlow(bytes: Uint8Array): DemPixels {
   return { width: png.width, height: png.height, data };
 }
 
-async function loadDem(z: number, x: number, y: number): Promise<DemPixels> {
+/** Raw DEM PNG bytes of tile z/x/y (Terrarium, 256 px). */
+export type DemFetcher = (z: number, x: number, y: number) => Promise<Uint8Array>;
+
+/** AWS Terrarium straight from S3 — the default (tests); the Worker passes `/dem`'s reader. */
+export const fetchAwsDem: DemFetcher = async (z, x, y) => {
   const url = DEM_URL.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y));
   const res = await fetch(url, {
     signal: AbortSignal.timeout(DEM_TIMEOUT_MS),
     cf: { cacheTtl: 2_592_000, cacheEverything: true },
   });
   if (!res.ok) throw new Error(`DEM ${res.status}`);
-  const bytes = new Uint8Array(await res.arrayBuffer());
+  return new Uint8Array(await res.arrayBuffer());
+};
+
+async function loadDem(z: number, x: number, y: number, fetchDem: DemFetcher): Promise<DemPixels> {
+  const bytes = await fetchDem(z, x, y);
   let dem: DemPixels;
   try {
     dem = await decodeTerrariumPng(bytes, inflate, SEA_FLOOR_M);
@@ -145,6 +153,12 @@ function join(pending: Promise<DemPixels>): Promise<DemPixels | undefined> {
 export interface ContourTileOptions {
   /** DEM tiles this request may decode itself (see DEFAULT_DECODE_BUDGET). */
   decodeBudget?: number;
+  /**
+   * Where DEM tiles come from. The Worker passes the `/dem` route's own
+   * reader (LiDAR archives inside coverage, AWS elsewhere), so contours and
+   * the app's hillshade, slope and 3D read the same heights. Default: AWS.
+   */
+  fetchDem?: DemFetcher;
 }
 
 export interface ContourTileResult {
@@ -163,7 +177,7 @@ export async function contourTile(
   z: number,
   x: number,
   y: number,
-  { decodeBudget = DEFAULT_DECODE_BUDGET }: ContourTileOptions = {},
+  { decodeBudget = DEFAULT_DECODE_BUDGET, fetchDem = fetchAwsDem }: ContourTileOptions = {},
 ): Promise<ContourTileResult> {
   const demZ = Math.max(0, Math.min(z - OVERZOOM, DEM_MAX_ZOOM));
   const { size, parts } = demPartsFor(z, x, y, demZ, DEM_SIZE);
@@ -193,7 +207,7 @@ export async function contourTile(
     const pending = dems.pending(n.key);
     if (pending !== undefined) return join(pending);
     if (!starts[i]) return Promise.resolve(undefined);
-    return dems.start(n.key, () => loadDem(n.z, n.x, n.y)).catch(() => undefined);
+    return dems.start(n.key, () => loadDem(n.z, n.x, n.y, fetchDem)).catch(() => undefined);
   });
   const loaded = new Map<string, DemPixels | undefined>();
   (await Promise.all(loads)).forEach((dem, i) => {
@@ -205,7 +219,7 @@ export async function contourTile(
   // load of it died, or ours failed, try once more — and fail the tile if
   // that fails too.
   if (loaded.get(own.key) === undefined) {
-    loaded.set(own.key, await dems.start(own.key, () => loadDem(own.z, own.x, own.y)));
+    loaded.set(own.key, await dems.start(own.key, () => loadDem(own.z, own.x, own.y, fetchDem)));
   }
 
   let partial = false;

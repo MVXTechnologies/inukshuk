@@ -1,0 +1,37 @@
+{
+  "comment": "LiDAR-grade terrain models served from Mapterhorn (coverage.py). A source is allowed when it is a bare-earth terrain model (DTM/DGM/MNT/DMR, checked in Mapterhorn's source-catalog file lists) at 2.5 m or finer. Copernicus GLO-30 (a surface model) and 5-10 m compilations are never allowed: outside the mask the Worker answers from AWS Terrarium. A new fine source Mapterhorn adds inside a bbox is logged by `dem.py mask` for review and stays out until listed here.",
+  "maxResolutionM": 2.5,
+  "regions": [
+    {
+      "name": "dem-quebec",
+      "label": "Québec",
+      "bbox": [-79.8, 44.9, -57.0, 62.6],
+      "sources": ["cahrdem2"],
+      "dryRunBbox": [-70.93, 47.06, -70.89, 47.09]
+    },
+    {
+      "name": "dem-alps",
+      "label": "Alps",
+      "bbox": [5.9, 43.5, 16.5, 48.0],
+      "sources": ["swissalti3d", "frhd2154b", "frhd2154d"],
+      "pendingValidation": {
+        "comment": "LiDAR-grade terrain models in the bbox left out — AWS Terrarium answers there — until each is cross-checked against its agency's own height service or benchmarks (DEM-VALIDATION.md, geodesy rule): validate.py needs a site for it and the results in DEM-VALIDATION.md; then move the id into sources and regenerate the credits. chzh: 0.25 m off swissALTI3D on average at Uetliberg (RMS 0.57 m). frrgealti1metro: partly photogrammetric in the mountains; 3.7 m below IGN's LiDAR HD at Briançon.",
+        "sources": [
+          "chzh",
+          "frrgealti1metro",
+          "at1",
+          "atsalzburg",
+          "atoberoesterreich",
+          "atkaernten",
+          "si",
+          "debayern",
+          "debw",
+          "debw025",
+          "itbozen",
+          "itaosta"
+        ]
+      },
+      "dryRunBbox": [7.645, 45.97, 7.675, 45.99]
+    }
+  ]
+}

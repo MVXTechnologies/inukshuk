@@ -25,10 +25,12 @@ export const OVERZOOMED_FROM = 13;
 
 /**
  * Bump whenever the generated geometry changes (interval rules, clean-up,
- * encoder): stored tiles live under this prefix, so old ones are never read
- * again (and can be deleted from R2 at leisure).
+ * encoder) or the DEM under it does (v4: the `/dem` LiDAR tiles, #725 — bump
+ * again when a new LiDAR region is published): stored tiles live under this
+ * prefix, so old ones are never read again (and can be deleted from R2 at
+ * leisure).
  */
-export const CONTOUR_VERSION = 'v3';
+export const CONTOUR_VERSION = 'v4';
 
 /** Where a generated tile is kept in R2 (gzipped MVT bytes). */
 export function contourR2Key(z: number, x: number, y: number): string {

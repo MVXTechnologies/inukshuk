@@ -1,0 +1,114 @@
+{
+  "comment": "Sites validate.py checks (DEM-VALIDATION.md): official = the agency's terrain-model service, benchmarks = its survey marks near the site.",
+  "sites": [
+    {
+      "id": "qc-quebec-plaines",
+      "region": "dem-quebec",
+      "lat": 46.803,
+      "lon": -71.219,
+      "official": "hrdem-wcs",
+      "benchmarks": "nrcan"
+    },
+    {
+      "id": "qc-mont-sainte-anne",
+      "region": "dem-quebec",
+      "lat": 47.0752,
+      "lon": -70.905,
+      "official": "hrdem-wcs",
+      "benchmarks": "nrcan"
+    },
+    {
+      "id": "qc-mont-tremblant",
+      "region": "dem-quebec",
+      "lat": 46.2097,
+      "lon": -74.5856,
+      "official": "hrdem-wcs",
+      "benchmarks": "nrcan"
+    },
+    {
+      "id": "qc-mont-megantic",
+      "region": "dem-quebec",
+      "lat": 45.4558,
+      "lon": -71.1525,
+      "official": "hrdem-wcs",
+      "benchmarks": "nrcan"
+    },
+    {
+      "id": "qc-saguenay",
+      "region": "dem-quebec",
+      "lat": 48.428,
+      "lon": -71.068,
+      "official": "hrdem-wcs",
+      "benchmarks": "nrcan"
+    },
+    {
+      "id": "qc-charlevoix",
+      "region": "dem-quebec",
+      "lat": 47.4404,
+      "lon": -70.5033,
+      "official": "hrdem-wcs",
+      "benchmarks": "nrcan"
+    },
+    {
+      "id": "ch-bern",
+      "region": "dem-alps",
+      "lat": 46.948,
+      "lon": 7.4474,
+      "official": "swisstopo-height",
+      "benchmarks": "swisstopo"
+    },
+    {
+      "id": "ch-interlaken",
+      "region": "dem-alps",
+      "lat": 46.6863,
+      "lon": 7.8632,
+      "official": "swisstopo-height",
+      "benchmarks": "swisstopo"
+    },
+    {
+      "id": "ch-zermatt",
+      "region": "dem-alps",
+      "lat": 46.0207,
+      "lon": 7.7491,
+      "official": "swisstopo-height",
+      "benchmarks": "swisstopo"
+    },
+    {
+      "id": "ch-st-moritz",
+      "region": "dem-alps",
+      "lat": 46.4908,
+      "lon": 9.8355,
+      "official": "swisstopo-height",
+      "benchmarks": "swisstopo"
+    },
+    {
+      "id": "ch-gornergrat",
+      "region": "dem-alps",
+      "lat": 45.9833,
+      "lon": 7.7847,
+      "official": "swisstopo-height",
+      "benchmarks": "swisstopo"
+    },
+    {
+      "id": "fr-chamonix",
+      "region": "dem-alps",
+      "lat": 45.9237,
+      "lon": 6.8694,
+      "official": "ign-lidarhd"
+    },
+    {
+      "id": "fr-annecy",
+      "region": "dem-alps",
+      "lat": 45.8992,
+      "lon": 6.1294,
+      "official": "ign-lidarhd"
+    },
+    {
+      "id": "fr-briancon",
+      "region": "dem-alps",
+      "lat": 44.8986,
+      "lon": 6.6436,
+      "official": "ign-lidarhd"
+    }
+  ]
+}
