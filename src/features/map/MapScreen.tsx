@@ -54,8 +54,6 @@ import {
   Map,
   type MapRef,
   Marker,
-  type ViewState,
-  type ViewStateChangeEvent,
 } from '@maplibre/maplibre-react-native';
 import { useLibraryStore } from '@state/libraryStore';
 import { useLongTrailsStore } from '@state/longTrailsStore';
@@ -105,6 +103,7 @@ import { mapCredits } from '@core/map/mapCredits';
 import { bareTapAfterFocus } from '@core/map/mapTap';
 import { centreCursorPoint } from '@core/map/centreCursor';
 import { topChipLayout } from '@core/map/topChips';
+import { parseRegionPayload, regionBox, type RegionPayload } from '@core/map/regionPayload';
 import { HeadingCamera } from './components/HeadingCamera';
 import { HeadingCone } from './components/HeadingCone';
 import { PointingLine } from './components/PointingLine';
@@ -230,7 +229,7 @@ import { useOfflineDownload } from './hooks/useOfflineDownload';
 import { useRecordingSession } from './hooks/useRecordingSession';
 import { useTrailInspection } from './hooks/useTrailInspection';
 import { useSelectionCamera } from './hooks/useSelectionCamera';
-import { useSettleThrottle } from './hooks/useSettleThrottle';
+import { useRegionSettle } from './hooks/useSettleThrottle';
 import {
   CONTOUR_LAYERS,
   FOCUSED_TRAIL_LAYERS,
@@ -341,9 +340,14 @@ const TRAIL_REBUILD_POINTS = 5;
  */
 const NO_MARINE_LAYERS: readonly MarineLayerId[] = [];
 
-/** MapLibre ViewState bounds ([w,s,e,n]) → the wind layer's bbox shape. */
-function windBoundsOf(vs: ViewState): WindBbox {
-  return { west: vs.bounds[0], south: vs.bounds[1], east: vs.bounds[2], north: vs.bounds[3] };
+/**
+ * The camera view, read and PARSED (`@core/map/regionPayload`): MapLibre can
+ * hand back an empty or bounds-less view, and every reader here must cope.
+ * Throws as `getViewState()` does (an uninitialised or torn-down map).
+ */
+async function readRegion(map: MapRef | null | undefined): Promise<RegionPayload | null> {
+  if (!map) return null;
+  return parseRegionPayload(await map.getViewState());
 }
 
 // Fallback bottom padding for the select-trail camera fit, used only before
@@ -1227,8 +1231,8 @@ export function MapScreen() {
       let at = forecastAt;
       if (at === null && mapLoaded) {
         try {
-          const vs = await mapRef.current?.getViewState();
-          if (vs !== undefined) at = { latitude: vs.center[1], longitude: vs.center[0] };
+          const vs = await readRegion(mapRef.current);
+          if (vs !== null) at = { latitude: vs.center[1], longitude: vs.center[0] };
         } catch {
           // map mid-teardown — fall through to the stored position.
         }
@@ -1297,7 +1301,7 @@ export function MapScreen() {
     let center: LatLng | null = null;
     if (mapLoaded) {
       try {
-        const vs = await mapRef.current?.getViewState();
+        const vs = await readRegion(mapRef.current);
         if (vs) center = { latitude: vs.center[1], longitude: vs.center[0] };
       } catch {
         // Map mid-teardown: search without a bias.
@@ -1416,7 +1420,7 @@ export function MapScreen() {
   const [windSettledBounds, setWindSettledBounds] = useState<WindBbox | null>(null);
   const windSettleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => clearTimeout(windSettleTimer.current ?? undefined), []);
-  const writeWindView = useCallback((vs: ViewState) => {
+  const writeWindView = useCallback((vs: RegionPayload) => {
     windViewRef.current = {
       centerLng: vs.center[0],
       centerLat: vs.center[1],
@@ -1431,15 +1435,15 @@ export function MapScreen() {
   // USER gestures also fade the particles out and arm the ~400 ms settle
   // (Windy's own mobile mitigation — re-seed once the camera rests).
   const onWindRegionIsChanging = useCallback(
-    (e: { nativeEvent: ViewStateChangeEvent }) => {
-      const ev = e.nativeEvent;
+    (ev: RegionPayload) => {
       writeWindView(ev);
       if (!ev.userInteraction) return;
       setWindInteracting(true);
       clearTimeout(windSettleTimer.current ?? undefined);
       windSettleTimer.current = setTimeout(() => {
         setWindInteracting(false);
-        setWindSettledBounds(windBoundsOf(ev));
+        const box = regionBox(ev);
+        if (box) setWindSettledBounds(box);
       }, GESTURE_SETTLE_MS);
     },
     [writeWindView],
@@ -1449,20 +1453,23 @@ export function MapScreen() {
   // React state here, so panning re-renders the strip leaf, not this screen.
   const stripReadsCursor = useStripReadsCursor();
   const onRegionIsChanging = useCallback(
-    (e: { nativeEvent: ViewStateChangeEvent }) => {
-      if (windEnabled) onWindRegionIsChanging(e);
-      publishLiveCentre(e.nativeEvent.center);
+    (e: { nativeEvent: unknown }) => {
+      // Parsed now, while the pooled event still holds its payload.
+      const view = parseRegionPayload(e.nativeEvent);
+      if (view === null) return;
+      if (windEnabled) onWindRegionIsChanging(view);
+      publishLiveCentre(view.center);
     },
     [windEnabled, onWindRegionIsChanging],
   );
   // Settled camera (also fires for programmatic moves): re-anchor input.
   const onWindRegionDidChange = useCallback(
-    (e: { nativeEvent: ViewStateChangeEvent }) => {
-      const ev = e.nativeEvent;
+    (ev: RegionPayload) => {
       writeWindView(ev);
       clearTimeout(windSettleTimer.current ?? undefined);
       setWindInteracting(false);
-      setWindSettledBounds(windBoundsOf(ev));
+      const box = regionBox(ev);
+      if (box) setWindSettledBounds(box);
     },
     [writeWindView],
   );
@@ -1480,10 +1487,11 @@ export function MapScreen() {
     let cancelled = false;
     void (async () => {
       try {
-        const vs = await mapRef.current?.getViewState();
-        if (vs === undefined || cancelled) return;
+        const vs = await readRegion(mapRef.current);
+        if (vs === null || cancelled) return;
         writeWindView(vs);
-        setWindSettledBounds(windBoundsOf(vs));
+        const box = regionBox(vs);
+        if (box) setWindSettledBounds(box);
       } catch {
         // map mid-teardown — the first region event will seed instead.
       }
@@ -1503,10 +1511,11 @@ export function MapScreen() {
     let cancelled = false;
     void (async () => {
       try {
-        const vs = await mapRef.current?.getViewState();
-        if (vs === undefined || cancelled) return;
+        const vs = await readRegion(mapRef.current);
+        if (vs === null || cancelled) return;
         setMapCenter({ latitude: vs.center[1], longitude: vs.center[0] });
-        setSettledBounds(windBoundsOf(vs));
+        const box = regionBox(vs);
+        if (box) setSettledBounds(box);
         onSettleBearing(vs.bearing);
       } catch {
         // map mid-teardown — the first region settle seeds instead.
@@ -1629,10 +1638,9 @@ export function MapScreen() {
   // gate's own note), so every read here is behind it.
   const readEditorCamera = useCallback(() => {
     if (!mapLoaded) return;
-    void mapRef.current
-      ?.getViewState()
+    void readRegion(mapRef.current)
       .then((vs) => {
-        setEditorCamera({ center: [vs.center[0], vs.center[1]], zoom: vs.zoom });
+        if (vs) setEditorCamera({ center: [vs.center[0], vs.center[1]], zoom: vs.zoom });
       })
       .catch(() => undefined); // mid-teardown; the next settle re-reads
   }, [mapLoaded]);
@@ -1649,10 +1657,9 @@ export function MapScreen() {
     // Copied for the cleanup: the ref could point elsewhere by the time this
     // effect tears down (react-hooks/exhaustive-deps).
     const camera = cameraRef.current;
-    void mapRef.current
-      ?.getViewState()
+    void readRegion(mapRef.current)
       .then((vs) => {
-        if (cancelled) return;
+        if (cancelled || vs === null) return;
         const at: EditorCamera = { center: [vs.center[0], vs.center[1]], zoom: vs.zoom };
         preEditorCameraRef.current = at;
         setEditorCamera(at);
@@ -2013,7 +2020,7 @@ export function MapScreen() {
         .then((z) => zoomMapTo([at.longitude, at.latitude], Math.max(z, 16)));
     },
     getCenter: async () => {
-      const vs = await mapRef.current?.getViewState();
+      const vs = await readRegion(mapRef.current);
       return vs ? { latitude: vs.center[1], longitude: vs.center[0] } : null;
     },
     snack: mapSnacks.action,
@@ -2823,7 +2830,7 @@ export function MapScreen() {
   // The settled camera (see the notes inline). Programmatic settles that
   // the compass streams in heading-up are thinned (useSettleThrottle); the
   // gesture-pause controller still sees every one (see onRegionDidChange).
-  const onRegionSettled = (e: { nativeEvent: ViewStateChangeEvent }) => {
+  const onRegionSettled = (view: RegionPayload) => {
     // A settled camera is proof the native map is up: in some sessions
     // (seen on iOS in the mountains, 2026-09-28) onDidFinishLoadingMap
     // never fires, which left every mapLoaded-gated feature dead — the
@@ -2838,27 +2845,29 @@ export function MapScreen() {
     if (makeMapOpen) readEditorCamera();
     // Settled bounds for the marine chart's re-anchor check (the
     // wind layer keeps its own copy behind the windEnabled gate).
-    setSettledBounds(windBoundsOf(e.nativeEvent));
-    updateScaleAt(e.nativeEvent.zoom, e.nativeEvent.center[1]);
+    // (No bounds when MapLibre could not compute the visible region: keep the last.)
+    const box = regionBox(view);
+    if (box) setSettledBounds(box);
+    updateScaleAt(view.zoom, view.center[1]);
     // Settled bearing → the badge's red north needle, and the
     // snap-back detent for a rotation too small to have been meant.
-    onSettleBearing(e.nativeEvent.bearing);
+    onSettleBearing(view.bearing);
     // Settled pitch → the tilted-map relief pass (#480), and the 3D/2D button.
-    tilt.onSettledPitch(e.nativeEvent.pitch);
-    setViewPitch(Math.round(e.nativeEvent.pitch));
+    tilt.onSettledPitch(view.pitch);
+    setViewPitch(Math.round(view.pitch));
     // Settled view → look for contour tiles that failed to load.
-    onContourSettled(e.nativeEvent);
+    if (view.bounds) onContourSettled({ ...view, bounds: view.bounds });
     // Settled centre → mapStore (wave B): resolves the effective
     // forecast model and the radar rows' "Canada only" hint. Same
     // render batch as the version bump above — no extra re-render.
     setMapCenter({
-      latitude: e.nativeEvent.center[1],
-      longitude: e.nativeEvent.center[0],
+      latitude: view.center[1],
+      longitude: view.center[0],
     });
     void refreshBounds();
-    if (windEnabled) onWindRegionDidChange(e);
+    if (windEnabled) onWindRegionDidChange(view);
   };
-  const onRegionSettledThrottled = useSettleThrottle(onRegionSettled);
+  const onRegionSettle = useRegionSettle(onRegionSettled);
   return (
     <MapAreaBottomContext.Provider value={mapAreaBottom}>
       <View
@@ -2995,13 +3004,13 @@ export function MapScreen() {
               // Seed the scale bar: onRegionDidChange is not guaranteed to fire
               // before the user's first gesture, and a map with no scale on it
               // until you pan looks broken.
-              void mapRef.current
-                ?.getViewState()
+              void readRegion(mapRef.current)
                 .then((vs) => {
+                  if (vs === null) return;
                   updateScaleAt(vs.zoom, vs.center[1]);
                   onSettleBearing(vs.bearing);
                   tilt.onSettledPitch(vs.pitch);
-                  onContourSettled(vs);
+                  if (vs.bounds) onContourSettled({ ...vs, bounds: vs.bounds });
                 })
                 .catch(() => undefined); // mid-teardown — the next settle seeds it
             }}
@@ -3027,9 +3036,10 @@ export function MapScreen() {
             // nudges every fix) never count; see gesturePause for the iOS tap
             // trap this guards against.
             onRegionWillChange={(e) => {
-              gesturePause.willChange(e.nativeEvent.userInteraction === true);
+              const userInteraction = parseRegionPayload(e.nativeEvent)?.userInteraction === true;
+              gesturePause.willChange(userInteraction);
               if (
-                e.nativeEvent.userInteraction === true &&
+                userInteraction &&
                 externalActiveRef.current &&
                 useMapStore.getState().followUser
               ) {
@@ -3039,9 +3049,12 @@ export function MapScreen() {
             onRegionIsChanging={windEnabled || stripReadsCursor ? onRegionIsChanging : undefined}
             onRegionDidChange={(e) => {
               gesturePause.didChange();
+              // Parsed at once (RN pools the event and nulls its payload when
+              // this returns; 2.6.1 QA white screen), then throttled; an
+              // empty payload (no camera target yet) is dropped.
+              const view = onRegionSettle(e);
               // Every settle, unthrottled: the cursor fields end on the settled centre.
-              publishLiveCentre(e.nativeEvent.center);
-              onRegionSettledThrottled(e);
+              if (view !== null) publishLiveCentre(view.center);
             }}
             onLayout={(e) => {
               const { width, height } = e.nativeEvent.layout;

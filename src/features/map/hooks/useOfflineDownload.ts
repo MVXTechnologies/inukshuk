@@ -1,3 +1,4 @@
+import { parseRegionPayload } from '@core/map/regionPayload';
 import { dedupeLabel } from '@core/geo/regionName';
 import {
   screenPointToLngLat,
@@ -103,9 +104,10 @@ export function useOfflineDownload({
 
   const refreshBounds = useCallback(async () => {
     if (!mapLoaded) return;
-    const view = await mapRef.current?.getViewState().catch(() => undefined);
-    if (!view || !isFlat(view.bearing, view.pitch)) return;
-    const next = view.bounds as [number, number, number, number];
+    // Parsed: an empty or bounds-less view (@core/map/regionPayload) keeps the last bounds.
+    const view = parseRegionPayload(await mapRef.current?.getViewState().catch(() => undefined));
+    if (!view?.bounds || !isFlat(view.bearing, view.pitch)) return;
+    const next: [number, number, number, number] = [...view.bounds];
     const prev = boundsRef.current;
     if (prev && prev.every((v, i) => v === next[i])) return;
     boundsRef.current = next;
@@ -119,7 +121,7 @@ export function useOfflineDownload({
    */
   const flatBounds = useCallback(async (): Promise<[number, number, number, number] | null> => {
     if (!mapLoaded) return null;
-    const view = await mapRef.current?.getViewState().catch(() => undefined);
+    const view = parseRegionPayload(await mapRef.current?.getViewState().catch(() => undefined));
     if (view && !isFlat(view.bearing, view.pitch)) {
       await cameraRef.current
         ?.setStop({ bearing: 0, pitch: 0, duration: 0 })

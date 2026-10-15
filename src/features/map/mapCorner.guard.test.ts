@@ -94,7 +94,7 @@ describe('tip mug vs map interaction', () => {
   it('tracks the person’s own pans and zooms (for the bubble) robustly', () => {
     expect(map).toMatch(/useState\(\(\) => createGesturePause\(setCameraMoving\)\)/);
     expect(map).toMatch(
-      /onRegionWillChange=\{\(e\) => \{\s*gesturePause\.willChange\(e\.nativeEvent\.userInteraction === true\);/,
+      /onRegionWillChange=\{\(e\) => \{\s*const userInteraction =\s*parseRegionPayload\(e\.nativeEvent\)\?\.userInteraction === true;\s*gesturePause\.willChange\(userInteraction\);/,
     );
     expect(map).toMatch(/onRegionDidChange=\{\(e\) => \{\s*gesturePause\.didChange\(\);/);
     // Nothing else may set it: only the controller (with its 3 s cap).
