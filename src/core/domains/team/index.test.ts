@@ -41,7 +41,7 @@ import { MIN, T0 } from '@core/team/testing/fixtures';
 import { capBody } from '@core/teamdraw/caps';
 import { arrowFields } from '@core/teamdraw/testUtils';
 import { encodePolyline } from '@core/trails/polyline';
-import { GMETA } from '@core/group/meta';
+import { GMETA, groupPlugin, IRDV, NET } from '@core/group/meta';
 
 import { TEAM_V27_KINDS } from './groupKinds';
 import { TEAM_DOMAIN, TEAM_KINDS_V26, teamPlugin, teamRegistry } from './index';
@@ -158,9 +158,14 @@ function seededWorld(seed: number) {
     }),
   ];
   const ids = [owner.id, ...devs.map((d) => d.id)];
+  /** What `to` does not hold yet (as anti-entropy sends: no re-verifying held ops). */
+  const missing = (from: GroupReplica, to: GroupReplica, now: number) =>
+    [...from.log.logged(), ...from.liveEphemeral(now)]
+      .filter((op) => to.log.get(op.id) === undefined)
+      .map((op) => op.env);
   const sync = (now: number) => {
-    for (const r of replicas) root.ingest(envs(r, now), now);
-    for (const r of replicas) r.ingest(envs(root, now), now);
+    for (const r of replicas) root.ingest(missing(r, root, now), now);
+    for (const r of replicas) r.ingest(missing(root, r, now), now);
   };
   return { cs, teamId: team.teamId, owner, root, replicas, ids, sync, envs };
 }
@@ -197,7 +202,7 @@ function randomWrite(
     if (rnd() < 0.2) body['mn'] = [other];
     return ['msg', body];
   }
-  const kinds = [...ENTITY_KINDS, ...TEAM_V27_KINDS, GMETA, 'pnm', 'zzz'];
+  const kinds = [...ENTITY_KINDS, ...TEAM_V27_KINDS, GMETA, IRDV, NET, 'pnm', 'zzz'];
   const k = pick(rnd, kinds);
   if (roll < 0.3) {
     const body: Record<string, Json> = { k, id };
@@ -382,15 +387,17 @@ describe('property: the seam folds every 2.6 kind exactly as the 2.6.1 fold', ()
 });
 
 describe('the team plug-in', () => {
-  it('owns the 2.6 kinds and the three 2.7.0 kinds; the registry adds gmeta and is frozen', () => {
+  it('owns the 2.6 kinds and gref; the registry adds the group kinds (gmeta, irdv, net) and is frozen', () => {
     expect(teamPlugin.id).toBe(TEAM_DOMAIN);
-    expect(teamPlugin.kinds).toEqual([...ENTITY_KINDS, 'gref', 'irdv', 'net']);
+    expect(teamPlugin.kinds).toEqual([...ENTITY_KINDS, 'gref']);
     const reg = teamRegistry();
     expect(reg).toBe(teamRegistry());
     expect(reg.isFrozen).toBe(true);
     expect(reg.forKind('wpt')).toBe(teamPlugin);
     expect(reg.forKind('gref')).toBe(teamPlugin);
     expect(reg.forKind(GMETA)?.id).toBe('group');
+    expect(reg.forKind('irdv')?.id).toBe('group');
+    expect(reg.forKind('net')?.id).toBe('group');
     expect(reg.forKind('pnm')).toBeUndefined();
     expect(reg.forThread(`pin:x:y`)).toBe(teamPlugin);
     expect(reg.forThread('trail:t1')).toBe(teamPlugin);
@@ -417,8 +424,8 @@ describe('the team plug-in', () => {
       );
     }
     expect(teamPlugin.owned('gref')).toBe(true);
-    expect(teamPlugin.owned('irdv')).toBe(true);
-    expect(teamPlugin.owned('net')).toBe(false);
+    expect(groupPlugin.owned('irdv')).toBe(true);
+    expect(groupPlugin.owned('net')).toBe(false);
   });
 
   it('alerts ride lane 0, everything else lane 1; it needs the pen capability for strokes', () => {

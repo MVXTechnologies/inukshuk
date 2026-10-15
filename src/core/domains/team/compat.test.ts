@@ -20,9 +20,9 @@ import { canonicalText } from '@core/team/testing/golden/canon';
 import { legacyApplyDataOp } from '@core/team/testing/legacyFold26';
 import { c, device, MIN, T0 } from '@core/team/testing/fixtures';
 import { crew } from '@core/teamdraw/testUtils';
-import { GMETA, groupMeta } from '@core/group/meta';
+import { GMETA, groupMeta, IRDV, NET } from '@core/group/meta';
 
-import { GREF, IRDV, NET } from './groupKinds';
+import { GREF } from './groupKinds';
 import { TEAM_KINDS_V26 } from './index';
 
 interface Old {

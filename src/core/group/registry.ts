@@ -77,9 +77,15 @@ export interface DomainPlugin<View = unknown> {
   /**
    * Authorization at the op's fold position (the author's role then), with
    * the view folded so far. Field validation lives here too, in the order the
-   * domain needs. Total; never throws on hostile input.
+   * domain needs. `group` is the resolved membership (its genesis, members,
+   * invites). Total; never throws on hostile input.
    */
-  authorize(w: KindWrite, role: Role, view: Readonly<DomainState>): Authorization;
+  authorize(
+    w: KindWrite,
+    role: Role,
+    view: Readonly<DomainState>,
+    group: Readonly<TeamState>,
+  ): Authorization;
   /** After a record of one of its kinds merged: keep the domain's counters in step. */
   merged?(view: DomainState, rec: Readonly<EntityRecord>, before: EntityState | undefined): void;
   /** Merge is always per-field LWW (`mergeEntity`); a domain may opt into base stamps (§4.3). */

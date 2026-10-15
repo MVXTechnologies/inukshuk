@@ -312,7 +312,7 @@ export function applyDataOp(
       if (!plugin.validate(w)) break;
       // Fail closed: every accepted data op has a role.
       if (role === undefined) return skip('forbidden');
-      const r = plugin.authorize(w, role, out);
+      const r = plugin.authorize(w, role, out, state);
       if (r === 'invalid') break;
       if (r === 'forbidden') return skip('forbidden');
       const key = recordKey(plugin.owned(b.k), b.k, b.id, r.owner);

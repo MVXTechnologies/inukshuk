@@ -3,7 +3,18 @@ import { visibleFields } from '@core/team/crdt';
 import { device, MIN, T0 } from '@core/team/testing/fixtures';
 import { crew, why } from '@core/teamdraw/testUtils';
 
-import { DEFAULT_APP, GMETA, GMETA_KEY, GROUP_RECORD_ID, groupMeta, groupMetaPlugin } from './meta';
+import {
+  backdatesOnce,
+  DEFAULT_APP,
+  GMETA,
+  GMETA_KEY,
+  GROUP_RECORD_ID,
+  groupMeta,
+  groupPlugin,
+  IRDV,
+  NET,
+} from './meta';
+import type { KindWrite } from './registry';
 
 const at = (n: number) => T0 + n * MIN;
 const gmeta = (f: Record<string, Json>, id = GROUP_RECORD_ID) => ({ k: GMETA, id, f });
@@ -100,9 +111,95 @@ describe('gmeta: what a sync group is', () => {
     expect(groupMeta(r.data())).toMatchObject({ app: 'lib', v: 3 });
   });
 
-  it('the plug-in: one shared kind, no threads', () => {
-    expect(groupMetaPlugin.kinds).toEqual([GMETA]);
-    expect(groupMetaPlugin.owned(GMETA)).toBe(false);
-    expect(groupMetaPlugin.threads).toBeUndefined();
+  it('a write-once field stamped before the group existed is refused (bounded backdating)', () => {
+    const { w } = crew();
+    const born = w.root.state.genesis!.stamp.wall;
+    const write = (wall: number, f: Record<string, Json>): KindWrite => ({
+      op: 'set',
+      kind: GMETA,
+      id: GROUP_RECORD_ID,
+      f,
+      o: undefined,
+      author: w.owner.id,
+      wall,
+    });
+    const view = w.root.data();
+    const auth = (wr: KindWrite) => groupPlugin.authorize(wr, 'owner', view, w.root.state);
+    expect(backdatesOnce(write(born - 1, { app: 'lib' }), w.root.state)).toBe(true);
+    expect(auth(write(born - 1, { app: 'lib' }))).toBe('forbidden');
+    expect(auth(write(born - 1, { app: 'lib', parent }))).toBe('forbidden');
+    // At or after the genesis: fine; flags alone are never time-bounded here.
+    expect(auth(write(born, { app: 'lib' }))).toEqual({ owner: undefined });
+    expect(backdatesOnce(write(born - 1, { net: 1 }), w.root.state)).toBe(false);
+    // No genesis folded (cannot happen for an accepted op): fail closed.
+    const noGenesis = { ...w.root.state, genesis: undefined };
+    expect(backdatesOnce(write(born + 1, { app: 'lib' }), noGenesis)).toBe(true);
+    // Through the fold, the earliest valid write wins and a later rival is refused.
+    const first = w.root.write(at(1), 'e.set', gmeta({ app: 'lib' }))!;
+    const rival = w.root.write(at(2), 'e.set', gmeta({ app: 'self' }))!;
+    expect(why(w.root, first.id)).toBeUndefined();
+    expect(why(w.root, rival.id)).toBe('forbidden');
+  });
+
+  it('the plug-in: gmeta, irdv, net; no threads', () => {
+    expect(groupPlugin.kinds).toEqual([GMETA, IRDV, NET]);
+    expect(groupPlugin.owned(GMETA)).toBe(false);
+    expect(groupPlugin.owned(IRDV)).toBe(true);
+    expect(groupPlugin.owned(NET)).toBe(false);
+    expect(groupPlugin.threads).toBeUndefined();
+  });
+});
+
+describe('irdv: an invite’s internet rendezvous (every group)', () => {
+  it('admins write it (owned), with a 32-byte seed; members cannot', () => {
+    const { w, rb, sync } = crew();
+    const inv = device().id;
+    const s = device().id; // 32 bytes, base64url
+    const ok = w.root.write(at(1), 'e.set', { k: IRDV, id: inv, f: { s } })!;
+    const member = rb.write(at(1), 'e.set', { k: IRDV, id: device().id, f: { s } })!;
+    const short = w.root.write(at(2), 'e.set', { k: IRDV, id: device().id, f: { s: 'AAAA' } })!;
+    const noSeed = w.root.write(at(3), 'e.set', { k: IRDV, id: device().id, f: { x: 1 } })!;
+    const badId = w.root.write(at(4), 'e.set', { k: IRDV, id: 'inv1', f: { s } })!;
+    sync(at(5));
+    expect(why(rb, ok.id)).toBeUndefined();
+    expect(why(rb, member.id)).toBe('forbidden');
+    expect(why(rb, short.id)).toBe('invalid');
+    expect(why(rb, noSeed.id)).toBe('invalid');
+    expect(why(rb, badId.id)).toBe('invalid');
+    expect(rb.data().entities.get(`irdv:${w.owner.id}:${inv}`)?.owner).toBe(w.owner.id);
+    // A member cannot delete it; its writer can.
+    const memberDel = rb.write(at(6), 'e.del', { k: IRDV, id: inv, o: w.owner.id })!;
+    const ownDel = w.root.write(at(6), 'e.del', { k: IRDV, id: inv })!;
+    sync(at(7));
+    expect(why(rb, memberDel.id)).toBe('forbidden');
+    expect(why(rb, ownDel.id)).toBeUndefined();
+  });
+});
+
+describe('net: the group’s internet switch', () => {
+  it('one shared record, admins only (writes and deletes); the first write carries inet', () => {
+    const { w, rb, sync } = crew();
+    const noInet = w.root.write(at(1), 'e.set', { k: NET, id: 'g', f: { later: 1 } })!;
+    const on = w.root.write(at(2), 'e.set', { k: NET, id: 'g', f: { inet: 1 } })!;
+    const member = rb.write(at(2), 'e.set', { k: NET, id: 'g', f: { inet: 0 } })!;
+    const bad = w.root.write(at(3), 'e.set', { k: NET, id: 'g', f: { inet: 2 } })!;
+    const wrongId = w.root.write(at(3), 'e.set', { k: NET, id: 'team', f: { inet: 1 } })!;
+    sync(at(4));
+    const memberDel = rb.write(at(5), 'e.del', { k: NET, id: 'g' })!;
+    const delO = w.root.write(at(5), 'e.del', { k: NET, id: 'g', o: rb.id })!;
+    sync(at(6));
+    expect(why(w.root, noInet.id)).toBe('invalid');
+    expect(why(w.root, on.id)).toBeUndefined();
+    expect(why(w.root, member.id)).toBe('forbidden');
+    expect(why(w.root, bad.id)).toBe('invalid');
+    expect(why(w.root, wrongId.id)).toBe('invalid');
+    expect(why(w.root, memberDel.id)).toBe('forbidden');
+    expect(why(w.root, delO.id)).toBe('invalid');
+    const rec = w.root.data().entities.get('net:g');
+    expect(rec?.owner).toBeUndefined();
+    expect(visibleFields(rec!.state)).toEqual({ inet: 1 });
+    const adminDel = w.root.write(at(7), 'e.del', { k: NET, id: 'g' })!;
+    expect(why(w.root, adminDel.id)).toBeUndefined();
+    expect(w.root.data().entities.get('net:g')?.state.deleted).toBeDefined();
   });
 });

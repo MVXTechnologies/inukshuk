@@ -18,7 +18,7 @@ import {
 } from '@core/team/records';
 import { isAdminRole, type Role } from '@core/team/roles';
 import { isTaskStatusUpdate, validTaskFields } from '@core/team/tasks';
-import { groupMetaPlugin } from '@core/group/meta';
+import { groupPlugin } from '@core/group/meta';
 import {
   DomainRegistry,
   type Authorization,
@@ -27,13 +27,7 @@ import {
   type Lane,
 } from '@core/group/registry';
 
-import {
-  authorizeTeamV27Kind,
-  isTeamV27Kind,
-  ownedTeamV27Kind,
-  TEAM_V27_KINDS,
-  validTeamV27Write,
-} from './groupKinds';
+import { TEAM_V27, TEAM_V27_KINDS } from './groupKinds';
 
 /**
  * The team domain (plug-in #1 of the sync-group seam, 2.7.0 PR G1;
@@ -45,10 +39,10 @@ import {
  * golden refold test (`index.test.ts`) pins that over a recorded log, the
  * frozen 2.6.1 fold and seeded random workloads.
  *
- * 2.7.0 adds three kinds a 2.6 phone stores, relays and skips (`groupKinds.ts`):
- * `gref` (a child group announced in the team), `irdv` (an invite's internet
- * rendezvous) and `net` (the team's internet switch). Validators only: no
- * phone writes them before G5/G7.
+ * 2.7.0 adds one kind a 2.6 phone stores, relays and skips (`groupKinds.ts`):
+ * `gref` (a child group announced in the team). Validators only: no phone
+ * writes it before G10. `gmeta`, `irdv` and `net` belong to every group
+ * (`@core/group/meta`), registered next to this plug-in by {@link teamRegistry}.
  */
 export const TEAM_DOMAIN = 'team';
 
@@ -131,15 +125,15 @@ export const teamPlugin: DomainPlugin<TeamData> = {
   threads: ['team', 'dm', 'g', 'photo', 'task', 'pin', 'trail'],
   ephemeral: ['pos', 'pen'],
   needsCaps: ['pen'],
-  owned: (kind) => (isTeamKind(kind) ? OWNED_KINDS.includes(kind) : ownedTeamV27Kind(kind)),
+  owned: (kind) => (isTeamKind(kind) ? OWNED_KINDS.includes(kind) : TEAM_V27.owned(kind)),
   validate(w) {
-    if (isTeamV27Kind(w.kind)) return validTeamV27Write(w);
+    if (TEAM_V27.has(w.kind)) return TEAM_V27.validate(w);
     // A message is a `msg` op, never an `e.set`; only some kinds name another's record.
     if (w.op === 'del') return true;
     return w.kind !== 'msg' && (w.o === undefined || OWNER_REF_KINDS.includes(w.kind));
   },
   authorize(w, role, view) {
-    if (isTeamV27Kind(w.kind)) return authorizeTeamV27Kind(w, role, view);
+    if (TEAM_V27.has(w.kind)) return TEAM_V27.authorize(w, role, view);
     // Registered kinds only reach here: the team's own.
     const kind = w.kind as EntityKind;
     return w.op === 'set'
@@ -156,6 +150,6 @@ let shared: DomainRegistry | undefined;
 
 /** The registry of a team group (the group meta kind + the team domain), frozen and shared. */
 export function teamRegistry(): DomainRegistry {
-  shared ??= new DomainRegistry([groupMetaPlugin, teamPlugin]).freeze();
+  shared ??= new DomainRegistry([groupPlugin, teamPlugin]).freeze();
   return shared;
 }

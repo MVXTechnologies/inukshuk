@@ -1,19 +1,8 @@
 import { visibleFields } from '@core/team/crdt';
-import { device, MIN, T0 } from '@core/team/testing/fixtures';
+import { MIN, T0 } from '@core/team/testing/fixtures';
 import { crew, why } from '@core/teamdraw/testUtils';
-import { emptyData } from '@core/team/data';
 
-import {
-  authorizeTeamV27Kind,
-  GREF,
-  IRDV,
-  isTeamV27Kind,
-  MAX_GROUP_NAME,
-  NET,
-  ownedTeamV27Kind,
-  TEAM_V27_KINDS,
-  validTeamV27Write,
-} from './groupKinds';
+import { GREF, MAX_GROUP_NAME, TEAM_V27, TEAM_V27_KINDS } from './groupKinds';
 
 const at = (n: number) => T0 + n * MIN;
 const child = 'AAAAAAAAAAAAAAAAAAAAAA';
@@ -73,77 +62,11 @@ describe('gref: a child group announced in the team', () => {
   });
 });
 
-describe('irdv: an invite’s internet rendezvous', () => {
-  it('admins write it (owned), with a 32-byte seed; members cannot', () => {
-    const { w, rb, sync } = crew();
-    const inv = device().id;
-    const s = device().id; // 32 bytes, base64url
-    const ok = w.root.write(at(1), 'e.set', { k: IRDV, id: inv, f: { s } })!;
-    const member = rb.write(at(1), 'e.set', { k: IRDV, id: device().id, f: { s } })!;
-    const short = w.root.write(at(2), 'e.set', { k: IRDV, id: device().id, f: { s: 'AAAA' } })!;
-    const noSeed = w.root.write(at(3), 'e.set', { k: IRDV, id: device().id, f: { x: 1 } })!;
-    const badId = w.root.write(at(4), 'e.set', { k: IRDV, id: 'inv1', f: { s } })!;
-    sync(at(5));
-    expect(why(rb, ok.id)).toBeUndefined();
-    expect(why(rb, member.id)).toBe('forbidden');
-    expect(why(rb, short.id)).toBe('invalid');
-    expect(why(rb, noSeed.id)).toBe('invalid');
-    expect(why(rb, badId.id)).toBe('invalid');
-    expect(rb.data().entities.get(`irdv:${w.owner.id}:${inv}`)?.owner).toBe(w.owner.id);
-    // A member cannot delete it; its writer can.
-    const memberDel = rb.write(at(6), 'e.del', { k: IRDV, id: inv, o: w.owner.id })!;
-    const ownDel = w.root.write(at(6), 'e.del', { k: IRDV, id: inv })!;
-    sync(at(7));
-    expect(why(rb, memberDel.id)).toBe('forbidden');
-    expect(why(rb, ownDel.id)).toBeUndefined();
-  });
-});
-
-describe('net: the team’s internet switch', () => {
-  it('one shared record, admins only (writes and deletes); the first write carries inet', () => {
-    const { w, rb, sync } = crew();
-    const noInet = w.root.write(at(1), 'e.set', { k: NET, id: 'g', f: { later: 1 } })!;
-    const on = w.root.write(at(2), 'e.set', { k: NET, id: 'g', f: { inet: 1 } })!;
-    const member = rb.write(at(2), 'e.set', { k: NET, id: 'g', f: { inet: 0 } })!;
-    const bad = w.root.write(at(3), 'e.set', { k: NET, id: 'g', f: { inet: 2 } })!;
-    const wrongId = w.root.write(at(3), 'e.set', { k: NET, id: 'team', f: { inet: 1 } })!;
-    sync(at(4));
-    const memberDel = rb.write(at(5), 'e.del', { k: NET, id: 'g' })!;
-    const delO = w.root.write(at(5), 'e.del', { k: NET, id: 'g', o: rb.id })!;
-    sync(at(6));
-    expect(why(w.root, noInet.id)).toBe('invalid');
-    expect(why(w.root, on.id)).toBeUndefined();
-    expect(why(w.root, member.id)).toBe('forbidden');
-    expect(why(w.root, bad.id)).toBe('invalid');
-    expect(why(w.root, wrongId.id)).toBe('invalid');
-    expect(why(w.root, memberDel.id)).toBe('forbidden');
-    expect(why(w.root, delO.id)).toBe('invalid');
-    const rec = w.root.data().entities.get('net:g');
-    expect(rec?.owner).toBeUndefined();
-    expect(visibleFields(rec!.state)).toEqual({ inet: 1 });
-    const adminDel = w.root.write(at(7), 'e.del', { k: NET, id: 'g' })!;
-    expect(why(w.root, adminDel.id)).toBeUndefined();
-    expect(w.root.data().entities.get('net:g')?.state.deleted).toBeDefined();
-  });
-});
-
-describe('the 2.7.0 kind table', () => {
-  it('names, ownership, and total guards for a kind it does not own', () => {
-    expect(TEAM_V27_KINDS).toEqual([GREF, IRDV, NET]);
-    expect(TEAM_V27_KINDS.map(isTeamV27Kind)).toEqual([true, true, true]);
-    expect(isTeamV27Kind('wpt')).toBe(false);
-    expect(TEAM_V27_KINDS.map(ownedTeamV27Kind)).toEqual([true, true, false]);
-    expect(ownedTeamV27Kind('wpt')).toBe(false);
-    const w = {
-      op: 'set',
-      kind: 'wpt',
-      id: 'g',
-      f: {},
-      o: undefined,
-      author: 'a',
-      wall: 0,
-    } as const;
-    expect(validTeamV27Write(w)).toBe(false);
-    expect(authorizeTeamV27Kind(w, 'owner', emptyData())).toBe('invalid');
+describe('the team’s 2.7.0 kind table', () => {
+  it('holds gref only (irdv and net are group-level)', () => {
+    expect(TEAM_V27_KINDS).toEqual([GREF]);
+    expect(TEAM_V27.has(GREF)).toBe(true);
+    expect(TEAM_V27.has('irdv')).toBe(false);
+    expect(TEAM_V27.owned(GREF)).toBe(true);
   });
 });
