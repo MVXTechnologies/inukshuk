@@ -15,8 +15,14 @@ import type { CreatedInvite } from '@data/team/teamSession';
 import { ExtensionsSection } from '@features/settings/ExtensionsSection';
 import { useSettingsStore } from '@state/settingsStore';
 import { IMPERIAL, METRIC } from '@core/format';
-import { selectChatUnread, useTeamStore, wireTeamStore } from '@state/teamStore';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import type { ThreadRow } from '@core/teamui/threads';
+import {
+  selectChatUnread,
+  settleTeamStoreForTests,
+  useTeamStore,
+  wireTeamStore,
+} from '@state/teamStore';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { Linking, StyleSheet } from 'react-native';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
@@ -98,6 +104,8 @@ beforeEach(async () => {
 afterEach(async () => {
   await app.active?.stopMesh();
   await app.cancelJoin();
+  // No store refresh left on the wall clock for the next test to inherit (#726).
+  settleTeamStoreForTests();
 });
 
 describe('Settings → Extensions: Team mode', () => {
@@ -124,13 +132,39 @@ describe('Settings → Extensions: Team mode', () => {
 describe('the team hub', () => {
   beforeEach(async () => {
     await app.createTeam({ name: 'Relevé MSA', myName: 'Marc', lifetimeMs: lifetimeMs('14d') });
+    // From a settled store: createTeam's throttled refresh runs now, not mid-test.
+    settleTeamStoreForTests();
     useTeamStore.getState().refresh();
   });
 
   it('counts chat unread as the map chip and the panel do: channel plus sub-threads (#707)', async () => {
     await render(wrap(<TeamHubScreen />));
-    // 3 in the team channel, 4 across photo / pin / trail threads.
-    await act(() => useTeamStore.setState({ unread: 3, threadsUnread: 4 }));
+    // 3 in the team channel, 4 across photo / pin / trail threads. Stub the
+    // session, not the store: the service refreshes the store (throttled,
+    // 250 ms) after any change, and under load that refresh fired after a
+    // hand-written store value and reset the count to 0 (#726). Every
+    // refresh now reads 3 + 4.
+    const session = app.active!;
+    jest.spyOn(session, 'unread').mockReturnValue(3);
+    const thread = (key: string, unread: number, resolved = false): ThreadRow => ({
+      key,
+      title: key,
+      thumbUri: null,
+      count: unread,
+      unread,
+      last: { author: 'Julie', text: '…', at: 0 },
+      resolved,
+      target: { kind: 'pin', owner: 'julie', id: key, at: [-71, 47] },
+    });
+    jest
+      .spyOn(session, 'threads')
+      .mockReturnValue([
+        thread('photo:p1', 2),
+        thread('pin:p2', 1),
+        thread('trail:t1', 1),
+        thread('pin:done', 5, true),
+      ]);
+    await act(() => useTeamStore.getState().refresh());
     expect(screen.getByTestId('team-unread-badge').props.children).toBe(7);
     expect(screen.getByText('Chat · 7')).toBeTruthy();
     expect(selectChatUnread(useTeamStore.getState())).toBe(7);
@@ -210,8 +244,11 @@ describe('joining', () => {
     await act(async () => {
       await fireEvent.press(screen.getByTestId('team-join-start'));
     });
-    await until(() => useTeamStore.getState().join?.phase === 'verify');
-    await waitFor(() => expect(screen.getByTestId('team-join-code')).toBeTruthy());
+    // Wait on the service, then run the store's throttled refresh now: polling
+    // the store slept through its 250 ms timer, real time that a loaded
+    // machine stretches past Jest's 5 s budget (#726).
+    await until(() => app.join?.state().phase === 'verify');
+    await act(async () => settleTeamStoreForTests());
     const code = session.joinNotices[0]!.code;
     expect(screen.getByTestId('team-join-code').props.children.join('')).toBe(
       `${code.slice(0, 3)} ${code.slice(3)}`,

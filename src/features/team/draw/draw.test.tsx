@@ -12,6 +12,7 @@ import { LIVE_LAYER_ORDER, liveLayerAnchor, type LiveLayerId } from '@core/map/l
 import { nodeCrypto } from '@core/team/testing/nodeCrypto';
 import { DEFAULT_INVITE } from '@core/teamui/invites';
 import { lifetimeMs } from '@core/teamui/lifetime';
+import type { TeamView } from '@core/teamui/view';
 import { DRAW_LAYERS } from '@core/teamdraw/mapStyle';
 import * as penModule from '@core/teamdraw/pen';
 import { PEN_INTERVAL_MS, penBody, toleranceM, type Stroke } from '@core/teamdraw/pen';
@@ -184,6 +185,19 @@ const ev = (...touches: ReturnType<typeof touch>[]) => ({ nativeEvent: { touches
 
 let app: TeamService;
 
+/**
+ * Show the screens another view of the team by stubbing the session the store
+ * snapshots, never the store: beforeEach's createTeam leaves the store's
+ * 250 ms throttled refresh pending, and on a loaded machine it fired after a
+ * value written into the store and put the real view back (#726).
+ */
+async function stubView(patch: (v: TeamView) => TeamView): Promise<void> {
+  const session = app.active!;
+  const real = session.view.bind(session);
+  jest.spyOn(session, 'view').mockImplementation(() => patch(real()));
+  await act(() => useTeamStore.getState().refresh());
+}
+
 beforeEach(async () => {
   mockLayers.length = 0;
   mockSources.length = 0;
@@ -211,12 +225,17 @@ beforeEach(async () => {
   resetAppTeamServiceForTests(app);
   wireTeamStore();
   await app.createTeam({ name: 'Ridge crew', myName: 'Marc', lifetimeMs: lifetimeMs('14d') });
+  // From a settled store: createTeam's throttled refresh runs now. Left on the
+  // wall clock, it fired mid-test on a loaded machine, inside tests that run on
+  // jest's clock too, and re-read drawings that test said had expired (#726).
+  await act(async () => settleTeamStoreForTests());
   await act(() => useTeamStore.getState().refresh());
 });
 
 afterEach(async () => {
   await realClock();
   await app.active?.stopMesh();
+  settleTeamStoreForTests();
 });
 
 const style = penStyle({ ...defaultPrefs(0), fadeMs: 30_000 });
@@ -240,10 +259,10 @@ describe('the team panel (the old team menu, #707)', () => {
   });
 
   it('hides Draw and Rally for guests', async () => {
-    const view = useTeamStore.getState().view!;
-    useTeamStore.setState({
-      view: { ...view, members: view.members.map((m) => ({ ...m, role: 'guest' as const })) },
-    });
+    await stubView((v) => ({
+      ...v,
+      members: v.members.map((m) => ({ ...m, role: 'guest' as const })),
+    }));
     await render(wrap(<TeamPanel top={0} here={null} />));
     expect(screen.queryByTestId('team-panel-draw')).toBeNull();
     expect(screen.queryByTestId('team-panel-rally')).toBeNull();
@@ -528,9 +547,13 @@ describe('drawing mode', () => {
     fakeClock();
     const built = jest.spyOn(penModule, 'penBody');
     await fireEvent(canvas, 'responderGrant', ev(touch(1, 20, 400)));
-    for (let i = 1; i <= 120; i++) {
-      await fireEvent(canvas, 'responderMove', ev(touch(1, 20 + i * 3, 400 + (i % 5))));
-    }
+    // One act around the 120 moves: React flushes once, not after each move
+    // (120 separate acts took ~1 s on a loaded machine, #726).
+    await act(async () => {
+      for (let i = 1; i <= 120; i++) {
+        await fireEvent(canvas, 'responderMove', ev(touch(1, 20 + i * 3, 400 + (i % 5))));
+      }
+    });
     // 120 moves inside one throttle interval: the first real stroke went, the rest wait.
     expect(built).toHaveBeenCalledTimes(1);
     await act(async () => {
@@ -761,8 +784,7 @@ describe('Manage team › Drawings', () => {
   });
 
   it('is not there for members', async () => {
-    const view = useTeamStore.getState().view!;
-    useTeamStore.setState({ view: { ...view, isAdmin: false } });
+    await stubView((v) => ({ ...v, isAdmin: false }));
     await render(wrap(<TeamDrawingsRow />));
     expect(screen.queryByTestId('team-drawings-row')).toBeNull();
   });

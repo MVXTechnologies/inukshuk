@@ -29,6 +29,19 @@ afterAll(() => {
   }
 });
 
+// React Native requires its legacy renderer (743 KB, behind findNodeHandle /
+// unstable_batchedUpdates) and TextInput lazily, on first use: inside the
+// first test that opens a Paper Dialog/Portal or shows a text field. That is
+// ~65 ms warm but ~1 s on a cold transform cache, and ~5 s under a loaded
+// machine, so that test hit Jest's per-test timeout (#726). Screen suites
+// load them here, at setup, where no per-test clock runs.
+if (expect.getState().testPath?.endsWith('.tsx')) {
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  require('react-native/Libraries/Renderer/shims/ReactNative');
+  void require('react-native').TextInput;
+  /* eslint-enable @typescript-eslint/no-require-imports */
+}
+
 // Reanimated 4 (InukshukLoader). Its native entry needs the Worklets native
 // module, which does not exist under Jest: swap both packages for their own
 // shipped mocks (hooks run their worklet once, synchronously; animations
