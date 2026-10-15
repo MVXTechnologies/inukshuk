@@ -1,4 +1,5 @@
 import { zoomForVisibleWidth } from '@core/geo/zoomForVisibleWidth';
+import { cameraRequestStep } from '@core/map/cameraRequest';
 import type { CameraTarget } from '@core/search/camera';
 import type { BoundingBox } from '@core/models';
 import type { CameraRef, MapRef } from '@maplibre/maplibre-react-native';
@@ -24,11 +25,18 @@ export function useCameraControls({
   cameraRef,
   mapRef,
   overlays,
+  ready = true,
 }: {
   cameraRef: RefObject<CameraRef | null>;
   mapRef: RefObject<MapRef | null>;
   overlays: readonly { bbox: BoundingBox }[];
+  /**
+   * The map screen is focused and its map loaded: a "fit these bounds"
+   * request from another screen waits for it (#710).
+   */
+  ready?: boolean;
 }) {
+  const followUser = useMapStore((s) => s.followUser);
   const setFollowUser = useMapStore((s) => s.setFollowUser);
   const focusBounds = useMapStore((s) => s.focusBounds);
   const focusPadding = useMapStore((s) => s.focusPadding);
@@ -37,17 +45,25 @@ export function useCameraControls({
   const setFocusWaypoint = useMapStore((s) => s.setFocusWaypoint);
 
   // Consume a one-shot "fit these bounds" request (e.g. "view trail" from the
-  // Library) — fly to the trail instead of staying on the user's location.
+  // Library, "On map" from a trail) — fly to the trail instead of staying on
+  // the user's location. Asked from another screen, it waits for the map to
+  // be up, and follow mode goes off (a rendered change) before the fit: a
+  // fit on the hidden camera, or under native tracking, was lost (#710).
   useEffect(() => {
-    if (!focusBounds) return;
-    setFollowUser(false);
+    const step = cameraRequestStep({
+      pending: focusBounds !== null,
+      ready: ready && cameraRef.current !== null,
+      following: followUser,
+    });
+    if (step === 'stopFollowing') setFollowUser(false);
+    if (step !== 'run' || focusBounds === null) return;
     cameraRef.current?.fitBounds(toLngLatBounds(focusBounds), {
       duration: 600,
       padding: focusPadding ?? { top: 60, right: 60, bottom: 220, left: 60 },
     });
     setFocusBounds(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusBounds]);
+  }, [focusBounds, ready, followUser]);
 
   // Consume a one-shot "show this waypoint" request (Library → ⋮ → Show on
   // map): fly to the pin at the same comfortable width the locate button uses.

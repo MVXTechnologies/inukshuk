@@ -174,6 +174,13 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
     ['tip button coin on stone', t.support.coin, palette.stone, GRAPHIC],
     ['tip button heart on surface', t.support.heart, t.surface, GRAPHIC],
     ['tip button stone heart on surface', t.support.stone, t.surface, GRAPHIC],
+    // Team bar and alert bands (#707, #708).
+    ['SOS band words', t.team.sosInk, t.team.sos, TEXT],
+    ['gather band words', t.team.gatherInk, t.team.gather, TEXT],
+    ['undo snackbar words', t.team.snackInk, t.team.snack, TEXT],
+    ['undo snackbar UNDO', t.team.snackAccent, t.team.snack, TEXT],
+    ['team sync glyph (synced) on chrome', t.map.gnssFixed, t.map.chrome, GRAPHIC],
+    ['team sync glyph (offline) on chrome', t.map.gnssLost, t.map.chrome, GRAPHIC],
   ];
 }
 

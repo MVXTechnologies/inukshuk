@@ -8,6 +8,8 @@ import type { ReactNode, Ref } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Icon, Text, useTheme } from 'react-native-paper';
 
+import { SelectCheck } from './LibraryRows';
+
 /**
  * The Library's chrome (revamp §5, boards `After-Library.html` and
  * `After-Empty.html`): contour texture, type chips, collapsible section
@@ -126,6 +128,8 @@ export function SectionHeader({
   count,
   collapsed,
   onToggle,
+  onLongPress,
+  selected,
   actions,
   first,
   highlighted,
@@ -135,6 +139,10 @@ export function SectionHeader({
   count: string;
   collapsed: boolean;
   onToggle: () => void;
+  /** A folder's header: holding it selects the folder itself (#711). */
+  onLongPress?: () => void;
+  /** The folder is selected: sage fill and the circle check. */
+  selected?: boolean;
   actions?: ReactNode;
   first?: boolean;
   highlighted?: boolean;
@@ -151,13 +159,15 @@ export function SectionHeader({
           borderTopWidth: StyleSheet.hairlineWidth * 2,
           borderTopColor: t.outlineVariant,
         },
-        highlighted && { backgroundColor: theme.colors.secondaryContainer },
+        (highlighted || selected) && { backgroundColor: theme.colors.secondaryContainer },
       ]}
     >
       <Pressable
         onPress={onToggle}
+        onLongPress={onLongPress}
         accessibilityRole="button"
-        accessibilityState={{ expanded: !collapsed }}
+        accessibilityState={{ expanded: !collapsed, ...(selected ? { selected: true } : {}) }}
+        accessibilityHint={onLongPress ? 'Long-press to select the folder' : undefined}
         style={styles.sectionToggle}
       >
         <Icon source={collapsed ? 'chevron-right' : 'chevron-down'} size={20} color={t.ink} />
@@ -169,6 +179,7 @@ export function SectionHeader({
         </Text>
       </Pressable>
       {actions}
+      {selected && <SelectCheck selected />}
     </View>
   );
 }

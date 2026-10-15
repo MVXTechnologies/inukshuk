@@ -11,6 +11,25 @@ import type {
 } from '@core/models';
 import type { ImportedNote } from '@core/geo/track';
 import { toggleId } from '@core/library/toggleId';
+import {
+  applyFolderMoves,
+  applyShown,
+  folderSnapshot,
+  isEmptyRemoval,
+  removedFileUris,
+  removeItems,
+  restoreFolder,
+  restoreItems,
+  type FolderSnapshot,
+  type RemovedItems,
+} from '@core/library/bulkEdits';
+import {
+  launchPurgePlan,
+  pendingPurgeOf,
+  withoutPurge,
+  type PendingPurge,
+} from '@core/library/pendingPurges';
+import type { FolderMove, ItemRef } from '@core/library/selection';
 import type { CustomCategory } from '@core/library/categories';
 import {
   LIBRARY_SCHEMA_VERSION,
@@ -191,10 +210,30 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
    * An unknown folder id is ignored (no-op) rather than committed as dangling.
    */
   setItemFolder: (
-    kind: 'map' | 'track' | 'waypoint',
+    kind: 'map' | 'track' | 'waypoint' | 'area',
     itemId: string,
     folderId: string | null,
   ) => void;
+  // Bulk edits behind the Library's select mode (#711), each ONE index write
+  // (`@core/library/bulkEdits`).
+  /** Move many items between folders (a Move, or its Undo). */
+  moveItems: (moves: readonly FolderMove[]) => void;
+  /**
+   * Take items out of the Library for an Undo-able delete: the index is
+   * written at once (the map stops drawing them), their files stay until
+   * {@link purgeRemovedItems}. Returns what {@link restoreRemovedItems} needs.
+   */
+  removeItemsForUndo: (refs: readonly ItemRef[]) => RemovedItems;
+  /** Undo: put removed items back where they were. */
+  restoreRemovedItems: (removed: RemovedItems) => void;
+  /** The Undo window has passed: delete the removed items' files and photos. */
+  purgeRemovedItems: (removed: RemovedItems) => void;
+  /** Delete a folder (items fall back to Ungrouped) and return what Undo needs. */
+  removeFolderForUndo: (id: string) => FolderSnapshot | null;
+  /** Undo a folder delete. */
+  restoreFolder: (snapshot: FolderSnapshot) => void;
+  /** Show or hide many maps and trails on the map; returns how many changed. */
+  setItemsShown: (refs: readonly ItemRef[], shown: boolean) => number;
   // Activity categories — built-ins live in @core/library/categories; only
   // user-defined ones are stored (and persisted) here.
   /** Create a custom category (name assumed pre-validated); returns its id. */
@@ -298,6 +337,10 @@ function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolea
     customCategories: state.customCategories,
     waypoints: state.waypoints,
     areas: state.areas,
+    // The purge journal (#711) rides in the same write as the delete it covers.
+    ...(state.pendingPurges !== undefined && state.pendingPurges.length > 0
+      ? { pendingPurges: state.pendingPurges }
+      : {}),
   };
   // #247 — the store holds ABSOLUTE uris (every consumer, from <Image> to
   // Sharing to the GPX reader, wants one), but the index on disk must hold
@@ -317,22 +360,54 @@ function persistAndDelete(
 ): void {
   // Nothing was committed: the files are still referenced by the index on disk.
   if (!persist(state)) return;
-  for (const uri of orphanedUris) {
-    if (!uri) continue;
+  // A deleted trail's photos (#587) go with it: copies and sidecar.
+  deleteFilesAndPhotoFolders(
+    orphanedUris.filter((uri): uri is string => !!uri),
+    deletedTrackIds,
+  );
+}
+
+/** Best-effort file and trail-photo-folder deletes: an orphan never surfaces as an error. */
+function deleteFilesAndPhotoFolders(
+  fileUris: readonly string[],
+  trackIds: readonly string[],
+): void {
+  for (const uri of fileUris) {
     try {
       storage.deleteFileAt(uri);
     } catch {
-      // Metadata is committed: keep memory consistent even if an orphan remains.
+      // Metadata is committed: an orphan file must not surface as an error.
     }
   }
-  // A deleted trail's photos (#587) go with it: copies and sidecar.
-  for (const id of deletedTrackIds) {
+  for (const id of trackIds) {
     try {
       deleteTrailPhotoFolder(id);
     } catch {
-      // Same as above: an orphan folder must not undo a committed delete.
+      // Same as above.
     }
   }
+}
+
+/**
+ * The launch half of the purge journal (#711): Undo-able deletes the app was
+ * killed inside (their Undo can no longer be pressed) stand. Their files and
+ * photo folders go now, except any the live index names; the journal is then
+ * cleared. Returns the index to publish (unchanged when nothing was pending).
+ */
+function purgeLeftovers<T extends Omit<LibraryIndex, 'schemaVersion'>>(index: T): T {
+  const journal: readonly PendingPurge[] = index.pendingPurges ?? [];
+  if (journal.length === 0) return index;
+  const plan = launchPurgePlan(journal, index);
+  deleteFilesAndPhotoFolders(plan.fileUris, plan.trackIds);
+  const { pendingPurges: _done, ...rest } = index;
+  const cleared = rest as T;
+  try {
+    // A kill before this write re-runs the (idempotent) purge next launch.
+    persist({ ...cleared, hydrated: true });
+  } catch (error) {
+    reportError(error, 'library-purge-journal');
+  }
+  return cleared;
 }
 
 /**
@@ -452,9 +527,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         // unversioned indexes are normalized, junk is dropped, never throws.
         // The ladder also relativises stored paths (#247), healing an index
         // written under a container UUID iOS has since rotated away.
-        const { schemaVersion: _v, ...index } = resolveStoredPaths(
+        const { schemaVersion: _v, ...loaded } = resolveStoredPaths(
           migrateLibraryIndex(raw, storage.documentDirUri()),
         );
+        const index = purgeLeftovers(loaded);
         let pdfRecoveryNotice: string | null = null;
         if (interrupted) {
           const map = index.maps.find(
@@ -837,6 +913,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         maps: s.maps.map(clear),
         tracks: s.tracks.map(clear),
         waypoints: s.waypoints.map(clear),
+        areas: s.areas.map(clear),
         visibleFolderIds: s.visibleFolderIds.filter((f) => f !== id),
       };
       persist(next);
@@ -858,15 +935,104 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
                 ...s,
                 tracks: s.tracks.map((t) => (t.id === itemId ? { ...t, folderId: folder } : t)),
               }
-            : {
-                ...s,
-                waypoints: s.waypoints.map((w) =>
-                  w.id === itemId ? { ...w, folderId: folder } : w,
-                ),
-              };
+            : kind === 'waypoint'
+              ? {
+                  ...s,
+                  waypoints: s.waypoints.map((w) =>
+                    w.id === itemId ? { ...w, folderId: folder } : w,
+                  ),
+                }
+              : {
+                  ...s,
+                  areas: s.areas.map((a) => (a.id === itemId ? { ...a, folderId: folder } : a)),
+                };
       persist(next);
       return next;
     }),
+
+  moveItems: (moves) =>
+    set((s) => {
+      if (moves.length === 0) return s;
+      const next = { ...s, ...applyFolderMoves(s, moves) };
+      persist(next);
+      return next;
+    }),
+
+  removeItemsForUndo: (refs) => {
+    const { next: edited, removed: taken } = removeItems(get(), refs);
+    if (isEmptyRemoval(taken)) return taken;
+    // The journal entry goes in the SAME write as the delete (#711): a kill
+    // inside the Undo window leaves no file behind unnamed; the next launch
+    // purges it (`purgeLeftovers`).
+    const purgeId = storage.newId();
+    const removed: RemovedItems = { ...taken, purgeId };
+    set((s) => {
+      const next = {
+        ...s,
+        ...edited,
+        pendingPurges: [...(s.pendingPurges ?? []), pendingPurgeOf(purgeId, removed)],
+      };
+      persist(next);
+      return next;
+    });
+    return removed;
+  },
+
+  restoreRemovedItems: (removed) =>
+    set((s) => {
+      if (isEmptyRemoval(removed)) return s;
+      // Back in the index and out of the journal, in one write.
+      const next = {
+        ...s,
+        ...restoreItems(s, removed),
+        pendingPurges: withoutPurge(s.pendingPurges, removed.purgeId),
+      };
+      persist(next);
+      return next;
+    }),
+
+  purgeRemovedItems: (removed) => {
+    // The index no longer names them (it was written at the delete); an item
+    // put back by Undo is never purged, as Undo cancels this call.
+    deleteFilesAndPhotoFolders(
+      removedFileUris(removed),
+      removed.tracks.map((r) => r.item.id),
+    );
+    // Files gone: the journal entry goes. A kill before this write only
+    // means the launch purge finds nothing left to delete.
+    if (removed.purgeId === undefined) return;
+    set((s) => {
+      if (!(s.pendingPurges ?? []).some((p) => p.id === removed.purgeId)) return s;
+      const next = { ...s, pendingPurges: withoutPurge(s.pendingPurges, removed.purgeId) };
+      persist(next);
+      return next;
+    });
+  },
+
+  removeFolderForUndo: (id) => {
+    const snapshot = folderSnapshot(get(), id);
+    if (snapshot === null) return null;
+    get().removeFolder(id);
+    return snapshot;
+  },
+
+  restoreFolder: (snapshot) =>
+    set((s) => {
+      const next = { ...s, ...restoreFolder(s, snapshot) };
+      persist(next);
+      return next;
+    }),
+
+  setItemsShown: (refs, shown) => {
+    const result = applyShown(get(), refs, shown);
+    if (result.changed === 0) return 0;
+    set((s) => {
+      const next = { ...s, maps: result.maps, activeTrackIds: result.activeTrackIds };
+      persist(next);
+      return next;
+    });
+    return result.changed;
+  },
 
   addCustomCategory: (name, color) => {
     const id = storage.newId();

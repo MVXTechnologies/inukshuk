@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC } from '@core/format';
 import { bearingDeg, haversineM, type Pt } from './geo';
 import { penStyle, defaultPrefs } from './style';
 import {
@@ -169,15 +170,15 @@ describe('the readout chip', () => {
     const a: Pt = QC;
     const b: Pt = [QC[0], QC[1] + 0.001];
     const c: Pt = [QC[0] + 0.001, QC[1] + 0.001];
-    expect(chipText({ id: 'f', sh: 'free', pts: [a, b], style }, 'metric')).toBe('Pencil · 111 m');
-    expect(chipText({ id: 'a', sh: 'arrow', pts: [a, b], style }, 'metric')).toBe('111 m · 0° N');
-    expect(chipText({ id: 'c', sh: 'circle', pts: [a], r: 85, style }, 'metric')).toBe(
+    expect(chipText({ id: 'f', sh: 'free', pts: [a, b], style }, METRIC)).toBe('Pencil · 111 m');
+    expect(chipText({ id: 'a', sh: 'arrow', pts: [a, b], style }, METRIC)).toBe('111 m · 0° N');
+    expect(chipText({ id: 'c', sh: 'circle', pts: [a], r: 85, style }, METRIC)).toBe(
       'Circle · 85 m radius',
     );
-    expect(chipText({ id: 'c', sh: 'circle', pts: [a], style }, 'metric')).toBe(
+    expect(chipText({ id: 'c', sh: 'circle', pts: [a], style }, METRIC)).toBe(
       'Circle · 0 m radius',
     );
-    expect(chipText({ id: 'r', sh: 'rect', pts: [a, b, c, a], style }, 'imperial')).toBe(
+    expect(chipText({ id: 'r', sh: 'rect', pts: [a, b, c, a], style }, IMPERIAL)).toBe(
       'Rectangle · 365 ft × 250 ft',
     );
   });
@@ -233,7 +234,7 @@ describe('StrokeBuilder (one gesture, move by move)', () => {
           expect(got!.r ?? 0).toBeCloseTo(want.r ?? 0, 6);
         }
         const one = buildStroke(tool, so, VIEW, 's1', style, 1);
-        expect(b.chip(so, VIEW, 'metric')).toBe(one === null ? null : chipText(one, 'metric'));
+        expect(b.chip(so, VIEW, METRIC)).toBe(one === null ? null : chipText(one, METRIC));
       }
     }
   });
@@ -241,16 +242,16 @@ describe('StrokeBuilder (one gesture, move by move)', () => {
   it('a pencil stroke of n moves unprojects n points, not n²/2 (and once more per new camera)', () => {
     const pts = scribble(600);
     const b = new StrokeBuilder('free', 's2');
-    for (let n = 1; n <= pts.length; n++) b.chip(pts.slice(0, n), VIEW, 'metric');
+    for (let n = 1; n <= pts.length; n++) b.chip(pts.slice(0, n), VIEW, METRIC);
     expect(b.unprojected).toBe(600);
     // Built whole (the throttle let one go): nothing unprojected again.
     expect(b.stroke(pts, VIEW, style)!.pts).toHaveLength(600);
     expect(b.unprojected).toBe(600);
     // The camera was re-read (a new viewport object): one full pass, then incremental again.
     const moved = { ...VIEW, zoom: 16 };
-    b.chip(pts, moved, 'metric');
+    b.chip(pts, moved, METRIC);
     expect(b.unprojected).toBe(1200);
-    b.chip([...pts, [2000, 300]], moved, 'metric');
+    b.chip([...pts, [2000, 300]], moved, METRIC);
     expect(b.unprojected).toBe(1201);
   });
 
@@ -266,8 +267,8 @@ describe('StrokeBuilder (one gesture, move by move)', () => {
 describe('readouts for strokes missing points', () => {
   const style = penStyle(defaultPrefs(0));
   it('say zero rather than throw; a bearing that is not a number reads N', () => {
-    expect(chipText({ id: 'a', sh: 'arrow', pts: [QC], style }, 'metric')).toBe('Arrow · 0 m');
-    expect(chipText({ id: 'r', sh: 'rect', pts: [QC], style }, 'metric')).toBe('Rectangle · 0 m');
+    expect(chipText({ id: 'a', sh: 'arrow', pts: [QC], style }, METRIC)).toBe('Arrow · 0 m');
+    expect(chipText({ id: 'r', sh: 'rect', pts: [QC], style }, METRIC)).toBe('Rectangle · 0 m');
     expect(cardinal16(Number.NaN)).toBe('N');
   });
 });

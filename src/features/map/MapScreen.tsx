@@ -4,6 +4,7 @@ import { fnv1a32 } from '@core/encoding/fnv1a';
 import { isWebUrl } from '@core/links/externalUrl';
 import { unprojectablePins } from '@core/geo/pinHitTest';
 import type { WaypointTapRoute } from '@core/map/waypointClusters';
+import { alertBandPlace } from '@core/teamui/alertBands';
 import {
   chipSurvivesHit,
   pointChipAfterBareTap,
@@ -46,7 +47,6 @@ import { GESTURE_SETTLE_MS } from '@core/weather/windPerf';
 import type { WindBbox } from '@core/weather/windCoverage';
 import type { WindViewState } from '@core/weather/windProjection';
 import {
-  Camera,
   type CameraRef,
   GeoJSONSource,
   ImageSource,
@@ -54,8 +54,6 @@ import {
   Map,
   type MapRef,
   Marker,
-  type ViewState,
-  type ViewStateChangeEvent,
 } from '@maplibre/maplibre-react-native';
 import { useLibraryStore } from '@state/libraryStore';
 import { useLongTrailsStore } from '@state/longTrailsStore';
@@ -91,6 +89,9 @@ import { CategoryStartSheet } from './components/CategoryStartSheet';
 import { CompassBadge } from './components/CompassBadge';
 import { DestinationChip } from './components/DestinationChip';
 import { FollowChip } from './nav/FollowChip';
+import { OnMapTrailChip, useOnMapTrailChip } from './nav/OnMapTrailChip';
+import { withOnMapTrail } from '@core/library/onMapTrail';
+import { useOnMapTrailStore } from '@state/onMapTrailStore';
 import { FollowGuideLine } from './nav/FollowGuideLine';
 import { FollowedTrailLine } from './nav/FollowedTrailLine';
 import { NavigationCompassRow } from './nav/NavigationCompassRow';
@@ -100,6 +101,10 @@ import { DestinationMarkerPin } from './components/DestinationMarkerPin';
 import { MapCreditsButton, MapCreditsSheet } from './components/MapCredits';
 import { mapCredits } from '@core/map/mapCredits';
 import { bareTapAfterFocus } from '@core/map/mapTap';
+import { centreCursorPoint } from '@core/map/centreCursor';
+import { topChipLayout } from '@core/map/topChips';
+import { parseRegionPayload, regionBox, type RegionPayload } from '@core/map/regionPayload';
+import { HeadingCamera } from './components/HeadingCamera';
 import { HeadingCone } from './components/HeadingCone';
 import { PointingLine } from './components/PointingLine';
 import { MapSearchPill } from './components/MapSearchPill';
@@ -134,6 +139,7 @@ import { RenderingToasts } from './components/RenderingToasts';
 import { ScaleBar } from './components/ScaleBar';
 import { CenterCursor } from './components/CenterCursor';
 import { InfoStripHost } from './infoStrip/InfoStripHost';
+import { publishLiveCentre, useStripReadsCursor } from './infoStrip/liveCentre';
 import { useMapBack, useStoreBackLayers } from './useMapBack';
 import type { TargetOpen } from '@core/infoStrip/target';
 import { useInfoStripBottomLift, useStripEditorOpen } from './infoStrip/stripRuntime';
@@ -159,7 +165,8 @@ import {
 } from '@features/team/map/TeamMapMarks';
 import { useTeamMapFocus } from '@features/team/map/teamMapFocus';
 import { TeamTrailPhotos } from '@features/team/map/TeamTrailPhotos';
-import { useTeamSheet, useTeamSignalMode } from '@features/team/map/teamMode';
+import { useSearchSlotMode, useTeamSheet, useTeamSignalMode } from '@features/team/map/teamMode';
+import { TeamStatusBar, useTeamBarLayout } from '@features/team/bar/TeamStatusBar';
 import { TeamPickOverlay, useTeamPick } from '@features/team/map/TeamPick';
 import {
   hitTestTeamTrail,
@@ -217,12 +224,12 @@ import { toLineFeature, toLngLatBounds, type TrailLineFeature } from './geojson'
 import { useAutoPauseOnLocationLoss } from './hooks/useAutoPauseOnLocationLoss';
 import { useCameraControls } from './hooks/useCameraControls';
 import { useContourRecovery } from './hooks/useContourRecovery';
-import { useHeadingCamera } from './hooks/useHeadingCamera';
 import { useMapBearing } from './hooks/useMapBearing';
 import { useOfflineDownload } from './hooks/useOfflineDownload';
 import { useRecordingSession } from './hooks/useRecordingSession';
 import { useTrailInspection } from './hooks/useTrailInspection';
 import { useSelectionCamera } from './hooks/useSelectionCamera';
+import { useRegionSettle } from './hooks/useSettleThrottle';
 import {
   CONTOUR_LAYERS,
   FOCUSED_TRAIL_LAYERS,
@@ -333,9 +340,14 @@ const TRAIL_REBUILD_POINTS = 5;
  */
 const NO_MARINE_LAYERS: readonly MarineLayerId[] = [];
 
-/** MapLibre ViewState bounds ([w,s,e,n]) → the wind layer's bbox shape. */
-function windBoundsOf(vs: ViewState): WindBbox {
-  return { west: vs.bounds[0], south: vs.bounds[1], east: vs.bounds[2], north: vs.bounds[3] };
+/**
+ * The camera view, read and PARSED (`@core/map/regionPayload`): MapLibre can
+ * hand back an empty or bounds-less view, and every reader here must cope.
+ * Throws as `getViewState()` does (an uninitialised or torn-down map).
+ */
+async function readRegion(map: MapRef | null | undefined): Promise<RegionPayload | null> {
+  if (!map) return null;
+  return parseRegionPayload(await map.getViewState());
 }
 
 // Fallback bottom padding for the select-trail camera fit, used only before
@@ -344,12 +356,6 @@ function windBoundsOf(vs: ViewState): WindBbox {
 // session. Generous on purpose: a slightly larger pad is a smaller trail
 // on-screen, never a trail hidden under the panel.
 const INSPECT_PANEL_H_ESTIMATE = 300;
-/**
- * Top-centre chips (marine notice, destination readout) sit under the
- * "Search places" pill: its 8 dp top margin + 48 dp height + an 8 dp gap.
- */
-const TOP_CHIP_OFFSET = 8 + 48 + 8;
-
 // Breathing room between the panel's top edge and the fitted trail.
 const INSPECT_PANEL_PAD = 24;
 
@@ -438,7 +444,7 @@ export function MapScreen() {
 
   const { permission, location, lastFix, unavailableKind, unavailableReason } =
     useLocationTracking();
-  const headingForCamera = useHeadingCamera();
+  const rotateMapWithHeading = useSettingsStore((s) => s.rotateMapWithHeading);
 
   const maps = useLibraryStore((s) => s.maps);
   const tracks = useLibraryStore((s) => s.tracks);
@@ -462,9 +468,16 @@ export function MapScreen() {
     () => pdfOverlayMaps(showPdfOverlay, mapVisibilityMode, visibleFolderIds, maps),
     [showPdfOverlay, mapVisibilityMode, visibleFolderIds, maps],
   );
+  // A trail shown with the trail view's "On map" is drawn alone, over that set (#710).
+  const onMapTrackId = useOnMapTrailStore((s) => s.trackId);
   const shownTrackIds = useMemo(
-    () => visibleTrackIds(mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds),
-    [mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds],
+    () =>
+      withOnMapTrail(
+        visibleTrackIds(mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds),
+        onMapTrackId,
+        (id) => tracks.some((t) => t.id === id),
+      ),
+    [mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds, onMapTrackId],
   );
   // `enabled` is passed as well as the (already empty) target list so a page
   // mid-render when the switch flips off is abandoned, not drawn late.
@@ -535,6 +548,9 @@ export function MapScreen() {
   }, []);
   // Team signal mode (#589): taps on the map signal the team.
   const teamSignal = useTeamSignalMode();
+  // The top slot: search, team (its bar goes here), or nothing until known (#707).
+  const searchSlot = useSearchSlotMode();
+  const teamBarHeight = useTeamBarLayout((s) => s.height);
   const teamSignalRef = useRef(teamSignal);
   useEffect(() => {
     teamSignalRef.current = teamSignal;
@@ -893,7 +909,7 @@ export function MapScreen() {
   const marineChart = useMarineChart(
     marineActive && screenFocused && mapLoaded,
     settledBounds,
-    units === 'imperial',
+    units.elevation === 'ft',
     installedPacks,
     installedPacks.size + packTotalBytes,
   );
@@ -929,6 +945,7 @@ export function MapScreen() {
         : {}),
       ...(imageryContours ? { imageryContours: imageryContoursOption() } : {}),
       hillshadeStrength,
+      elevationUnit: units.elevation,
       tiltRelief,
       // #495: the imagery's brightening paint. The map maker's frame shows
       // the raw tiles, because that is what its sheet prints.
@@ -1020,6 +1037,7 @@ export function MapScreen() {
     hillshadeStrength,
     peakDensity,
     showParks,
+    units.elevation,
     tiltRelief,
     offlineOnly,
     offlineRegions,
@@ -1124,6 +1142,10 @@ export function MapScreen() {
   const formatCoords = useCoordinateFormatter();
   // Following a saved trail (#678): its readout, per fix, for the compass.
   const follow = useFollowTrail(location, showSnack);
+  // Its chip (#710), in the top-centre lane under whatever chip holds it.
+  const onMapChip = useOnMapTrailChip();
+  const topLaneTaken =
+    marineActive || destination !== null || follow !== null || displayCondition === 'night';
 
   // Overlay errors surface through the timed hook too: a raw <Snackbar
   // duration={4000}> never auto-dismisses on Samsung One UI (paper arms its
@@ -1209,8 +1231,8 @@ export function MapScreen() {
       let at = forecastAt;
       if (at === null && mapLoaded) {
         try {
-          const vs = await mapRef.current?.getViewState();
-          if (vs !== undefined) at = { latitude: vs.center[1], longitude: vs.center[0] };
+          const vs = await readRegion(mapRef.current);
+          if (vs !== null) at = { latitude: vs.center[1], longitude: vs.center[0] };
         } catch {
           // map mid-teardown — fall through to the stored position.
         }
@@ -1232,6 +1254,7 @@ export function MapScreen() {
       cameraRef,
       mapRef,
       overlays,
+      ready: mapLoaded && screenFocused,
     });
   // Settled map bearing → the compass badge's red north needle, plus the
   // snap-back detent that undoes the rotation a zoom pinch leaks in (#248).
@@ -1278,7 +1301,7 @@ export function MapScreen() {
     let center: LatLng | null = null;
     if (mapLoaded) {
       try {
-        const vs = await mapRef.current?.getViewState();
+        const vs = await readRegion(mapRef.current);
         if (vs) center = { latitude: vs.center[1], longitude: vs.center[0] };
       } catch {
         // Map mid-teardown: search without a bias.
@@ -1397,7 +1420,7 @@ export function MapScreen() {
   const [windSettledBounds, setWindSettledBounds] = useState<WindBbox | null>(null);
   const windSettleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => clearTimeout(windSettleTimer.current ?? undefined), []);
-  const writeWindView = useCallback((vs: ViewState) => {
+  const writeWindView = useCallback((vs: RegionPayload) => {
     windViewRef.current = {
       centerLng: vs.center[0],
       centerLat: vs.center[1],
@@ -1412,27 +1435,41 @@ export function MapScreen() {
   // USER gestures also fade the particles out and arm the ~400 ms settle
   // (Windy's own mobile mitigation — re-seed once the camera rests).
   const onWindRegionIsChanging = useCallback(
-    (e: { nativeEvent: ViewStateChangeEvent }) => {
-      const ev = e.nativeEvent;
+    (ev: RegionPayload) => {
       writeWindView(ev);
       if (!ev.userInteraction) return;
       setWindInteracting(true);
       clearTimeout(windSettleTimer.current ?? undefined);
       windSettleTimer.current = setTimeout(() => {
         setWindInteracting(false);
-        setWindSettledBounds(windBoundsOf(ev));
+        const box = regionBox(ev);
+        if (box) setWindSettledBounds(box);
       }, GESTURE_SETTLE_MS);
     },
     [writeWindView],
   );
+  // The strip's cursor fields read the centre while it moves (<= 10 Hz on
+  // their side): each report is a plain call into the strip's feed, never
+  // React state here, so panning re-renders the strip leaf, not this screen.
+  const stripReadsCursor = useStripReadsCursor();
+  const onRegionIsChanging = useCallback(
+    (e: { nativeEvent: unknown }) => {
+      // Parsed now, while the pooled event still holds its payload.
+      const view = parseRegionPayload(e.nativeEvent);
+      if (view === null) return;
+      if (windEnabled) onWindRegionIsChanging(view);
+      publishLiveCentre(view.center);
+    },
+    [windEnabled, onWindRegionIsChanging],
+  );
   // Settled camera (also fires for programmatic moves): re-anchor input.
   const onWindRegionDidChange = useCallback(
-    (e: { nativeEvent: ViewStateChangeEvent }) => {
-      const ev = e.nativeEvent;
+    (ev: RegionPayload) => {
       writeWindView(ev);
       clearTimeout(windSettleTimer.current ?? undefined);
       setWindInteracting(false);
-      setWindSettledBounds(windBoundsOf(ev));
+      const box = regionBox(ev);
+      if (box) setWindSettledBounds(box);
     },
     [writeWindView],
   );
@@ -1450,10 +1487,11 @@ export function MapScreen() {
     let cancelled = false;
     void (async () => {
       try {
-        const vs = await mapRef.current?.getViewState();
-        if (vs === undefined || cancelled) return;
+        const vs = await readRegion(mapRef.current);
+        if (vs === null || cancelled) return;
         writeWindView(vs);
-        setWindSettledBounds(windBoundsOf(vs));
+        const box = regionBox(vs);
+        if (box) setWindSettledBounds(box);
       } catch {
         // map mid-teardown — the first region event will seed instead.
       }
@@ -1473,10 +1511,11 @@ export function MapScreen() {
     let cancelled = false;
     void (async () => {
       try {
-        const vs = await mapRef.current?.getViewState();
-        if (vs === undefined || cancelled) return;
+        const vs = await readRegion(mapRef.current);
+        if (vs === null || cancelled) return;
         setMapCenter({ latitude: vs.center[1], longitude: vs.center[0] });
-        setSettledBounds(windBoundsOf(vs));
+        const box = regionBox(vs);
+        if (box) setSettledBounds(box);
         onSettleBearing(vs.bearing);
       } catch {
         // map mid-teardown — the first region settle seeds instead.
@@ -1599,10 +1638,9 @@ export function MapScreen() {
   // gate's own note), so every read here is behind it.
   const readEditorCamera = useCallback(() => {
     if (!mapLoaded) return;
-    void mapRef.current
-      ?.getViewState()
+    void readRegion(mapRef.current)
       .then((vs) => {
-        setEditorCamera({ center: [vs.center[0], vs.center[1]], zoom: vs.zoom });
+        if (vs) setEditorCamera({ center: [vs.center[0], vs.center[1]], zoom: vs.zoom });
       })
       .catch(() => undefined); // mid-teardown; the next settle re-reads
   }, [mapLoaded]);
@@ -1619,10 +1657,9 @@ export function MapScreen() {
     // Copied for the cleanup: the ref could point elsewhere by the time this
     // effect tears down (react-hooks/exhaustive-deps).
     const camera = cameraRef.current;
-    void mapRef.current
-      ?.getViewState()
+    void readRegion(mapRef.current)
       .then((vs) => {
-        if (cancelled) return;
+        if (cancelled || vs === null) return;
         const at: EditorCamera = { center: [vs.center[0], vs.center[1]], zoom: vs.zoom };
         preEditorCameraRef.current = at;
         setEditorCamera(at);
@@ -1983,12 +2020,13 @@ export function MapScreen() {
         .then((z) => zoomMapTo([at.longitude, at.latitude], Math.max(z, 16)));
     },
     getCenter: async () => {
-      const vs = await mapRef.current?.getViewState();
+      const vs = await readRegion(mapRef.current);
       return vs ? { latitude: vs.center[1], longitude: vs.center[0] } : null;
     },
     snack: mapSnacks.action,
   });
-  const onAddWaypoint = wpQuick.addAtFix;
+  const { addAtCursor } = wpQuick;
+  const onAddWaypoint = useCallback(() => void addAtCursor(), [addAtCursor]);
 
   // Every waypoint pin currently drawn on the 2D map (live pins only exist
   // while a recording session is up), tagged with its source for tap handling.
@@ -2770,6 +2808,66 @@ export function MapScreen() {
     },
     [mapAreaRef],
   );
+  // Team mode (#707): the team status bar holds the search slot whenever the
+  // search pill would show; the top-centre chips then sit below its column.
+  const teamBarShown =
+    searchSlot === 'team' &&
+    makeMapState === null &&
+    heatSelection === null &&
+    !selecting &&
+    !drawing.active &&
+    !teamDrawing &&
+    movingWp === null &&
+    shownTrail === null &&
+    !searchOpen;
+  // The top-centre chip rows (lane, On map #710, receiver) under the slot.
+  const topChips = topChipLayout({
+    teamBarHeight: teamBarShown ? teamBarHeight : 0,
+    laneTaken: topLaneTaken,
+    onMapChip: onMapChip !== null,
+  });
+  const topChipOffset = topChips.lane;
+  // The settled camera (see the notes inline). Programmatic settles that
+  // the compass streams in heading-up are thinned (useSettleThrottle); the
+  // gesture-pause controller still sees every one (see onRegionDidChange).
+  const onRegionSettled = (view: RegionPayload) => {
+    // A settled camera is proof the native map is up: in some sessions
+    // (seen on iOS in the mountains, 2026-09-28) onDidFinishLoadingMap
+    // never fires, which left every mapLoaded-gated feature dead — the
+    // offline/map-maker selectors stuck on "Calculating…", no slope or
+    // contour overlays. React bails out when it is already true.
+    setMapLoaded(true);
+    setRegionVersion((v) => v + 1);
+    // The selected drawing point's grip follows the camera (#502/#503).
+    drawingRef.current.onCameraSettled();
+    // The map-maker frame's scale and bbox come straight off the
+    // settled camera (#349) — it is the only source of truth for both.
+    if (makeMapOpen) readEditorCamera();
+    // Settled bounds for the marine chart's re-anchor check (the
+    // wind layer keeps its own copy behind the windEnabled gate).
+    // (No bounds when MapLibre could not compute the visible region: keep the last.)
+    const box = regionBox(view);
+    if (box) setSettledBounds(box);
+    updateScaleAt(view.zoom, view.center[1]);
+    // Settled bearing → the badge's red north needle, and the
+    // snap-back detent for a rotation too small to have been meant.
+    onSettleBearing(view.bearing);
+    // Settled pitch → the tilted-map relief pass (#480), and the 3D/2D button.
+    tilt.onSettledPitch(view.pitch);
+    setViewPitch(Math.round(view.pitch));
+    // Settled view → look for contour tiles that failed to load.
+    if (view.bounds) onContourSettled({ ...view, bounds: view.bounds });
+    // Settled centre → mapStore (wave B): resolves the effective
+    // forecast model and the radar rows' "Canada only" hint. Same
+    // render batch as the version bump above — no extra re-render.
+    setMapCenter({
+      latitude: view.center[1],
+      longitude: view.center[0],
+    });
+    void refreshBounds();
+    if (windEnabled) onWindRegionDidChange(view);
+  };
+  const onRegionSettle = useRegionSettle(onRegionSettled);
   return (
     <MapAreaBottomContext.Provider value={mapAreaBottom}>
       <View
@@ -2848,8 +2946,12 @@ export function MapScreen() {
                 // waypoint, Convert); it no longer drops a destination by itself.
                 // Following would recentre on every fix and slide the chip out
                 // from under the finger reaching for Convert (CI 2026-10-08).
-                if (useMapStore.getState().followUser) setFollowUser(false);
-                setPointAt(at);
+                // #709: the bubble opens at the centre cursor, not the finger
+                // (the finger's point only before the map has a centre).
+                const { mapCenter, followUser: following } = useMapStore.getState();
+                const cursor = centreCursorPoint(mapCenter, following, location);
+                if (following) setFollowUser(false);
+                setPointAt(cursor ?? at);
               };
               // #676 — a long-press on a saved pin is Move's shortcut. Projecting
               // the pins is async, so everything else waits for "no pin here".
@@ -2902,13 +3004,13 @@ export function MapScreen() {
               // Seed the scale bar: onRegionDidChange is not guaranteed to fire
               // before the user's first gesture, and a map with no scale on it
               // until you pan looks broken.
-              void mapRef.current
-                ?.getViewState()
+              void readRegion(mapRef.current)
                 .then((vs) => {
+                  if (vs === null) return;
                   updateScaleAt(vs.zoom, vs.center[1]);
                   onSettleBearing(vs.bearing);
                   tilt.onSettledPitch(vs.pitch);
-                  onContourSettled(vs);
+                  if (vs.bounds) onContourSettled({ ...vs, bounds: vs.bounds });
                 })
                 .catch(() => undefined); // mid-teardown — the next settle seeds it
             }}
@@ -2934,51 +3036,25 @@ export function MapScreen() {
             // nudges every fix) never count; see gesturePause for the iOS tap
             // trap this guards against.
             onRegionWillChange={(e) => {
-              gesturePause.willChange(e.nativeEvent.userInteraction === true);
+              const userInteraction = parseRegionPayload(e.nativeEvent)?.userInteraction === true;
+              gesturePause.willChange(userInteraction);
               if (
-                e.nativeEvent.userInteraction === true &&
+                userInteraction &&
                 externalActiveRef.current &&
                 useMapStore.getState().followUser
               ) {
                 setFollowUser(false);
               }
             }}
-            onRegionIsChanging={windEnabled ? onWindRegionIsChanging : undefined}
+            onRegionIsChanging={windEnabled || stripReadsCursor ? onRegionIsChanging : undefined}
             onRegionDidChange={(e) => {
               gesturePause.didChange();
-              // A settled camera is proof the native map is up: in some sessions
-              // (seen on iOS in the mountains, 2026-09-28) onDidFinishLoadingMap
-              // never fires, which left every mapLoaded-gated feature dead — the
-              // offline/map-maker selectors stuck on "Calculating…", no slope or
-              // contour overlays. React bails out when it is already true.
-              setMapLoaded(true);
-              setRegionVersion((v) => v + 1);
-              // The selected drawing point's grip follows the camera (#502/#503).
-              drawingRef.current.onCameraSettled();
-              // The map-maker frame's scale and bbox come straight off the
-              // settled camera (#349) — it is the only source of truth for both.
-              if (makeMapOpen) readEditorCamera();
-              // Settled bounds for the marine chart's re-anchor check (the
-              // wind layer keeps its own copy behind the windEnabled gate).
-              setSettledBounds(windBoundsOf(e.nativeEvent));
-              updateScaleAt(e.nativeEvent.zoom, e.nativeEvent.center[1]);
-              // Settled bearing → the badge's red north needle, and the
-              // snap-back detent for a rotation too small to have been meant.
-              onSettleBearing(e.nativeEvent.bearing);
-              // Settled pitch → the tilted-map relief pass (#480), and the 3D/2D button.
-              tilt.onSettledPitch(e.nativeEvent.pitch);
-              setViewPitch(Math.round(e.nativeEvent.pitch));
-              // Settled view → look for contour tiles that failed to load.
-              onContourSettled(e.nativeEvent);
-              // Settled centre → mapStore (wave B): resolves the effective
-              // forecast model and the radar rows' "Canada only" hint. Same
-              // render batch as the version bump above — no extra re-render.
-              setMapCenter({
-                latitude: e.nativeEvent.center[1],
-                longitude: e.nativeEvent.center[0],
-              });
-              void refreshBounds();
-              if (windEnabled) onWindRegionDidChange(e);
+              // Parsed at once (RN pools the event and nulls its payload when
+              // this returns; 2.6.1 QA white screen), then throttled; an
+              // empty payload (no camera target yet) is dropped.
+              const view = onRegionSettle(e);
+              // Every settle, unthrottled: the cursor fields end on the settled centre.
+              if (view !== null) publishLiveCentre(view.center);
             }}
             onLayout={(e) => {
               const { width, height } = e.nativeEvent.layout;
@@ -2998,7 +3074,7 @@ export function MapScreen() {
             {/* The shared sprites, registered once and first: never moved or
               unmounted while the map lives (2.5.2 QA, see MapImages). */}
             <MapImages />
-            <Camera
+            <HeadingCamera
               ref={cameraRef}
               // A cold launch mounts <Map>/<Camera> fresh;
               // without a centre here MapLibre defaults to [0,0] (null island,
@@ -3011,24 +3087,14 @@ export function MapScreen() {
                 zoom: 14,
                 ...(initialCenter ? { center: initialCenter } : {}),
               }}
-              // "Rotate map with heading" setting: the map bearing always comes
-              // from OUR filtered heading (see useHeadingCamera → useCompass),
-              // whether or not we are following the user, eased over a short
-              // linear transition so successive updates glide instead of ticking.
-              // MapLibre normalizes bearing transitions to the shortest arc, so
-              // 359°→1° turns 2°, not 358°. undefined when the setting is off.
-              //
-              // We deliberately do NOT use trackUserLocation="heading": that maps
-              // to MapLibre's native CameraMode.TRACKING_COMPASS, which drives the
-              // bearing from the platform's *raw* compass — the unfiltered signal
-              // this whole module exists to tame, so the map would shake even
-              // while the needle sat still. "default" (CameraMode.TRACKING) keeps
-              // the centre-on-user behaviour and leaves the bearing to us.
+              // "Rotate map with heading" setting, owned by HeadingCamera so a
+              // heading frame never re-renders this screen. While following,
+              // it switches the follow to MapLibre's native compass mode (a
+              // bearing sent from JS would END the follow on Android); else
+              // OUR heading turns the camera at display rate. See
+              // @core/map/headingCameraMode.
               // Drawing mode (#683) turns the map with two fingers: no heading.
-              bearing={teamDrawing ? undefined : headingForCamera}
-              {...(headingForCamera !== undefined
-                ? { duration: 150, easing: 'linear' as const }
-                : {})}
+              followHeading={rotateMapWithHeading && !teamDrawing}
               trackUserLocation={followUser && !externalActive ? 'default' : undefined}
               onTrackUserLocationChange={(e) => {
                 // Handing follow to the receiver turns native tracking off: not a user pan.
@@ -3472,7 +3538,11 @@ export function MapScreen() {
 
         {/* Top-left compass (decision 1): snug to the safe area. */}
         <View style={[styles.topLeft, { top: insets.top + 8 }]} pointerEvents="box-none">
-          <CompassBadge onPress={resetNorth} mapBearing={mapBearing} />
+          <CompassBadge
+            onPress={resetNorth}
+            mapBearing={mapBearing}
+            followHeading={rotateMapWithHeading && !teamDrawing}
+          />
         </View>
         {/* Screen readers only: the pins (GL symbols, no a11y nodes) as a list,
           nearest first; a row opens the pin's card as a tap on it does. */}
@@ -3523,10 +3593,18 @@ export function MapScreen() {
                 <ShownTrailPill shown={shownTrail} />
               ) : (
                 !searchOpen &&
-                !teamSignal && <MapSearchPill onPress={() => void openPlaceSearch()} />
+                searchSlot === 'search' && <MapSearchPill onPress={() => void openPlaceSearch()} />
               )}
             </View>
           )}
+        {/* Team mode (#707): the team status bar in the search slot. */}
+        {teamBarShown && (
+          <TeamStatusBar
+            top={insets.top + 8}
+            here={location}
+            onNavigate={(latitude, longitude) => setDestination({ latitude, longitude })}
+          />
+        )}
         {searchOpen && !drawing.active && (
           <View style={[styles.searchSheet, { top: insets.top + 8 }]} pointerEvents="box-none">
             <PlaceSearchSheet
@@ -3544,7 +3622,7 @@ export function MapScreen() {
           like the GPS warning, never a Portal/Dialog. */}
         {marineActive && (
           <View
-            style={[styles.marineChip, { top: insets.top + TOP_CHIP_OFFSET }]}
+            style={[styles.marineChip, { top: insets.top + topChipOffset }]}
             pointerEvents="none"
           >
             <MarineDisclaimerChip />
@@ -3557,7 +3635,7 @@ export function MapScreen() {
           destination exists; the ✕ on it is the way out. */}
         {destination !== null && !marineActive && (
           <View
-            style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
+            style={[styles.topCenterChip, { top: insets.top + topChipOffset }]}
             pointerEvents="box-none"
           >
             <DestinationChip onClear={() => setDestination(null)} />
@@ -3565,10 +3643,21 @@ export function MapScreen() {
         )}
         {follow !== null && !marineActive && (
           <View
-            style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
+            style={[styles.topCenterChip, { top: insets.top + topChipOffset }]}
             pointerEvents="box-none"
           >
             <FollowChip name={follow.name} onStop={stopFollowing} />
+          </View>
+        )}
+        {/* A trail shown with "On map" (#710): its name and ✕, one row down
+          when the lane is taken. Below the top bar, so team mode's bar
+          (#707) never covers it. */}
+        {onMapChip !== null && makeMapState === null && (
+          <View
+            style={[styles.topCenterChip, { top: insets.top + topChips.onMap }]}
+            pointerEvents="box-none"
+          >
+            <OnMapTrailChip trail={onMapChip} />
           </View>
         )}
 
@@ -3617,8 +3706,9 @@ export function MapScreen() {
               status === 'idle' && !selecting && !pickingCategory && !drawing.active
                 ? {
                     onRecord: () => setPickingCategory(true),
+                    onPinMyLocation: wpQuick.addAtFix,
+                    pinMyLocationHint: wpQuick.addHint,
                     onAddWaypoint,
-                    addWaypointHint: wpQuick.addHint,
                     // A second download would stop the first's loopback server.
                     onDownload:
                       downloadProgress !== null
@@ -3904,7 +3994,7 @@ export function MapScreen() {
         {/* "Night on · tap to exit" (Night-Mode board), under the search pill. */}
         {displayCondition === 'night' && makeMapState === null && (
           <View
-            style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
+            style={[styles.topCenterChip, { top: insets.top + topChipOffset }]}
             pointerEvents="box-none"
           >
             <NightExitPill />
@@ -3967,19 +4057,7 @@ export function MapScreen() {
           above the panel. Below the destination / night / marine chip when
           one holds the lane. */}
         {makeMapState === null && (
-          <ReceiverMapOverlay
-            top={
-              insets.top +
-              TOP_CHIP_OFFSET +
-              (marineActive ||
-              destination !== null ||
-              follow !== null ||
-              displayCondition === 'night'
-                ? 44
-                : 0)
-            }
-            showChip={!recordingPanelUp}
-          />
+          <ReceiverMapOverlay top={insets.top + topChips.receiver} showChip={!recordingPanelUp} />
         )}
 
         {/* Team mode (#589): the team chip under the receiver chip's lane and
@@ -3987,7 +4065,13 @@ export function MapScreen() {
         {makeMapState === null && (
           <TeamMapOverlay
             fabBottom={teamFabBottom(bottomColumnLift + stripLift, bottomColumnH)}
-            sosTop={insets.top + 8}
+            panelTop={insets.top + 4}
+            snackStyle={liftedSnackbarStyle(bottomColumnLift + stripLift, bottomColumnH)}
+            bandPlace={alertBandPlace({ teamMode: searchSlot === 'team', barShown: teamBarShown })}
+            drawChromeTop={drawCreditsSheetBottom(
+              insets.bottom,
+              recordingPanelUp ? panelHeight : 0,
+            )}
             onPointActions={(p, what) => {
               const at = { longitude: p[0], latitude: p[1] };
               // Navigate starts navigating (compass + destination chip), as the
@@ -4301,7 +4385,7 @@ export function MapScreen() {
           visible={snack !== null}
           onDismiss={dismissSnack}
           duration={Number.POSITIVE_INFINITY}
-          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
+          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight, drawing.panelHeight)}
         >
           {snack ?? ''}
         </Snackbar>
@@ -4309,7 +4393,7 @@ export function MapScreen() {
           visible={overlaySnack !== null}
           onDismiss={dismissOverlaySnack}
           duration={Number.POSITIVE_INFINITY}
-          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
+          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight, drawing.panelHeight)}
         >
           {overlaySnack ?? ''}
         </Snackbar>
@@ -4324,7 +4408,7 @@ export function MapScreen() {
           visible={healthNotice.message !== null}
           onDismiss={healthNotice.dismiss}
           duration={Number.POSITIVE_INFINITY}
-          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
+          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight, drawing.panelHeight)}
           // Settings › Data settings holds the offline maps and their Update buttons.
           action={{ label: 'View', onPress: () => router.push('/settings?open=data') }}
         >
@@ -4335,7 +4419,7 @@ export function MapScreen() {
             visible
             onDismiss={() => undefined}
             duration={Number.POSITIVE_INFINITY}
-            wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
+            wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight, drawing.panelHeight)}
           >
             {`Downloading ${downloadProgress.label}… ${Math.floor(downloadProgress.pct)}%`}
           </Snackbar>

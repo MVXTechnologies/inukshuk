@@ -8,6 +8,7 @@
 import { canResolve, distanceToLine, ON_TRAIL_M, type TeamPin } from '@core/teamui/pins';
 import { rangeAndBearing } from '@core/teamui/positions';
 import type { TeamView } from '@core/teamui/view';
+import { formatDistance } from '@state/formatters';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -21,8 +22,7 @@ import { sendTeamComment } from '../taskSend';
 import { TeamComments } from '../TeamComments';
 import { useToggleTask } from '../useToggleTask';
 
-const dist = (m: number) =>
-  m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(m < 10_000 ? 1 : 0)} km`;
+const dist = (m: number) => formatDistance(m, { style: 'short' });
 
 /** "On the trail", or "120 m off the trail", against the team's shared trails. */
 export function pinPlace(

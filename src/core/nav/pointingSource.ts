@@ -37,7 +37,11 @@ export function choosePointingBearing(
   return null;
 }
 
-/** The pointing line's heading rate: 4 Hz at most. */
+/**
+ * A heading READOUT's rate (the info strip's bearing fields): 4 Hz at most…
+ * Text is read, not watched: the map's moving heading (cone, line, camera,
+ * tape) runs at display rate instead (features/map/headingMotion).
+ */
 export const POINTING_HEADING_INTERVAL_MS = 250;
 /** …and only for a turn of at least 1°. */
 export const POINTING_HEADING_DEADBAND_DEG = 1;

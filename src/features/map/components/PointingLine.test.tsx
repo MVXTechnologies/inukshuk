@@ -1,7 +1,8 @@
+import { IMPERIAL, METRIC } from '@core/format';
 /**
  * The pointing line on the map (#681): hidden/visible rules, the
  * no-magnetometer COG fallback, Edge, the layers, both themes — and, measured,
- * that heading ticks re-render this leaf only, at 4 Hz at most.
+ * that it turns at display rate re-rendering this leaf only (#704).
  */
 import { LIVE_LAYER_ORDER, liveLayerAnchor, type LiveLayerId } from '@core/map/liveLayerOrder';
 import { haversineMeters, initialBearingDeg } from '@core/geo/geomath';
@@ -42,16 +43,19 @@ jest.mock('@maplibre/maplibre-react-native', () => ({
 }));
 jest.mock('@data/storage', () => ({ writeJson: jest.fn(), readJson: async () => null }));
 
-type Listener = (s: { headingDeg: number; accuracy: number | null }) => void;
+type Listener = (f: { headingDeg: number; accuracy: number | null; moving: boolean }) => void;
 const mockListeners = new Set<Listener>();
-jest.mock('../useCompass', () => ({
-  subscribeHeading: (l: Listener) => {
+/** The gate each subscriber asked the display-rate heading for. */
+const mockGates: { minIntervalMs?: number; minDeltaDeg?: number }[] = [];
+jest.mock('../headingMotion', () => ({
+  subscribeHeadingMotion: (l: Listener, gate: { minIntervalMs?: number; minDeltaDeg?: number }) => {
     mockListeners.add(l);
+    mockGates.push(gate);
     return () => mockListeners.delete(l);
   },
 }));
 
-// The heading throttle and the COG refresh are timers.
+// The COG refresh is a timer.
 jest.useFakeTimers();
 
 const QC: LatLng = { latitude: 46.8139, longitude: -71.2082 };
@@ -69,9 +73,11 @@ function configure(patch: Partial<PointingLineSettings>) {
   useSettingsStore.setState({ pointingLine: { ...DEFAULT_POINTING_LINE, ...patch } });
 }
 
-async function heading(deg: number) {
+/** One display frame of the heading (the shared follower is mocked: frames arrive as sent). */
+async function heading(deg: number, moving = false) {
   await act(async () => {
-    for (const l of mockListeners) l({ headingDeg: deg, accuracy: 3 });
+    for (const l of mockListeners)
+      l({ headingDeg: ((deg % 360) + 360) % 360, accuracy: 3, moving });
   });
 }
 
@@ -103,7 +109,8 @@ beforeEach(() => {
   mockLayers.length = 0;
   mockSources.length = 0;
   mockListeners.clear();
-  useSettingsStore.setState({ pointingLine: DEFAULT_POINTING_LINE, units: 'metric' });
+  mockGates.length = 0;
+  useSettingsStore.setState({ pointingLine: DEFAULT_POINTING_LINE, units: METRIC });
 });
 
 describe('PointingLine: when it shows', () => {
@@ -166,7 +173,7 @@ describe('PointingLine: when it shows', () => {
 
   it('follows the unit setting: round feet in imperial, redrawn when it changes', async () => {
     configure({ enabled: true, direction: 'fixed', fixedBearingDeg: 0, labelEvery5th: true });
-    useSettingsStore.setState({ units: 'imperial' });
+    useSettingsStore.setState({ units: IMPERIAL });
     await render(wrap({}));
     // The 500 m stop is 0.5 mi in imperial (2.5.1 final QA): 2640 ft long, and
     // 50 m stands for 200 ft: 13 ticks (11 minor), the 5th and 10th labelled.
@@ -175,7 +182,7 @@ describe('PointingLine: when it shows', () => {
     expect(haversineMeters(from, to)).toBeCloseTo(2640 * 0.3048, 0);
     expect(fc.features.filter((f) => f.properties.kind === 'tick')).toHaveLength(11);
     expect(labels(fc)).toEqual(['1000 ft', '2000 ft']);
-    await act(async () => useSettingsStore.setState({ units: 'metric' }));
+    await act(async () => useSettingsStore.setState({ units: METRIC }));
     fc = drawn()!;
     expect(labels(fc)).toEqual(['250 m', '500 m']);
   });
@@ -273,7 +280,7 @@ describe('PointingLine: themes', () => {
 });
 
 describe('PointingLine render cost (measured)', () => {
-  it('heading ticks re-render the leaf only, at most 4 times a second, never the parent', async () => {
+  it('turns at display rate: one leaf commit and one source update per heading frame, never the parent', async () => {
     configure({ enabled: true });
     let parentRenders = 0;
     let leafCommits = 0;
@@ -292,39 +299,20 @@ describe('PointingLine render cost (measured)', () => {
       </PaperProvider>,
     );
     await heading(100);
-    await act(async () => {
-      jest.advanceTimersByTime(1000);
-    });
+    // It asks the shared follower to skip only sub-0.1° creep (at 500 m: < 1 m).
+    expect(mockGates.at(-1)).toEqual({ minDeltaDeg: 0.1 });
     const parentBefore = parentRenders;
     const commitsBefore = leafCommits;
     const sourcesBefore = mockSources.length;
 
-    // Sub-degree jitter at 20 Hz for 1 s: no work at all.
-    for (let i = 1; i <= 20; i++) {
-      await heading(100 + (i % 2) * 0.6);
-      await act(async () => {
-        jest.advanceTimersByTime(50);
-      });
-    }
-    expect(leafCommits).toBe(commitsBefore);
-
-    // A steady 3°-per-sample turn at 20 Hz for 2 s: ≤ 4 Hz → at most 8 commits (+1 trailing).
-    for (let i = 1; i <= 40; i++) {
-      await heading(100 + i * 3);
-      await act(async () => {
-        jest.advanceTimersByTime(50);
-      });
-    }
-    await act(async () => {
-      jest.advanceTimersByTime(500);
-    });
+    // A 60 Hz turn of 1.5° a frame (90°/s) for 2 s: every frame is drawn.
+    for (let i = 1; i <= 120; i++) await heading(100 + i * 1.5, true);
     const commits = leafCommits - commitsBefore;
-    expect(commits).toBeGreaterThanOrEqual(7);
-    expect(commits).toBeLessThanOrEqual(9);
+    expect(commits).toBe(120);
     // One native source update per commit, and the turn's last heading is the one drawn.
     expect(mockSources.length - sourcesBefore).toBe(commits);
     const { from, to } = lineOf(drawn()!);
-    expect(signedDeltaDeg(220, initialBearingDeg(from, to))).toBeCloseTo(0, 6);
+    expect(signedDeltaDeg(280, initialBearingDeg(from, to))).toBeCloseTo(0, 6);
     expect(parentRenders).toBe(parentBefore);
   });
 });

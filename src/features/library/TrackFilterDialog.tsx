@@ -1,3 +1,4 @@
+import { distanceUnitLabel, fromElevationUnit, metresPer, paceSuffix } from '@core/format';
 import { allCategories } from '@core/library/categories';
 import { UNCATEGORIZED, type NumericRange, type TrackFilter } from '@core/library/filterTracks';
 import { DEFAULT_SORT, SORTS, type SortKey } from '@core/library/sortTracks';
@@ -15,9 +16,6 @@ interface Props {
   /** Apply the built criteria (an empty object clears the filter) and the sort. */
   onApply: (filter: TrackFilter, sortKey: SortKey) => void;
 }
-
-const M_PER_MI = 1609.344;
-const M_PER_FT = 0.3048;
 
 type DatePreset = 'any' | 'week' | 'month' | 'year';
 const DATE_PRESETS: { key: DatePreset; label: string; days?: number }[] = [
@@ -64,7 +62,6 @@ export function TrackFilterDialog({ visible, onDismiss, sortKey, onApply }: Prop
   const theme = useTheme();
   const units = useSettingsStore((s) => s.units);
   const customCategories = useLibraryStore((s) => s.customCategories);
-  const imperial = units === 'imperial';
 
   const [categories, setCategories] = useState<string[]>([]);
   const [distMin, setDistMin] = useState('');
@@ -87,9 +84,10 @@ export function TrackFilterDialog({ visible, onDismiss, sortKey, onApply }: Prop
     setCategories((sel) => (sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]));
 
   const buildFilter = (): TrackFilter => {
-    const distScale = imperial ? M_PER_MI : 1000; // input in mi / km
-    const gainScale = imperial ? M_PER_FT : 1; // input in ft / m
-    const paceScale = imperial ? (60 * 1000) / M_PER_MI : 60; // min/mi | min/km → s/km
+    const distScale = metresPer(units.distance); // input in km / mi / NM
+    const gainScale = fromElevationUnit(1, units); // input in m / ft
+    // min per km / mi / NM → s per km
+    const paceScale = (60 * 1000) / metresPer(units.distance);
     const preset = DATE_PRESETS.find((p) => p.key === datePreset);
     const distanceM = range(distMin, distMax, distScale);
     const durationS = range(durMin, durMax, 3600); // input in hours
@@ -266,24 +264,24 @@ export function TrackFilterDialog({ visible, onDismiss, sortKey, onApply }: Prop
               </View>
             </View>
 
-            {rangeRow('Distance', imperial ? 'mi' : 'km', distMin, setDistMin, distMax, setDistMax)}
+            {rangeRow(
+              'Distance',
+              distanceUnitLabel(units.distance),
+              distMin,
+              setDistMin,
+              distMax,
+              setDistMax,
+            )}
             {rangeRow('Duration', 'hours', durMin, setDurMin, durMax, setDurMax)}
             {rangeRow(
               'Elevation gain D+',
-              imperial ? 'ft' : 'm',
+              units.elevation,
               gainMin,
               setGainMin,
               gainMax,
               setGainMax,
             )}
-            {rangeRow(
-              'Pace',
-              imperial ? 'min/mi' : 'min/km',
-              paceMin,
-              setPaceMin,
-              paceMax,
-              setPaceMax,
-            )}
+            {rangeRow('Pace', `min${paceSuffix(units)}`, paceMin, setPaceMin, paceMax, setPaceMax)}
           </ScrollView>
         </Dialog.ScrollArea>
         <Dialog.Actions>

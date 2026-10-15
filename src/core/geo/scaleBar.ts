@@ -1,4 +1,4 @@
-import type { Units } from '@core/format';
+import { formatInUnit, fromUnit, smallDistanceUnit, toUnit, type Units } from '@core/format';
 
 /**
  * Map scale-bar geometry: how much ground a run of screen pixels covers, and
@@ -33,10 +33,6 @@ const WORLD_PX_AT_ZOOM_0 = 512;
 /** Web-Mercator's usable latitude domain; beyond it cos(lat) → 0 and the math degenerates. */
 const MAX_MERCATOR_LAT = 85;
 
-const M_PER_FT = 0.3048;
-/** Feet in a statute mile — the threshold where an imperial bar switches units. */
-const FT_PER_MI = 5280;
-
 /**
  * Ground metres covered by one logical pixel at a given Web-Mercator zoom and
  * latitude. Returns `null` for junk input rather than NaN/Infinity, so callers
@@ -63,11 +59,6 @@ export function niceBelow(value: number): number {
   return mult * pow;
 }
 
-/** Drop float noise from a nice number: 2 -> "2", 2.5 -> "2.5", 0.30000000004 -> "0.3". */
-function trim(n: number): string {
-  return String(Number(n.toFixed(3)));
-}
-
 /** One drawable scale bar. */
 export interface ScaleBar {
   /** Ground distance the bar represents, in metres. */
@@ -82,8 +73,10 @@ export interface ScaleBar {
  * Pick the scale bar to draw inside `maxWidthPx` pixels of screen.
  *
  * Metric bars are round metres below 1 km and round kilometres above it;
- * imperial bars are round feet below one mile and round miles above it (the
- * Leaflet/Google convention — nobody reads "0.19 mi").
+ * mile bars are round feet below one mile and round miles above it (the
+ * Leaflet/Google convention — nobody reads "0.19 mi"); nautical bars are
+ * round NM from one cable up (0.1 / 0.2 / 0.5 NM, as on a chart), and the
+ * short unit (metres or feet) below.
  *
  * Returns `null` when no sane bar exists (junk camera state, zero width, or a
  * zoom so deep that even the smallest nice distance overflows the allowance).
@@ -99,28 +92,12 @@ export function scaleBar(
   if (mpp === null) return null;
 
   const maxMeters = mpp * maxWidthPx;
-  let meters: number;
-  let label: string;
-
-  if (units === 'imperial') {
-    const maxFeet = maxMeters / M_PER_FT;
-    if (maxFeet >= FT_PER_MI) {
-      const miles = niceBelow(maxFeet / FT_PER_MI);
-      meters = miles * FT_PER_MI * M_PER_FT;
-      label = `${trim(miles)} mi`;
-    } else {
-      const feet = niceBelow(maxFeet);
-      meters = feet * M_PER_FT;
-      label = `${trim(feet)} ft`;
-    }
-  } else if (maxMeters >= 1000) {
-    const km = niceBelow(maxMeters / 1000);
-    meters = km * 1000;
-    label = `${trim(km)} km`;
-  } else {
-    meters = niceBelow(maxMeters);
-    label = `${trim(meters)} m`;
-  }
+  const long = units.distance;
+  // The long unit takes over once one whole unit fits (a cable for NM).
+  const switchAt = long === 'nmi' ? 0.1 : 1;
+  const unit = toUnit(maxMeters, long) >= switchAt ? long : smallDistanceUnit(units);
+  const meters = fromUnit(niceBelow(toUnit(maxMeters, unit)), unit);
+  const label = formatInUnit(meters, unit, 3);
 
   const widthPx = meters / mpp;
   if (!Number.isFinite(widthPx) || widthPx <= 0 || widthPx > maxWidthPx) return null;

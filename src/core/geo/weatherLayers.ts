@@ -1,3 +1,4 @@
+import { speedUnit, toSpeedUnit, usesFahrenheit, type Units } from '@core/format';
 import type { LatLng } from '@core/models';
 
 /**
@@ -100,6 +101,32 @@ export function isWeatherLayerId(v: unknown): v is WeatherLayerId {
  */
 export function sanitizeWeatherLayer(v: unknown): WeatherLayerId | null {
   return isWeatherLayerId(v) ? v : null;
+}
+
+/**
+ * A layer's legend in the user's units (#702): the same colour stops, their
+ * values converted — °F for the US pair, wind in mph or knots. Precipitation
+ * and radar stay in millimetres (as the drape and the readouts do).
+ */
+export function legendInUnits(
+  layer: WeatherLayer,
+  units: Units,
+): { unit: string; labels: readonly string[] } {
+  if (layer.id === 'temp' && usesFahrenheit(units)) {
+    return {
+      unit: '°F',
+      labels: layer.legend.labels.map((c) => String(Math.round((Number(c) * 9) / 5 + 32))),
+    };
+  }
+  if (layer.id === 'wind') {
+    return {
+      unit: speedUnit(units),
+      labels: layer.legend.labels.map((kmh) =>
+        String(Math.round(toSpeedUnit(Number(kmh) / 3.6, units))),
+      ),
+    };
+  }
+  return layer.legend;
 }
 
 export function weatherLayerById(id: WeatherLayerId): WeatherLayer {

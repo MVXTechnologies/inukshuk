@@ -37,6 +37,7 @@ import { isTaskStatusUpdate, validTaskFields } from './tasks';
  * | `msg` (from `msg` ops) | owned, immutable | the creator, once (guests too) | creator or admin (redact) |
  * | `drw` map drawing (#683) | owned | the creator (members); later only its note | creator or admin |
  * | `cap` capabilities (#683) | owned, id = the member | the member (guests too) | member or admin |
+ * | `rcp` receipts (#708) | owned, id = the alert's | the receiver (guests too) | receiver or admin |
  *
  * Guests write only comments: `msg` ops and `comment` entities (their own).
  * A geo-anchored comment ("pin") is a message on the thread `pin:<its id>`
@@ -74,9 +75,10 @@ export const OWNED_KINDS: readonly EntityKind[] = [
   'mres',
   'drw',
   'cap',
+  'rcp',
 ];
 /** Entity kinds a guest may write (their own records only). */
-export const GUEST_KINDS: readonly EntityKind[] = ['comment', 'sos', 'mres', 'cap'];
+export const GUEST_KINDS: readonly EntityKind[] = ['comment', 'sos', 'mres', 'cap', 'rcp'];
 /** Kinds whose `e.set` may name another member's record (`o`). */
 const O_KINDS: readonly string[] = ['task', 'trl', 'sos', 'mres', 'tve'];
 

@@ -30,30 +30,77 @@ export function RowDivider() {
   return <View style={[styles.divider, { backgroundColor: t.divider }]} />;
 }
 
+/**
+ * Select mode on a row (#711): while selecting, the row's trailing controls
+ * (⋮, On map) give way to the circle check, in the same slot, so nothing
+ * shifts sideways; a selected row takes the sage fill. `flash` is the soft
+ * wash moved rows get for a moment so you can see where they landed.
+ */
+export interface RowSelection {
+  selecting?: boolean;
+  selected?: boolean;
+  flash?: boolean;
+}
+
+/** The trailing circle check of a row in select mode. */
+export function SelectCheck({ selected }: { selected: boolean }) {
+  const t = useSchemeTokens();
+  const theme = useTheme();
+  return (
+    <View
+      style={styles.trailingIcon}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      <Icon
+        source={selected ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'}
+        size={24}
+        color={selected ? theme.colors.primary : t.inkMuted}
+      />
+    </View>
+  );
+}
+
+/** Half-strength sage for the moved-rows wash (an 8-digit hex when the colour allows it). */
+export function washOf(color: string): string {
+  return /^#[0-9a-f]{6}$/i.test(color) ? `${color}8C` : color;
+}
+
 function RowFrame({
   leading,
   trailing,
   children,
+  selecting,
   selected,
+  flash,
   main,
-}: {
+}: RowSelection & {
   leading?: ReactNode;
   trailing?: ReactNode;
   children?: ReactNode;
-  selected?: boolean;
   main: ReactNode;
 }) {
   const theme = useTheme();
+  const fill = selected
+    ? theme.colors.secondaryContainer
+    : flash
+      ? washOf(theme.colors.secondaryContainer)
+      : undefined;
   return (
-    <View style={selected ? { backgroundColor: theme.colors.secondaryContainer } : undefined}>
+    <View style={fill ? { backgroundColor: fill } : undefined}>
       <View style={[styles.row, leading ? styles.rowWithGrip : null]}>
         {leading}
         {main}
-        {trailing}
+        {selecting ? <SelectCheck selected={selected === true} /> : trailing}
       </View>
       {children}
     </View>
   );
+}
+
+/** Spoken state of a row in select mode ("selected" / "not selected"). */
+function selectionState(selecting: boolean | undefined, selected: boolean | undefined) {
+  return selecting ? { selected: selected === true } : undefined;
 }
 
 export function TrailRow({
@@ -66,11 +113,12 @@ export function TrailRow({
   onLongPress,
   selecting,
   selected,
+  flash,
   sourceMark,
   leading,
   trailing,
   children,
-}: {
+}: RowSelection & {
   track: TrackSummary;
   category: CategoryDefinition | null;
   stats: string;
@@ -78,8 +126,6 @@ export function TrailRow({
   accessibilityLabel: string;
   onPress: () => void;
   onLongPress: () => void;
-  selecting: boolean;
-  selected: boolean;
   /** "Strava" — where an imported trail came from (#432/#435). */
   sourceMark?: string;
   leading?: ReactNode;
@@ -87,25 +133,14 @@ export function TrailRow({
   children?: ReactNode;
 }) {
   const t = useSchemeTokens();
-  const theme = useTheme();
   const thumb = useRouteThumbnail(track);
   return (
     <RowFrame
+      selecting={selecting}
       selected={selected}
+      flash={flash}
       leading={leading}
-      trailing={
-        selecting ? (
-          <View style={styles.trailingIcon}>
-            <Icon
-              source={selected ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'}
-              size={24}
-              color={selected ? theme.colors.primary : t.inkMuted}
-            />
-          </View>
-        ) : (
-          trailing
-        )
-      }
+      trailing={trailing}
       main={
         <Pressable
           style={styles.main}
@@ -113,6 +148,8 @@ export function TrailRow({
           onLongPress={onLongPress}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
+          accessibilityState={selectionState(selecting, selected)}
+          testID={`library-row-track-${track.id}`}
         >
           <TrailThumbnail trackId={track.id} thumb={thumb} category={category} />
           <View style={styles.text}>
@@ -187,11 +224,15 @@ export function MapRow({
   renderingLabel,
   accessibilityLabel,
   onPress,
+  onLongPress,
+  selecting,
+  selected,
+  flash,
   leading,
   toggle,
   trailing,
   children,
-}: {
+}: RowSelection & {
   map: MapDocument;
   title: string;
   /** Why the map can never be drawn; replaces the size caption when set. */
@@ -206,6 +247,7 @@ export function MapRow({
   renderingLabel: string;
   accessibilityLabel: string;
   onPress: () => void;
+  onLongPress?: () => void;
   leading?: ReactNode;
   toggle?: ReactNode;
   trailing?: ReactNode;
@@ -225,6 +267,9 @@ export function MapRow({
   const theme = useTheme();
   return (
     <RowFrame
+      selecting={selecting}
+      selected={selected}
+      flash={flash}
       leading={leading}
       trailing={
         <>
@@ -236,8 +281,11 @@ export function MapRow({
         <Pressable
           style={styles.main}
           onPress={onPress}
+          onLongPress={onLongPress}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
+          accessibilityState={selectionState(selecting, selected)}
+          testID={`library-row-map-${map.id}`}
         >
           <View>
             <MapThumbnail uri={thumbnailUri} />
@@ -292,9 +340,14 @@ export function WaypointRow({
   accessibilityLabel,
   onPress,
   onLongPress,
+  selecting,
+  selected,
+  flash,
+  testID,
   leading,
   trailing,
-}: {
+}: RowSelection & {
+  testID?: string;
   name: string;
   detail: string;
   caption: string;
@@ -310,6 +363,9 @@ export function WaypointRow({
   const t = useSchemeTokens();
   return (
     <RowFrame
+      selecting={selecting}
+      selected={selected}
+      flash={flash}
       leading={leading}
       trailing={trailing}
       main={
@@ -319,6 +375,8 @@ export function WaypointRow({
           onLongPress={onLongPress}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
+          accessibilityState={selectionState(selecting, selected)}
+          testID={testID}
         >
           <View
             style={[
@@ -364,8 +422,15 @@ export function AreaRow({
   accessibilityLabel,
   onPress,
   onLongPress,
+  selecting,
+  selected,
+  flash,
+  testID,
+  leading,
   trailing,
-}: {
+}: RowSelection & {
+  testID?: string;
+  leading?: ReactNode;
   name: string;
   detail: string;
   caption: string;
@@ -379,6 +444,10 @@ export function AreaRow({
   const t = useSchemeTokens();
   return (
     <RowFrame
+      selecting={selecting}
+      selected={selected}
+      flash={flash}
+      leading={leading}
       trailing={trailing}
       main={
         <Pressable
@@ -387,6 +456,8 @@ export function AreaRow({
           onLongPress={onLongPress}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
+          accessibilityState={selectionState(selecting, selected)}
+          testID={testID}
         >
           <View
             style={[

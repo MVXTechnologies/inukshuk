@@ -1,5 +1,5 @@
 import { distanceUnitMeters } from '@core/dashboard/logbook';
-import type { Units } from '@core/format';
+import { distanceUnitLabel, type Units } from '@core/format';
 import { tightAxis } from '@core/stats/axis';
 import type { StatsBar, StatsPeriod } from '@core/stats/periods';
 import { formatDistance } from '@state/formatters';
@@ -150,7 +150,7 @@ export function StatsBarChart({
         )}
       </View>
       <Text style={[styles.unit, { color: tokens.inkMuted }]}>
-        Distance, {units === 'imperial' ? 'mi' : 'km'}
+        Distance, {distanceUnitLabel(units.distance)}
       </Text>
     </StatsCard>
   );

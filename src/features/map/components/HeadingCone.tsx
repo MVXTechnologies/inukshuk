@@ -1,23 +1,21 @@
 import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import { coneHalfAngleDeg, headingConeFeature } from '@core/geo/headingCone';
 import type { LatLng } from '@core/models';
-import { signedDeltaDeg } from '@core/signal/heading';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { subscribeHeading } from '../useCompass';
+import { subscribeHeadingMotion } from '../headingMotion';
 
 /** Ground radius of the beam, metres. Sized to read clearly at the zooms the
  * map is actually navigated at (z14–18) without dominating the screen. */
 const CONE_RADIUS_M = 70;
 
 /**
- * Minimum heading change (deg) before the sector polygon is regenerated. The
- * shared filter holds the heading exactly still at rest, so this no longer has
- * to defend against jitter — it only has to keep the beam from visibly stepping
- * while you turn, hence the sub-degree value.
+ * Minimum heading change (deg) before the sector polygon is regenerated: well
+ * under what a frame of a slow turn moves, so the beam glides; it only skips
+ * the follower's last sub-pixel creep onto its target.
  */
-const MIN_UPDATE_DELTA_DEG = 0.5;
+const MIN_UPDATE_DELTA_DEG = 0.1;
 
 interface HeadingConeProps {
   /** Latest fix; the cone hides until one exists. */
@@ -37,9 +35,11 @@ interface HeadingConeProps {
  * uses in both themes), and it fades out below z12 where the cone would
  * collapse into the dot anyway.
  *
- * The component owns its own heading subscription (shared, see
- * `subscribeHeading`) so cone updates re-render only this subtree, gated to
- * ≥1° changes to keep GeoJSON regeneration cheap.
+ * It turns at display rate (`subscribeHeadingMotion`: one frame per
+ * animation frame while you turn, none at rest) — 2.6.0 stepped it once per
+ * sensor sample, 6–25° at a time. The subscription is its own, so a frame
+ * re-renders only this subtree: one 26-point polygon and one native source
+ * update.
  */
 export function HeadingCone({ location }: HeadingConeProps) {
   const tokens = useSchemeTokens();
@@ -47,14 +47,8 @@ export function HeadingCone({ location }: HeadingConeProps) {
 
   useEffect(
     () =>
-      subscribeHeading((next) => {
-        setBeam((prev) =>
-          prev !== null &&
-          prev.accuracy === next.accuracy &&
-          Math.abs(signedDeltaDeg(prev.headingDeg, next.headingDeg)) < MIN_UPDATE_DELTA_DEG
-            ? prev
-            : next,
-        );
+      subscribeHeadingMotion(({ headingDeg, accuracy }) => setBeam({ headingDeg, accuracy }), {
+        minDeltaDeg: MIN_UPDATE_DELTA_DEG,
       }),
     [],
   );

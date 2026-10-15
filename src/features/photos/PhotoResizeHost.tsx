@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { FocusBlock } from '@ui/FocusBlock';
 import { WebView } from 'react-native-webview';
 
 import { registerPhotoResizer } from './photoResizer';
@@ -36,7 +37,7 @@ export function PhotoResizeHost() {
     setGeneration((g) => g + 1);
   };
   return (
-    <View style={styles.hidden} pointerEvents="none" collapsable={false}>
+    <FocusBlock style={styles.hidden} pointerEvents="none" collapsable={false}>
       <WebView
         key={generation}
         ref={(view) => host.attach(view)}
@@ -55,7 +56,7 @@ export function PhotoResizeHost() {
         scalesPageToFit={false}
         cacheEnabled={false}
       />
-    </View>
+    </FocusBlock>
   );
 }
 

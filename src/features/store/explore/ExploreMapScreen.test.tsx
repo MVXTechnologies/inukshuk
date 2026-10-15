@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 /**
  * Explore on a map (#447), with MapLibre replaced by a prop-capturing stub:
  * the sheet counts the maps in view, the first view's shards load without a
@@ -129,7 +130,7 @@ beforeEach(() => {
   delete mockCaptured.footprint;
   seedCatalog(fixtureIndex({ shards: [HERE, EAST] }));
   shardMock.mockResolvedValue({ items: [], fromCache: false, warnings: [] });
-  useSettingsStore.setState({ lastKnownPosition: QUEBEC, units: 'metric' });
+  useSettingsStore.setState({ lastKnownPosition: QUEBEC, units: METRIC });
 });
 
 async function mapScreen(initialFilter: ExploreFilter = {}, fromList = false) {

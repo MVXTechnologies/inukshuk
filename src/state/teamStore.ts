@@ -21,7 +21,8 @@ import type { DrawShape } from '@core/teamdraw/view';
 import { drawingSummary } from '@data/team/teamDraw';
 import { useTeamDrawStore } from './teamDrawStore';
 import { appTeamService } from '@data/team/appTeam';
-import { notifyTeam } from '@data/team/teamNotifications';
+import { activeEntities, AlertLedger } from '@core/teamui/alertLedger';
+import { dismissTeamNotification, notifyTeam, setInAppAlarm } from '@data/team/teamNotifications';
 import type { MeshLinkStatus } from '@data/team/meshLink';
 import type { TeamRecord } from '@data/team/teamDisk';
 import type { JoinState } from '@data/team/teamJoin';
@@ -81,9 +82,47 @@ export interface TeamSnapshot {
   banner: TeamBanner | null;
 }
 
+/**
+ * A teammate's SOS that has just arrived and is not acknowledged yet (#708):
+ * the in-app alarm banner sounds and vibrates until Acknowledge, or until
+ * the SOS is resolved.
+ */
+export interface SosAlarm {
+  /** `sos:<owner>:<id>`. */
+  entity: string;
+  owner: string;
+  authorName: string;
+  teamName: string;
+  text: string;
+  at: number;
+}
+
 interface TeamStore extends TeamSnapshot {
+  sosAlarm: SosAlarm | null;
+  /**
+   * TeamHost wants the mesh up (a team open, foreground or recording). With
+   * `meshRunning` still false, the mesh is starting: the bar says
+   * "Connecting…" rather than a transient "Offline" (QA 2.6.1).
+   */
+  meshWanted: boolean;
   refresh(): void;
   dismissBanner(): void;
+  /** Stop this phone's alarm for the current SOS (the band stays). */
+  acknowledgeAlarm(): void;
+}
+
+/** One phone alert per SOS / rally point, cleared on resolve (#708). */
+const ledger = new AlertLedger();
+
+/** Clear what was resolved or ended: its notification, and the alarm if it was this one. */
+function settleAlerts(): void {
+  const s = useTeamStore.getState();
+  const active = activeEntities(s.soses, s.rally);
+  for (const gone of ledger.settle(active)) void dismissTeamNotification(gone);
+  if (s.sosAlarm !== null && !active.has(s.sosAlarm.entity)) {
+    setInAppAlarm(false);
+    useTeamStore.setState({ sosAlarm: null });
+  }
 }
 
 /** The team list has been read from disk (declared before the store is created). */
@@ -129,17 +168,34 @@ function snapshot(service: TeamService | null): Omit<TeamSnapshot, 'banner'> {
   };
 }
 
+/**
+ * Unread in Team chat, the ONE number every chat entry shows (QA 2.6.1,
+ * #707: the map chip and the panel said 7, the Team screen 3): the team
+ * channel's unread plus its sub-threads' (photos, pins, trails). Chat opens
+ * on both tabs, and the two sets are disjoint (the channel holds only
+ * `TEAM_THREAD` messages), so the sum counts each message once.
+ */
+export const selectChatUnread = (s: Pick<TeamSnapshot, 'unread' | 'threadsUnread'>): number =>
+  s.unread + s.threadsUnread;
+
 export const useTeamStore = create<TeamStore>((set) => ({
   ...snapshot(null),
   available: appTeamService() !== null,
   loaded: false,
   banner: null,
+  sosAlarm: null,
+  meshWanted: false,
   refresh: () => {
     set(snapshot(appTeamService()));
+    settleAlerts();
     // A finished shape replaces its live stroke (#683).
     refreshLive();
   },
   dismissBanner: () => set({ banner: null }),
+  acknowledgeAlarm: () => {
+    setInAppAlarm(false);
+    set({ sosAlarm: null });
+  },
 }));
 
 /** Teammates' live strokes into the drawing store, at most once per frame (#683). */
@@ -194,20 +250,56 @@ export function wireTeamStore(): TeamService | null {
     const author = view?.members.find((m) => m.id === alert.author);
     const authorName = author?.name ?? 'A teammate';
     const teamName = view?.name ?? 'Team';
+    const me = service.active?.me ?? '';
+    // An SOS or a rally point (#708): its own channel, once per entity, never mine.
+    if (alert.kind === 'sos' || alert.kind === 'rally') {
+      const routed = ledger.route(alert, me);
+      if (routed !== null && routed.channel === 'sos' && alert.entity) {
+        setInAppAlarm(true);
+        useTeamStore.setState({
+          sosAlarm: {
+            entity: alert.entity,
+            owner: alert.author,
+            authorName,
+            teamName,
+            text: alert.text,
+            at: Date.now(),
+          },
+        });
+        void notifyTeam({
+          title: `SOS · ${authorName}`,
+          body: `${alert.text === 'SOS · needs help' ? 'Needs help' : alert.text} · ${teamName}`,
+          url: alert.url,
+          channel: 'sos',
+          identifier: routed.id,
+        });
+        return;
+      }
+      if (routed !== null && routed.channel === 'rally') {
+        void notifyTeam({
+          title: alert.text.startsWith('Gather · ') ? alert.text : `Gather · ${authorName}`,
+          body: `${authorName} calls everyone there · ${teamName}`,
+          url: alert.url,
+          channel: 'rally',
+          identifier: routed.id,
+        });
+        return;
+      }
+      // A resolution, or a repeat: the small in-app banner only (a badge).
+      if (alert.level === 'alert') return;
+    }
     useTeamStore.setState({ banner: { ...alert, teamName, authorName, at: Date.now() } });
     // The phone's own notification for what is addressed to me (`alert`).
     if (alert.level === 'alert') {
       void notifyTeam({
         title:
-          alert.kind === 'sos'
-            ? `SOS · ${authorName} · ${teamName}`
-            : alert.kind === 'task'
-              ? `${authorName} · tasks · ${teamName}`
-              : alert.kind === 'comment'
-                ? `${authorName} commented · ${teamName}`
-                : alert.priority === 2
-                  ? `Urgent · ${authorName} · ${teamName}`
-                  : `${authorName} · ${teamName}`,
+          alert.kind === 'task'
+            ? `${authorName} · tasks · ${teamName}`
+            : alert.kind === 'comment'
+              ? `${authorName} commented · ${teamName}`
+              : alert.priority === 2
+                ? `Urgent · ${authorName} · ${teamName}`
+                : `${authorName} · ${teamName}`,
         body: alert.text,
         url: alert.url,
       });

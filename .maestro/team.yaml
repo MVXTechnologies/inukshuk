@@ -254,29 +254,167 @@ tags:
 - assertVisible: '.*Removed.*'
 - assertNotVisible:
     id: 'team-needs-rotation'
-# The team chip on the map.
+# The team bar on the map (#707).
 - tapOn: 'Back'
 - tapOn: 'Back'
 - tapOn:
     text: 'Map(, tab.*)?'
     retryTapIfNoChange: true
-# Team signal mode: the team button is the map's only team chrome.
+# Team mode: the team status bar holds the search slot (no search pill) and
+# the orange team button is now the small SOS-only button.
 - extendedWaitUntil:
     visible:
-      id: 'team-fab'
+      id: 'team-bar-pill'
     timeout: 10000
 - assertNotVisible: 'Search places'
+- assertVisible:
+    id: 'team-sos-button'
 - takeScreenshot: team-map
-# Its menu: my status (shown on the map to the others).
+# The panel (tap the pill): my status, from its actions.
 - tapOn:
-    id: 'team-fab'
+    id: 'team-bar-pill'
+- extendedWaitUntil:
+    visible:
+      id: 'team-panel'
+    timeout: 5000
+- assertVisible:
+    id: 'team-panel-manage'
+- takeScreenshot: team-panel
 - tapOn:
-    id: 'team-fab-status'
+    id: 'team-panel-status'
 - tapOn:
     id: 'team-status-arrived'
 - extendedWaitUntil:
     notVisible:
       id: 'team-status-card'
+    timeout: 5000
+# SOS (#708): a plain tap only says to hold; nothing is sent.
+- tapOn:
+    id: 'team-sos-button'
+- extendedWaitUntil:
+    visible:
+      id: 'team-sos-hint'
+    timeout: 3000
+- assertNotVisible:
+    id: 'team-undo-snack'
+# Hold (2 s), then the 5 s undo: Undo sends nothing. The undo's countdown
+# ring animates until it ends, so Maestro's default wait for the screen to
+# settle after a press outlasts the 5 s window (the SOS was already sent when
+# the next step ran, local repro 2026-10-14): the presses on this live
+# countdown wait at most 500 ms to settle. Even so, Maestro's release-to-tap
+# time reached 5.4 s on CI (run 38750352646: the tap landed after the 5 s
+# ended, so the SOS was sent) and 6.8 s locally: the E2E build's undo lasts
+# 20 s (EXPO_PUBLIC_E2E_UNDO_MS), and Undo is the very next step (tapOn waits
+# for it to appear). The undo's screenshot is taken on the next hold.
+- longPressOn:
+    id: 'team-sos-button'
+    waitToSettleTimeoutMs: 500
+- tapOn:
+    id: 'team-undo'
+    waitToSettleTimeoutMs: 500
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-undo-snack'
+    timeout: 3000
+# Then longer than the armed limit and the E2E undo together (5 s + 20 s): a
+# stray timer, or an Undo that came too late, shows here as an SOS band,
+# never as a later flake.
+- extendedWaitUntil:
+    visible: 'never-shown-sentinel'
+    timeout: 27000
+    optional: true
+- assertNotVisible:
+    id: 'team-band-sos'
+- assertNotVisible:
+    id: 'team-undo-snack'
+# Hold again and let the countdown run out (20 s in the E2E build): my SOS is
+# active, in a band under the pill, until I resolve it (confirmed inline).
+- longPressOn:
+    id: 'team-sos-button'
+    waitToSettleTimeoutMs: 500
+- extendedWaitUntil:
+    visible:
+      id: 'team-undo-snack'
+    timeout: 5000
+- takeScreenshot: team-sos-undo
+- extendedWaitUntil:
+    visible:
+      id: 'team-band-sos'
+    timeout: 30000
+- assertVisible: 'Your SOS is active'
+- takeScreenshot: team-sos-active
+- tapOn:
+    id: 'team-band-sos-resolve'
+- tapOn:
+    id: 'team-band-sos-confirm-yes'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-band-sos'
+    timeout: 5000
+# A new SOS right after "Resolve for everyone" goes out at once: the team's
+# one-minute guard once dropped it in silence (QA 2.6.1).
+- longPressOn:
+    id: 'team-sos-button'
+    waitToSettleTimeoutMs: 500
+- extendedWaitUntil:
+    visible:
+      id: 'team-undo-snack'
+    timeout: 5000
+- extendedWaitUntil:
+    visible:
+      id: 'team-band-sos'
+    timeout: 30000
+- assertVisible: 'Your SOS is active'
+- assertNotVisible:
+    id: 'team-undo-error'
+- tapOn:
+    id: 'team-band-sos-resolve'
+- tapOn:
+    id: 'team-band-sos-confirm-yes'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-band-sos'
+    timeout: 5000
+# Rally here (from the panel; a team of one shows Invite in the chips): the
+# same 5 s undo, then the gather band; its creator ends it.
+- tapOn:
+    id: 'team-bar-pill'
+- tapOn:
+    id: 'team-panel-rally'
+    waitToSettleTimeoutMs: 500
+- extendedWaitUntil:
+    visible:
+      id: 'team-undo-snack'
+    timeout: 5000
+- assertVisible: 'Rally point at your position'
+- extendedWaitUntil:
+    visible:
+      id: 'team-band-gather'
+    timeout: 30000
+- takeScreenshot: team-gather-active
+# Its words open who gets there when (name, distance, ETA); again to fold.
+- tapOn:
+    id: 'team-band-gather-text'
+- extendedWaitUntil:
+    visible:
+      id: 'team-gather-etas'
+    timeout: 3000
+- assertVisible:
+    id: 'team-gather-eta-You'
+- takeScreenshot: team-gather-etas
+- tapOn:
+    id: 'team-band-gather-text'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-gather-etas'
+    timeout: 3000
+- tapOn:
+    id: 'team-band-gather-end'
+- tapOn:
+    id: 'team-band-gather-confirm-yes'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-band-gather'
     timeout: 5000
 # A pin: a long-press on the map → Message pin, its card with the thread
 # (pins are made from a spot on the map, not from a menu).
@@ -305,11 +443,11 @@ tags:
 - assertVisible: '.*Fallen tree here.*'
 - takeScreenshot: team-pin
 - tapOn: 'Close'
-# Team chat → Threads: the pin's conversation, apart from the channel.
+# Team chat → Threads (the panel's Chat): the pin's conversation, apart from the channel.
 - tapOn:
-    id: 'team-fab'
+    id: 'team-bar-pill'
 - tapOn:
-    id: 'team-fab-chat'
+    id: 'team-panel-chat'
 - extendedWaitUntil:
     visible:
       id: 'team-chat-screen'
@@ -332,9 +470,9 @@ tags:
     optional: true
 - takeScreenshot: review-team-badges
 - tapOn:
-    id: 'team-fab'
+    id: 'team-bar-pill'
 - tapOn:
-    id: 'team-fab-chat'
+    id: 'team-panel-chat'
 - tapOn:
     id: 'team-chat-tab-threads'
 # A teammate's photo thread opens the photo's card on the map. Its comment
@@ -368,11 +506,11 @@ tags:
           optional: true
       - tapOn:
           id: 'photo-card-close'
-# Leave the team (deletes it from this phone): the menu's Manage team.
+# Leave the team (deletes it from this phone): the panel's Manage team.
 - tapOn:
-    id: 'team-fab'
+    id: 'team-bar-pill'
 - tapOn:
-    id: 'team-fab-manage'
+    id: 'team-panel-manage'
 - extendedWaitUntil:
     visible:
       id: 'team-hub-screen'

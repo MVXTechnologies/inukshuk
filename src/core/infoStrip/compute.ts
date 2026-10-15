@@ -10,6 +10,7 @@ import type {
   FieldDescriptor,
   FieldRef,
   Params,
+  StripSubject,
   StripValue,
 } from './types';
 
@@ -49,7 +50,24 @@ export function sameValue(a: StripValue, b: StripValue): boolean {
     a.unit === b.unit &&
     a.glyph === b.glyph &&
     a.tag === b.tag &&
-    a.tone === b.tone
+    a.tone === b.tone &&
+    a.namesSubject === b.namesSubject &&
+    sameSubject(a.subject, b.subject)
+  );
+}
+
+function sameSubject(a: StripSubject | undefined, b: StripSubject | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return (
+    a.key === b.key &&
+    a.name === b.name &&
+    a.glyph === b.glyph &&
+    a.pin?.icon === b.pin?.icon &&
+    a.pin?.color === b.pin?.color &&
+    (a.pin === undefined) === (b.pin === undefined) &&
+    a.cursor?.kind === b.cursor?.kind &&
+    a.cursor?.color === b.cursor?.color &&
+    a.cursor?.halo === b.cursor?.halo
   );
 }
 

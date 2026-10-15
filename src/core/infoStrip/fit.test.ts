@@ -86,6 +86,7 @@ describe('shortUnit', () => {
     expect(shortUnit('300°', 'NW')).toBeUndefined();
     expect(shortUnit('1.2', 'nmi')).toBe('NM');
     expect(shortUnit('+3.84', 'm ↑')).toBe('↑');
+    expect(shortUnit('+12.60', 'ft ↓')).toBe('↓');
     expect(shortUnit('+3.84', 'm↓')).toBe('↓');
     expect(shortUnit('3.6', 'km/h')).toBe('km/h');
   });

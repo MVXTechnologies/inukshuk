@@ -17,7 +17,7 @@ import {
   getErrorQueueStatus,
   reportError,
 } from '@lib/errorReporting';
-import { formatBytes } from '@core/format';
+import { formatBytes, formatSmallDistance } from '@core/format';
 import { useLibraryStore } from '@state/libraryStore';
 import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
 import { updateCurrentStrip } from '@features/map/infoStrip/stripSettings';
@@ -25,6 +25,7 @@ import { BetaFeaturesSection } from './BetaFeaturesSection';
 import { CoordinateFormatSetting } from './CoordinateFormatSetting';
 import { NavigationButtonsSetting } from './NavigationButtonsSetting';
 import { PinSizeSetting } from './PinSizeSetting';
+import { UnitsSetting } from './UnitsSetting';
 import { ExtensionsSection } from './ExtensionsSection';
 import Constants from 'expo-constants';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -63,16 +64,8 @@ import { ConnectionsSection } from './ConnectionsSection';
 import { TrainingSection } from './TrainingSection';
 import { PhotosSection } from './PhotosSection';
 
-const DISPLACEMENT_OPTIONS = [
-  { value: '2', label: '2 m' },
-  { value: '5', label: '5 m' },
-  { value: '10', label: '10 m' },
-];
-
-const UNITS_OPTIONS = [
-  { value: 'metric', label: 'Metric (km)' },
-  { value: 'imperial', label: 'Imperial (mi)' },
-];
+/** GPS point spacing stops, metres; labelled in the user's short unit ("2 m" / "7 ft"). */
+const DISPLACEMENT_STOPS_M = [2, 5, 10];
 
 /** One-line outcome of a manual "Send now" flush (shown in a timed snackbar). */
 function describeFlush(result: FlushResult): string {
@@ -354,7 +347,10 @@ export function SettingsScreen() {
                   <SegmentedButtons
                     value={String(minDisplacement)}
                     onValueChange={(v) => set('minDisplacementM', Number(v))}
-                    buttons={DISPLACEMENT_OPTIONS}
+                    buttons={DISPLACEMENT_STOPS_M.map((m) => ({
+                      value: String(m),
+                      label: formatSmallDistance(m, units),
+                    }))}
                   />
                 </View>
               </List.Section>
@@ -363,14 +359,8 @@ export function SettingsScreen() {
 
               <List.Section>
                 <List.Subheader>Display</List.Subheader>
-                <List.Item title="Units" description="Distances, elevation, speed and pace" />
-                <View style={styles.segment}>
-                  <SegmentedButtons
-                    value={units}
-                    onValueChange={(v) => set('units', v === 'imperial' ? 'imperial' : 'metric')}
-                    buttons={UNITS_OPTIONS}
-                  />
-                </View>
+                {/* #702: distance (km / mi / NM) and elevation (m / ft), in a sub-panel. */}
+                <UnitsSetting />
                 {/* #677: one app-wide coordinate format (map chip, waypoint cards, copies). */}
                 <CoordinateFormatSetting />
                 {/* #686: every waypoint pin on the map at 75–150 %. */}

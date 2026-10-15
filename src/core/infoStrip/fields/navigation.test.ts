@@ -1,4 +1,4 @@
-import { formatClockTime, formatDistance } from '@core/format';
+import { formatClockTime, formatDistance, METRIC as METRIC_UNITS } from '@core/format';
 import { haversineMeters, initialBearingDeg } from '@core/geo/geomath';
 import { declinationAt } from '@core/geo/wmm';
 
@@ -28,6 +28,9 @@ const FOLLOW: FollowSnapshot = {
   onTrail: false,
 };
 const navigating = (over = {}) => snapshot({ position: fix(), navTarget: CAMP, ...over });
+/** What the fields to the destination pin carry (`subject.ts`). */
+const TO_CAMP = { key: 'destination', name: 'Camp lac', glyph: 'flag' };
+const TO_SOURCE = { key: 'note:n1', name: 'Source', glyph: 'notes' };
 const straightM = haversineMeters(QC, CAMP.point);
 
 describe('target name', () => {
@@ -35,21 +38,31 @@ describe('target name', () => {
     expect(TARGET_NAME.compute(navigating(), { target: null }, METRIC)).toEqual({
       glyph: 'flag',
       value: 'Camp lac',
+      subject: TO_CAMP,
+      namesSubject: true,
     });
     const own = { target: { kind: 'coordinate' as const, point: QC, label: 'Borne 23A' } };
     expect(TARGET_NAME.compute(navigating(), own, METRIC)).toEqual({
       glyph: 'my_location',
       value: 'Borne 23A',
+      subject: {
+        key: `point:${QC.latitude},${QC.longitude}`,
+        name: 'Borne 23A',
+        glyph: 'my_location',
+      },
+      namesSubject: true,
     });
     expect(TARGET_NAME.compute(snapshot(), { target: null }, METRIC)).toBeNull();
   });
 
   it("uses the strip's own target kind (Hiking: next on trail)", () => {
-    const ctx: ComputeContext = { units: 'metric', target: { kind: 'nextOnTrail' } };
+    const ctx: ComputeContext = { units: METRIC_UNITS, target: { kind: 'nextOnTrail' } };
     expect(TARGET_NAME.compute(navigating(), { target: null }, ctx)).toBeNull();
     expect(TARGET_NAME.compute(navigating({ follow: FOLLOW }), { target: null }, ctx)).toEqual({
-      glyph: 'route',
+      glyph: 'notes',
       value: 'Source',
+      subject: TO_SOURCE,
+      namesSubject: true,
     });
   });
 });
@@ -61,24 +74,30 @@ describe('distance to target', () => {
     expect(TARGET_DISTANCE.compute(navigating(), P, METRIC)).toEqual({
       value: (straightM / 1000).toFixed(2),
       unit: 'km',
+      subject: TO_CAMP,
     });
   });
 
   it('along the trail while following, straight when asked', () => {
     const data = navigating({ follow: FOLLOW });
-    expect(TARGET_DISTANCE.compute(data, P, METRIC)).toEqual({ value: '1.50', unit: 'km' });
-    expect(TARGET_DISTANCE.compute(data, { ...P, measure: 'straight' }, METRIC)).toEqual(
-      splitUnit(formatDistance(haversineMeters(QC, FOLLOW.targetPoint), 'metric')),
-    );
+    expect(TARGET_DISTANCE.compute(data, P, METRIC)).toEqual({
+      value: '1.50',
+      unit: 'km',
+      subject: TO_SOURCE,
+    });
+    expect(TARGET_DISTANCE.compute(data, { ...P, measure: 'straight' }, METRIC)).toEqual({
+      ...splitUnit(formatDistance(haversineMeters(QC, FOLLOW.targetPoint), METRIC_UNITS)),
+      subject: TO_SOURCE,
+    });
   });
 
   it('in a fixed unit (nautical miles for paddling) or the app units', () => {
     const data = navigating({ follow: FOLLOW });
-    expect(TARGET_DISTANCE.compute(data, { ...P, unit: 'nmi' }, METRIC)).toEqual({
+    expect(TARGET_DISTANCE.compute(data, { ...P, unit: 'nmi' }, METRIC)).toMatchObject({
       value: '0.81',
-      unit: 'nmi',
+      unit: 'NM',
     });
-    expect(TARGET_DISTANCE.compute(data, P, IMPERIAL)).toEqual({ value: '0.93', unit: 'mi' });
+    expect(TARGET_DISTANCE.compute(data, P, IMPERIAL)).toMatchObject({ value: '0.93', unit: 'mi' });
   });
 
   it('needs a fix for a straight line, and a target', () => {
@@ -97,6 +116,7 @@ describe('bearing to target', () => {
       glyph: 'explore',
       value: `${String(Math.round(trueDeg)).padStart(3, '0')}°`,
       unit: 'NE',
+      subject: TO_CAMP,
     });
     const m = TARGET_BEARING.compute(navigating(), { target: null, reference: 'magnetic' }, METRIC);
     const magDeg = trueDeg - declinationAt(QC.latitude, QC.longitude, NOW);
@@ -121,10 +141,12 @@ describe('ETE and ETA (Q2)', () => {
     expect(ETE.compute(data, { target: null }, METRIC)).toEqual({
       tag: 'ETE',
       value: `≈${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}`,
+      subject: TO_CAMP,
     });
     expect(ETA.compute(data, { target: null }, METRIC)).toEqual({
       tag: 'ETA',
       value: `≈${formatClockTime(NOW + mins * 60_000)}`,
+      subject: TO_CAMP,
     });
   });
 
@@ -145,8 +167,16 @@ describe('ETE and ETA (Q2)', () => {
 
   it('"—" below 0.5 m/s or while the speed warms up', () => {
     const slow = navigating({ movingSpeedMps: ETE_MIN_SPEED_MPS - 0.01 });
-    expect(ETE.compute(slow, { target: null }, METRIC)).toEqual({ tag: 'ETE', value: '—' });
-    expect(ETA.compute(slow, { target: null }, METRIC)).toEqual({ tag: 'ETA', value: '—' });
+    expect(ETE.compute(slow, { target: null }, METRIC)).toEqual({
+      tag: 'ETE',
+      value: '—',
+      subject: TO_CAMP,
+    });
+    expect(ETA.compute(slow, { target: null }, METRIC)).toEqual({
+      tag: 'ETA',
+      value: '—',
+      subject: TO_CAMP,
+    });
     expect(ETE.compute(navigating(), { target: null }, METRIC)?.value).toBe('—');
   });
 
@@ -156,7 +186,7 @@ describe('ETE and ETA (Q2)', () => {
   });
 
   it('helpers report the measure used', () => {
-    const t = { name: 'x', point: CAMP.point, glyph: 'flag' as const, alongTrailM: 900 };
+    const t = { key: 'x', name: 'x', point: CAMP.point, glyph: 'flag' as const, alongTrailM: 900 };
     expect(targetDistance(snapshot(), t, true)).toEqual({ m: 900, straight: false });
     expect(targetDistance(snapshot(), t, false)).toBeNull();
     expect(timeToTarget(snapshot({ movingSpeedMps: 1 }), t)).toEqual({ s: 900, straight: false });
@@ -171,7 +201,11 @@ describe('off trail', () => {
       value: 'Off 62',
       unit: 'm',
       tone: 'warn',
+      subject: { key: 'trail', name: 'Trail', glyph: 'route' },
     });
+    // Off WHAT: the followed trail, by its name.
+    const named = { follow: { ...FOLLOW, trailName: 'Sentier des Caps' } };
+    expect(OFF_TRAIL.compute(snapshot(named), {}, METRIC)?.subject?.name).toBe('Sentier des Caps');
     expect(OFF_TRAIL.compute(snapshot({ follow: FOLLOW }), {}, IMPERIAL)?.unit).toBe('ft');
     expect(
       OFF_TRAIL.compute(snapshot({ follow: { ...FOLLOW, onTrail: true } }), {}, METRIC),

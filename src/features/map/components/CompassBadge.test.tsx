@@ -1,9 +1,26 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { CompassBadge } from './CompassBadge';
 
-async function renderBadge(props: { mapBearing?: number | null; onPress?: () => void } = {}) {
+type Frame = { headingDeg: number; moving: boolean };
+const mockListeners = new Set<(f: Frame) => void>();
+jest.mock('../headingMotion', () => ({
+  subscribeHeadingMotion: (l: (f: Frame) => void) => {
+    mockListeners.add(l);
+    return () => mockListeners.delete(l);
+  },
+}));
+
+async function heading(deg: number) {
+  await act(async () => {
+    for (const l of mockListeners) l({ headingDeg: deg, moving: true });
+  });
+}
+
+async function renderBadge(
+  props: { mapBearing?: number | null; onPress?: () => void; followHeading?: boolean } = {},
+) {
   await render(
     <PaperProvider>
       <CompassBadge {...props} />
@@ -96,5 +113,39 @@ describe('CompassBadge press', () => {
     await renderBadge({ mapBearing: 0, onPress });
     fireEvent.press(screen.getByLabelText('Compass'));
     expect(onPress).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('CompassBadge in heading-up (the map turns with the compass)', () => {
+  beforeEach(() => mockListeners.clear());
+
+  it('listens to nothing unless the map follows the heading', async () => {
+    await renderBadge({ mapBearing: 30 });
+    expect(mockListeners.size).toBe(0);
+  });
+
+  it('the needle follows every heading frame — the camera turns on the same frames', async () => {
+    await renderBadge({ mapBearing: 0, followHeading: true });
+    expect(mockListeners.size).toBe(1);
+    for (const h of [10, 10.5, 11, 11.5]) {
+      await heading(h);
+      expect(needleRotation()).toBe(`-${h}deg`);
+    }
+  });
+
+  it('crosses north the short way: 350° → 10° turns the needle 20°, not 340°', async () => {
+    await renderBadge({ mapBearing: 0, followHeading: true });
+    const deg = () => parseFloat(needleRotation());
+    await heading(350);
+    const start = deg();
+    expect(((start % 360) + 360) % 360).toBeCloseTo(10, 9); // north 10° left of up
+    for (const h of [359, 4, 10]) {
+      const before = deg();
+      await heading(h);
+      // Each step turns the needle the short way (counter-clockwise for a clockwise turn).
+      expect(before - deg()).toBeGreaterThan(0);
+      expect(before - deg()).toBeLessThan(10);
+    }
+    expect(start - deg()).toBeCloseTo(20, 9);
   });
 });

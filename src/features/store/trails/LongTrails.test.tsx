@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 /**
  * Long-distance trails in Explore (#467): the landing section (hidden until
  * the index is in), the full list (activity chips, sort, sections) and the
@@ -70,7 +71,7 @@ const CHARLEVOIX = { latitude: 47.25, longitude: -70.9 };
 beforeEach(() => {
   resetLongTrailsStore();
   useMapStore.setState({ mapCenter: null, focusBounds: null });
-  useSettingsStore.setState({ lastKnownPosition: CHARLEVOIX, units: 'metric', offlineOnly: false });
+  useSettingsStore.setState({ lastKnownPosition: CHARLEVOIX, units: METRIC, offlineOnly: false });
   (loadTrailIndex as jest.Mock).mockResolvedValue({ index: sampleIndex(), fromCache: false });
   (loadTrailDetail as jest.Mock).mockResolvedValue(sampleDetail(true));
   seedCatalog(fixtureIndex({ items: [] }), { items: [] });

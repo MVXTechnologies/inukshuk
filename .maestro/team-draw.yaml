@@ -122,23 +122,25 @@ appId: com.inukshuk.app
     retryTapIfNoChange: true
 - extendedWaitUntil:
     visible:
-      id: 'team-fab'
+      id: 'team-bar-pill'
     timeout: 10000
-# The team menu: "Draw on map", right after Rally.
+# The team panel (tap the team bar, #707): Draw, right after Rally here.
 - tapOn:
-    id: 'team-fab'
+    id: 'team-bar-pill'
 - tapOn:
-    id: 'team-fab-draw'
+    id: 'team-panel-draw'
 - extendedWaitUntil:
     visible:
       id: 'team-draw-toolbar'
     timeout: 5000
-# Drawing mode owns the screen: no team button, no search. (Its hint shows on
+# Drawing mode owns the screen: no team bar, no SOS button, no search. (Its hint shows on
 # this install's first three entries only, counted across launches, so a flow
 # retried on the same install may be past them: not asserted here; the
 # component and store tests cover it.)
 - assertNotVisible:
-    id: 'team-fab'
+    id: 'team-bar-pill'
+- assertNotVisible:
+    id: 'team-sos-button'
 - assertNotVisible: 'Search places'
 - takeScreenshot: team-draw-entered
 # Style: fades Never (the arrow must outlive this flow's taps).
@@ -171,7 +173,7 @@ appId: com.inukshuk.app
     id: 'team-draw-done'
 - extendedWaitUntil:
     visible:
-      id: 'team-fab'
+      id: 'team-bar-pill'
     timeout: 5000
 # Outside drawing mode, a tap on the arrow's shaft opens its card.
 - tapOn:
@@ -189,11 +191,11 @@ appId: com.inukshuk.app
     notVisible:
       id: 'team-shape-card'
     timeout: 5000
-# Leave the team (it is deleted from this phone).
+# Leave the team (it is deleted from this phone): the panel's Manage team.
 - tapOn:
-    id: 'team-fab'
+    id: 'team-bar-pill'
 - tapOn:
-    id: 'team-fab-manage'
+    id: 'team-panel-manage'
 - extendedWaitUntil:
     visible:
       id: 'team-hub-screen'

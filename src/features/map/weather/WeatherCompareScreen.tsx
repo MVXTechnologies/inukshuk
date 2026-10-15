@@ -1,3 +1,4 @@
+import type { Units } from '@core/format';
 import { ECCC_ATTRIBUTION, weatherLayerById, type WeatherLayerId } from '@core/geo/weatherLayers';
 import { daySegments } from '@core/geo/weatherTimeline';
 import type { LatLng } from '@core/models';
@@ -37,7 +38,6 @@ export function WeatherCompareScreen({ at, layer }: { at: LatLng; layer: Weather
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const units = useSettingsStore((s) => s.units);
-  const imperial = units === 'imperial';
 
   const variable: ModelVariable = (layer !== null ? modelVariableForLayer(layer) : null) ?? 'temp';
   const matrix = useCompareMatrix(at, variable);
@@ -98,7 +98,7 @@ export function WeatherCompareScreen({ at, layer }: { at: LatLng; layer: Weather
             key={model.id}
             model={model}
             variable={variable}
-            imperial={imperial}
+            units={units}
             at={at}
             times={times}
             segments={segments}
@@ -116,7 +116,7 @@ export function WeatherCompareScreen({ at, layer }: { at: LatLng; layer: Weather
 function ModelCard({
   model,
   variable,
-  imperial,
+  units,
   at,
   times,
   segments,
@@ -126,7 +126,7 @@ function ModelCard({
 }: {
   model: WeatherModel;
   variable: ModelVariable;
-  imperial: boolean;
+  units: Units;
   at: LatLng;
   times: readonly number[] | null;
   segments: ReturnType<typeof daySegments>;
@@ -141,19 +141,19 @@ function ModelCard({
       ? [
           {
             infoLayer: model.info.temp,
-            unit: compareUnitLabel('temp', imperial),
+            unit: compareUnitLabel('temp', units),
             rowVariable: 'temp',
           },
         ]
       : [
           {
             infoLayer: model.info[variable],
-            unit: compareUnitLabel(variable, imperial),
+            unit: compareUnitLabel(variable, units),
             rowVariable: variable,
           },
           {
             infoLayer: model.info.temp,
-            unit: compareUnitLabel('temp', imperial),
+            unit: compareUnitLabel('temp', units),
             rowVariable: 'temp',
           },
         ];
@@ -164,7 +164,7 @@ function ModelCard({
       return <Animated.View style={[styles.skeleton, { opacity: shimmer }]} />;
     }
     if (value === null) return <Text style={styles.cellMuted}>–</Text>;
-    return <Text style={styles.cellText}>{compareCellText(rowVariable, value, imperial)}</Text>;
+    return <Text style={styles.cellText}>{compareCellText(rowVariable, value, units)}</Text>;
   };
 
   return (

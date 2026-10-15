@@ -6,6 +6,7 @@ import {
   drawHelp,
   drawHint,
   drawReducer,
+  exitNeedsConfirm,
   initialDrawState,
   MAX_UNDO,
   type DrawAction,
@@ -177,6 +178,33 @@ describe('canSave', () => {
     expect(canSave(run(initialDrawState('route'), add(A), add(B)))).toBe(true);
     expect(canSave(run(initialDrawState('area'), add(A), add(B)))).toBe(false);
     expect(canSave(run(initialDrawState('area'), add(A), add(B), add(C)))).toBe(true);
+  });
+});
+
+describe('exitNeedsConfirm (QA 2.6.1)', () => {
+  it('nothing drawn: ✕ closes at once', () => {
+    expect(exitNeedsConfirm(initialDrawState('area'))).toBe(false);
+    expect(exitNeedsConfirm(initialDrawState('route'))).toBe(false);
+  });
+
+  it('an area with one or two corners never had a shape: ✕ closes at once', () => {
+    expect(exitNeedsConfirm(run(initialDrawState('area'), add(A)))).toBe(false);
+    expect(exitNeedsConfirm(run(initialDrawState('area'), add(A), add(B)))).toBe(false);
+  });
+
+  it('an area with a shape (or editing a saved one) asks first', () => {
+    expect(exitNeedsConfirm(run(initialDrawState('area'), add(A), add(B), add(C)))).toBe(true);
+    // Undone back to two corners: the shape is gone (no redo), nothing to lose.
+    const undone = run(initialDrawState('area'), add(A), add(B), add(C), { type: 'undo' });
+    expect(undone.vertices).toHaveLength(2);
+    expect(exitNeedsConfirm(undone)).toBe(false);
+    // Editing a saved area: its shape is the starting point.
+    const edit = run(initialDrawState('area', [A, B, C, D]), { type: 'remove', index: 0 });
+    expect(exitNeedsConfirm(edit)).toBe(true);
+  });
+
+  it('a route asks as soon as anything was drawn (unchanged)', () => {
+    expect(exitNeedsConfirm(run(initialDrawState('route'), add(A)))).toBe(true);
   });
 });
 

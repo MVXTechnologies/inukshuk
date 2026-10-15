@@ -1,4 +1,4 @@
-import { formatDistance, formatElevation } from '../format';
+import { formatDistance, formatElevation, IMPERIAL, METRIC, NAUTICAL } from '../format';
 import { axisGutterWidth, estimateTextWidth } from './axis';
 
 /** The gutter both charts hard-coded before the labels were measured. */
@@ -51,21 +51,24 @@ describe('axisGutterWidth', () => {
 
   it('reproduces the Dashboard defect: the old fixed 40 px gutter clipped two-digit km', () => {
     // 1 digit fitted, which is why the bug only showed up once a weekly total
-    // reached 10 km.
-    expect(axisGutterWidth([formatDistance(9_000, 'metric')], opts)).toBeLessThanOrEqual(
-      OLD_FIXED_GUTTER,
-    );
-    expect(axisGutterWidth([formatDistance(10_000, 'metric')], opts)).toBeGreaterThan(
-      OLD_FIXED_GUTTER,
-    );
-    expect(axisGutterWidth([formatDistance(123_450, 'metric')], opts)).toBeGreaterThan(
-      OLD_FIXED_GUTTER,
-    );
-    // Imperial clipped too, and at a *lower* number: "123.4 mi" is a shorter
+    // reached 10 km. The labels as the formatter wrote them then (two
+    // decimals on every km; #702 drops one from 10 up).
+    expect(axisGutterWidth(['9.00 km'], opts)).toBeLessThanOrEqual(OLD_FIXED_GUTTER);
+    expect(axisGutterWidth(['10.00 km'], opts)).toBeGreaterThan(OLD_FIXED_GUTTER);
+    expect(axisGutterWidth(['123.45 km'], opts)).toBeGreaterThan(OLD_FIXED_GUTTER);
+    // Imperial clipped too, and at a *lower* number: "124.3 mi" is a shorter
     // string than "123.45 km" but "mi" is wide.
-    expect(axisGutterWidth([formatDistance(200_000, 'imperial')], opts)).toBeGreaterThan(
-      OLD_FIXED_GUTTER,
-    );
+    expect(axisGutterWidth(['124.3 mi'], opts)).toBeGreaterThan(OLD_FIXED_GUTTER);
+  });
+
+  it('sizes today’s labels to fit too, in every distance unit', () => {
+    for (const units of [METRIC, IMPERIAL, NAUTICAL]) {
+      for (const m of [9_000, 10_000, 123_450, 1_234_500]) {
+        const label = formatDistance(m, units);
+        const x = axisGutterWidth([label], opts) - 5;
+        expect(x - estimateTextWidth(label, GRAPH_FONT)).toBeGreaterThanOrEqual(0);
+      }
+    }
   });
 
   it('sizes from the WIDEST label, not the first or the last', () => {
@@ -94,9 +97,9 @@ describe('axisGutterWidth', () => {
   it('fits the elevation labels the trail profile draws, including big imperial ones', () => {
     const fontSize = 8;
     for (const label of [
-      formatElevation(120, 'metric'),
-      formatElevation(4_400, 'metric'),
-      formatElevation(4_400, 'imperial'), // "14436 ft"
+      formatElevation(120, METRIC),
+      formatElevation(4_400, METRIC),
+      formatElevation(4_400, IMPERIAL), // "14436 ft"
     ]) {
       const gutter = axisGutterWidth([label], { fontSize });
       expect(gutter - 5 - estimateTextWidth(label, fontSize)).toBeGreaterThanOrEqual(0);

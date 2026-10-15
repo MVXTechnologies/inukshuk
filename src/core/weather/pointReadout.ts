@@ -1,3 +1,4 @@
+import type { Units } from '@core/format';
 import { weatherLayerById, type WeatherLayerId } from '@core/geo/weatherLayers';
 import { formatTimelineLabel } from '@core/geo/weatherTimeline';
 import {
@@ -22,7 +23,7 @@ export function pointReadoutText(
   layerId: WeatherLayerId,
   modelId: WeatherModelId,
   value: number,
-  imperial: boolean,
+  units: Units,
   timeMs: number | null,
 ): string {
   const variable = modelVariableForLayer(layerId);
@@ -33,10 +34,10 @@ export function pointReadoutText(
     valuePart = `${Math.round(value * 10) / 10} ${weatherLayerById(layerId).legend.unit}`;
     modelPart = null;
   } else {
-    const cell = compareCellText(variable, value, imperial);
+    const cell = compareCellText(variable, value, units);
     // Temperature's cell text already ends in the degree sign; the other
     // variables append their unit label ("23 km/h", "1.2 mm").
-    valuePart = variable === 'temp' ? cell : `${cell} ${compareUnitLabel(variable, imperial)}`;
+    valuePart = variable === 'temp' ? cell : `${cell} ${compareUnitLabel(variable, units)}`;
     modelPart = weatherModelById(modelId).label;
   }
   const timePart = timeMs !== null ? formatTimelineLabel(timeMs) : null;

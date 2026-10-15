@@ -261,6 +261,116 @@ describe('team mode over the loopback mesh', () => {
     await active(a).stopMesh();
   });
 
+  it('an SOS and a rally point get one receipt each, and the raiser counts them (#708)', async () => {
+    const hub = new LoopbackMeshHub();
+    const a = await founded(hub);
+    const { b } = await joined(hub, a, 'Julie');
+    await until(() => names(active(a)).includes('Julie:member'), 'A sees Julie');
+    // Both phones advertise receipts once they hold a key (the profile check).
+    await until(
+      () => active(a).receipts({ kind: 'sos', owner: active(b).me, id: 'x' }).capable === 1,
+      'A sees Julie’s rc',
+    );
+    expect(active(b).raiseSos(-71.2, 46.8)).toBeNull();
+    const sos = active(b).soses()[0]!;
+    const ref = { kind: 'sos' as const, owner: sos.owner, id: sos.id };
+    expect(active(b).receipts(ref)).toEqual({ received: 0, capable: 1, others: 1 });
+    await until(() => active(b).receipts(ref).received === 1, 'Julie sees A’s receipt');
+    expect(a.alerts.filter((x) => x.kind === 'sos')).toHaveLength(1);
+    // Nothing more is owed: another sync writes nothing.
+    expect(active(a).sendOwedReceipts()).toBe(0);
+    expect(active(a).setRally(-71.21, 46.81)).toBeNull();
+    const rly = active(a).rally()!;
+    const rref = { kind: 'rly' as const, owner: rly.owner, id: rly.id };
+    await until(() => active(a).receipts(rref).received === 1, 'A sees Julie’s rally receipt');
+    expect(b.alerts.filter((x) => x.kind === 'rally')).toMatchObject([
+      { level: 'alert', entity: `rly:${rly.owner}:${rly.id}` },
+    ]);
+    for (const p of [a, b]) await active(p).stopMesh();
+  }, 20_000);
+
+  it.each(['raiser', 'admin'] as const)(
+    'a resolved SOS never blocks the next: resolve, then a new SOS at once reaches the team (resolved by the %s, QA 2.6.1)',
+    async (resolver) => {
+      const hub = new LoopbackMeshHub();
+      const a = await founded(hub);
+      const { b } = await joined(hub, a, 'Julie');
+      await until(() => names(active(a)).includes('Julie:member'), 'A sees Julie');
+      await until(
+        () => active(a).receipts({ kind: 'sos', owner: active(b).me, id: 'x' }).capable === 1,
+        'A sees Julie’s rc',
+      );
+      const julie = active(b).me;
+      const openOnA = () =>
+        active(a)
+          .soses()
+          .filter((s) => s.owner === julie && !s.resolved);
+      expect(active(b).raiseSos(-71.2, 46.8, 'Ankle')).toBeNull();
+      await until(() => openOnA().length === 1, 'A sees the first SOS');
+      const first = active(b).soses()[0]!;
+      const ref = { kind: 'sos' as const, owner: julie, id: first.id };
+      await until(() => active(b).receipts(ref).received === 1, 'A’s receipt for the first');
+      // "Resolve for everyone", by Julie herself or by the admin.
+      const resolve =
+        resolver === 'raiser'
+          ? active(b).resolveSos(julie, first.id)
+          : active(a).resolveSos(julie, first.id);
+      expect(resolve).toBeNull();
+      await until(
+        () =>
+          active(b)
+            .soses()
+            .every((s) => s.resolved) && openOnA().length === 0,
+        'both see it resolved',
+      );
+      const raisedAt = Date.now();
+      // Seconds later, a real emergency: it must go out now, not in a minute.
+      expect(active(b).raiseSos(-71.3, 46.9)).toBeNull();
+      const mine = active(b)
+        .soses()
+        .filter((s) => !s.resolved);
+      expect(mine).toMatchObject([{ owner: julie, lng: -71.3, lat: 46.9, text: '' }]);
+      // It is a new alert: "just now", and nobody has received it yet.
+      expect(mine[0]!.at).toBeGreaterThanOrEqual(raisedAt);
+      const next = { kind: 'sos' as const, owner: julie, id: mine[0]!.id };
+      expect(active(b).receipts(next).received).toBe(0);
+      await until(() => openOnA().length === 1, 'A sees the new SOS');
+      expect(openOnA()[0]).toMatchObject({ lng: -71.3, lat: 46.9, text: '' });
+      expect(openOnA()[0]!.at).toBeGreaterThanOrEqual(raisedAt);
+      // A raised it again (not a silent place update), and receipts it anew.
+      expect(a.alerts.filter((x) => x.kind === 'sos' && x.text.startsWith('SOS ·'))).toHaveLength(
+        2,
+      );
+      await until(() => active(b).receipts(next).received === 1, 'A’s receipt for the new SOS');
+      for (const p of [a, b]) await active(p).stopMesh();
+    },
+    20_000,
+  );
+
+  it('a write the data fold refuses is reported, never called a success (QA 2.6.1)', async () => {
+    const hub = new LoopbackMeshHub();
+    const a = await founded(hub);
+    const { b } = await joined(hub, a, 'Julie');
+    expect(active(a).raiseSos(-71.2, 46.8)).toBeNull();
+    const sos = active(a).soses()[0]!;
+    await until(
+      () =>
+        active(b)
+          .soses()
+          .some((s) => s.id === sos.id),
+      'Julie sees the SOS',
+    );
+    // A member (not an admin) cannot resolve someone else's SOS: the fold
+    // skips the write, and the action says so.
+    expect(active(b).resolveSos(sos.owner, sos.id)).toBe('not-allowed');
+    expect(
+      active(b)
+        .soses()
+        .find((s) => s.id === sos.id)!.resolved,
+    ).toBe(false);
+    for (const p of [a, b]) await active(p).stopMesh();
+  }, 20_000);
+
   it('runs the whole join on the real noble crypto', async () => {
     const hub = new LoopbackMeshHub();
     const a = await founded(hub, nobleCrypto);

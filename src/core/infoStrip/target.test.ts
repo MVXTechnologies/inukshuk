@@ -35,15 +35,67 @@ describe('resolveTarget', () => {
     expect(resolveTarget({ kind: 'navTarget' }, snapshot())).toBeNull();
     expect(resolveTarget({ kind: 'navTarget' }, snapshot({ navTarget: PIN }))).toEqual({
       ...PIN,
+      key: 'destination',
       glyph: 'flag',
       alongTrailM: null,
     });
   });
 
+  it('nav target set on a saved waypoint: that waypoint, as its pin', () => {
+    const on = { ...PIN, waypointId: 'w1', pin: { icon: 'camp', color: '#E8612C' } };
+    expect(resolveTarget({ kind: 'navTarget' }, snapshot({ navTarget: on }))).toEqual({
+      name: PIN.name,
+      point: PIN.point,
+      key: 'waypoint:w1',
+      glyph: 'place',
+      pin: { icon: 'camp', color: '#E8612C' },
+      alongTrailM: null,
+    });
+    // A pin with no style still draws as the default waypoint pin.
+    const plain = { ...PIN, waypointId: 'w1' };
+    expect(resolveTarget({ kind: 'navTarget' }, snapshot({ navTarget: plain }))?.pin).toEqual({});
+  });
+
   it("nav target while following: the trail's next target, along the trail", () => {
     expect(
       resolveTarget({ kind: 'navTarget' }, snapshot({ navTarget: PIN, follow: FOLLOW })),
-    ).toEqual({ name: 'Source', point: FOLLOW.targetPoint, glyph: 'route', alongTrailM: 620 });
+    ).toEqual({
+      key: 'note:n1',
+      name: 'Source',
+      point: FOLLOW.targetPoint,
+      glyph: 'notes',
+      alongTrailM: 620,
+    });
+  });
+
+  it("the trail's next target keeps its own look: a waypoint's pin, the trail's end flag", () => {
+    const wp: FollowSnapshot = {
+      ...FOLLOW,
+      targetKind: 'waypoint',
+      targetId: 'w1',
+      targetPin: { color: '#1E64C8' },
+    };
+    expect(resolveTarget({ kind: 'nextOnTrail' }, snapshot({ follow: wp }))).toMatchObject({
+      key: 'waypoint:w1',
+      glyph: 'place',
+      pin: { color: '#1E64C8' },
+    });
+    const end: FollowSnapshot = { ...FOLLOW, targetKind: 'end', targetId: 'end' };
+    expect(resolveTarget({ kind: 'nextOnTrail' }, snapshot({ follow: end }))).toMatchObject({
+      key: 'trailEnd',
+      glyph: 'sports_score',
+    });
+    expect(resolveTarget({ kind: 'nextOnTrail' }, snapshot({ follow: end }))?.pin).toBeUndefined();
+  });
+
+  it('one waypoint is one subject, however a field reaches it', () => {
+    const waypoints = { w1: PIN };
+    const picked = resolveTarget({ kind: 'waypoint', waypointId: 'w1' }, snapshot({ waypoints }));
+    const next = resolveTarget(
+      { kind: 'nextOnTrail' },
+      snapshot({ follow: { ...FOLLOW, targetKind: 'waypoint', targetId: 'w1' } }),
+    );
+    expect(picked?.key).toBe(next?.key);
   });
 
   it('next on trail: only while following', () => {
@@ -57,7 +109,9 @@ describe('resolveTarget', () => {
     const waypoints = { w1: PIN };
     expect(resolveTarget({ kind: 'waypoint', waypointId: 'w1' }, snapshot({ waypoints }))).toEqual({
       ...PIN,
+      key: 'waypoint:w1',
       glyph: 'place',
+      pin: {},
       alongTrailM: null,
     });
     expect(
@@ -71,7 +125,8 @@ describe('resolveTarget', () => {
     ).toBe('Borne 23A');
     const t = resolveTarget({ kind: 'coordinate', point: QC }, snapshot());
     expect(t).toEqual({
-      name: '46.8139, -71.2076',
+      key: `point:${QC.latitude},${QC.longitude}`,
+      name: '46.813940, -71.207610',
       point: QC,
       glyph: 'my_location',
       alongTrailM: null,

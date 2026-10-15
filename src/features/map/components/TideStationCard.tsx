@@ -1,5 +1,6 @@
 import { buildTideCard, type TideChip } from '@core/tides/card';
 import { nowLine } from '@core/tides/live';
+import { useSettingsStore } from '@state/settingsStore';
 import type { TideStation } from '@core/tides/station';
 import { tideColors } from '@core/map/tideStyle';
 import { useMemo } from 'react';
@@ -65,12 +66,13 @@ export function TideStationCard({
   const shown = chs.status === 'ready' ? chs.station : station;
   const model = useMemo(() => (shown ? buildTideCard(shown) : null), [shown]);
   const live = useLiveTide(station, offline);
+  const units = useSettingsStore((s) => s.units);
   if (!station || !model) return null;
   const scheme = theme.dark ? 'dark' : 'light';
   const teal = tideColors(scheme).station;
   const muted = theme.colors.onSurfaceVariant;
   const icon = tideImage(scheme, station.kind === 'gauge');
-  const line = live.status === 'ready' ? nowLine(live.live, model.cdLabel, clock) : null;
+  const line = live.status === 'ready' ? nowLine(live.live, model.cdLabel, clock, units) : null;
 
   const chipStyle = (tone: TideChip['tone']) => {
     switch (tone) {

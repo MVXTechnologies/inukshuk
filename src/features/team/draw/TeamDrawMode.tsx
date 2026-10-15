@@ -4,7 +4,7 @@
  *
  * - A top bar (Clear mine, with a 5 s UNDO; Done) and a bottom tool bar
  *   (Pencil · Arrow · Circle · Rectangle | Style | Undo). The tab bar, the
- *   search, the + menu and the team button step aside; Android Back = Done.
+ *   search (the team bar), the + menu and the SOS button step aside; Android Back = Done.
  * - One finger draws; two fingers pan, zoom and rotate the map. The overlay
  *   takes every touch (`@core/teamdraw/gesture`) and moves the camera itself
  *   for two fingers (`@core/teamdraw/screen`): MapLibre's native gestures

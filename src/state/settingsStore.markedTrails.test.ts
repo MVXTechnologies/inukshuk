@@ -38,13 +38,13 @@ it('hydrates an old file with marked trails on, and drops the key on the next wr
 
   const state = store.getState() as unknown as Record<string, unknown>;
   expect(state.hydrated).toBe(true);
-  expect(state.units).toBe('imperial');
+  expect(state.units).toEqual({ distance: 'mi', elevation: 'ft' });
   expect(state.showHeatmap).toBe(false);
   expect(state.markedTrailsNetworks).toBeUndefined();
 
   store.getState().set('themeMode', 'dark');
   const written = storage.writeJson.mock.calls.at(-1)?.[1] as Record<string, unknown>;
   expect(written.themeMode).toBe('dark');
-  expect(written.units).toBe('imperial');
+  expect(written.units).toEqual({ distance: 'mi', elevation: 'ft' });
   expect('markedTrailsNetworks' in written).toBe(false);
 });

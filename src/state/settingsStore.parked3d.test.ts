@@ -46,7 +46,7 @@ it.each<[string, unknown, unknown]>([
 
     const state = store.getState() as unknown as Record<string, unknown>;
     expect(state.hydrated).toBe(true);
-    expect(state.units).toBe('imperial');
+    expect(state.units).toEqual({ distance: 'mi', elevation: 'ft' });
     expect(state.terrainContours).toBe(false);
     expect(state.trailViewMode).toBeUndefined();
     expect(state.terrainHypso).toBeUndefined();
@@ -54,7 +54,7 @@ it.each<[string, unknown, unknown]>([
     store.getState().set('themeMode', 'dark');
     const written = storage.writeJson.mock.calls.at(-1)?.[1] as Record<string, unknown>;
     expect(written.themeMode).toBe('dark');
-    expect(written.units).toBe('imperial');
+    expect(written.units).toEqual({ distance: 'mi', elevation: 'ft' });
     expect('trailViewMode' in written).toBe(false);
     expect('terrainHypso' in written).toBe(false);
   },

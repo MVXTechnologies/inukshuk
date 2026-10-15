@@ -29,6 +29,14 @@ export function waypointDropMessage(
   return `${base} · ±${formatDistance(accuracyM, units)}, low accuracy`;
 }
 
+/** + menu → Add waypoint (#709), off the fix: "Waypoint 7 added at the map centre". */
+export function waypointCursorDropMessage(label: string): string {
+  return `${label} added at the map centre`;
+}
+
+/** Add waypoint before the map has a camera to read the centre from (rare: launch). */
+export const MAP_NOT_READY = 'The map is still loading. Try again in a moment.';
+
 /** Below this a move is "not moved yet" (one GPS-grade metre). */
 export const MOVE_EPSILON_M = 0.5;
 

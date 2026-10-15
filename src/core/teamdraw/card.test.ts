@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 import { ageText, durationText, lifeText, navTarget, SHAPE_NAMES, whereText } from './card';
 import type { Pt } from './geo';
 import { NEAR, QC } from './testUtils';
@@ -57,11 +58,9 @@ describe('a shape’s card', () => {
   });
 
   it('says where the target is from me', () => {
-    expect(whereText({ sh: 'arrow', pts: [QC, NEAR] }, null, 'metric')).toBeNull();
-    expect(whereText({ sh: 'arrow', pts: [QC, NEAR] }, QC, 'metric')).toBe(
-      'head 1.01 km NE of you',
-    );
-    expect(whereText({ sh: 'circle', pts: [QC] }, QC, 'metric')).toBe('centre here');
+    expect(whereText({ sh: 'arrow', pts: [QC, NEAR] }, null, METRIC)).toBeNull();
+    expect(whereText({ sh: 'arrow', pts: [QC, NEAR] }, QC, METRIC)).toBe('head 1.01 km NE of you');
+    expect(whereText({ sh: 'circle', pts: [QC] }, QC, METRIC)).toBe('centre here');
   });
 });
 

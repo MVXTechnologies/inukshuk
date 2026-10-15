@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC } from '@core/format';
 import {
   coopsHiLoUrl,
   coopsLevelUrl,
@@ -71,15 +72,19 @@ describe('live tide parsers', () => {
     const live = liveTide(parseCoopsLevels(COOPS_LEVELS), parseCoopsHiLo(COOPS_HILO), NOW);
     expect(live.level?.heightM).toBe(0.567);
     expect(live.trend).toBe('falling');
-    expect(nowLine(live, 'MLLW', () => '14:31')).toBe(
+    expect(nowLine(live, 'MLLW', () => '14:31', METRIC)).toBe(
       'Water 0.57 m above MLLW · falling · next low 14:31 (0.26 m)',
+    );
+    // Heights follow the elevation unit (#702).
+    expect(nowLine(live, 'MLLW', () => '14:31', IMPERIAL)).toBe(
+      'Water 1.86 ft above MLLW · falling · next low 14:31 (0.84 ft)',
     );
   });
 
   it('never calls a stale reading "now"', () => {
     const live = liveTide(parseCoopsLevels(COOPS_LEVELS), [], NOW + 3 * 3_600_000);
     expect(live.level).toBeNull();
-    expect(nowLine(live, 'MLLW', () => '')).toBeNull();
+    expect(nowLine(live, 'MLLW', () => '', METRIC)).toBeNull();
   });
 
   it('builds key-free request URLs', () => {

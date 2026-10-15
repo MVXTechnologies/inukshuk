@@ -14,7 +14,8 @@ import { TeamService } from '@data/team/teamService';
 import type { CreatedInvite } from '@data/team/teamSession';
 import { ExtensionsSection } from '@features/settings/ExtensionsSection';
 import { useSettingsStore } from '@state/settingsStore';
-import { useTeamStore, wireTeamStore } from '@state/teamStore';
+import { IMPERIAL, METRIC } from '@core/format';
+import { selectChatUnread, useTeamStore, wireTeamStore } from '@state/teamStore';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { Linking, StyleSheet } from 'react-native';
@@ -23,6 +24,8 @@ import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
 
 import { JoinScreen } from './JoinScreen';
 import { TeamMapOverlay, useTeamMapSelection } from './map/TeamMapOverlay';
+import { useTeamSheet } from './map/teamMode';
+import { useTeamDrawStore } from '@state/teamDrawStore';
 import { TeamHubScreen } from './TeamHubScreen';
 
 const mockPush = jest.fn();
@@ -122,6 +125,15 @@ describe('the team hub', () => {
   beforeEach(async () => {
     await app.createTeam({ name: 'Relevé MSA', myName: 'Marc', lifetimeMs: lifetimeMs('14d') });
     useTeamStore.getState().refresh();
+  });
+
+  it('counts chat unread as the map chip and the panel do: channel plus sub-threads (#707)', async () => {
+    await render(wrap(<TeamHubScreen />));
+    // 3 in the team channel, 4 across photo / pin / trail threads.
+    await act(() => useTeamStore.setState({ unread: 3, threadsUnread: 4 }));
+    expect(screen.getByTestId('team-unread-badge').props.children).toBe(7);
+    expect(screen.getByText('Chat · 7')).toBeTruthy();
+    expect(selectChatUnread(useTeamStore.getState())).toBe(7);
   });
 
   it('states that sharing is off until switched on, in both themes', async () => {
@@ -242,39 +254,97 @@ describe('the map card', () => {
           cardSlotFree
           cardStyle={{}}
           fabBottom={72}
-          sosTop={0}
+          panelTop={0}
+          snackStyle={{}}
           onNavigate={jest.fn()}
           onPointActions={jest.fn()}
         />,
       ),
     );
-    // The popup: position age, accuracy, distance and direction; its actions.
-    expect(screen.getByTestId('team-card-range').props.children).toBe('just now · ±5 m · 1.1 km N');
-    expect(screen.getByText('Julie')).toBeTruthy();
-    expect(screen.getByTestId('team-member-where')).toBeTruthy();
-    // The team button never covers a popup: hidden while one is up, back after.
-    expect(screen.queryByTestId('team-fab')).toBeNull();
-    await act(() => useTeamMapSelection.getState().select(null));
-    expect(screen.getByTestId('team-fab')).toBeTruthy();
-    // Closed, the button's layer sits under the bottom cards (QA 2.6.0, 09b).
-    const layerZ = () =>
-      StyleSheet.flatten(screen.getByTestId('team-button-layer').props.style).zIndex;
-    expect(layerZ()).toBe(MAP_OVERLAY_Z.teamButton);
-    // Its menu: the owner's six (2026-10-07) and "Draw on map" after Rally (#683).
-    await fireEvent.press(screen.getByTestId('team-fab'));
-    const ids = ['sos', 'status', 'rally', 'draw', 'tasks', 'chat', 'manage'].map(
-      (x) => `team-fab-${x}`,
+    // The card (#707): freshness and accuracy, distance, bearing, last fix; its actions.
+    expect(screen.getByTestId('team-card-fresh').props.children).toBe('Live · updated now · ±5 m');
+    expect(screen.getByLabelText('Distance: 1.1 km')).toBeTruthy();
+    expect(screen.getByLabelText('Bearing: 0° N')).toBeTruthy();
+    // In the user's units (#702), live: the card follows a Settings change.
+    await act(() => useSettingsStore.setState({ units: IMPERIAL }));
+    expect(screen.getByTestId('team-card-fresh').props.children).toBe(
+      'Live · updated now · ±16 ft',
     );
-    const shown = screen
-      .queryAllByTestId(/^team-fab-/)
-      .map((n) => n.props.testID as string)
-      .filter((id, k, all) => all.indexOf(id) === k && id !== 'team-fab-scrim');
-    expect(shown).toEqual(ids);
-    // Open, the menu's layer rides over the bottom cards (QA 09b).
-    expect(layerZ()).toBe(MAP_OVERLAY_Z.teamMenu);
-    expect(screen.getByLabelText('Manage team')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('team-fab-tasks'));
-    expect(mockPush).toHaveBeenCalledWith('/team/tasks');
+    expect(screen.getByLabelText('Distance: 0.7 mi')).toBeTruthy();
+    await act(() => useSettingsStore.setState({ units: METRIC }));
+    expect(screen.getByText('Julie')).toBeTruthy();
+    for (const id of ['message', 'goto', 'centre', 'where'])
+      expect(screen.getByTestId(`team-member-${id}`)).toBeTruthy();
+    // The SOS button never covers a card: hidden while one is up, back after.
+    expect(screen.queryByTestId('team-sos-button')).toBeNull();
+    await act(() => useTeamMapSelection.getState().select(null));
+    expect(screen.getByTestId('team-sos-button')).toBeTruthy();
+    expect(screen.queryByTestId('team-fab')).toBeNull();
+    // Its layer sits under the bottom cards (QA 2.6.0, 09b); the panel's over them.
+    const z = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style).zIndex;
+    expect(z('team-sos-layer')).toBe(MAP_OVERLAY_Z.teamButton);
+    await act(() => useTeamSheet.getState().open({ kind: 'menu' }));
+    expect(z('team-panel-layer')).toBe(MAP_OVERLAY_Z.teamPanel);
+    await act(() => useTeamSheet.getState().close());
     await session.stopMesh();
+  });
+});
+
+describe('the active SOS band while the bar is away (QA 2.6.1, #708)', () => {
+  it('stays in the strip area in Draw mode (over the canvas) and with a card up', async () => {
+    const session = await app.createTeam({
+      name: 'Ridge crew',
+      myName: 'Marc',
+      lifetimeMs: lifetimeMs('14d'),
+    });
+    expect(session.raiseSos(-71.2, 46.8)).toBeNull();
+    await act(() => useTeamStore.getState().refresh());
+    await render(
+      wrap(
+        <TeamMapOverlay
+          here={{ latitude: 46.8, longitude: -71.2 }}
+          cardSlotFree
+          cardStyle={{}}
+          fabBottom={72}
+          panelTop={0}
+          snackStyle={{}}
+          bandPlace="strip"
+          drawChromeTop={200}
+          onNavigate={jest.fn()}
+          onPointActions={jest.fn()}
+        />,
+      ),
+    );
+    const bands = () => StyleSheet.flatten(screen.getByTestId('team-alert-bands').props.style);
+    expect(screen.getByTestId('team-band-sos')).toBeTruthy();
+    expect(bands()).toMatchObject({ bottom: 80, right: 88, zIndex: MAP_OVERLAY_Z.teamButton });
+    // Draw mode hides the bar and the SOS button, never the band.
+    await act(() => useTeamDrawStore.getState().enter());
+    expect(screen.queryByTestId('team-sos-button')).toBeNull();
+    expect(screen.getByTestId('team-band-sos')).toBeTruthy();
+    expect(bands()).toMatchObject({ bottom: 208, right: 16, zIndex: MAP_OVERLAY_Z.overDrawMode });
+    await act(() => useTeamDrawStore.getState().exit());
+    // A teammate's card (or any card) hides the SOS button, never the band.
+    await act(() => useTeamMapSelection.getState().select({ kind: 'member', id: 'someone' }));
+    expect(screen.queryByTestId('team-sos-button')).toBeNull();
+    expect(screen.getByTestId('team-band-sos')).toBeTruthy();
+    await act(() => useTeamMapSelection.getState().select(null));
+    // With the bar on screen the band is the bar's, not the strip's.
+    await screen.rerender(
+      wrap(
+        <TeamMapOverlay
+          here={{ latitude: 46.8, longitude: -71.2 }}
+          cardSlotFree
+          cardStyle={{}}
+          fabBottom={72}
+          panelTop={0}
+          snackStyle={{}}
+          bandPlace="bar"
+          onNavigate={jest.fn()}
+          onPointActions={jest.fn()}
+        />,
+      ),
+    );
+    expect(screen.queryByTestId('team-alert-bands')).toBeNull();
   });
 });

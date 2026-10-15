@@ -7,7 +7,7 @@ import { formatCoordinate } from '@core/convert/coordinateDisplay';
 import { haversineMeters } from '@core/geo/geomath';
 import type { LatLng } from '@core/models';
 
-import type { DepsSnapshot, FollowSnapshot, ResolvedTarget, Target } from './types';
+import type { DepsSnapshot, FollowSnapshot, ResolvedTarget, StripSubject, Target } from './types';
 
 /** The strip's target unless the field picked its own (`params.target` non-null). */
 export function effectiveTarget(
@@ -23,24 +23,44 @@ export function effectiveTarget(
  */
 export function resolveTarget(target: Target, data: DepsSnapshot): ResolvedTarget | null {
   switch (target.kind) {
-    case 'navTarget':
+    case 'navTarget': {
       if (data.follow !== null) return fromFollow(data.follow);
-      return data.navTarget === null
-        ? null
-        : { ...data.navTarget, glyph: 'flag', alongTrailM: null };
+      const n = data.navTarget;
+      if (n === null) return null;
+      // Set on a saved waypoint: it is that waypoint, drawn as its pin.
+      if (n.waypointId !== undefined) {
+        return {
+          key: waypointKey(n.waypointId),
+          name: n.name,
+          point: n.point,
+          glyph: 'place',
+          pin: n.pin ?? {},
+          alongTrailM: null,
+        };
+      }
+      return { key: 'destination', name: n.name, point: n.point, glyph: 'flag', alongTrailM: null };
+    }
     case 'nextOnTrail':
       return data.follow === null ? null : fromFollow(data.follow);
     case 'waypoint': {
       const w = data.waypoints[target.waypointId];
-      return w === undefined ? null : { ...w, glyph: 'place', alongTrailM: null };
+      return w === undefined
+        ? null
+        : {
+            key: waypointKey(target.waypointId),
+            name: w.name,
+            point: w.point,
+            glyph: 'place',
+            pin: w.pin ?? {},
+            alongTrailM: null,
+          };
     }
     case 'coordinate':
       return {
+        key: `point:${target.point.latitude},${target.point.longitude}`,
         name:
           target.label ??
-          formatCoordinate(target.point.latitude, target.point.longitude, data.coordinateFormat, {
-            compact: true,
-          }),
+          formatCoordinate(target.point.latitude, target.point.longitude, data.coordinateFormat),
         point: target.point,
         glyph: 'my_location',
         alongTrailM: null,
@@ -48,13 +68,37 @@ export function resolveTarget(target: Target, data: DepsSnapshot): ResolvedTarge
   }
 }
 
+/** A saved waypoint's identity, whichever way a field reached it (picked, Navigate, the trail's next). */
+function waypointKey(id: string): string {
+  return `waypoint:${id}`;
+}
+
 function fromFollow(follow: FollowSnapshot): ResolvedTarget {
-  return {
+  const base = {
     name: follow.targetName,
     point: follow.targetPoint,
-    glyph: 'route',
     alongTrailM: follow.targetDistanceM,
   };
+  switch (follow.targetKind) {
+    case 'waypoint':
+      return {
+        ...base,
+        key: waypointKey(follow.targetId),
+        glyph: 'place',
+        pin: follow.targetPin ?? {},
+      };
+    case 'note':
+      return { ...base, key: `note:${follow.targetId}`, glyph: 'notes' };
+    case 'end':
+      return { ...base, key: 'trailEnd', glyph: 'sports_score' };
+  }
+}
+
+/** What a target field reads to, for its cell (`subject.ts`). */
+export function targetSubject(t: ResolvedTarget): StripSubject {
+  const out: StripSubject = { key: t.key, name: t.name, glyph: t.glyph };
+  if (t.pin !== undefined) out.pin = t.pin;
+  return out;
 }
 
 /**

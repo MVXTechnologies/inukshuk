@@ -50,7 +50,7 @@ tags:
     latitude: 46.8139
     longitude: -71.2082
 # Drop three waypoints at the fix. Each drop: the guarded dial tap (a blind
-# re-tap on retry toggled a slow-but-open dial closed), "Add waypoint", and
+# re-tap on retry toggled a slow-but-open dial closed), "Pin my location", and
 # its snackbar. Retries absorb the cold-start tap race and the no-fix-yet
 # snackbar; an extra pin from a retry only makes the count larger.
 - repeat:
@@ -61,14 +61,14 @@ tags:
           commands:
             - runFlow:
                 when:
-                  notVisible: 'Add waypoint'
+                  notVisible: 'Pin my location'
                 commands:
                   - tapOn: 'Map actions'
             # 60 s: on software-GL emulators one hierarchy fetch can take that long.
             - extendedWaitUntil:
-                visible: 'Add waypoint'
+                visible: 'Pin my location'
                 timeout: 60000
-            - tapOn: 'Add waypoint'
+            - tapOn: 'Pin my location'
             - extendedWaitUntil:
                 visible: 'Waypoint \d+ added at your position.*'
                 timeout: 8000
@@ -145,18 +145,18 @@ tags:
     while:
       visible: 'Waypoint \d+.*'
     commands:
+      # A long-press selects the row (#711); the action bar's Delete takes
+      # it out at once, with Undo (no confirm dialog).
       - longPressOn: 'Waypoint \d+.*'
       - extendedWaitUntil:
-          visible: 'Delete waypoint'
+          visible:
+            id: 'library-action-delete'
           timeout: 8000
-      - tapOn: 'Delete waypoint'
-      # Confirm dialog: title 'Delete waypoint', buttons Cancel / Delete.
+      - tapOn:
+          id: 'library-action-delete'
       - extendedWaitUntil:
-          visible: 'Cancel'
-          timeout: 8000
-      - tapOn: 'Delete'
-      - extendedWaitUntil:
-          notVisible: 'Cancel'
+          notVisible:
+            id: 'library-action-bar'
           timeout: 8000
 - assertNotVisible: 'Waypoint \d+.*'
 - tapOn:

@@ -50,8 +50,8 @@ export function estimateWidthDp(v: StripValue, valueSp: number, fontScale = 1): 
 export function shortUnit(value: string, unit: string): string | undefined {
   if (COMPASS_POINT.test(unit) && value.includes('°')) return undefined;
   if (unit === 'nmi') return 'NM';
-  // Tide: "m ↑" → "↑" (the level's metres are the strip's own unit).
-  const trend = /^m\s*([↑↓])$/.exec(unit);
+  // Tide: "m ↑" / "ft ↑" → "↑" (the level is in the app's elevation unit, #702).
+  const trend = /^(?:m|ft)\s*([↑↓])$/.exec(unit);
   if (trend) return trend[1];
   return unit;
 }

@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 /**
  * The Parcs Québec link-out collection (#447): sort chips, rows opening the
  * park's page on sepaq.com, and no download anywhere.
@@ -21,7 +22,7 @@ const collectionsMock = loadCatalogCollectionsRaw as jest.Mock;
 beforeEach(() => {
   resetLinkOutCollectionsCache();
   collectionsMock.mockResolvedValue(sepaqRaw);
-  useSettingsStore.setState({ lastKnownPosition: QUEBEC, units: 'metric' });
+  useSettingsStore.setState({ lastKnownPosition: QUEBEC, units: METRIC });
 });
 
 async function screen() {

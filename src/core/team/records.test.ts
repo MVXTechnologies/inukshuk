@@ -9,6 +9,8 @@ import {
   decodeLine,
   KEY,
   keyBetween,
+  SOS_COOLDOWN_MS,
+  sosCoolingDown,
   MAX_KEY,
   MAX_LIVE_VERTICES,
   MAX_VERTEX_RECORDS,
@@ -352,6 +354,31 @@ describe('SOS spam guard', () => {
     expect(why(w.root, second.id)).toBe('forbidden');
     expect(why(w.root, soon.id)).toBe('forbidden');
     expect(why(w.root, later.id)).toBeUndefined();
+  });
+
+  it('the cooldown never holds back a reopen: the way to raise again at once (QA 2.6.1)', () => {
+    const { w, gus, rg, sync } = crew();
+    rg.write(T0 + MIN, 'e.set', { k: 'sos', id: 's1', f: { la: 47, lo: -71 } });
+    rg.write(T0 + 2 * MIN, 'e.set', {
+      k: 'sos',
+      id: 's1',
+      f: { res: true, rby: gus.id, rat: T0 + 2 * MIN },
+    });
+    sync(T0 + 2 * MIN + 1000);
+    const idx = rg.data().index;
+    expect(sosCoolingDown(idx, gus.id, T0 + 2 * MIN + 5000)).toBe(true);
+    expect(sosCoolingDown(idx, gus.id, T0 + 2 * MIN + SOS_COOLDOWN_MS)).toBe(false);
+    expect(sosCoolingDown(idx, w.owner.id, T0 + 2 * MIN + 5000)).toBe(false);
+    const reopen = rg.write(T0 + 2 * MIN + 5000, 'e.set', {
+      k: 'sos',
+      id: 's1',
+      f: { la: 47.1, lo: -71.1, tx: '', res: false, rby: null, rat: null },
+    })!;
+    sync(T0 + 3 * MIN);
+    expect(why(w.root, reopen.id)).toBeUndefined();
+    expect(
+      visibleFields(w.root.data().entities.get(entityKey('sos', 's1', gus.id))!.state),
+    ).toMatchObject({ la: 47.1, res: false });
   });
 });
 

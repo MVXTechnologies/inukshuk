@@ -69,11 +69,21 @@ export function waypointCardDockStyle(
  * The map screen's snackbars: above every bottom dock, and lifted over the
  * recording panel while it is up — they used to render under it, so the
  * "Waypoint dropped" / "Waypoint deleted" feedback never showed mid-recording.
+ * Likewise over the drawing panel (`drawPanelHeight`): "Tap ✕ again to
+ * discard this drawing" sat on the panel's own buttons (QA 2.6.1).
  */
-export function snackbarWrapperStyle(recordingPanelUp: boolean, panelHeight: number): ViewStyle {
+export function snackbarWrapperStyle(
+  recordingPanelUp: boolean,
+  panelHeight: number,
+  drawPanelHeight = 0,
+): ViewStyle {
   return {
     ...BOTTOM_LAYER.snackbar,
-    ...(recordingPanelUp ? { bottom: panelHeight } : {}),
+    ...(drawPanelHeight > 0
+      ? { bottom: drawPanelHeight }
+      : recordingPanelUp
+        ? { bottom: panelHeight }
+        : {}),
   };
 }
 
@@ -102,11 +112,11 @@ export function rowLiftAboveColumnBottom(columnHeight: number, rowY: number): nu
   return Math.max(0, columnHeight - rowY);
 }
 
-/** Gap between the team button and the top of the bottom column. */
+/** Gap between the team SOS button (#707; once the team button) and the top of the bottom column. */
 export const TEAM_FAB_GAP = 16;
 
 /**
- * Where the team button sits: just above the whole bottom column (the
+ * Where the team SOS button sits: just above the whole bottom column (the
  * coordinates chip, the scale row and, while navigating or following, the
  * compass tape), not at a fixed 72 dp, which put it on the chip's right end
  * once the tape pushed the row up (2.5.2 QA). Before the column's first

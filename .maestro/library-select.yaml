@@ -1,0 +1,159 @@
+# Library select mode e2e (#711): hold a row to select it, tap two more,
+# Move to… › New folder…, check the folder's count, Undo, and check every
+# item is back where it was.
+#
+# The rows are three waypoints this flow drops at the fix (the
+# waypoint-cluster.yaml idiom: "Pin my location" from the Map actions dial),
+# so it needs nothing from an earlier flow. It ends by deleting the folder and
+# the three waypoints through select mode itself: navigate.yaml, next in this
+# shard, long-presses the map centre, where a pin would start Move instead,
+# and later flows expect the no-folders Library layout.
+#
+# Selectors:
+# - A waypoint row reads "Waypoint N — edit note and photo, long-press to
+#   select"; in select mode "Waypoint N — tap to select" or "… — selected,
+#   tap to deselect".
+# - testIDs: library-selection-count (the header's "N selected"),
+#   library-action-move / -delete (the bar), library-move-new-folder (the
+#   Move sheet), library-undo (the Undo snackbar), library-folder-action-delete
+#   (a held folder's bar).
+# - A folder header is one Text, "Select711 (3)" ("Select711" when empty),
+#   as folders.yaml reads "TripA (1)".
+appId: com.inukshuk.app
+tags:
+  - own-location
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- setLocation:
+    latitude: 46.8139
+    longitude: -71.2082
+# --- Three waypoints to select ---
+- repeat:
+    times: 3
+    commands:
+      - retry:
+          maxRetries: 3
+          commands:
+            - runFlow:
+                when:
+                  notVisible: 'Pin my location'
+                commands:
+                  - tapOn: 'Map actions'
+            - extendedWaitUntil:
+                visible: 'Pin my location'
+                timeout: 60000
+            - tapOn: 'Pin my location'
+            - extendedWaitUntil:
+                visible: 'Waypoint \d+ added at your position.*'
+                timeout: 8000
+      - extendedWaitUntil:
+          notVisible: 'Waypoint \d+ added at your position.*'
+          timeout: 15000
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Import'
+    timeout: 15000
+# --- Hold one row, tap two more ---
+- longPressOn: 'Waypoint \d+ — edit note and photo.*'
+- extendedWaitUntil:
+    visible:
+      id: 'library-selection-count'
+      text: '1 selected'
+    timeout: 8000
+- tapOn: 'Waypoint \d+ — tap to select'
+- extendedWaitUntil:
+    visible: '2 selected'
+    timeout: 8000
+- tapOn: 'Waypoint \d+ — tap to select'
+- extendedWaitUntil:
+    visible: '3 selected'
+    timeout: 8000
+- assertVisible: '3 waypoints'
+# --- Move to a new folder ---
+- tapOn:
+    id: 'library-action-move'
+- extendedWaitUntil:
+    visible:
+      id: 'library-move-new-folder'
+    timeout: 8000
+- tapOn:
+    id: 'library-move-new-folder'
+- extendedWaitUntil:
+    visible: 'Folder name'
+    timeout: 8000
+- waitForAnimationToEnd:
+    timeout: 3000
+- inputText: 'Select711'
+- tapOn: 'Create'
+# No hideKeyboard: closing the dialog unmounts its field and the keyboard goes
+# with it (focus-block). Android's hideKeyboard with no keyboard up presses
+# BACK, which leaves the Library.
+- extendedWaitUntil:
+    visible: 'Select711 \(3\)'
+    timeout: 8000
+- assertVisible: 'Moved 3 waypoints to Select711'
+# --- Undo: every waypoint back in Ungrouped, the folder empty ---
+- tapOn:
+    id: 'library-undo'
+- extendedWaitUntil:
+    notVisible: 'Select711 \(3\)'
+    timeout: 8000
+- assertVisible: 'Select711'
+- assertVisible: 'Empty folder'
+- assertVisible: 'Ungrouped \(\d+\)'
+- assertVisible:
+    text: 'Waypoint \d+ — edit note and photo.*'
+    index: 2
+# --- Clean up: the folder (held by its header), then the waypoints ---
+- longPressOn: 'Select711'
+- extendedWaitUntil:
+    visible:
+      id: 'library-folder-action-delete'
+    timeout: 8000
+- tapOn:
+    id: 'library-folder-action-delete'
+- extendedWaitUntil:
+    notVisible: 'Empty folder'
+    timeout: 8000
+- longPressOn: 'Waypoint \d+ — edit note and photo.*'
+- extendedWaitUntil:
+    visible:
+      id: 'library-action-delete'
+    timeout: 8000
+- repeat:
+    times: 8
+    while:
+      visible: 'Waypoint \d+ — tap to select'
+    commands:
+      - tapOn: 'Waypoint \d+ — tap to select'
+- tapOn:
+    id: 'library-action-delete'
+- extendedWaitUntil:
+    notVisible:
+      id: 'library-action-bar'
+    timeout: 8000
+- assertNotVisible: 'Waypoint \d+ — .*'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 15000

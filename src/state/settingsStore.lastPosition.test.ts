@@ -32,7 +32,7 @@ it('hydrates to null from an old settings.json without the field', async () => {
   storage.readJson.mockResolvedValue({ schemaVersion: SETTINGS_SCHEMA_VERSION, units: 'imperial' });
   await useSettingsStore.getState().hydrate();
   expect(useSettingsStore.getState().lastKnownPosition).toBeNull();
-  expect(useSettingsStore.getState().units).toBe('imperial');
+  expect(useSettingsStore.getState().units).toEqual({ distance: 'mi', elevation: 'ft' });
 });
 
 it('hydrates to null from a legacy unversioned settings.json', async () => {

@@ -1,12 +1,16 @@
+import { METRIC } from '@core/format';
 import { buildGpx } from '@core/geo/gpx';
 import { computeSegmentedTrackStats } from '@core/geo/track';
 import { walk } from '@core/geo/track/__fixtures__/walk';
 import type { TrackSummary } from '@core/models';
 import { useLibraryStore } from '@state/libraryStore';
 import { useNavigationStore } from '@state/navigationStore';
+import { useOnMapTrailStore } from '@state/onMapTrailStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
+import { State } from 'react-native-gesture-handler';
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Trail3DGLScreen } from './Trail3DGLScreen';
@@ -110,7 +114,8 @@ async function mount(trackId = 't1'): Promise<Awaited<ReturnType<typeof render>>
 beforeEach(() => {
   clearOutingAnalysisCache();
   mockNavigate.mockReset();
-  useSettingsStore.setState({ hydrated: true, units: 'metric', trailViewTab: 'overview' });
+  useOnMapTrailStore.setState({ trackId: null });
+  useSettingsStore.setState({ hydrated: true, units: METRIC, trailViewTab: 'overview' });
 });
 
 it('opens on Overview: tiles, compact elevation chart, jump chips, photo strip', async () => {
@@ -191,30 +196,12 @@ it('scrubs every chart from a drag on any one of them', async () => {
   // The stop on top is labelled on the pace chart, where its line breaks.
   // (SVG text isn't a host <Text>, so read it off the rendered tree.)
   expect(JSON.stringify(screen.toJSON())).toMatch(/stop (9|10) min/);
-  const touch = { locationX: 30, pageX: 30, pageY: 0, identifier: 0, timestamp: 1 };
   await act(async () =>
-    fireEvent(surface, 'responderGrant', {
-      nativeEvent: { ...touch, touches: [touch], changedTouches: [touch] },
-      touchHistory: {
-        numberActiveTouches: 1,
-        indexOfSingleActiveTouch: 0,
-        mostRecentTimeStamp: 1,
-        touchBank: [
-          {
-            touchActive: true,
-            startPageX: 30,
-            startPageY: 0,
-            startTimeStamp: 1,
-            currentPageX: 30,
-            currentPageY: 0,
-            currentTimeStamp: 1,
-            previousPageX: 30,
-            previousPageY: 0,
-            previousTimeStamp: 1,
-          },
-        ],
-      },
-    }),
+    fireGestureHandler(getByGestureTestId('chart-hr-scrub'), [
+      { state: State.BEGAN, x: 30, y: 40 },
+      { state: State.ACTIVE, x: 30, y: 40 },
+      { state: State.END, x: 30, y: 40 },
+    ]),
   );
   // 10 % along: walking uphill, so all three charts and the map read a value.
   expect(screen.getByTestId('chart-pace-value').props.children).toMatch(/\/km$/);
@@ -301,12 +288,26 @@ it('opens a note from the photo strip in the waypoint card', async () => {
   expect(screen.getByTestId('waypoint-note').props.children).toBe('Spring');
 });
 
-it('shows the trail on the main map from the bar', async () => {
+it('shows the trail on the main map from the bar, as a look with a chip (#710)', async () => {
   seed(true);
+  useLibraryStore.setState({ activeTrackIds: ['other'] });
   await mount();
   await act(async () => fireEvent.press(screen.getByText('On map')));
-  expect(useLibraryStore.getState().activeTrackIds).toEqual(['t1']);
+  expect(useOnMapTrailStore.getState().trackId).toBe('t1');
+  // The Library's shown set is kept, so the chip's ✕ can give it back.
+  expect(useLibraryStore.getState().activeTrackIds).toEqual(['other']);
   expect(mockNavigate).toHaveBeenCalledWith('/');
+});
+
+it('following the trail shown "On map" keeps it a look, not a Library change (#710)', async () => {
+  seed(true);
+  useLibraryStore.setState({ activeTrackIds: ['other'] });
+  useOnMapTrailStore.setState({ trackId: 't1' });
+  await mount();
+  await act(async () => fireEvent.press(screen.getByText('Follow')));
+  expect(useLibraryStore.getState().activeTrackIds).toEqual(['other']);
+  expect(useOnMapTrailStore.getState().trackId).toBe('t1');
+  expect(useNavigationStore.getState().following?.trackId).toBe('t1');
 });
 
 it('follows the trail from the bar (#678): drawn on the map, compass guiding', async () => {

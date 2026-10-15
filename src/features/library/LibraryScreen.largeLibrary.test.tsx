@@ -153,6 +153,30 @@ it('re-renders no trail row for a change elsewhere on the screen', async () => {
   expect(new Set(mockThumbnailCalls.mock.calls.map((c) => c[0]))).toEqual(new Set(['t1999']));
 });
 
+it('in select mode, a tap re-renders only the row it toggles (#711)', async () => {
+  const view = await show(library(N));
+  await act(async () => {
+    fireEvent(rowNamed(view, 'Run 1999')!, 'longPress');
+  });
+  expect(view.getByText('1 selected')).toBeOnTheScreen();
+  const selectRows = () => view.queryAllByLabelText(/ — (selected, )?tap to (de)?select$/).length;
+  expect(selectRows()).toBeLessThanOrEqual(20);
+  mockThumbnailCalls.mockClear();
+  await act(async () => {
+    fireEvent.press(view.getByLabelText(/^Run 1998 — tap to select$/));
+  });
+  expect(view.getByText('2 selected')).toBeOnTheScreen();
+  expect(new Set(mockThumbnailCalls.mock.calls.map((c) => c[0]))).toEqual(new Set(['t1998']));
+  // Select all takes the whole list in one step, and mounts no more rows.
+  mockThumbnailCalls.mockClear();
+  await act(async () => {
+    fireEvent.press(view.getByTestId('library-select-all'));
+  });
+  expect(view.getByText(`${N} selected`)).toBeOnTheScreen();
+  expect(selectRows()).toBeLessThanOrEqual(20);
+  expect(new Set(mockThumbnailCalls.mock.calls.map((c) => c[0])).size).toBeLessThanOrEqual(20);
+});
+
 it('re-renders a window when an import flush adds trails while the Library is open', async () => {
   const view = await show(library(N));
   mockThumbnailCalls.mockClear();

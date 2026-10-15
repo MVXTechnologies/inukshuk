@@ -5,7 +5,6 @@ import type { Area, MapDocument, TrackSummary, Waypoint, WaypointIcon } from '@c
 import { polygonAreaM2 } from '@core/draw/geometry';
 import { formatAreaSize, sortAreasNewestFirst } from '@core/library/areas';
 import { describeUploadOutcome } from '@core/strava/upload';
-import { resolveDocumentPath } from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { uploadTrackToStrava } from '@lib/strava';
 import { useImportStore } from '@state/importStore';
@@ -92,7 +91,8 @@ import { SupportNudgeCard } from '../support/SupportNudgeCard';
 import { ImportSheet } from '../import/ImportSheet';
 import { activityImportMessage, pickAndImportActivityFiles } from './importActivities';
 import { pickAndImportMaps } from './importMap';
-import { copyMergedTrailPhotos, mergeLibraryTracks } from './mergeTracks';
+import { itemCount, refKey, type ItemRef } from '@core/library/selection';
+import { useLibrarySelection } from './selection/useLibrarySelection';
 import { NameDialog } from './NameDialog';
 import { DragGhost } from './DragGhost';
 import { useDragToFolder, type DragItem } from './useDragToFolder';
@@ -104,6 +104,16 @@ import { useTrackElevationPreview } from './useTrackElevationPreview';
 const SEARCH_DEBOUNCE_MS = 200;
 
 const keyOfItem = (item: LibraryListItem) => item.key;
+
+/** Space left above a folder header scrolled to after a Move, under the chips. */
+export const MOVED_HEADER_GAP = space.sm;
+
+/** Room the Undo bar takes, so a plain snackbar shows above it. */
+const UNDO_CLEARANCE = 64;
+
+/** A row's spoken label in select mode. */
+const selectLabel = (name: string, selected: boolean) =>
+  `${name} — ${selected ? 'selected, tap to deselect' : 'tap to select'}`;
 
 // One confirm flow covers every destructive delete in the Library; the copy
 // spells out exactly what is (and is not) lost for each kind.
@@ -172,7 +182,6 @@ export function LibraryScreen() {
     () => mapsWithNewerVersion(maps, catalogItems),
     [maps, catalogItems],
   );
-  const addTrack = useLibraryStore((s) => s.addTrack);
   const addTracks = useLibraryStore((s) => s.addTracks);
   const removeTrack = useLibraryStore((s) => s.removeTrack);
   const renameTrack = useLibraryStore((s) => s.renameTrack);
@@ -250,11 +259,9 @@ export function LibraryScreen() {
     null,
   );
   const [confirmDelete, setConfirmDelete] = useState<DeleteTarget | null>(null);
-  // Trail multi-select (long-press a trail to enter): ids in selection order,
-  // which is the merge order for untimed tracks.
-  const [selectedTrackIds, setSelectedTrackIds] = useState<string[]>([]);
-  const [merging, setMerging] = useState(false);
-  const selectionMode = selectedTrackIds.length > 0;
+  // "New folder…" from the Move sheet (#711): the same NameDialog, then the
+  // selection goes in.
+  const [newFolderForMove, setNewFolderForMove] = useState(false);
   // "Set category" dialog target (opened from a trail's ⋮ menu).
   const [categoryTarget, setCategoryTarget] = useState<string | null>(null);
   // Trail filter (header sort/filter button). The criteria are built by the
@@ -351,6 +358,10 @@ export function LibraryScreen() {
   // onto a folder (or Ungrouped) header. The ⋮ move-to-folder menu remains
   // for one-handed use. Grips render only once a folder exists.
   const listRef = useRef<FlatList<LibraryListItem>>(null);
+  // The select-mode hook, for the drag callbacks (declared before it).
+  const selectionRef = useRef<{
+    dropSelection: (item: ItemRef, target: string | null) => boolean;
+  } | null>(null);
   const scrollListTo = useCallback(
     (y: number) => listRef.current?.scrollToOffset({ offset: y, animated: false }),
     [],
@@ -369,6 +380,8 @@ export function LibraryScreen() {
       const folderName = target === null ? null : folders.find((f) => f.id === target)?.name;
       // A target that no longer exists (deleted mid-drag, #303) is not a move.
       if (folderName === undefined) return;
+      // A selected row carries the whole selection (#711), with Undo.
+      if (selectionRef.current?.dropSelection(item, target)) return;
       setItemFolder(item.kind, item.id, target);
       showSnack(folderName === null ? 'Removed from folder' : `Moved to "${folderName}"`);
     },
@@ -555,54 +568,6 @@ export function LibraryScreen() {
     setExpandedTrack((current) => (current === id ? null : id));
   };
 
-  const toggleTrackSelected = (id: string) => {
-    if (selectedTrackIds.length === 0) {
-      showSnack('Select 2 or more trails, then tap the merge button');
-    }
-    setSelectedTrackIds((sel) => (sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]));
-  };
-
-  const onMergeSelected = async () => {
-    // Resolve in selection order; mergeTracks re-orders by timestamp when all
-    // sources carry one.
-    const chosen = selectedTrackIds
-      .map((id) => tracks.find((t) => t.id === id))
-      .filter((t): t is TrackSummary => t !== undefined);
-    if (chosen.length < 2) return;
-    setMerging(true);
-    try {
-      const { track, fileUri, notes } = await mergeLibraryTracks(chosen);
-      addTrack(track, fileUri, notes);
-      setSelectedTrackIds([]);
-      // The sources' trail photos (#587) are copied onto the merged trail.
-      const photos = await copyMergedTrailPhotos(
-        chosen.map((t) => t.id),
-        track,
-      );
-      showSnack(
-        photos.skippedTrails > 0
-          ? `Merged ${chosen.length} trails into "${track.name}". Photos from ${photos.skippedTrails} of them could not be copied (saved by a newer version of Inukshuk).`
-          : `Merged ${chosen.length} trails into "${track.name}"`,
-      );
-    } catch (err) {
-      showSnack(`Merge failed: ${err instanceof Error ? err.message : 'could not read a trail'}`);
-    } finally {
-      setMerging(false);
-    }
-  };
-
-  const shareTrack = async (fileUri: string) => {
-    if (await Sharing.isAvailableAsync()) {
-      // Stored paths are document-relative (#255); the share sheet needs the absolute uri.
-      await Sharing.shareAsync(resolveDocumentPath(fileUri), {
-        mimeType: 'application/gpx+xml',
-        UTI: 'public.xml',
-      });
-    } else {
-      showSnack('Sharing is not available on this device');
-    }
-  };
-
   // Push an older saved trail to Strava (the ⋮ menu item only shows while a
   // Strava account is connected). Outcomes land in the same timed snackbar.
   const sendToStrava = async (t: TrackSummary) => {
@@ -620,6 +585,7 @@ export function LibraryScreen() {
     first,
     actions,
     dropTarget,
+    folderId,
   }: {
     key: string;
     title: string;
@@ -627,6 +593,8 @@ export function LibraryScreen() {
     first?: boolean;
     actions?: ReactNode;
     dropTarget?: string | null;
+    /** A folder's header: holding it selects the folder (#711). */
+    folderId?: string;
   }) => (
     <SectionHeader
       title={title}
@@ -634,6 +602,8 @@ export function LibraryScreen() {
       first={first}
       collapsed={collapsed[key] === true}
       onToggle={() => toggleSection(key)}
+      onLongPress={folderId === undefined ? undefined : () => sel.longPressFolder(folderId)}
+      selected={folderId !== undefined && sel.selectedFolderId === folderId}
       actions={actions}
       dropRef={dropTarget === undefined ? undefined : registerTarget(dropTarget)}
       highlighted={dropTarget !== undefined && dragging !== null && dragHovered === dropTarget}
@@ -641,7 +611,7 @@ export function LibraryScreen() {
   );
 
   const moveToFolderItems = (
-    kind: 'map' | 'track' | 'waypoint',
+    kind: 'map' | 'track' | 'waypoint' | 'area',
     id: string,
     folderId: string | undefined,
   ) => (
@@ -786,10 +756,16 @@ export function LibraryScreen() {
         overlayStatuses[overlayDetailStatusKey(key)]?.phase === 'rendering'
       );
     });
+    const ref: ItemRef = { kind: 'map', id: m.id };
+    const selected = sel.keys.has(refKey(ref));
     return (
       <MapRow
         key={m.id}
         map={m}
+        selecting={sel.selecting}
+        selected={selected}
+        flash={sel.flashKeys.has(refKey(ref))}
+        onLongPress={() => sel.longPress(ref)}
         title={m.pageCount > 1 ? `${m.name} · ${m.pageCount} pages` : m.name}
         notice={notice}
         pagesLine={
@@ -805,8 +781,18 @@ export function LibraryScreen() {
         credit={credit}
         rendering={rendering}
         renderingLabel={`Rendering ${m.name}`}
-        accessibilityLabel={unplaced ? `${m.name} — open the PDF` : `${m.name} — view on map`}
-        onPress={() => (unplaced ? void openPdf(m) : openMap(m.id))}
+        accessibilityLabel={
+          sel.selecting
+            ? selectLabel(m.name, selected)
+            : unplaced
+              ? `${m.name} — open the PDF, long-press to select`
+              : `${m.name} — view on map, long-press to select`
+        }
+        onPress={() => {
+          if (sel.press(ref)) return;
+          if (unplaced) void openPdf(m);
+          else openMap(m.id);
+        }}
         leading={dragHandle({ kind: 'map', id: m.id, label: m.name })}
         toggle={
           notice === null && hasPages ? (
@@ -880,15 +866,16 @@ export function LibraryScreen() {
   // re-render of this screen (a menu, a selection tap, a drag hover) re-renders
   // only the rows whose own props changed.
   const trackHandlers = {
-    press: (t: TrackSummary) =>
-      selectionMode ? toggleTrackSelected(t.id) : router.navigate(`/trail3d/${t.id}`),
-    longPress: (t: TrackSummary) => toggleTrackSelected(t.id),
+    press: (t: TrackSummary) => {
+      if (!sel.press({ kind: 'track', id: t.id })) router.navigate(`/trail3d/${t.id}`);
+    },
+    longPress: (t: TrackSummary) => sel.longPress({ kind: 'track', id: t.id }),
     openMenu: (t: TrackSummary) => setCardMenu({ kind: 'track', id: t.id }),
     closeMenu: () => setCardMenu(null),
     rename: (t: TrackSummary) => setRenamingTrack({ id: t.id, name: t.name }),
     viewOnMap: (t: TrackSummary) => viewTrack(t.id),
     toggleElevation: (t: TrackSummary) => toggleElevation(t.id),
-    share: (t: TrackSummary) => void shareTrack(t.fileUri),
+    share: (t: TrackSummary) => sel.shareTrail(t),
     sendToStrava: (t: TrackSummary) => void sendToStrava(t),
     trim: (t: TrackSummary) => trimTrack(t.id),
     // A route drawn on the map reopens in the drawing tool (#502).
@@ -896,9 +883,7 @@ export function LibraryScreen() {
       setDrawRequest({ kind: 'edit-route', trackId: t.id });
       router.navigate('/');
     },
-    merge: (t: TrackSummary) => {
-      if (!selectedTrackIds.includes(t.id)) toggleTrackSelected(t.id);
-    },
+    merge: (t: TrackSummary) => sel.pickForMerge(t.id),
     setCategory: (t: TrackSummary) => setCategoryTarget(t.id),
     moveToFolder: (t: TrackSummary, folderId: string | null) =>
       setItemFolder('track', t.id, folderId),
@@ -927,7 +912,6 @@ export function LibraryScreen() {
     remove: (t) => trackHandlersRef.current.remove(t),
     dragHandleProps: (item) => trackHandlersRef.current.dragHandleProps(item),
   }));
-  const selectedSet = useMemo(() => new Set(selectedTrackIds), [selectedTrackIds]);
   const menuTrackId = cardMenu?.kind === 'track' ? cardMenu.id : null;
 
   // ⋮ / long-press menu for a waypoint row: rename, jump the map to the pin,
@@ -977,17 +961,29 @@ export function LibraryScreen() {
 
   const renderWaypointRow = (w: Waypoint) => {
     const preview = notePreview(w.note);
+    const ref: ItemRef = { kind: 'waypoint', id: w.id };
+    const selected = sel.keys.has(refKey(ref));
     return (
       <WaypointRow
         key={w.id}
+        selecting={sel.selecting}
+        selected={selected}
+        flash={sel.flashKeys.has(refKey(ref))}
+        testID={`library-row-waypoint-${w.id}`}
         name={w.label}
         detail={preview !== null ? `Waypoint · ${preview}` : 'Waypoint'}
         caption={shortDate(w.createdAt, nowMs)}
         photoUri={w.photoUri}
         glyph={waypointIconGlyph(w.icon)}
-        accessibilityLabel={`${w.label} — edit note and photo, long-press for more options`}
-        onPress={() => openWaypointEditor(w)}
-        onLongPress={() => setCardMenu({ kind: 'waypoint', id: w.id })}
+        accessibilityLabel={
+          sel.selecting
+            ? selectLabel(w.label, selected)
+            : `${w.label} — edit note and photo, long-press to select`
+        }
+        onPress={() => {
+          if (!sel.press(ref)) openWaypointEditor(w);
+        }}
+        onLongPress={() => sel.longPress(ref)}
         leading={dragHandle({ kind: 'waypoint', id: w.id, label: w.label })}
         trailing={waypointMenu(w)}
       />
@@ -1055,6 +1051,8 @@ export function LibraryScreen() {
           void shareArea(a);
         }}
       />
+      {/* Areas file into folders too (#711). */}
+      {moveToFolderItems('area', a.id, a.folderId)}
       <Divider />
       <Menu.Item
         leadingIcon="trash-can-outline"
@@ -1069,17 +1067,30 @@ export function LibraryScreen() {
   const renderAreaRow = (a: Area) => {
     const preview = notePreview(a.note);
     const size = formatAreaSize(polygonAreaM2(a.ring), units);
+    const ref: ItemRef = { kind: 'area', id: a.id };
+    const selected = sel.keys.has(refKey(ref));
     return (
       <AreaRow
         key={a.id}
+        selecting={sel.selecting}
+        selected={selected}
+        flash={sel.flashKeys.has(refKey(ref))}
+        testID={`library-row-area-${a.id}`}
+        leading={dragHandle({ kind: 'area', id: a.id, label: a.name })}
         name={a.name}
         detail={preview !== null ? `${size} · ${preview}` : size}
         caption={[shortDate(a.createdAt, nowMs), ...(a.tags ?? [])].join(' · ')}
         color={a.color}
         photoUri={a.photoUris?.[0]}
-        accessibilityLabel={`${a.name}, area ${size} — show on map, long-press for more options`}
-        onPress={() => showAreaOnMap(a)}
-        onLongPress={() => setCardMenu({ kind: 'area', id: a.id })}
+        accessibilityLabel={
+          sel.selecting
+            ? selectLabel(`${a.name}, area ${size}`, selected)
+            : `${a.name}, area ${size} — show on map, long-press to select`
+        }
+        onPress={() => {
+          if (!sel.press(ref)) showAreaOnMap(a);
+        }}
+        onLongPress={() => sel.longPress(ref)}
         trailing={areaMenu(a)}
       />
     );
@@ -1138,6 +1149,50 @@ export function LibraryScreen() {
     ],
   );
 
+  // Select mode (#711): hold a row (or a folder's header) to select it; the
+  // action bar replaces the tab bar. Selection logic: @core/library/selection.
+  const pendingScrollRef = useRef<string | null>(null);
+  const sel = useLibrarySelection({
+    items,
+    focused: isFocused,
+    units,
+    creditLang,
+    showSnack,
+    requestNewFolder: () => setNewFolderForMove(true),
+    requestRenameFolder: (f) => setRenamingFolder(f),
+    onMoved: (folderId) => {
+      // The destination opens and scrolls into view, where the rows flash.
+      const section = folderId === null ? 'ungrouped' : `folder:${folderId}`;
+      setCollapsed((c) => (c[section] ? { ...c, [section]: false } : c));
+      pendingScrollRef.current = section;
+    },
+  });
+  useEffect(() => {
+    selectionRef.current = sel;
+  });
+  useEffect(() => {
+    const section = pendingScrollRef.current;
+    if (section === null) return;
+    pendingScrollRef.current = null;
+    const index = items.findIndex((i) => i.kind === 'header' && i.section === section);
+    if (index < 0) return;
+    // After the moved rows have laid out (the list's frames are stale in this
+    // commit: the jump overshot and tucked the header under the chips, QA
+    // 2.6.1), and with a gap, so the header lands fully visible below them.
+    // Not cancelled by a later re-render (the request is already taken);
+    // after unmount the ref is null and nothing scrolls.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        listRef.current?.scrollToIndex({
+          index,
+          animated: true,
+          viewPosition: 0,
+          viewOffset: MOVED_HEADER_GAP,
+        }),
+      ),
+    );
+  }, [items]);
+
   const renderItem: ListRenderItem<LibraryListItem> = ({ item }) => {
     switch (item.kind) {
       case 'header':
@@ -1147,6 +1202,7 @@ export function LibraryScreen() {
           count: item.count,
           first: item.first,
           dropTarget: item.dropTarget,
+          folderId: item.folderId,
           actions:
             organizing && item.folderId !== undefined
               ? folderActions(item.folderId, item.title)
@@ -1186,8 +1242,9 @@ export function LibraryScreen() {
             night={night}
             units={units}
             nowMs={nowMs}
-            selecting={selectionMode}
-            selected={selectedSet.has(t.id)}
+            selecting={sel.selecting}
+            selected={sel.keys.has(`track:${t.id}`)}
+            flash={sel.flashKeys.has(`track:${t.id}`)}
             menuOpen={menuTrackId === t.id}
             elevation={expanded ? (elevationPreview ?? null) : undefined}
             grip={grip}
@@ -1283,29 +1340,7 @@ export function LibraryScreen() {
     </Menu>
   );
 
-  const header = selectionMode ? (
-    // Trail selection mode (entered by long-pressing a trail row).
-    <View style={styles.header}>
-      <IconButton
-        icon="close"
-        iconColor={tokens.ink}
-        style={styles.headerButton}
-        onPress={() => setSelectedTrackIds([])}
-        accessibilityLabel="Exit selection"
-      />
-      <Text style={[styles.selectionTitle, { color: tokens.ink }]}>
-        {`${selectedTrackIds.length} selected`}
-      </Text>
-      <IconButton
-        icon="call-merge"
-        iconColor={tokens.ink}
-        style={styles.headerButton}
-        onPress={() => void onMergeSelected()}
-        disabled={selectedTrackIds.length < 2 || merging}
-        accessibilityLabel="Merge selected trails"
-      />
-    </View>
-  ) : (
+  const header = sel.header ?? (
     <ScreenHeader title="Library">
       {!libraryEmpty && (
         <Pressable
@@ -1348,8 +1383,7 @@ export function LibraryScreen() {
       <View style={{ paddingTop: insets.top }}>
         <ContourTexture variant="header" />
         {header}
-        {!selectionMode &&
-          !libraryEmpty &&
+        {!libraryEmpty &&
           (searchOpen ? (
             <Searchbar
               placeholder="Search trails"
@@ -1439,13 +1473,21 @@ export function LibraryScreen() {
           scrollEventThrottle={32}
           onLayout={(e) => onDragWindowHeight(e.nativeEvent.layout.height + e.nativeEvent.layout.y)}
           contentContainerStyle={{ paddingBottom: insets.bottom + space.xl }}
+          onScrollToIndexFailed={({ index, averageItemLength }) =>
+            listRef.current?.scrollToOffset({ offset: index * averageItemLength, animated: true })
+          }
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
         />
       )}
 
       <DragGhost
-        dragging={dragging}
+        dragging={
+          // Dragging a selected row carries the selection: "5 items" (#711).
+          dragging !== null && sel.count > 1 && sel.keys.has(refKey(dragging))
+            ? { ...dragging, label: itemCount(sel.count) }
+            : dragging
+        }
         ghost={dragGhost}
         backgroundColor={theme.colors.inverseSurface}
         color={theme.colors.inverseOnSurface}
@@ -1456,13 +1498,24 @@ export function LibraryScreen() {
         )}
       />
 
+      {sel.overlay}
+
       <Portal>
         <NameDialog
-          visible={newFolderVisible}
+          visible={newFolderVisible || newFolderForMove}
           title="New folder"
           label="Folder name"
-          onDismiss={() => setNewFolderVisible(false)}
-          onSubmit={createFolder}
+          onDismiss={() => {
+            setNewFolderVisible(false);
+            setNewFolderForMove(false);
+          }}
+          onSubmit={(name) => {
+            if (newFolderForMove) {
+              // "New folder…" in the Move sheet: create it and file the selection.
+              setNewFolderForMove(false);
+              sel.moveIntoNewFolder(name);
+            } else createFolder(name);
+          }}
         />
 
         <NameDialog
@@ -1561,6 +1614,8 @@ export function LibraryScreen() {
         visible={snack !== null}
         onDismiss={dismissSnack}
         duration={Number.POSITIVE_INFINITY}
+        // Above the action bar, and above an Undo bar, while either is up.
+        wrapperStyle={{ bottom: sel.barBottom + (sel.undoVisible ? UNDO_CLEARANCE : 0) }}
       >
         {snack ?? ''}
       </Snackbar>
@@ -1571,17 +1626,7 @@ export function LibraryScreen() {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   showMore: { alignSelf: 'center', marginVertical: space.md },
-  // Board: 52 dp, 16 dp left / 4 dp right, 28/800 title then 48 dp actions.
-  header: {
-    minHeight: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: space.lg,
-    paddingRight: space.xs,
-    gap: 2,
-  },
   title: { flex: 1, fontSize: 28, lineHeight: 34, fontWeight: '800', letterSpacing: -0.3 },
-  selectionTitle: { flex: 1, fontSize: 20, lineHeight: 26, fontWeight: '700' },
   organize: {
     minHeight: target.min,
     paddingHorizontal: 10,

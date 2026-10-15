@@ -1,3 +1,4 @@
+import { formatAccuracy, type Units } from '@core/format';
 import { GPS_LOST_MS, type GpsQuality } from '../geo/track/gpsQuality';
 
 /**
@@ -14,11 +15,6 @@ export interface GpsChip {
   label: string;
 }
 
-/** Accuracy radius, rounded for display (never below 1 m). */
-function metres(accuracyM: number): string {
-  return `±${Math.max(1, Math.round(accuracyM))} m`;
-}
-
 /** Time since the last fix, as the lost chip states it. */
 function sinceLabel(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -33,7 +29,10 @@ export function gpsChip(
   lastAccuracyM: number | null,
   lastFixAt: number | null,
   now: number,
+  units: Units,
 ): GpsChip {
+  // Accuracy radius in the user's short unit, never below 1 ("±5 m" / "±16 ft").
+  const metres = (accuracyM: number) => formatAccuracy(accuracyM, units);
   switch (quality) {
     case 'acquiring':
       return { kind: 'acquiring', label: 'Finding GPS…' };

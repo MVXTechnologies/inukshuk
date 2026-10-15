@@ -11,46 +11,48 @@ import {
   formatSpeed,
   formatTimestamp,
   headingToCardinal,
+  IMPERIAL,
+  METRIC,
 } from './index';
 
 describe('formatDistance (metric)', () => {
   it('uses metres below 1 km', () => {
-    expect(formatDistance(0, 'metric')).toBe('0 m');
-    expect(formatDistance(840, 'metric')).toBe('840 m');
-    expect(formatDistance(999, 'metric')).toBe('999 m');
+    expect(formatDistance(0, METRIC)).toBe('0 m');
+    expect(formatDistance(840, METRIC)).toBe('840 m');
+    expect(formatDistance(999, METRIC)).toBe('999 m');
   });
   it('uses km at or above 1 km', () => {
-    expect(formatDistance(1000, 'metric')).toBe('1.00 km');
-    expect(formatDistance(1234, 'metric')).toBe('1.23 km');
+    expect(formatDistance(1000, METRIC)).toBe('1.00 km');
+    expect(formatDistance(1234, METRIC)).toBe('1.23 km');
   });
   it('never renders "1000 m" on the rounding boundary', () => {
-    expect(formatDistance(999.4, 'metric')).toBe('999 m');
-    expect(formatDistance(999.5, 'metric')).toBe('1.00 km');
-    expect(formatDistance(999.99, 'metric')).toBe('1.00 km');
+    expect(formatDistance(999.4, METRIC)).toBe('999 m');
+    expect(formatDistance(999.5, METRIC)).toBe('1.00 km');
+    expect(formatDistance(999.99, METRIC)).toBe('1.00 km');
   });
   it('guards bad input', () => {
-    expect(formatDistance(-5, 'metric')).toBe('0 m');
-    expect(formatDistance(NaN, 'metric')).toBe('0 m');
+    expect(formatDistance(-5, METRIC)).toBe('0 m');
+    expect(formatDistance(NaN, METRIC)).toBe('0 m');
   });
 });
 
 describe('formatDistance (imperial)', () => {
   it('uses whole feet for short distances', () => {
-    expect(formatDistance(0, 'imperial')).toBe('0 ft');
-    expect(formatDistance(100, 'imperial')).toBe('328 ft');
+    expect(formatDistance(0, IMPERIAL)).toBe('0 ft');
+    expect(formatDistance(100, IMPERIAL)).toBe('328 ft');
   });
   it('switches to miles where feet would round to 1000', () => {
-    expect(formatDistance(999.4 * 0.3048, 'imperial')).toBe('999 ft');
-    expect(formatDistance(1000 * 0.3048, 'imperial')).toBe('0.19 mi');
+    expect(formatDistance(999.4 * 0.3048, IMPERIAL)).toBe('999 ft');
+    expect(formatDistance(1000 * 0.3048, IMPERIAL)).toBe('0.19 mi');
   });
   it('uses 2 decimals below 10 mi and 1 decimal above', () => {
-    expect(formatDistance(1609.344, 'imperial')).toBe('1.00 mi');
-    expect(formatDistance(5 * 1609.344, 'imperial')).toBe('5.00 mi');
-    expect(formatDistance(12 * 1609.344, 'imperial')).toBe('12.0 mi');
+    expect(formatDistance(1609.344, IMPERIAL)).toBe('1.00 mi');
+    expect(formatDistance(5 * 1609.344, IMPERIAL)).toBe('5.00 mi');
+    expect(formatDistance(12 * 1609.344, IMPERIAL)).toBe('12.0 mi');
   });
   it('guards bad input', () => {
-    expect(formatDistance(-5, 'imperial')).toBe('0 ft');
-    expect(formatDistance(NaN, 'imperial')).toBe('0 ft');
+    expect(formatDistance(-5, IMPERIAL)).toBe('0 ft');
+    expect(formatDistance(NaN, IMPERIAL)).toBe('0 ft');
   });
 });
 
@@ -58,9 +60,9 @@ describe('unit independence', () => {
   it('is a pure function of its arguments: same input, same output', () => {
     // The regression this module was moved into @core to prevent: the answer
     // used to depend on a module-level `displayUnits` set from elsewhere.
-    expect(formatDistance(1609.344, 'metric')).toBe('1.61 km');
-    expect(formatDistance(1609.344, 'imperial')).toBe('1.00 mi');
-    expect(formatDistance(1609.344, 'metric')).toBe('1.61 km');
+    expect(formatDistance(1609.344, METRIC)).toBe('1.61 km');
+    expect(formatDistance(1609.344, IMPERIAL)).toBe('1.00 mi');
+    expect(formatDistance(1609.344, METRIC)).toBe('1.61 km');
   });
 });
 
@@ -80,59 +82,59 @@ describe('formatDuration', () => {
 
 describe('formatElevationChange', () => {
   it('signs a climb and a drop', () => {
-    expect(formatElevationChange(120.4, 'up', 'metric')).toBe('+120 m');
-    expect(formatElevationChange(85, 'down', 'metric')).toBe('−85 m');
-    expect(formatElevationChange(100, 'down', 'imperial')).toBe('−328 ft');
+    expect(formatElevationChange(120.4, 'up', METRIC)).toBe('+120 m');
+    expect(formatElevationChange(85, 'down', METRIC)).toBe('−85 m');
+    expect(formatElevationChange(100, 'down', IMPERIAL)).toBe('−328 ft');
   });
 
   it('never signs zero', () => {
-    expect(formatElevationChange(0, 'up', 'metric')).toBe('0 m');
-    expect(formatElevationChange(0.4, 'down', 'metric')).toBe('0 m');
-    expect(formatElevationChange(NaN, 'down', 'imperial')).toBe('0 ft');
+    expect(formatElevationChange(0, 'up', METRIC)).toBe('0 m');
+    expect(formatElevationChange(0.4, 'down', METRIC)).toBe('0 m');
+    expect(formatElevationChange(NaN, 'down', IMPERIAL)).toBe('0 ft');
   });
 });
 
 describe('formatElevation', () => {
   it('rounds to whole metres', () => {
-    expect(formatElevation(1234.6, 'metric')).toBe('1235 m');
-    expect(formatElevation(NaN, 'metric')).toBe('0 m');
+    expect(formatElevation(1234.6, METRIC)).toBe('1235 m');
+    expect(formatElevation(NaN, METRIC)).toBe('0 m');
   });
   it('renders whole feet in imperial', () => {
-    expect(formatElevation(1234, 'imperial')).toBe('4049 ft');
-    expect(formatElevation(NaN, 'imperial')).toBe('0 ft');
+    expect(formatElevation(1234, IMPERIAL)).toBe('4049 ft');
+    expect(formatElevation(NaN, IMPERIAL)).toBe('0 ft');
   });
 });
 
 describe('formatSpeed', () => {
   it('converts m/s to km/h', () => {
-    expect(formatSpeed(0, 'metric')).toBe('0.0 km/h');
-    expect(formatSpeed(10, 'metric')).toBe('36.0 km/h');
-    expect(formatSpeed(-1, 'metric')).toBe('0.0 km/h');
+    expect(formatSpeed(0, METRIC)).toBe('0.0 km/h');
+    expect(formatSpeed(10, METRIC)).toBe('36.0 km/h');
+    expect(formatSpeed(-1, METRIC)).toBe('0.0 km/h');
   });
   it('converts m/s to mph in imperial', () => {
-    expect(formatSpeed(10, 'imperial')).toBe('22.4 mph');
-    expect(formatSpeed(-1, 'imperial')).toBe('0.0 mph');
+    expect(formatSpeed(10, IMPERIAL)).toBe('22.4 mph');
+    expect(formatSpeed(-1, IMPERIAL)).toBe('0.0 mph');
   });
 });
 
 describe('formatPace', () => {
   it('converts m/s to min/km', () => {
-    expect(formatPace(1000 / 360, 'metric')).toBe('6:00/km'); // 360 s/km
-    expect(formatPace(10 / 3.6, 'metric')).toBe('6:00/km'); // 10 km/h
+    expect(formatPace(1000 / 360, METRIC)).toBe('6:00/km'); // 360 s/km
+    expect(formatPace(10 / 3.6, METRIC)).toBe('6:00/km'); // 10 km/h
   });
   it('converts m/s to min/mi in imperial', () => {
-    expect(formatPace(1609.344 / 360, 'imperial')).toBe('6:00/mi'); // 360 s/mi
-    expect(formatPace(0, 'imperial')).toBe('—');
+    expect(formatPace(1609.344 / 360, IMPERIAL)).toBe('6:00/mi'); // 360 s/mi
+    expect(formatPace(0, IMPERIAL)).toBe('—');
   });
   it('returns a dash for non-positive or implausible speeds', () => {
-    expect(formatPace(0, 'metric')).toBe('—');
-    expect(formatPace(-1, 'metric')).toBe('—');
-    expect(formatPace(0.01, 'metric')).toBe('—');
-    expect(formatPace(NaN, 'metric')).toBe('—');
+    expect(formatPace(0, METRIC)).toBe('—');
+    expect(formatPace(-1, METRIC)).toBe('—');
+    expect(formatPace(0.01, METRIC)).toBe('—');
+    expect(formatPace(NaN, METRIC)).toBe('—');
   });
   it('carries a second that rounds to 60 into the minute', () => {
     // 359.7 s/km rounds to 5:60 naively; it must read 6:00.
-    expect(formatPace(1000 / 359.7, 'metric')).toBe('6:00/km');
+    expect(formatPace(1000 / 359.7, METRIC)).toBe('6:00/km');
   });
 });
 
@@ -176,15 +178,15 @@ describe('formatBytes', () => {
 
 describe('createFormatters', () => {
   it('binds the unit system into (value) => string helpers', () => {
-    const metric = createFormatters('metric');
+    const metric = createFormatters(METRIC);
     expect(metric.formatDistance(1609.344)).toBe('1.61 km');
     expect(metric.formatElevation(1234)).toBe('1234 m');
     expect(metric.formatSpeed(10)).toBe('36.0 km/h');
     expect(metric.formatPace(1000 / 360)).toBe('6:00/km');
   });
   it('gives two instances independent unit systems', () => {
-    const metric = createFormatters('metric');
-    const imperial = createFormatters('imperial');
+    const metric = createFormatters(METRIC);
+    const imperial = createFormatters(IMPERIAL);
     expect(imperial.formatDistance(1609.344)).toBe('1.00 mi');
     expect(imperial.formatElevation(1234)).toBe('4049 ft');
     expect(imperial.formatSpeed(10)).toBe('22.4 mph');

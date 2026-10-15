@@ -20,22 +20,23 @@ import { MapButton } from './MapButton';
  * the sheet on an outside tap.
  *
  * A11y/Maestro contract: the trigger keeps the EXACT label 'Map actions';
- * action rows keep 'Record track' / 'Add waypoint' / 'Download offline
- * area' / 'Make a map'. The guarded-tap idiom still holds — the action
- * labels only exist while the sheet is open, so they remain the open-state
- * sentinels. New rows are appended, never inserted, so an existing flow's
- * tap targets keep their position.
+ * action rows keep 'Record track' / 'Pin my location' / 'Add waypoint' /
+ * 'Download offline area' / 'Make a map'. The guarded-tap idiom still holds —
+ * the action labels only exist while the sheet is open, so they remain the
+ * open-state sentinels. Rows are appended, never inserted, so an existing
+ * flow's tap targets keep their position — with one owner-ordered exception
+ * (#709): 'Pin my location' (the fix: 2.5's 'Add waypoint') sits where the
+ * old row was, and 'Add waypoint' (now at the centre cursor) follows it.
  */
 
 export interface MapActions {
   onRecord: () => void;
-  /** Drop a standalone waypoint at the current GPS position (#671: in one tap). */
+  /** "Pin my location": a waypoint at the current GPS fix, in one tap (#671; #709 name). */
+  onPinMyLocation: () => void;
+  /** Its sub-line ("Waiting for a GPS fix…") while there is no fix. */
+  pinMyLocationHint?: string;
+  /** "Add waypoint": a waypoint at the centre cursor, in one tap (#709). */
   onAddWaypoint: () => void;
-  /**
-   * The Add waypoint row's sub-line ("Waiting for a GPS fix…", #671). The
-   * row keeps its place and label — Maestro flows key on both.
-   */
-  addWaypointHint?: string;
   /** Omitted while unavailable — region-select or a running download. */
   onDownload?: () => void;
   /** Open the map maker. Omitted in 3D. */
@@ -103,7 +104,13 @@ export function MapActionsMenu({
       {open && (
         <View style={styles.sheet}>
           {row('timer-outline', 'Record track', run(actions.onRecord))}
-          {row(null, 'Add waypoint', run(actions.onAddWaypoint), actions.addWaypointHint)}
+          {row(
+            'crosshairs-gps',
+            'Pin my location',
+            run(actions.onPinMyLocation),
+            actions.pinMyLocationHint,
+          )}
+          {row(null, 'Add waypoint', run(actions.onAddWaypoint))}
           {actions.onDownload !== undefined &&
             row('tray-arrow-down', 'Download offline area', run(actions.onDownload))}
           {actions.onMakeMap !== undefined && row('map-plus', 'Make a map', run(actions.onMakeMap))}

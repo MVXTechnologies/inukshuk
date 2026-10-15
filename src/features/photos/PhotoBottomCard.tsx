@@ -12,7 +12,9 @@ import type { TrackPhoto } from '@core/photos/model';
 import { isNotePhoto } from '@core/photos/model';
 import { photoEditFailureMessage } from '@core/photos/status';
 import { PhotoTeamComments } from '@features/team/PhotoTeamComments';
+import { formatDistanceMarker } from '@core/format';
 import { useLibraryStore } from '@state/libraryStore';
+import { useSettingsStore } from '@state/settingsStore';
 import { useTeamStore } from '@state/teamStore';
 import { photosEditable, useTrailPhotosStore } from '@state/trailPhotosStore';
 import { KeyboardLifted, useKeyboardHeight } from '@ui/components/KeyboardLifted';
@@ -66,6 +68,7 @@ export function PhotoBottomCard({ dockStyle }: { dockStyle?: StyleProp<ViewStyle
   const { height: windowH } = useWindowDimensions();
   const target = usePhotoCard((s) => s.target);
   const close = usePhotoCard((s) => s.close);
+  const units = useSettingsStore((s) => s.units);
   const own = useTrailPhotosStore((s) =>
     target?.kind === 'own'
       ? s.byTrack[target.trackId]?.photos.find((p) => p.id === target.photoId)
@@ -96,24 +99,26 @@ export function PhotoBottomCard({ dockStyle }: { dockStyle?: StyleProp<ViewStyle
     [],
   );
   if (target === null) return null;
-  const photo: Pick<TrackPhoto, 'caption' | 'takenAt'> & { uri: string | null; km: number | null } =
-    own
-      ? {
-          caption: own.caption,
-          takenAt: own.takenAt,
-          uri: photoFileUri(own.thumb),
-          km: own.distanceM / 1000,
-        }
-      : {
-          caption: teamPhoto?.caption ?? undefined,
-          takenAt: teamPhoto?.takenAt ?? undefined,
-          uri: teamPhoto?.thumbUri ?? null,
-          km: null,
-        };
+  const photo: Pick<TrackPhoto, 'caption' | 'takenAt'> & {
+    uri: string | null;
+    alongM: number | null;
+  } = own
+    ? {
+        caption: own.caption,
+        takenAt: own.takenAt,
+        uri: photoFileUri(own.thumb),
+        alongM: own.distanceM,
+      }
+    : {
+        caption: teamPhoto?.caption ?? undefined,
+        takenAt: teamPhoto?.takenAt ?? undefined,
+        uri: teamPhoto?.thumbUri ?? null,
+        alongM: null,
+      };
   const said = threads.get(target.photoId) ?? [];
   const sub = [
     photo.takenAt ? formatPhotoWhen(photo.takenAt) : null,
-    photo.km !== null ? `km ${photo.km.toFixed(1)}` : null,
+    photo.alongM !== null ? formatDistanceMarker(photo.alongM, units) : null,
     said.length > 0 ? `${said.length} comment${said.length === 1 ? '' : 's'}` : null,
   ]
     .filter(Boolean)

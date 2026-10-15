@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 /**
  * Full-screen photo viewers open in their own window, under the status bar:
  * with the strip docked on top, their close button must sit on the REAL
@@ -88,7 +89,7 @@ describe('photo viewers keep the real status bar inset under a top strip', () =>
     await underTopStrip(
       <AreaCard
         area={area}
-        units="metric"
+        units={METRIC}
         onEdit={jest.fn()}
         onDelete={jest.fn()}
         onClose={jest.fn()}

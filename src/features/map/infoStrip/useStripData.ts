@@ -1,4 +1,5 @@
 import { fixAltitude } from '@core/gnss/receiver';
+import { visibleCursor } from '@core/infoStrip/cursor';
 import { stripNeeds } from '@core/infoStrip/deps';
 import { datumTag } from '@core/infoStrip/edit';
 import { createMovingSpeedWindow } from '@core/infoStrip/movingSpeed';
@@ -12,6 +13,7 @@ import type {
   GnssSnapshot,
   InfoStrip,
   StripFix,
+  WaypointPin,
 } from '@core/infoStrip/types';
 import type { LatLng, TrackStats } from '@core/models';
 import { isRealCenter } from '@core/map/coordinatesChip';
@@ -28,6 +30,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCenterElevation } from '../centerElevation';
 import type { FollowState } from '../nav/useFollowTrail';
 import { subscribeHeading } from '../useCompass';
+import { useLiveCentre } from './liveCentre';
 import { useInstalledExtensions } from './stripSettings';
 import { useStripTides } from './useStripTides';
 
@@ -204,6 +207,15 @@ export function useStripSnapshot(
     deps.has('elevation') && !youAreCentre ? centre : null,
   );
   const heading = useGatedHeading(deps.has('heading'));
+  // The centre cursor, live while you pan (≤ 10 Hz), only with a cursor field.
+  const liveCentre = useLiveCentre(deps.has('cursor'));
+  const cursorSettings = strip.aids.cursor;
+  // While the map follows you the cursor sits on you: nothing to measure.
+  const cursorOnYou = followsUser && location !== null;
+  const cursor = useMemo(
+    () => visibleCursor(cursorSettings, isRealCenter(liveCentre) ? liveCentre : null, cursorOnYou),
+    [cursorSettings, liveCentre, cursorOnYou],
+  );
   const course = useCourse(deps.has('course'), location);
 
   // An external receiver in use: its altitude, and the fix in other datums.
@@ -245,18 +257,26 @@ export function useStripSnapshot(
     const on = destinationWaypoint(destination, waypointList);
     return on === undefined
       ? { name: 'Destination', point: destination }
-      : { name: on.label, point: destination, waypointId: on.id };
+      : { name: on.label, point: destination, waypointId: on.id, pin: pinOf(on) };
   }, [destination, waypointList]);
   const refIds = referencedWaypoints(strip, rows).join('\n');
   const waypoints = useMemo(() => {
-    const out: Record<string, { name: string; point: LatLng }> = {};
+    const out: Record<string, { name: string; point: LatLng; pin: WaypointPin }> = {};
     if (refIds === '') return out;
     const wanted = new Set(refIds.split('\n'));
     for (const w of waypointList) {
-      if (wanted.has(w.id)) out[w.id] = { name: w.label, point: w };
+      if (wanted.has(w.id)) out[w.id] = { name: w.label, point: w, pin: pinOf(w) };
     }
     return out;
   }, [refIds, waypointList]);
+  // The followed trail's next target, when a saved waypoint: its pin (#675).
+  const followWaypointId =
+    follow?.readout?.target.kind === 'waypoint' ? follow.readout.target.id : null;
+  const followPin = useMemo((): WaypointPin | undefined => {
+    if (followWaypointId === null) return undefined;
+    const w = waypointList.find((p) => p.id === followWaypointId);
+    return w === undefined ? {} : pinOf(w);
+  }, [followWaypointId, waypointList]);
 
   return useMemo((): DepsSnapshot => {
     const position: StripFix | null =
@@ -274,6 +294,8 @@ export function useStripSnapshot(
       readout === null
         ? null
         : {
+            trailName: follow?.name,
+            ...(followPin !== undefined ? { targetPin: followPin } : {}),
             targetKind: readout.target.kind,
             targetId: readout.target.id,
             targetName: readout.target.name,
@@ -315,6 +337,7 @@ export function useStripSnapshot(
       course,
       movingSpeedMps,
       navTarget,
+      cursor,
       follow: followSnap,
       waypoints,
       recording: hero,
@@ -332,10 +355,12 @@ export function useStripSnapshot(
     location,
     fix,
     follow,
+    followPin,
     recording,
     heading,
     course,
     navTarget,
+    cursor,
     waypoints,
     coordinateFormat,
     external,
@@ -343,6 +368,14 @@ export function useStripSnapshot(
     gnssProject,
     tides,
   ]);
+}
+
+/** A saved waypoint's pin as the strip draws it (its icon and colour, when set). */
+function pinOf(w: { icon?: string; color?: string }): WaypointPin {
+  const pin: WaypointPin = {};
+  if (w.icon !== undefined) pin.icon = w.icon;
+  if (w.color !== undefined) pin.color = w.color;
+  return pin;
 }
 
 function heroData(

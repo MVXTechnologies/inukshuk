@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 /**
  * The map's tap-a-trail sheet: the drawing panel's elevation strip (not the
  * old axis-and-pace chart), the trail view's stat tiles, scrubbing that moves
@@ -92,7 +93,7 @@ async function mount(track: TrackSummary, points: TrackPoint[] = POINTS) {
   await render(
     <SafeAreaProvider initialMetrics={METRICS}>
       <PaperProvider>
-        <TrailInspectPanel track={track} points={points} units="metric" {...handlers} />
+        <TrailInspectPanel track={track} points={points} units={METRIC} {...handlers} />
       </PaperProvider>
     </SafeAreaProvider>,
   );

@@ -1,3 +1,4 @@
+import { IMPERIAL } from '@core/format';
 // #673: the info strip's own file (`info-strip.json`), its migration from
 // 2.5.1 and from a pre-release's settings key, and its rollback mirror
 // (`showCenterCursor` in settings.json).
@@ -136,7 +137,7 @@ it('setInfoStrip writes the strip to its own file, and settings.json only for th
 it('any other setting write leaves the strip out of settings.json', async () => {
   await hydrate({ strip: navigation() });
   storage.writeJson.mockClear();
-  useSettingsStore.getState().set('units', 'imperial');
+  useSettingsStore.getState().set('units', IMPERIAL);
   expect(writesTo(SETTINGS)[0]).not.toHaveProperty('infoStrip');
   expect(writesTo(INFO_STRIP_FILE)).toHaveLength(0);
 });
@@ -162,7 +163,7 @@ it('rolling back to 2.5.1 and forward again loses nothing', async () => {
     saved: [{ ...navigation().current, name: 'Paddle' }],
   };
   useSettingsStore.getState().setInfoStrip(mine);
-  useSettingsStore.getState().set('units', 'imperial');
+  useSettingsStore.getState().set('units', IMPERIAL);
   expect(mockDisk.get(SETTINGS)).toEqual(expect.objectContaining({ showCenterCursor: true }));
 
   // 2.5.1 runs: it rewrites settings.json with only its keys (and the user
@@ -173,7 +174,7 @@ it('rolling back to 2.5.1 and forward again loses nothing', async () => {
   await relaunch();
   const s = useSettingsStore.getState();
   expect(s.infoStrip).toEqual(mine);
-  expect(s.units).toBe('imperial');
+  expect(s.units).toEqual(IMPERIAL);
   // The mirror is re-derived from the strip for the next rollback.
   expect(s.showCenterCursor).toBe(true);
 });

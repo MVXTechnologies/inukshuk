@@ -1,10 +1,14 @@
 import {
   createFormatters,
+  distanceUnitLabel,
+  distanceUnitName,
   formatClockTime,
+  metresPer,
   formatDuration,
   formatSpan,
   type Units,
 } from '@core/format';
+import { formatLatLng } from '@core/geo/formatCoords';
 import type { ElevationExtremes, Split, TimelineEvent, TrailTiming } from '@core/geo/track';
 import type { TrackStats } from '@core/models';
 
@@ -14,11 +18,9 @@ import type { TrackStats } from '@core/models';
  * unit-tested rather than eyeballed. The screen only lays these out.
  */
 
-const MILE_M = 1609.344;
-
-/** Split length for the user's units: a kilometre or a mile. */
-export function splitUnit(units: Units): { unitM: number; label: 'km' | 'mi' } {
-  return units === 'imperial' ? { unitM: MILE_M, label: 'mi' } : { unitM: 1000, label: 'km' };
+/** Split length for the user's units: a kilometre, a mile or a nautical mile. */
+export function splitUnit(units: Units): { unitM: number; label: string } {
+  return { unitM: metresPer(units.distance), label: distanceUnitLabel(units.distance) };
 }
 
 /** Signed whole-percent grade with a thin gap: "+24 %", "−8 %", "0 %". */
@@ -114,7 +116,8 @@ export function splitRows(
 ): SplitRow[] {
   const fmt = createFormatters(units);
   const { unitM, label: unitLabel } = splitUnit(units);
-  const unitName = units === 'imperial' ? 'Mile' : 'Kilometre';
+  const name0 = distanceUnitName(units.distance);
+  const unitName = `${name0.charAt(0).toUpperCase()}${name0.slice(1)}`;
   const timed = splits.some((s) => s.speedMps !== null);
   let maxSpeed = 0;
   let maxClimb = 0;
@@ -194,9 +197,7 @@ export function timelineEventText(
     case 'start':
       return {
         title: 'Start',
-        sub:
-          join(elev ?? null, high, stopped) ||
-          `${e.at.latitude.toFixed(4)}, ${e.at.longitude.toFixed(4)}`,
+        sub: join(elev ?? null, high, stopped) || formatLatLng(e.at.latitude, e.at.longitude),
         time,
       };
     case 'note': {

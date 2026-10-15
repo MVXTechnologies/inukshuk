@@ -1042,3 +1042,33 @@ describe('library v10 → v11: drawn routes and areas (#502/#503)', () => {
     expect(index.tracks[1]).not.toHaveProperty('plan');
   });
 });
+
+describe('the purge journal (#711): kept, sanitized and relativised', () => {
+  const DIR = 'file:///var/mobile/Containers/Data/Application/AAA/Documents';
+
+  it('keeps well-formed entries with document-relative paths; absent when empty', () => {
+    const index = migrateLibraryIndex(
+      {
+        schemaVersion: LIBRARY_SCHEMA_VERSION,
+        pendingPurges: [
+          { id: 'd1', fileUris: [`${DIR}/tracks/t1.gpx`, 'photos/w1.jpg'], trackIds: ['t1'] },
+          { junk: true },
+        ],
+      },
+      DIR,
+    );
+    expect(index.pendingPurges).toEqual([
+      { id: 'd1', fileUris: ['tracks/t1.gpx', 'photos/w1.jpg'], trackIds: ['t1'] },
+    ]);
+    expect(migrateLibraryIndex({ pendingPurges: [] })).not.toHaveProperty('pendingPurges');
+    expect(migrateLibraryIndex({ pendingPurges: 'junk' })).not.toHaveProperty('pendingPurges');
+  });
+
+  it('mapLibraryIndexPaths maps the journal paths like every other stored path', () => {
+    const index = migrateLibraryIndex({
+      pendingPurges: [{ id: 'd1', fileUris: ['tracks/t1.gpx'], trackIds: [] }],
+    });
+    const resolved = mapLibraryIndexPaths(index, (p) => `file:///doc/${p}`);
+    expect(resolved.pendingPurges?.[0]?.fileUris).toEqual(['file:///doc/tracks/t1.gpx']);
+  });
+});

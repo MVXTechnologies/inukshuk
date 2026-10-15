@@ -302,6 +302,7 @@ function Review({
   const theme = useTheme();
   const { plan, index } = prepared;
   const timedTrail = index.startMs !== undefined;
+  const units = useSettingsStore((s) => s.units);
   const [adjusting, setAdjusting] = useState(manualOffsetMs !== null);
   // As many thumbnails as fit one row (the last one becomes "+N").
   const [stripW, setStripW] = useState(0);
@@ -309,7 +310,7 @@ function Review({
   const uriOf = (p: PlannedPhoto) => prepared.items.get(p.candidate.key)?.picked.uri;
   const describe = {
     byTime: () => BY_TIME_TEXT,
-    byGps: (g: readonly PlannedPhoto[]) => byGpsText(g, timedTrail),
+    byGps: (g: readonly PlannedPhoto[]) => byGpsText(g, timedTrail, units),
     outside: (g: readonly PlannedPhoto[]) => outsideText(g),
   };
   const rows = clockRows(plan, manualOffsetMs !== null);

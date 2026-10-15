@@ -1,3 +1,4 @@
+import { parseRegionPayload } from '@core/map/regionPayload';
 import { bytesToBase64 } from '@core/encoding/base64';
 import { contourFeatures, type ContourFeatures } from '@core/geo/contours';
 import { coverageScaleChanged, padBounds, viewStillCovered } from '@core/geo/overlayCoverage';
@@ -115,9 +116,12 @@ export function useTerrainOverlays2D({
     const reqId = ++reqIdRef.current;
     const timer = setTimeout(() => {
       void (async () => {
-        const view = await mapRef.current?.getViewState().catch(() => undefined);
-        if (!view || reqId !== reqIdRef.current) return;
-        const [w, s, e, n] = view.bounds as [number, number, number, number];
+        // Parsed: an empty or bounds-less view (@core/map/regionPayload) draws nothing new.
+        const view = parseRegionPayload(
+          await mapRef.current?.getViewState().catch(() => undefined),
+        );
+        if (!view?.bounds || reqId !== reqIdRef.current) return;
+        const [w, s, e, n] = view.bounds;
         const viewport: BoundingBox = { minLng: w, minLat: s, maxLng: e, maxLat: n };
         const bounds = padBounds(viewport, PAD);
         const knobs = [slopeOn, contoursOn, intervalM, slopeMinDeg, slopeMaxDeg].join('|');

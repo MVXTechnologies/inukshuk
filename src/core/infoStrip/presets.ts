@@ -8,10 +8,15 @@
  * installed applies anyway, without those fields (owner: never greyed out).
  */
 import type { AnyExtensionKey } from '@core/extensions/keys';
-import { DEFAULT_POINTING_LINE } from '@core/map/pointingLineSettings';
+import type { Units } from '@core/format';
+import {
+  DEFAULT_POINTING_LINE,
+  pointingLineLengthText,
+  pointingLineTicksLabel,
+} from '@core/map/pointingLineSettings';
 
 import { fieldDescriptor, fieldAvailable, type FieldId } from './registry';
-import type { CursorSettings, FieldRef, InfoStrip, Params } from './types';
+import type { CursorKind, CursorSettings, FieldRef, InfoStrip, Params } from './types';
 
 /** The cursor colours (mockup §7): stone first, then paper, then the pin palette. */
 export const CURSOR_COLORS: readonly { hex: string; name: string }[] = [
@@ -58,8 +63,6 @@ export interface Preset {
   name: string;
   /** The card's one-liner. */
   summary: string;
-  /** The card's map-aid line ("Crosshair · pointing line 500 m, ticks 100 m"). */
-  aidsSummary: string;
   strip: InfoStrip;
 }
 
@@ -84,14 +87,12 @@ export const PRESETS: readonly Preset[] = [
     id: 'default',
     name: 'Default',
     summary: 'Coordinates and elevation',
-    aidsSummary: 'Dot cursor',
     strip: DEFAULT_STRIP,
   },
   {
     id: 'hiking',
     name: 'Hiking',
     summary: 'Next on trail, time to it, altitude, sunset',
-    aidsSummary: 'Dot cursor',
     strip: strip(
       'hiking',
       'Hiking',
@@ -106,7 +107,6 @@ export const PRESETS: readonly Preset[] = [
     id: 'navigation',
     name: 'Navigation',
     summary: 'Target, bearing, ETE/ETA, heading, declination',
-    aidsSummary: 'Dot cursor',
     strip: strip('navigation', 'Navigation', [
       [ref('targetName'), ref('targetDistance'), ref('targetBearing'), ref('ete')],
       [ref('speed'), ref('heading'), ref('eta'), ref('declination')],
@@ -117,7 +117,6 @@ export const PRESETS: readonly Preset[] = [
     id: 'survey',
     name: 'Survey',
     summary: 'Your position and accuracy, GNSS, a mark',
-    aidsSummary: 'Crosshair · pointing line 500 m, ticks 100 m',
     strip: strip(
       'survey',
       'Survey',
@@ -144,7 +143,6 @@ export const PRESETS: readonly Preset[] = [
     id: 'paddling',
     name: 'Paddling',
     summary: 'Speed and course over water, tide',
-    aidsSummary: 'Dot cursor',
     strip: strip('paddling', 'Paddling', [
       [
         ref('speed', { style: 'sog' }),
@@ -156,6 +154,31 @@ export const PRESETS: readonly Preset[] = [
     ]),
   },
 ];
+
+const CURSOR_NAME: Record<CursorKind, string> = {
+  dot: 'Dot cursor',
+  cross: 'Crosshair',
+  reticle: 'Reticle',
+  ring: 'Ring cursor',
+  x: 'X cursor',
+};
+
+/**
+ * The card's map-aid line, from the preset's own aids and in the user's
+ * units: "Crosshair · pointing line 500 m, ticks 100 m", "… 0.3 mi, ticks
+ * 500 ft" (QA 2.6.1: it was a fixed metric string).
+ */
+export function presetAidsSummary(p: Preset, units: Units): string {
+  const { cursor, pointingLine: line } = p.strip.aids;
+  const name = CURSOR_NAME[cursor.kind];
+  if (line === undefined || !line.enabled) return name;
+  const length = pointingLineLengthText(line.length, units, line.customLengthM).toLowerCase();
+  const ticks =
+    line.ticks === 'off'
+      ? 'no ticks'
+      : `ticks ${pointingLineTicksLabel(line.ticks, units).toLowerCase()}`;
+  return `${name} · pointing line ${length}, ${ticks}`;
+}
 
 export function presetById(id: string): Preset | undefined {
   return PRESETS.find((p) => p.id === id);

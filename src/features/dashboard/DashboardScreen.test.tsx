@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 import { computeTrackStats } from '@core/geo/track';
 import type { TrackSummary } from '@core/models';
 import { useLibraryStore } from '@state/libraryStore';
@@ -36,7 +37,7 @@ function track(id: string, name: string, daysAgo: number, category: string): Tra
 
 async function show(tracks: TrackSummary[]) {
   useLibraryStore.setState({ tracks, customCategories: [] });
-  useSettingsStore.setState({ units: 'metric' });
+  useSettingsStore.setState({ units: METRIC });
   await render(
     <SafeAreaProvider
       initialMetrics={{

@@ -1,4 +1,4 @@
-import { canSave, canUndo, drawHelp, drawHint } from '@core/draw/editor';
+import { canSave, canUndo, drawHelp, drawHint, exitNeedsConfirm } from '@core/draw/editor';
 import {
   boundsOfVertices,
   isSelfIntersecting,
@@ -360,8 +360,9 @@ export function useMapDrawing({
   }, [draw]);
 
   const requestExit = () => {
-    // An unsaved drawing is one stray tap from gone: the first ✕ warns.
-    const dirty = state !== null && state.past.length > 0;
+    // An unsaved drawing is one stray tap from gone: the first ✕ warns
+    // (not for an area that never had a shape: nothing to lose).
+    const dirty = state !== null && exitNeedsConfirm(state);
     const now = Date.now();
     if (dirty && now - discardArmedAt.current > DISCARD_CONFIRM_MS) {
       discardArmedAt.current = now;

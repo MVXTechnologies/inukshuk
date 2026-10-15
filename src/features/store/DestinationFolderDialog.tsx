@@ -8,6 +8,8 @@ import { NameDialog } from '../library/NameDialog';
 
 /** RadioButton value for "no folder" (values must be strings). */
 const UNGROUPED = '__ungrouped__';
+/** RadioButton value for the folder named here, created only on Add. */
+const NEW_FOLDER = '__new__';
 
 interface Props {
   visible: boolean;
@@ -18,7 +20,7 @@ interface Props {
   folders: readonly Folder[];
   /** Pre-selected folder (last used); null = Ungrouped. */
   initialFolderId: string | null;
-  /** Create a folder now (store's addFolder); returns its id. */
+  /** Create a folder (store's addFolder); returns its id. Called only on Add. */
   onCreateFolder: (name: string) => string;
   onDismiss: () => void;
   onConfirm: (folderId: string | null) => void;
@@ -29,6 +31,9 @@ interface Props {
  * Ungrouped and an inline "New folder…" via NameDialog) with a size line and
  * a free-space pre-flight — a download that cannot fit is blocked here, before
  * any bytes move.
+ *
+ * A folder named with "New folder…" is listed (and selected) but only created
+ * when Add confirms: Cancel leaves no empty folder behind (QA 2.6.1).
  */
 export function DestinationFolderDialog({
   visible,
@@ -50,11 +55,16 @@ export function DestinationFolderDialog({
       : UNGROUPED,
   );
   const [naming, setNaming] = useState(false);
+  /** The name given with "New folder…", not created yet. */
+  const [draft, setDraft] = useState<string | null>(null);
 
   const assessment = sizeBytes !== undefined ? assessFreeSpaceForWrite(sizeBytes) : null;
   const blocked = assessment?.verdict === 'block';
 
-  const confirm = () => onConfirm(selected === UNGROUPED ? null : selected);
+  const confirm = () => {
+    if (selected === NEW_FOLDER && draft !== null) onConfirm(onCreateFolder(draft));
+    else onConfirm(selected === UNGROUPED || selected === NEW_FOLDER ? null : selected);
+  };
 
   return (
     <>
@@ -81,6 +91,14 @@ export function DestinationFolderDialog({
             {folders.map((f) => (
               <RadioButton.Item key={f.id} label={f.name} value={f.id} />
             ))}
+            {draft !== null && (
+              <RadioButton.Item
+                label={draft}
+                accessibilityLabel={`${draft}, new folder, created when you tap Add`}
+                value={NEW_FOLDER}
+                testID="destination-new-folder"
+              />
+            )}
           </RadioButton.Group>
           <View style={styles.newFolderRow}>
             <Button icon="folder-plus-outline" onPress={() => setNaming(true)}>
@@ -104,7 +122,8 @@ export function DestinationFolderDialog({
         onDismiss={() => setNaming(false)}
         onSubmit={(name) => {
           setNaming(false);
-          setSelected(onCreateFolder(name.trim() === '' ? 'Folder' : name));
+          setDraft(name.trim() === '' ? 'Folder' : name.trim());
+          setSelected(NEW_FOLDER);
         }}
       />
     </>

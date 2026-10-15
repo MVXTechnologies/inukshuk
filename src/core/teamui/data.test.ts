@@ -9,7 +9,11 @@ import {
   T0,
 } from '@core/team/testing/fixtures';
 
+import type { Json } from '@core/team/canonical';
+import type { SignedOp } from '@core/team/envelope';
+import { activeEntities, AlertLedger } from './alertLedger';
 import { alertContext, alertFor, TaskAlertThrottle, trailUrl, type AlertContext } from './alerts';
+import { teamSos } from './field';
 import { statusFields, taskFields } from '@core/team/tasks';
 import {
   photoComments,
@@ -526,6 +530,101 @@ describe('alerts', () => {
     ).toMatchObject({
       level: 'badge',
       text: 'SOS resolved',
+    });
+  });
+
+  describe('an SOS raised after a resolve always rings (owner 2026-10-15, QA 2.6.1)', () => {
+    afterEach(() => jest.useRealTimers());
+
+    /** Gus raises; Alice's phone (throttle + ledger, as the store wires them) gets it. */
+    function setup() {
+      jest.useFakeTimers({ now: T0 });
+      const w = newWorld();
+      const alice = device();
+      const gus = device();
+      addMember(w.root, alice, 'member', T0 + 1);
+      addMember(w.root, gus, 'member', T0 + 2);
+      const ra = joinReplica(w, alice, w.root, T0 + 3);
+      const rg = joinReplica(w, gus, w.root, T0 + 3);
+      const throttle = new TaskAlertThrottle();
+      const ledger = new AlertLedger();
+      /** Gus's writes reach Alice in one sync; what her phone does with them. */
+      const deliver = (ops: SignedOp[], bodies: Json[]) => {
+        exchange(rg, w.root, Date.now());
+        exchange(w.root, ra, Date.now());
+        const ctx = alertContext(ra.state, ra.data(Date.now()));
+        const out: { level: string; phase?: string; rang: boolean }[] = [];
+        ops.forEach((op, i) => {
+          const a = alertFor(ra.state, op, bodies[i]!, alice.id, ctx);
+          if (a === null) return;
+          const admitted = throttle.admit(a, Date.now());
+          const routed = ledger.route(admitted, alice.id);
+          out.push({ level: admitted.level, phase: admitted.sosPhase, rang: routed !== null });
+        });
+        // The store settles after each refresh: resolved SOS leave the ledger.
+        ledger.settle(activeEntities(teamSos(ra.data(Date.now())), null));
+        return out;
+      };
+      const write = (body: Json) => {
+        jest.advanceTimersByTime(1000);
+        return rg.write(Date.now(), 'e.set', body)!;
+      };
+      const raise = { k: 'sos', id: 's1', f: { la: 47, lo: -71 } };
+      const resolve = () => ({
+        k: 'sos',
+        id: 's1',
+        f: { res: true, rby: gus.id, rat: Date.now() },
+      });
+      const reopen = {
+        k: 'sos',
+        id: 's1',
+        f: { la: 47.1, lo: -71.1, tx: '', res: false, rby: null, rat: null },
+      };
+      const r = write(raise);
+      expect(deliver([r], [raise])).toEqual([{ level: 'alert', phase: 'raise', rang: true }]);
+      return { write, deliver, raise, resolve, reopen, r };
+    }
+
+    it('resolve, then a new SOS seconds later in another sync: it rings', () => {
+      const { write, deliver, resolve, reopen } = setup();
+      const resBody = resolve();
+      const res = write(resBody);
+      expect(deliver([res], [resBody])).toEqual([
+        { level: 'badge', phase: 'resolve', rang: false },
+      ]);
+      jest.advanceTimersByTime(5000);
+      const again = write(reopen);
+      expect(deliver([again], [reopen])).toEqual([{ level: 'alert', phase: 'reopen', rang: true }]);
+    });
+
+    it('resolve and the new SOS in the same sync: it still rings', () => {
+      const { write, deliver, resolve, reopen } = setup();
+      const resBody = resolve();
+      const res = write(resBody);
+      const again = write(reopen);
+      // The resolve alerts nothing (the merged record is open again); the reopen rings.
+      expect(deliver([res, again], [resBody, reopen])).toEqual([
+        { level: 'alert', phase: 'reopen', rang: true },
+      ]);
+    });
+
+    it('while it stays open, the 5-minute limit holds: a resync never rings twice', () => {
+      const { write, deliver, raise, r, resolve, reopen } = setup();
+      // The same raise synced again.
+      expect(deliver([r], [raise])).toEqual([{ level: 'badge', phase: 'raise', rang: false }]);
+      // Moves of the open SOS alert nothing.
+      const move = { k: 'sos', id: 's1', f: { la: 47.2, lo: -71 } };
+      expect(deliver([write(move)], [move])).toEqual([]);
+      // Reopened once (rings), then that same reopen synced again: no second ring.
+      const resBody = resolve();
+      const res = write(resBody);
+      const again = write(reopen);
+      expect(deliver([res, again], [resBody, reopen])).toEqual([
+        { level: 'alert', phase: 'reopen', rang: true },
+      ]);
+      expect(deliver([again], [reopen])).toEqual([
+        { level: 'badge', phase: 'reopen', rang: false },
+      ]);
     });
   });
 });

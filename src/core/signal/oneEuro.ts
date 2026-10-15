@@ -74,8 +74,8 @@ const MAX_DT_S = 1;
 
 /**
  * Create a 1-Euro filter over a plain (non-circular) scalar. For headings use
- * `createHeadingFilter` in `./heading`, which wraps this with angle unwrapping
- * and a rest deadband.
+ * `createBearingFilter` in `./bearingFilter`, which wraps this with angle unwrapping
+ * and a soft rest gate.
  */
 export function createOneEuroFilter(options: OneEuroOptions = {}): OneEuroFilter {
   const { minCutoffHz = 0.5, beta = 0.02, dCutoffHz = 1, defaultIntervalMs = 100 } = options;

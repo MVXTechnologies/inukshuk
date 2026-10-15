@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 import { pinGeometry, WAYPOINT_PIN_DIAMETER } from '@core/library/waypointStyle';
 import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
@@ -48,7 +49,7 @@ async function setup(dark = false, zoom: number | null = null) {
   const handlers = { onCancel: jest.fn(), onConfirm: jest.fn(), onLocate: jest.fn() };
   await render(
     <PaperProvider theme={dark ? darkTheme : lightTheme}>
-      <MoveWaypointOverlay units="metric" zoom={zoom} {...handlers} />
+      <MoveWaypointOverlay units={METRIC} zoom={zoom} {...handlers} />
       <MoveWaypointLayers />
     </PaperProvider>,
   );
@@ -80,12 +81,12 @@ describe('MoveWaypointOverlay (#676)', () => {
   it('shows the settled centre and how far the pin moved', async () => {
     useWaypointMoveStore.setState({ moving: TARGET });
     await setup();
-    expect(screen.getByTestId('move-coords')).toHaveTextContent('46.81394, -71.20761');
+    expect(screen.getByTestId('move-coords')).toHaveTextContent('46.813940, -71.207610');
     expect(screen.getByText('Pan the map to put the pin in its new place')).toBeOnTheScreen();
     await act(async () =>
       useMapStore.setState({ mapCenter: { latitude: 46.81418, longitude: -71.20726 } }),
     );
-    expect(screen.getByTestId('move-coords')).toHaveTextContent('46.81418, -71.20726');
+    expect(screen.getByTestId('move-coords')).toHaveTextContent('46.814180, -71.207260');
     // No scale known: no zoom hint.
     expect(screen.getByText('Moved 38 m NE')).toBeOnTheScreen();
   });
@@ -132,7 +133,7 @@ describe('MoveWaypointOverlay (#676)', () => {
       const r = await render(
         <PaperProvider theme={lightTheme}>
           <MoveWaypointOverlay
-            units="metric"
+            units={METRIC}
             onCancel={jest.fn()}
             onConfirm={jest.fn()}
             onLocate={jest.fn()}

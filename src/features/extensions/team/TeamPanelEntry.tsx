@@ -1,5 +1,5 @@
 import { DEVICE_EXTENSIONS } from '@core/extensions/registry';
-import { useTeamStore } from '@state/teamStore';
+import { selectChatUnread, useTeamStore } from '@state/teamStore';
 
 import { SubPanelButton, SwitchRow } from '../../map/components/mapSheet';
 import { setExtensionPrefs, useExtensionPrefs } from '../prefs';
@@ -7,14 +7,14 @@ import type { ExtensionPanelEntryProps } from '../types';
 
 /**
  * Map overlays › Extensions › Team mode: its switch IS team signal mode (taps
- * on the map signal the team; the team button appears). The hint names the
+ * on the map signal the team; the team bar and the SOS button appear). The hint names the
  * open team; the sub-panel accessory (`TeamSubPanel`: the hub, sharing,
  * create, join) carries the unread count.
  */
 export function TeamPanelEntry({ onOpenPanel }: ExtensionPanelEntryProps) {
   const { show } = useExtensionPrefs('team');
   const name = useTeamStore((s) => s.view?.name ?? null);
-  const unread = useTeamStore((s) => s.unread);
+  const unread = useTeamStore(selectChatUnread);
   const { label } = DEVICE_EXTENSIONS.team;
   const hint =
     name === null

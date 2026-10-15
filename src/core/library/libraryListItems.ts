@@ -62,18 +62,22 @@ export interface LibraryListInput {
   /** Trimmed search text when a search is active, else null. */
   searchText: string | null;
   activeFilterCount: number;
-  /** Drawn areas, newest first (#503) — one flat "Areas" section at the end. */
+  /**
+   * Drawn areas, newest first (#503): one "Areas" section at the end (with
+   * folders, the unfiled ones; filed ones come from `grouped`).
+   */
   sortedAreas?: readonly Area[];
   /** Whether the type chip shows areas (defaults to off when absent). */
   showAreas?: boolean;
 }
 
-type Row = Extract<LibraryListItem, { kind: 'map' | 'track' | 'waypoint' }>;
+type Row = Extract<LibraryListItem, { kind: 'map' | 'track' | 'waypoint' | 'area' }>;
 
 function rows(
   maps: readonly MapDocument[],
   tracks: readonly TrackSummary[],
   waypoints: readonly Waypoint[],
+  areas: readonly Area[] = [],
 ): Row[] {
   const out: Row[] = [];
   const divider = () => out.length > 0;
@@ -83,6 +87,9 @@ function rows(
   }
   for (const waypoint of waypoints) {
     out.push({ kind: 'waypoint', key: `wp:${waypoint.id}`, waypoint, divider: divider() });
+  }
+  for (const area of areas) {
+    out.push({ kind: 'area', key: `area:${area.id}`, area, divider: divider() });
   }
   return out;
 }
@@ -102,13 +109,17 @@ export function libraryListItems(input: LibraryListInput): LibraryListItem[] {
 
 /**
  * Drawn areas (#503): their own section after everything else, in both
- * layouts (areas are not filed into folders yet). Hidden while there are
- * none, unless the Areas chip asked for them; a trail search or filter is
- * about trails, so it stands the section down like it does Maps.
+ * layouts. With folders, an area filed in one (#711) is listed in its folder
+ * and this section holds the unfiled ones. Hidden while there are none,
+ * unless the Areas chip asked for them; a trail search or filter is about
+ * trails, so it stands the section down like it does Maps.
  */
 function areaItems(input: LibraryListInput, first: boolean): LibraryListItem[] {
-  const areas = input.sortedAreas ?? [];
   if (!input.showAreas || input.narrowed) return [];
+  const filed = input.hasFolders
+    ? new Set(input.grouped.groups.flatMap((g) => g.areas.map((a) => a.id)))
+    : null;
+  const areas = (input.sortedAreas ?? []).filter((a) => filed === null || !filed.has(a.id));
   if (areas.length === 0 && input.effectiveType !== 'areas') return [];
   const items: LibraryListItem[] = [
     {
@@ -152,8 +163,13 @@ function folderItems(input: LibraryListInput): LibraryListItem[] {
     const folderWaypoints = showWaypoints
       ? (input.sortedFolderWaypoints.get(g.folder.id) ?? [])
       : [];
+    // Like Maps, areas stand down while a trail search or filter narrows.
+    const folderAreas = input.showAreas && !input.narrowed ? g.areas : [];
     const rowCount =
-      (showMaps ? g.maps.length : 0) + (showTrails ? g.tracks.length : 0) + folderWaypoints.length;
+      (showMaps ? g.maps.length : 0) +
+      (showTrails ? g.tracks.length : 0) +
+      folderWaypoints.length +
+      folderAreas.length;
     // Under a type chip, a folder holding none of that type steps aside.
     if (effectiveType !== 'all' && rowCount === 0 && !organizing) return;
     const count = effectiveType === 'all' ? folderItemCount(g) : rowCount;
@@ -182,7 +198,9 @@ function folderItems(input: LibraryListInput): LibraryListItem[] {
     }
     // Trail filters and trail search are about trails — maps drop out of
     // results while either narrowing is active (the caller's showMaps).
-    items.push(...rows(showMaps ? g.maps : [], showTrails ? g.tracks : [], folderWaypoints));
+    items.push(
+      ...rows(showMaps ? g.maps : [], showTrails ? g.tracks : [], folderWaypoints, folderAreas),
+    );
   });
 
   const ungroupedMaps = showMaps ? grouped.ungroupedMaps : [];

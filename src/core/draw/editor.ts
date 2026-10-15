@@ -202,6 +202,20 @@ export const canSave = (state: DrawState): boolean =>
   state.vertices.length >= MIN_VERTICES[state.kind];
 
 /**
+ * Whether ✕ asks first ("Tap ✕ again to discard this drawing") rather than
+ * closing at once: something was drawn. An area that never had a shape —
+ * one or two corners, now or at any undo step — has nothing to lose, so ✕
+ * closes it at once (QA 2.6.1: with one corner placed, ✕ seemed to do
+ * nothing). Editing a saved area keeps the warning: its shape is in `past`.
+ */
+export function exitNeedsConfirm(state: DrawState): boolean {
+  if (state.past.length === 0) return false;
+  if (state.kind === 'route') return true;
+  const min = MIN_VERTICES.area;
+  return state.vertices.length >= min || state.past.some((p) => p.vertices.length >= min);
+}
+
+/**
  * The drawing help behind the panel title's (?) (2.1.1): how to draw and edit,
  * shown on demand instead of as a banner over the map.
  */

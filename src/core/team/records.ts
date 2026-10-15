@@ -27,12 +27,13 @@ export { decodeLine };
  * | `mres` message resolved | owned by the MESSAGE's author, id = message id | its author, an admin, or someone it mentions (guests too) | — |
  * | `drw` map drawing (#683) | owned (creator) | creator (members), whole; later only `tx`; ≤ 30 live | creator or admin |
  * | `cap` capabilities (#683) | owned, id = the member | the member (guests too) | member or admin |
+ * | `rcp` receipt (#708) | owned (receiver), id = the alert's id | the receiver (guests too), never for their own alert | receiver or admin |
  *
  * Status-like fields are written whole (the "done by the wrong person" lesson):
  * `res: true` with `rby` = the author and `rat`; `res: false` with both null.
  */
 
-export const RECORD_KINDS = ['trl', 'tve', 'sos', 'rly', 'mres', 'drw', 'cap'] as const;
+export const RECORD_KINDS = ['trl', 'tve', 'sos', 'rly', 'mres', 'drw', 'cap', 'rcp'] as const;
 export type RecordKind = (typeof RECORD_KINDS)[number];
 
 export const MAX_TRAIL_NAME = 80;
@@ -169,6 +170,26 @@ export function validResolutionFields(f: Record<string, Json>, author: string): 
   return only(f, RESOLUTION_FIELDS) && validResolution(f, author);
 }
 
+/** The alert kinds a receipt (#708) names: an SOS or a rally point. */
+export const RECEIPT_ALERT_KINDS: readonly string[] = ['sos', 'rly'];
+
+/**
+ * A receipt (#708): `e.set { k: 'rcp', id: <the alert's id>, f: { ak, ao } }`,
+ * "this phone has synced `ao`'s alert `ak`/`id`". Both fields, always, and
+ * nothing else: `ak` is `sos` or `rly`, `ao` the alert's owner (never the
+ * receiver). Older phones (2.6.0 and before) skip the unknown kind as invalid
+ * and keep the chain whole, as 2.5.1 does with `drw`.
+ */
+export function validReceiptFields(f: Record<string, Json>, author: string): boolean {
+  return (
+    only(f, ['ak', 'ao']) &&
+    typeof f['ak'] === 'string' &&
+    RECEIPT_ALERT_KINDS.includes(f['ak']) &&
+    isMemberId(f['ao']) &&
+    f['ao'] !== author
+  );
+}
+
 /** What the fold needs to authorize a record write. */
 export interface RecordWrite {
   kind: RecordKind;
@@ -267,8 +288,20 @@ export function reindex(
   }
 }
 
-/** After an SOS is resolved, its raiser waits this long before raising another. */
+/**
+ * After an SOS is resolved, its raiser waits this long before raising
+ * another *new* one (a new id). Reopening the resolved one (`res: false`, the
+ * whole trio) is never held back, and alerts like a raise: that is how the app
+ * sends an SOS within the cooldown (QA 2.6.1), so every phone, old or new,
+ * accepts it.
+ */
 export const SOS_COOLDOWN_MS = 60_000;
+
+/** Whether a new SOS id from `owner` at `wall` falls in the cooldown after their last resolve. */
+export function sosCoolingDown(idx: RecordIndex, owner: string, wall: number): boolean {
+  const last = idx.sosLastResolved.get(owner);
+  return last !== undefined && wall - last < SOS_COOLDOWN_MS;
+}
 
 const live = (r: { state: EntityState } | undefined): r is { state: EntityState } =>
   r !== undefined && isLive(r.state);
@@ -339,8 +372,7 @@ export function authorizeRecord(
         if (!has(f, 'la') || !has(f, 'lo')) return 'invalid';
         // Spam guard: one open SOS per member, and a cooldown after a resolve.
         if ((idx.sosOpen.get(owner)?.size ?? 0) > 0) return 'forbidden';
-        const last = idx.sosLastResolved.get(owner);
-        if (last !== undefined && wall - last < SOS_COOLDOWN_MS) return 'forbidden';
+        if (sosCoolingDown(idx, owner, wall)) return 'forbidden';
       }
       return { owner };
     }
@@ -365,6 +397,10 @@ export function authorizeRecord(
     case 'cap':
       // One record per member, its id the member's own.
       if (w.o !== undefined || id !== author || !validCapFields(f)) return 'invalid';
+      return { owner: author };
+    case 'rcp':
+      // One per receiver per alert, its owner the receiver.
+      if (w.o !== undefined || !validReceiptFields(f, author)) return 'invalid';
       return { owner: author };
     case 'mres': {
       if (!validResolutionFields(f, author)) return 'invalid';

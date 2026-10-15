@@ -6,7 +6,7 @@ import {
   zoomForGroundSpan,
 } from '@core/mapmaker/cameraFit';
 import { pointsOnPage, tracksOnPage } from '@core/mapmaker/contentSelection';
-import { formatDistance } from '@core/format';
+import { distanceParts, formatDistance, type Units } from '@core/format';
 import { categoryColor } from '@core/library/categories';
 import { useLibraryStore } from '@state/libraryStore';
 import { ScrollView } from 'react-native';
@@ -82,10 +82,14 @@ const PHASE_LABEL: Record<ComposePhase, string> = {
 const PHASE_BASE: Record<ComposePhase, number> = { tiles: 0, terrain: 1 / 3, compose: 2 / 3 };
 
 const fmtScale = (d: number) => `1:${Math.round(d).toLocaleString('en-US').replace(/,/g, ' ')}`;
-const fmtKm = (m: number) =>
-  m >= 1000 ? `${(m / 1000).toFixed(m < 10000 ? 1 : 0)}` : `${Math.round(m)} m`;
-const fmtCoverage = (w: number, h: number) =>
-  w >= 1000 && h >= 1000 ? `${fmtKm(w)} × ${fmtKm(h)} km` : `${Math.round(w)} × ${Math.round(h)} m`;
+/** "3.2 × 2.1 km", "840 m × 1.2 km": the sheet's ground coverage in the user's units. */
+const fmtCoverage = (w: number, h: number, units: Units) => {
+  const a = distanceParts(w, units, { style: 'short' });
+  const b = distanceParts(h, units, { style: 'short' });
+  return a.unit === b.unit
+    ? `${a.value} × ${b.value} ${a.unit}`
+    : `${a.value} ${a.unit} × ${b.value} ${b.unit}`;
+};
 
 export function MapMakerEditor({
   camera,
@@ -449,7 +453,7 @@ export function MapMakerEditor({
         >
           <Text style={styles.readoutLine}>
             {live
-              ? `${fmtScale(live.scaleDenom)}  ·  ${fmtCoverage(live.widthM, live.heightM)}`
+              ? `${fmtScale(live.scaleDenom)}  ·  ${fmtCoverage(live.widthM, live.heightM, units)}`
               : 'Positioning…'}
           </Text>
           {collapsed ? <Text style={styles.readoutHint}>▲ tap for options</Text> : null}
@@ -531,7 +535,7 @@ export function MapMakerEditor({
                     const active = activeScale > 0 && Math.abs(Math.log(activeScale / d)) < 0.06;
                     return chip(
                       `1:${d / 1000}k`,
-                      fmtCoverage(cov.widthM, cov.heightM),
+                      fmtCoverage(cov.widthM, cov.heightM, units),
                       active,
                       () => goToScale(d),
                       `s${d}`,

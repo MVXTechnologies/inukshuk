@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC } from '@core/format';
 import { useSettingsStore } from '@state/settingsStore';
 import { render, screen } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
@@ -22,7 +23,7 @@ describe('ScaleBar', () => {
   // testing library has not unmounted yet, and React (rightly) complains about
   // an update outside act().
   beforeEach(() => {
-    useSettingsStore.setState({ units: 'metric' });
+    useSettingsStore.setState({ units: METRIC });
   });
 
   it('labels a round metric distance', async () => {
@@ -31,7 +32,7 @@ describe('ScaleBar', () => {
   });
 
   it('follows the units setting', async () => {
-    useSettingsStore.setState({ units: 'imperial' });
+    useSettingsStore.setState({ units: IMPERIAL });
     await renderAt(13, 46.8);
     expect(screen.getByLabelText('Scale 2000 ft')).toBeOnTheScreen();
   });

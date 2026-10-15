@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC } from '@core/format';
 /**
  * Map layers › Map › Pointing line (#681): every option writes the one
  * `pointingLine` setting, the preview and its caption follow, and the page
@@ -8,7 +9,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { darkTheme, lightTheme } from '@ui/theme';
 import { darkScheme, lightScheme } from '@ui/tokens';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { Keyboard, StyleSheet } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { PointingLinePanel } from './PointingLinePanel';
 
@@ -28,7 +29,7 @@ async function mount(dark = false) {
 
 beforeEach(() => {
   onBack.mockClear();
-  useSettingsStore.setState({ pointingLine: DEFAULT_POINTING_LINE, units: 'metric' });
+  useSettingsStore.setState({ pointingLine: DEFAULT_POINTING_LINE, units: METRIC });
 });
 
 describe('PointingLinePanel', () => {
@@ -54,7 +55,7 @@ describe('PointingLinePanel', () => {
   });
 
   it('in imperial, the tick choices and the caption read in round feet', async () => {
-    useSettingsStore.setState({ units: 'imperial' });
+    useSettingsStore.setState({ units: IMPERIAL });
     await mount();
     expect(state('200 ft').selected).toBe(true);
     expect(screen.getByLabelText('50 ft')).toBeTruthy();
@@ -67,7 +68,7 @@ describe('PointingLinePanel', () => {
   });
 
   it('in imperial, the length reads in feet and miles everywhere (2.5.1 final QA)', async () => {
-    useSettingsStore.setState({ units: 'imperial' });
+    useSettingsStore.setState({ units: IMPERIAL });
     await mount();
     // The slider's value, the caption and the note: no metres anywhere.
     expect(screen.getByLabelText('Length').props.accessibilityValue).toMatchObject({
@@ -91,7 +92,7 @@ describe('PointingLinePanel', () => {
     expect(cfg().length).toBe(100);
     expect(screen.getByText(/· 500 ft ·/)).toBeTruthy();
     // Back to metric: the same choice, in metres.
-    await act(async () => useSettingsStore.setState({ units: 'metric' }));
+    await act(async () => useSettingsStore.setState({ units: METRIC }));
     expect(screen.getByLabelText('Length').props.accessibilityValue.text).toBe('100 m');
     expect(screen.getByText(/so 100 m is 100 m on the ground/)).toBeTruthy();
   });
@@ -136,6 +137,56 @@ describe('PointingLinePanel', () => {
     expect(cfg().length).toBe(100);
   });
 
+  it('Custom (#703): the last stop opens a distance field, typed and clamped', async () => {
+    await mount();
+    const step = () =>
+      act(async () => {
+        fireEvent(screen.getByLabelText('Length'), 'accessibilityAction', {
+          nativeEvent: { actionName: 'increment' },
+        });
+      });
+    expect(screen.queryByLabelText('Custom length in metres')).toBeNull();
+    for (let i = 0; i < 4; i++) await step();
+    expect(cfg().length).toBe('custom');
+    expect(screen.getByLabelText('Length').props.accessibilityValue.text).toBe('Custom');
+    const input = screen.getByLabelText('Custom length in metres');
+    expect(input.props.value).toBe('750');
+    await fireEvent.changeText(input, '1250');
+    expect(cfg().customLengthM).toBe(1250);
+    expect(screen.getByText('From you · heading · 1.25 km · ticks every 50 m')).toBeTruthy();
+    expect(screen.getByText(/so 1\.25 km is 1\.25 km on the ground/)).toBeTruthy();
+    // Not a number yet: nothing is written; too short: clamped, shown on leaving.
+    await fireEvent.changeText(input, '');
+    expect(cfg().customLengthM).toBe(1250);
+    await fireEvent.changeText(input, '3');
+    expect(cfg().customLengthM).toBe(10);
+    await fireEvent(input, 'blur');
+    expect(input.props.value).toBe('10');
+    // A preset keeps the custom distance for next time.
+    await act(async () => {
+      fireEvent(screen.getByLabelText('Length'), 'accessibilityAction', {
+        nativeEvent: { actionName: 'decrement' },
+      });
+    });
+    expect(cfg().length).toBe('edge');
+    expect(cfg().customLengthM).toBe(10);
+    expect(screen.queryByLabelText('Custom length in metres')).toBeNull();
+  });
+
+  it('Custom in imperial: typed in feet, stored in metres', async () => {
+    useSettingsStore.setState({
+      units: IMPERIAL,
+      pointingLine: { ...DEFAULT_POINTING_LINE, length: 'custom', customLengthM: 457.2 },
+    });
+    await mount();
+    const input = screen.getByLabelText('Custom length in feet');
+    expect(input.props.value).toBe('1500');
+    expect(screen.getByText('From you · heading · 1500 ft · ticks every 200 ft')).toBeTruthy();
+    await fireEvent.changeText(input, '5280');
+    expect(cfg().customLengthM).toBeCloseTo(1609.344, 6);
+    expect(screen.getByText(/· 1 mi ·/)).toBeTruthy();
+  });
+
   it('colour, width, ticks and labels each write their field only', async () => {
     await mount();
     await fireEvent.press(screen.getByLabelText('Blue'));
@@ -174,5 +225,26 @@ describe('PointingLinePanel', () => {
     const input = StyleSheet.flatten(screen.getByLabelText('Fixed bearing in degrees').props.style);
     expect(input.color).toBe(scheme.ink);
     expect(input.backgroundColor).toBe(scheme.surfaceVariant);
+    await act(async () =>
+      useSettingsStore.setState({
+        pointingLine: { ...useSettingsStore.getState().pointingLine, length: 'custom' },
+      }),
+    );
+    const custom = StyleSheet.flatten(screen.getByLabelText('Custom length in metres').props.style);
+    expect(custom.color).toBe(scheme.ink);
+    expect(custom.backgroundColor).toBe(scheme.surfaceVariant);
+  });
+
+  it('closing the panel with the Custom length focused puts the keyboard away (QA 2.6.1)', async () => {
+    const dismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => undefined);
+    useSettingsStore.setState({
+      pointingLine: { ...DEFAULT_POINTING_LINE, length: 'custom', customLengthM: 1000 },
+    });
+    await mount();
+    await fireEvent(screen.getByTestId('pointing-line-custom-length'), 'focus');
+    expect(dismiss).not.toHaveBeenCalled();
+    await screen.unmount();
+    expect(dismiss).toHaveBeenCalledTimes(1);
+    dismiss.mockRestore();
   });
 });

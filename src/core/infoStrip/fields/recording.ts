@@ -8,7 +8,8 @@
  * Shown only while recording; while the panel shows the same metric in its
  * hero row, the strip drops it (`visibleRows`).
  */
-import { heroFieldText, type HeroField } from '@core/recording/panel';
+import { METRIC, type Units } from '@core/format';
+import { heroFieldText, type HeroData, type HeroField } from '@core/recording/panel';
 
 import { splitUnit } from '../format';
 import type { FieldDescriptor, StripValue } from '../types';
@@ -16,9 +17,26 @@ import { defineField } from './define';
 
 type HeroSpec = { field: HeroField; label: string; summary: string; glyph?: string; tag?: string };
 
+/**
+ * The presets' made-up recording, formatted like a live one so a sample
+ * follows the Units setting (#702): "1:12:40", "8.42 km", "+412 m",
+ * "−188 m", "15:47/km", "58:10" in metric.
+ */
+const SAMPLE_RECORDING: HeroData = {
+  elapsedS: 4360,
+  distanceM: 8420,
+  ascentM: 412,
+  descentM: 188,
+  movingTimeS: 3490,
+  avgSpeedMps: 1000 / 947,
+  liveSpeedMps: 1,
+  altitudeM: 412,
+  position: null,
+  nowMs: 0,
+};
+
 function heroField(
   { field, label, summary, glyph, tag }: HeroSpec,
-  sample: string,
   synonyms: readonly string[],
 ): FieldDescriptor<Record<string, never>> {
   const dress = (text: string): StripValue => {
@@ -42,13 +60,13 @@ function heroField(
     compute(data, _params, { units }) {
       return data.recording === null ? null : dress(heroFieldText(field, data.recording, units));
     },
-    sample: dress(sample),
+    sample: dress(heroFieldText(field, SAMPLE_RECORDING, METRIC)),
+    sampleIn: (units: Units) => dress(heroFieldText(field, SAMPLE_RECORDING, units)),
   });
 }
 
 export const HERO_TIME = heroField(
   { field: 'time', label: 'Recording time', summary: 'This recording so far', glyph: 'timer' },
-  '1:12:40',
   ['elapsed', 'duration', 'chrono'],
 );
 export const HERO_DISTANCE = heroField(
@@ -58,12 +76,10 @@ export const HERO_DISTANCE = heroField(
     summary: 'This recording so far',
     glyph: 'straighten',
   },
-  '8.42 km',
   ['km', 'miles', 'covered'],
 );
 export const HERO_GAIN = heroField(
   { field: 'gain', label: 'Gain', summary: 'Climbed in this recording', glyph: 'north_east' },
-  '+412 m',
   ['ascent', 'climb', 'elevation gain', 'up'],
 );
 export const HERO_DESCENT = heroField(
@@ -73,12 +89,10 @@ export const HERO_DESCENT = heroField(
     summary: 'Descended in this recording',
     glyph: 'south_east',
   },
-  '−188 m',
   ['down', 'loss'],
 );
 export const HERO_PACE = heroField(
   { field: 'pace', label: 'Pace', summary: 'Average pace of this recording', tag: 'Pace' },
-  '15:47/km',
   ['min/km', 'tempo'],
 );
 export const HERO_MOVING = heroField(
@@ -88,6 +102,5 @@ export const HERO_MOVING = heroField(
     summary: 'Time in motion, stops left out',
     glyph: 'directions_walk',
   },
-  '58:10',
   ['moving', 'active time'],
 );

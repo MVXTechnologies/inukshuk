@@ -8,7 +8,7 @@ import { MESH_DEFAULT_PORT, hotspotCandidates, isPrivateIPv4, parseIPv4 } from '
 import { expiryLine, EXTEND_PRESETS } from '@core/teamui/lifetime';
 import { parseHostPort } from '@core/teamui/invites';
 import { reportError } from '@lib/errorReporting';
-import { teamService, useTeamStore } from '@state/teamStore';
+import { teamService, selectChatUnread, useTeamStore } from '@state/teamStore';
 import type { ComponentType } from 'react';
 import type { TeamTask } from '@core/team/tasks';
 import { HeaderAction } from '@ui/components/ScreenHeader';
@@ -31,6 +31,10 @@ import {
   useNow,
 } from './components';
 import { actionMessage } from './messages';
+import { AlertBands } from './bar/AlertBands';
+import { useTeamMapFocus } from './map/teamMapFocus';
+import { useNavigationStore } from '@state/navigationStore';
+import { useSettingsStore } from '@state/settingsStore';
 import { TeamDrawingsRow } from './draw/TeamDrawingsRow';
 import { memberSyncLine, openPeers, teamSyncLine } from './syncLine';
 
@@ -63,6 +67,7 @@ export function tasksLine(tasks: readonly TeamTask[], me: string): string {
 export function TeamHubScreen() {
   const t = useSchemeTokens();
   const router = useRouter();
+  const lastKnown = useSettingsStore((x) => x.lastKnownPosition);
   const now = useNow(15_000);
   const loaded = useTeamStore((s) => s.loaded);
   const view = useTeamStore((s) => s.view);
@@ -70,7 +75,7 @@ export function TeamHubScreen() {
   const peers = useTeamStore((s) => s.peers);
   const mesh = useTeamStore((s) => s.mesh);
   const meshRunning = useTeamStore((s) => s.meshRunning);
-  const unread = useTeamStore((s) => s.unread);
+  const unread = useTeamStore(selectChatUnread);
   const shares = useTeamStore((s) => s.shares);
   const tasks = useTeamStore((s) => s.tasks);
   const notices = useTeamStore((s) => s.joinNotices);
@@ -162,6 +167,21 @@ export function TeamHubScreen() {
           )}
         </View>
       </View>
+
+      {/* An active SOS or gather stays in view here too (#708): Navigate and
+        Centre go to the map. */}
+      <AlertBands
+        here={lastKnown}
+        onNavigate={(latitude, longitude) => {
+          useNavigationStore.getState().setDestination({ latitude, longitude });
+          router.navigate('/' as never);
+        }}
+        onCentre={(latitude, longitude) => {
+          useTeamMapFocus.getState().focus(longitude, latitude, 16);
+          router.navigate('/' as never);
+        }}
+        style={styles.bands}
+      />
 
       {denied && (
         <ActionBanner
@@ -508,6 +528,7 @@ function myAddressLine(port: number): string {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   headerRow: { flexDirection: 'row', alignItems: 'center', marginTop: -space.sm },
+  bands: { marginBottom: space.sm },
   badge: { position: 'absolute', top: 4, right: 4 },
   code: { fontWeight: '800', letterSpacing: 2 },
   actions: { flexDirection: 'row', gap: space.sm },

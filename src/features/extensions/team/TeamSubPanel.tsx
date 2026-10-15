@@ -7,7 +7,7 @@ import {
   useSharePosition,
 } from '@features/team/options';
 import { teamSyncLine } from '@features/team/syncLine';
-import { useTeamStore } from '@state/teamStore';
+import { selectChatUnread, useTeamStore } from '@state/teamStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
@@ -37,7 +37,7 @@ export function TeamSubPanel({ onBack, onClose }: ExtensionSubPanelProps) {
   const view = useTeamStore((s) => s.view);
   const peers = useTeamStore((s) => s.peers);
   const meshRunning = useTeamStore((s) => s.meshRunning);
-  const unread = useTeamStore((s) => s.unread);
+  const unread = useTeamStore(selectChatUnread);
   const share = useSharePosition();
   const { label } = DEVICE_EXTENSIONS.team;
 

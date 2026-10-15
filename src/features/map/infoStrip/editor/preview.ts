@@ -1,5 +1,6 @@
 import { placeholderValue } from '@core/infoStrip/preview';
 import { fieldDescriptor } from '@core/infoStrip/registry';
+import { captionPlan } from '@core/infoStrip/subject';
 import type {
   ComputeContext,
   DepsSnapshot,
@@ -25,4 +26,17 @@ export function previewValue(
   return live === null
     ? { value: placeholderValue(descriptor), descriptor, live: false }
     : { value: live, descriptor, live: true };
+}
+
+/**
+ * Which of the editor's fields name their target (`captionPlan`), over the
+ * whole strip as the map will draw it: what the editor shows is what the
+ * strip shows (a target named once, its other fields by its icon).
+ */
+export function previewCaptions(
+  rows: readonly (readonly FieldRef[])[],
+  data: DepsSnapshot,
+  ctx: ComputeContext,
+): boolean[][] {
+  return captionPlan(rows.map((row) => row.map((f) => previewValue(f, data, ctx)?.value ?? null)));
 }

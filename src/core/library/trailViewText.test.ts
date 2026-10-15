@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC, NAUTICAL } from '@core/format';
 import type { Split, TimelineEvent, TrailTiming } from '@core/geo/track';
 import {
   cursorReadout,
@@ -21,7 +22,7 @@ const extremes = { highIndex: 1, lowIndex: 0, highM: 885, lowM: 230 };
 
 describe('overviewTiles', () => {
   it('lists the six recorded-trail tiles', () => {
-    const tiles = overviewTiles(stats, timing, extremes, 'metric');
+    const tiles = overviewTiles(stats, timing, extremes, METRIC);
     expect(tiles.map((t) => t.label)).toEqual([
       'Distance',
       'Climb / descent',
@@ -30,7 +31,7 @@ describe('overviewTiles', () => {
       'Highest point',
       'Total time',
     ]);
-    expect(tiles[0]!.value).toBe('12.40 km');
+    expect(tiles[0]!.value).toBe('12.4 km');
     expect(tiles[1]).toMatchObject({ value: '↑ 640 m', sub: '↓ 630 m' });
     expect(tiles[2]).toMatchObject({ value: '3:42:00', sub: 'of 4:28:00 total' });
     expect(tiles[3]!.value).toMatch(/\/km$/);
@@ -38,22 +39,22 @@ describe('overviewTiles', () => {
   });
 
   it('gives the last slot to the average heart rate when there is one', () => {
-    const tiles = overviewTiles(stats, timing, extremes, 'metric', 142);
+    const tiles = overviewTiles(stats, timing, extremes, METRIC, 142);
     expect(tiles[5]).toEqual({ label: 'Avg heart rate', value: '142 bpm' });
-    expect(overviewTiles(stats, null, extremes, 'metric', 120).map((t) => t.label)).toContain(
+    expect(overviewTiles(stats, null, extremes, METRIC, 120).map((t) => t.label)).toContain(
       'Avg heart rate',
     );
   });
 
   it('shows speed for a ride and imperial units', () => {
-    const tiles = overviewTiles(stats, { ...timing, display: 'speed' }, extremes, 'imperial');
+    const tiles = overviewTiles(stats, { ...timing, display: 'speed' }, extremes, IMPERIAL);
     expect(tiles[3]!.label).toBe('Moving speed');
     expect(tiles[3]!.value).toMatch(/mph$/);
     expect(tiles[4]!.value).toBe('2904 ft');
   });
 
   it('has no times for an untimed route', () => {
-    const tiles = overviewTiles(stats, null, null, 'metric');
+    const tiles = overviewTiles(stats, null, null, METRIC);
     expect(tiles.map((t) => t.label)).toEqual([
       'Distance',
       'Climb / descent',
@@ -84,7 +85,7 @@ describe('splitRows', () => {
         split({ index: 1, speedMps: 1, ascentM: 160 }),
         split({ index: 2, speedMps: 1.5, distanceM: 450, partial: true, descentM: 120 }),
       ],
-      'metric',
+      METRIC,
       'pace',
     );
     expect(rows.map((r) => r.label)).toEqual(['1', '2', '0.45']);
@@ -100,9 +101,16 @@ describe('splitRows', () => {
   });
 
   it('shows speed per mile for an imperial ride', () => {
-    const rows = splitRows([split({ distanceM: 1609.344, speedMps: 5 })], 'imperial', 'speed');
+    const rows = splitRows([split({ distanceM: 1609.344, speedMps: 5 })], IMPERIAL, 'speed');
     expect(rows[0]!.pace).toMatch(/mph$/);
     expect(rows[0]!.a11y).toMatch(/^Mile 1/);
+  });
+
+  it('splits per nautical mile, in knots (#702)', () => {
+    const rows = splitRows([split({ distanceM: 1852, speedMps: 2 })], NAUTICAL, 'speed');
+    expect(rows[0]!.pace).toMatch(/ kn$/);
+    expect(rows[0]!.a11y).toMatch(/^Nautical mile 1/);
+    expect(splitUnit(NAUTICAL)).toEqual({ unitM: 1852, label: 'NM' });
   });
 
   it('gives an untimed route climb bars and no pace', () => {
@@ -111,7 +119,7 @@ describe('splitRows', () => {
         split({ speedMps: null, elapsedS: null, movingS: null, ascentM: 100 }),
         split({ index: 1, speedMps: null, elapsedS: null, movingS: null, ascentM: 0 }),
       ],
-      'metric',
+      METRIC,
       'pace',
     );
     expect(rows[0]!.pace).toBeNull();
@@ -120,8 +128,8 @@ describe('splitRows', () => {
   });
 
   it('knows its units', () => {
-    expect(splitUnit('metric')).toEqual({ unitM: 1000, label: 'km' });
-    expect(splitUnit('imperial').label).toBe('mi');
+    expect(splitUnit(METRIC)).toEqual({ unitM: 1000, label: 'km' });
+    expect(splitUnit(IMPERIAL).label).toBe('mi');
   });
 });
 
@@ -137,27 +145,27 @@ const totals = { distanceM: 12_400, timing };
 
 describe('timelineEventText', () => {
   it('describes start, stops merged in, and the finish totals', () => {
-    expect(timelineEventText({ kind: 'start', at: at(0) }, 'metric', totals)).toEqual({
+    expect(timelineEventText({ kind: 'start', at: at(0) }, METRIC, totals)).toEqual({
       title: 'Start',
       sub: '230 m',
       time: expect.stringMatching(/9:12/),
     });
     const fin = timelineEventText(
       { kind: 'finish', at: at(12_400), stoppedS: 300, highPointM: 885 },
-      'metric',
+      METRIC,
       totals,
     );
     expect(fin.title).toBe('Finish · high point 885 m');
-    expect(fin.sub).toBe('12.40 km · moving 3:42:00 of 4:28:00 · Stopped 5 min');
+    expect(fin.sub).toBe('12.4 km · moving 3:42:00 of 4:28:00 · Stopped 5 min');
   });
 
   it('falls back to coordinates for a start without elevation', () => {
     const t = timelineEventText(
       { kind: 'start', at: at(0, { elevation: undefined }) },
-      'metric',
+      METRIC,
       totals,
     );
-    expect(t.sub).toBe('46.8123, -71.2057');
+    expect(t.sub).toBe('46.812340, -71.205670');
   });
 
   it('titles a note with its first line and quotes the rest', () => {
@@ -169,21 +177,21 @@ describe('timelineEventText', () => {
         noteText: 'Spring\nWater is good after rain',
         stoppedS: 360,
       },
-      'metric',
+      METRIC,
       totals,
     );
     expect(t.title).toBe('Spring');
     expect(t.sub).toBe('Note 2 · 4.10 km · “Water is good after rain” · Stopped 6 min');
     const long = timelineEventText(
       { kind: 'note', at: at(10), noteNum: 1, noteText: 'x'.repeat(80) + '\n' + 'y'.repeat(90) },
-      'metric',
+      METRIC,
       totals,
     );
     expect(long.title).toHaveLength(40);
     expect(long.sub).toMatch(/…”$/);
     const empty = timelineEventText(
       { kind: 'note', at: at(10), noteNum: 3, noteText: ' ' },
-      'metric',
+      METRIC,
       totals,
     );
     expect(empty.title).toBe('Note 3');
@@ -191,35 +199,35 @@ describe('timelineEventText', () => {
 
   it('describes stops, pauses, the steepest stretch and the summit', () => {
     expect(
-      timelineEventText({ kind: 'stop', at: at(5000), stoppedS: 1080 }, 'metric', totals).title,
+      timelineEventText({ kind: 'stop', at: at(5000), stoppedS: 1080 }, METRIC, totals).title,
     ).toBe('Stopped 18 min');
     expect(
-      timelineEventText({ kind: 'pause', at: at(5000), pausedS: 900 }, 'metric', totals).title,
+      timelineEventText({ kind: 'pause', at: at(5000), pausedS: 900 }, METRIC, totals).title,
     ).toBe('Paused 15 min');
     expect(
       timelineEventText(
         { kind: 'steep', at: at(4100), gradePct: 24.4, lengthM: 400 },
-        'metric',
+        METRIC,
         totals,
       ),
     ).toMatchObject({ title: 'Steepest climb', sub: '+24 % over 400 m · 4.10 km' });
     expect(
       timelineEventText(
         { kind: 'steep', at: at(5000), gradePct: -18, lengthM: 300 },
-        'metric',
+        METRIC,
         totals,
       ).title,
     ).toBe('Steepest descent');
     const summit = timelineEventText(
       { kind: 'summit', at: at(6300), highPointM: 885, stoppedS: 1080 },
-      'metric',
+      METRIC,
       totals,
     );
     expect(summit).toMatchObject({ title: 'Summit · 885 m', sub: 'Stopped 18 min · 6.30 km' });
   });
 
   it('has no clock time on an untimed route', () => {
-    const t = timelineEventText({ kind: 'finish', at: at(2000, { time: undefined }) }, 'metric', {
+    const t = timelineEventText({ kind: 'finish', at: at(2000, { time: undefined }) }, METRIC, {
       distanceM: 2000,
       timing: null,
     });
@@ -255,12 +263,12 @@ describe('trailSubtitle', () => {
 
 describe('cursorReadout', () => {
   it('reads distance, elevation and grade, or summit', () => {
-    expect(cursorReadout({ distanceM: 2730, elevation: 800 }, 4.2, false, 'metric')).toBe(
+    expect(cursorReadout({ distanceM: 2730, elevation: 800 }, 4.2, false, METRIC)).toBe(
       '2.73 km · 800 m · +4 %',
     );
-    expect(cursorReadout({ distanceM: 2730, elevation: 800 }, 4.2, true, 'metric')).toBe(
+    expect(cursorReadout({ distanceM: 2730, elevation: 800 }, 4.2, true, METRIC)).toBe(
       '2.73 km · 800 m · summit',
     );
-    expect(cursorReadout({ distanceM: 50 }, null, false, 'imperial')).toBe('164 ft');
+    expect(cursorReadout({ distanceM: 50 }, null, false, IMPERIAL)).toBe('164 ft');
   });
 });

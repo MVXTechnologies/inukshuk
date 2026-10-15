@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 /**
  * The Explore tab's Discover landing (#447): sections render from fixture
  * data, zero-count facets hide, the offline and legacy-index states degrade
@@ -49,7 +50,7 @@ beforeEach(() => {
   resetLinkOutCollectionsCache();
   collectionsMock.mockResolvedValue(sepaqRaw);
   (loadCatalogManifest as jest.Mock).mockResolvedValue(null);
-  useSettingsStore.setState({ lastKnownPosition: QUEBEC, units: 'metric' });
+  useSettingsStore.setState({ lastKnownPosition: QUEBEC, units: METRIC });
 });
 
 async function landing() {

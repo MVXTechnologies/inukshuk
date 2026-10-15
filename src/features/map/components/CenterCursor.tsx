@@ -50,11 +50,25 @@ export const CenterCursor = memo(function CenterCursor({ suppressed }: { suppres
   );
 });
 
-/** The cursor itself (also the editor's previews). */
-export function CursorGlyph({ cursor }: { cursor: CursorSettings }) {
+/**
+ * The cursor itself (also the editor's previews and the strip).
+ *
+ * `px`: draw at this overall size instead of the setting's (the strip draws
+ * it at its glyph size beside a reading to the cursor); `testIDPrefix` keeps
+ * that copy apart from the map's own in tests and E2E flows.
+ */
+export function CursorGlyph({
+  cursor,
+  px,
+  testIDPrefix = 'map-center',
+}: {
+  cursor: CursorSettings;
+  px?: number;
+  testIDPrefix?: string;
+}) {
   const t = useSchemeTokens();
   if (cursor.kind === 'dot') {
-    const d = DOT_DP[cursor.size];
+    const d = px === undefined ? DOT_DP[cursor.size] : Math.round(px * 0.6);
     const outer = d + 2 * CURSOR_RING;
     return (
       <View
@@ -72,13 +86,13 @@ export function CursorGlyph({ cursor }: { cursor: CursorSettings }) {
       >
         <View
           style={{ width: d, height: d, borderRadius: d / 2, backgroundColor: cursor.color }}
-          testID="map-center-dot"
+          testID={`${testIDPrefix}-dot`}
         />
       </View>
     );
   }
   const kind = cursor.kind;
-  const s = ICON_DP[cursor.size];
+  const s = px ?? ICON_DP[cursor.size];
   const sw = s >= 30 ? 2 : 1.6;
   const strokes = (color: string, width: number, dotR: number) =>
     shape(kind, s, color, width, dotR);
@@ -88,7 +102,7 @@ export function CursorGlyph({ cursor }: { cursor: CursorSettings }) {
       height={s + 2 * PAD}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      testID={`map-center-${kind}`}
+      testID={`${testIDPrefix}-${kind}`}
     >
       <G x={PAD} y={PAD}>
         {cursor.halo && strokes(t.map.cursorRing, sw + HALO_EXTRA, sw * 0.7 + HALO_EXTRA / 2)}

@@ -17,7 +17,7 @@ import { reportError } from '@lib/errorReporting';
 import { useRecorderStore } from '@state/recorderStore';
 import { teamService, useTeamStore, wireTeamStore } from '@state/teamStore';
 import * as Location from 'expo-location';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AppState, Vibration, type AppStateStatus } from 'react-native';
 import { onTeamNotificationTap } from '@data/team/teamNotifications';
 import { useRouter } from 'expo-router';
@@ -52,11 +52,23 @@ export function TeamHost() {
   // (the join owns the transport).
   const foreground = appState === 'active';
   const wantMesh = enabled && activeId !== null && !joining && (foreground || recording);
+  // Published before paint, so the bar's first frame already says
+  // "Connecting…", not "Offline", while the mesh starts (QA 2.6.1).
+  useLayoutEffect(() => {
+    useTeamStore.setState({ meshWanted: wantMesh && teamService()?.active != null });
+  }, [wantMesh, activeId]);
   useEffect(() => {
     const session = teamService()?.active ?? null;
     if (session === null) return;
-    if (wantMesh) session.startMesh().catch((e) => reportError(e, 'team-mesh-start'));
-    else session.stopMesh().catch((e) => reportError(e, 'team-mesh-stop'));
+    if (wantMesh) {
+      session
+        .startMesh()
+        .catch((e) => reportError(e, 'team-mesh-start'))
+        // No transport, or a failed start: not "connecting" any more.
+        .finally(() => {
+          if (!session.meshRunning) useTeamStore.setState({ meshWanted: false });
+        });
+    } else session.stopMesh().catch((e) => reportError(e, 'team-mesh-stop'));
   }, [wantMesh, activeId]);
 
   // Back in the foreground: re-sync at once instead of waiting for the timer.

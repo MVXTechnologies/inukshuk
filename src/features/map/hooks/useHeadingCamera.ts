@@ -1,66 +1,44 @@
-import { signedDeltaDeg } from '@core/signal/heading';
-import { useSettingsStore } from '@state/settingsStore';
-import { useEffect, useRef, useState } from 'react';
-import { subscribeHeading } from '../useCompass';
+import { useEffect, useState } from 'react';
+import { subscribeHeadingMotion } from '../headingMotion';
 
-/** Minimum circular change (degrees) before a new camera heading is emitted. */
-const MIN_EMIT_DELTA_DEG = 0.5;
-/** Minimum time between camera heading emissions (ms) — caps bridge traffic. */
-const MIN_EMIT_INTERVAL_MS = 80;
+/** Bearing changes smaller than this are not sent to the native camera, °. */
+const MIN_CAMERA_DELTA_DEG = 0.02;
 
 /**
- * Camera heading for the "Rotate map with compass" setting.
+ * Camera bearing for the "Rotate map with compass" setting, at display rate.
  *
- * Returns the filtered device heading ([0, 360)) while `rotateMapWithHeading`
- * is on, and `undefined` while it's off. Pass the result straight to
- * MapLibre's `<Camera bearing={...} />` — `undefined` leaves the camera's
- * rotation alone. MapLibre's native transition normalizes bearing changes to
- * the shortest arc, so crossing 0/360 rotates the short way.
+ * Returns the display-rate heading ([0, 360)) while `active`; once inactive,
+ * the last one it returned (undefined if never active): pass it to
+ * MapLibre's `<Camera bearing={…} duration={0} />`
+ * (see `HeadingCamera`, which owns this hook so a heading frame re-renders
+ * the camera alone, never MapScreen).
  *
- * This is the *only* thing that should set the map bearing while the setting is
- * on — see the note in MapScreen about why `trackUserLocation="heading"` (whose
- * native camera mode reads the raw platform compass) is not used.
+ * Why every frame, with no native transition: on Android, MapLibre's
+ * location component moves the camera with `moveCamera` on EVERY animation
+ * frame while it follows you, and each `moveCamera` cancels any running
+ * camera transition. The 150 ms bearing ease 2.6.0 sent per sensor sample was
+ * cut off one frame in whenever follow was on, so the map turned a sliver per
+ * sample and froze in between. A per-frame jump composes with the follow
+ * animation instead of fighting it; on iOS, while following, MapLibre-RN
+ * already applied the bearing without animation. The motion itself comes
+ * from the shared display-rate follower (`subscribeHeadingMotion`), so it is
+ * the same frame the cone and the tape draw.
  *
- * Perf: the raw sensor stream never touches React state — it comes from the
- * shared filtered subscription (see `subscribeHeading`), and state (hence a
- * re-render + camera update) is only emitted when the heading moves by at
- * least MIN_EMIT_DELTA_DEG and MIN_EMIT_INTERVAL_MS has elapsed. Since the
- * filter holds a resting heading perfectly still, a stationary phone emits
- * nothing at all. The finer gate plus a short eased camera transition (set
- * where the Camera is rendered) keeps a real rotation fluid. When the setting
- * is off the hook subscribes to nothing.
- *
+ * At rest nothing is sent: the follower settles and the frame loop stops.
  * Like `subscribeHeading`, this expects location permission to already be granted.
  */
-export function useHeadingCamera(): number | undefined {
-  const enabled = useSettingsStore((s) => s.rotateMapWithHeading);
-  const [cameraHeading, setCameraHeading] = useState<number | undefined>(undefined);
-  const emittedRef = useRef<{ headingDeg: number; atMs: number } | undefined>(undefined);
-
+export function useHeadingCamera(active: boolean): number | undefined {
+  const [bearing, setBearing] = useState<number | undefined>(undefined);
   useEffect(() => {
-    if (!enabled) {
-      // Forget the last emission so re-enabling emits fresh state immediately.
-      // (The stale `cameraHeading` state is masked by the `enabled` gate below.)
-      emittedRef.current = undefined;
-      return;
-    }
-    return subscribeHeading(({ headingDeg }) => {
-      const prev = emittedRef.current;
-      const now = Date.now();
-      if (
-        prev !== undefined &&
-        (Math.abs(signedDeltaDeg(prev.headingDeg, headingDeg)) < MIN_EMIT_DELTA_DEG ||
-          now - prev.atMs < MIN_EMIT_INTERVAL_MS)
-      ) {
-        return;
-      }
-      emittedRef.current = { headingDeg, atMs: now };
-      setCameraHeading(headingDeg);
+    if (!active) return;
+    return subscribeHeadingMotion((frame) => setBearing(frame.headingDeg), {
+      minDeltaDeg: MIN_CAMERA_DELTA_DEG,
     });
-  }, [enabled]);
-
-  // While off, mask any state left over from a previous enabled period. On
-  // re-enable the last heading shows briefly, then corrects on the first
-  // sensor reading (the ref was cleared, so it always emits).
-  return enabled ? cameraHeading : undefined;
+  }, [active]);
+  // Sticky: while off, the last bearing stays what the camera was given.
+  // Dropping it would change the native camera's `stop` prop, and applying a
+  // changed stop is itself a camera move — on Android one that ends a
+  // follow (see @core/map/headingCameraMode). On re-enable the first frame
+  // replaces it.
+  return bearing;
 }

@@ -1,19 +1,11 @@
 import { useCallback } from 'react';
 
-import {
-  formatCoordinate,
-  type CoordinateFormat,
-  type FormatOptions,
-} from '@core/convert/coordinateDisplay';
+import { formatCoordinate, type CoordinateFormat } from '@core/convert/coordinateDisplay';
 
 import { useSettingsStore } from './settingsStore';
 
 /** Formats a WGS 84 position for display (and for copying, which must match). */
-export type CoordinateFormatter = (
-  latitude: number,
-  longitude: number,
-  opts?: FormatOptions,
-) => string;
+export type CoordinateFormatter = (latitude: number, longitude: number) => string;
 
 /**
  * THE app-wide coordinate formatter (#677): a position written in the format
@@ -28,18 +20,13 @@ export type CoordinateFormatter = (
 export function useCoordinateFormatter(): CoordinateFormatter {
   const fmt = useSettingsStore((s) => s.coordinateFormat);
   return useCallback(
-    (latitude: number, longitude: number, opts?: FormatOptions) =>
-      formatCoordinate(latitude, longitude, fmt, opts),
+    (latitude: number, longitude: number) => formatCoordinate(latitude, longitude, fmt),
     [fmt],
   );
 }
 
 /** The same, read once (for event handlers outside a component render). */
-export function formatCoordinateNow(
-  latitude: number,
-  longitude: number,
-  opts?: FormatOptions,
-): string {
+export function formatCoordinateNow(latitude: number, longitude: number): string {
   const fmt: CoordinateFormat = useSettingsStore.getState().coordinateFormat;
-  return formatCoordinate(latitude, longitude, fmt, opts);
+  return formatCoordinate(latitude, longitude, fmt);
 }

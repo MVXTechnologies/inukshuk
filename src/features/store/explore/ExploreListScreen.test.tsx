@@ -1,3 +1,4 @@
+import { METRIC } from '@core/format';
 /**
  * The explorer's filtered list (#447): the entry filter, the chips (clear a
  * facet, pick another), nearest-first order, the map toggle, and the empty
@@ -48,7 +49,7 @@ beforeEach(() => {
   mockPush.mockReset();
   mockReplace.mockReset();
   seedCatalog(fixtureIndex());
-  useSettingsStore.setState({ lastKnownPosition: QUEBEC, units: 'metric' });
+  useSettingsStore.setState({ lastKnownPosition: QUEBEC, units: METRIC });
 });
 
 async function list(filter: Parameters<typeof ExploreListScreen>[0]['initialFilter']) {

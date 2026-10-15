@@ -1,4 +1,10 @@
-import type { Units } from '@core/format';
+import {
+  distanceUnitLabel,
+  formatDistance,
+  formatElevation,
+  fromUnit,
+  type Units,
+} from '@core/format';
 
 import type { LongTrail, TrailActivity, TrailCountry, TrailNetworkLevel } from './schema';
 
@@ -29,26 +35,15 @@ export const TRAIL_NETWORK_LABELS: Record<TrailNetworkLevel, string> = {
   o: 'Local route',
 };
 
-const KM_PER_MI = 1.609344;
-
-/** Narrow no-break space grouping, as Explore's counts and scales ("1 600"). */
-function grouped(n: number): string {
-  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '\u202f');
-}
-
 /** "≈50 km", "≈1 600 km", "≈31 mi" — lengths are OSM-derived, so always approximate. */
 export function formatTrailLength(km: number, units: Units): string {
-  const value = units === 'imperial' ? km / KM_PER_MI : km;
-  const unit = units === 'imperial' ? 'mi' : 'km';
-  if (!Number.isFinite(value) || value <= 0) return `— ${unit}`;
-  const rounded = value < 10 ? Math.round(value * 10) / 10 : Math.round(value);
-  return `≈${grouped(rounded)} ${unit}`;
+  if (!Number.isFinite(km) || km <= 0) return `— ${distanceUnitLabel(units.distance)}`;
+  return `≈${formatDistance(fromUnit(km, 'km'), units, { style: 'short', smallStep: 10 })}`;
 }
 
 /** "≈1 850 m" / "≈6 070 ft" of climb. */
 export function formatClimb(meters: number, units: Units): string {
-  const value = units === 'imperial' ? meters / 0.3048 : meters;
-  return `≈${grouped(Math.round(value / 10) * 10)} ${units === 'imperial' ? 'ft' : 'm'}`;
+  return `≈${formatElevation(meters, units, { step: 10, grouped: true })}`;
 }
 
 export function activitiesLabel(activities: readonly TrailActivity[]): string {
@@ -85,17 +80,9 @@ export function trailPlaceLabel(
 /** Beyond this, a trail is placed by country, not by its midpoint's region. */
 export const LONG_TRAIL_KM = 800;
 
-/** How far you are from a trail: "350 m", "1.2 km", "17 km" (feet / miles in imperial). */
+/** How far you are from a trail: "350 m", "1.2 km", "17 km" (feet / miles, NM in the user's units). */
 export function formatDistanceFrom(meters: number, units: Units): string {
-  if (units === 'imperial') {
-    const feet = meters / 0.3048;
-    if (feet < 1000) return `${Math.round(feet / 10) * 10} ft`;
-    const mi = meters / (KM_PER_MI * 1000);
-    return mi < 10 ? `${Math.round(mi * 10) / 10} mi` : `${grouped(Math.round(mi))} mi`;
-  }
-  if (meters < 1000) return `${Math.round(meters / 10) * 10} m`;
-  const km = meters / 1000;
-  return km < 10 ? `${Math.round(km * 10) / 10} km` : `${grouped(Math.round(km))} km`;
+  return formatDistance(meters, units, { style: 'short', smallStep: 10 });
 }
 
 /** Carousel card: "Hiking · ≈50 km · 4 stages". */

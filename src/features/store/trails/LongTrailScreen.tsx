@@ -1,4 +1,5 @@
-import type { Units } from '@core/format';
+import { formatInUnit, type Units } from '@core/format';
+import { CORRIDOR_BUFFER_M } from '@core/trails/corridor';
 import { sourceAbbreviation } from '@core/catalog/exploreFormat';
 import { indexInstallStatus } from '@core/catalog/installStatus';
 import { catalogItemDistanceMeters } from '@core/catalog/nearest';
@@ -265,7 +266,7 @@ export function LongTrailScreen({ id }: { id: string }) {
           <WholeTrailDownload detail={detail} onMessage={snack.show} />
         ) : (
           <Text style={[styles.note, { color: t.inkMuted }]}>
-            Download a stage below for offline use — its map ≈3 km each side.
+            {`Download a stage below for offline use — its map ≈${corridorWidth(units)} each side.`}
           </Text>
         )}
 
@@ -459,6 +460,9 @@ function StageRow({
 }
 
 /** A trail without stages: one download when it is short, else a note. */
+/** The offline corridor's half-width in the user's units: "3 km", "1.9 mi", "1.6 NM". */
+const corridorWidth = (units: Units) => formatInUnit(CORRIDOR_BUFFER_M, units.distance, 1);
+
 function WholeTrailDownload({
   detail,
   onMessage,
@@ -467,6 +471,7 @@ function WholeTrailDownload({
   onMessage: (message: string) => void;
 }) {
   const t = useSchemeTokens();
+  const units = useSettingsStore((s) => s.units);
   const download = useTrailDownload(detail, null, onMessage);
   if (!download.allowed) {
     return (
@@ -510,7 +515,7 @@ function WholeTrailDownload({
       <Text style={[styles.note, { color: t.inkMuted }]}>
         {download.status === 'done'
           ? `Offline map downloaded · ${download.sizeLabel} · manage it in Settings`
-          : `Offline map along the trail (≈3 km each side) · ${download.sizeLabel}`}
+          : `Offline map along the trail (≈${corridorWidth(units)} each side) · ${download.sizeLabel}`}
       </Text>
     </>
   );

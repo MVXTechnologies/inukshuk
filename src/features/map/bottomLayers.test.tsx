@@ -55,6 +55,9 @@ describe('waypoint card vs recording panel stacking (#505)', () => {
     expect(BOTTOM_LAYER.snackbar.zIndex).toBeGreaterThan(BOTTOM_LAYER.waypointCard.zIndex);
     expect(snackbarWrapperStyle(true, 240)).toMatchObject({ bottom: 240 });
     expect(snackbarWrapperStyle(false, 240).bottom).toBeUndefined();
+    // Over the drawing panel too, whose ✕ warns through a snackbar (QA 2.6.1).
+    expect(snackbarWrapperStyle(false, 240, 310)).toMatchObject({ bottom: 310 });
+    expect(snackbarWrapperStyle(true, 240, 310)).toMatchObject({ bottom: 310 });
   });
 
   it('lifts the EDIT / UNDO bar above the whole bottom column (chip, scale row, compass)', () => {

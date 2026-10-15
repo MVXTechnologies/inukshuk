@@ -43,14 +43,21 @@ describe('UTM against published values', () => {
   it('southern hemisphere: a 10 000 km false northing', () => {
     // Cross-checked with the independent `mgrs` 1.0.0 package (which rounds
     // the last digit where we truncate).
-    expect(formatUtm(-33.856784, 151.215297)).toBe('56H 334900 6252290'); // Sydney Opera House
-    expect(formatUtm(-22.9519, -43.2105)).toBe('23K 683476 7460687'); // Cristo Redentor
+    expect(formatUtm(-33.856784, 151.215297)).toBe('56H 334900.2 6252290.5'); // Sydney Opera House
+    expect(formatUtm(-22.9519, -43.2105)).toBe('23K 683476.5 7460687.3'); // Cristo Redentor
     expect(toUtm(-1e-9, 0)?.northing).toBeCloseTo(10_000_000, 1);
   });
 
-  it('truncates to the metre the point is in', () => {
-    // CN Tower's northing is 4 833 438.59: rounding would print …439.
-    expect(formatUtm(43.642567, -79.387139)).toBe('17T 630084 4833438');
+  it('truncates to the decimetre the point is in (#701)', () => {
+    // CN Tower's northing is 4 833 438.59: rounding would print …438.6.
+    expect(formatUtm(43.642567, -79.387139)).toBe('17T 630084.3 4833438.5');
+  });
+
+  it('agrees with MGRS on every whole metre', () => {
+    const utm = formatUtm(QC.lat, QC.lon)?.split(' ') ?? [];
+    const mgrs = toMgrs(QC.lat, QC.lon)?.split(' ') ?? [];
+    expect(utm[1]?.slice(1, 6)).toBe(mgrs[2]);
+    expect(utm[2]?.slice(2, 7)).toBe(mgrs[3]);
   });
 });
 
@@ -179,54 +186,51 @@ describe('formatCoordinate', () => {
   });
 
   it.each([
-    ['dd', false, '46.81394, -71.20761'],
-    ['dd', true, '46.8139, -71.2076'],
-    ['dms', false, '46°48′50.2″N, 71°12′27.4″W'],
-    ['dms', true, '46°48′50″N, 71°12′27″W'],
-    ['ddm', false, '46°48.836′N, 71°12.457′W'],
-    ['ddm', true, '46°48.84′N, 71°12.46′W'],
-    ['utm', false, '19T 331586 5186854'],
-    ['utm', true, '19T 331586 5186854'],
-    ['mgrs', false, '19T CM 31586 86854'],
-    ['mgrs', true, '19T CM 3158 8685'],
-  ] as const)('%s (compact %s)', (fmt, compact, out) => {
-    expect(formatCoordinate(QC.lat, QC.lon, fmt, { compact })).toBe(out);
-  });
-
-  it('the compact form is never longer than the full one', () => {
-    for (const { value } of COORDINATE_FORMATS) {
-      const full = formatCoordinate(-33.856784, 151.215297, value);
-      const compact = formatCoordinate(-33.856784, 151.215297, value, { compact: true });
-      expect(compact.length).toBeLessThanOrEqual(full.length);
-    }
+    ['dd', '46.813940, -71.207610'],
+    ['dms', '46°48′50.18″N, 71°12′27.40″W'],
+    ['ddm', '46°48.8364′N, 71°12.4566′W'],
+    ['utm', '19T 331586.0 5186854.5'],
+    ['mgrs', '19T CM 31586 86854'],
+  ] as const)('%s, at about a decimetre (#701)', (fmt, out) => {
+    expect(formatCoordinate(QC.lat, QC.lon, fmt)).toBe(out);
   });
 
   it('carries rounding into the next minute and degree', () => {
-    expect(formatCoordinate(59.99999, 10, 'dms', { compact: true })).toBe('60°00′00″N, 10°00′00″E');
-    expect(formatCoordinate(45.9999999, 10, 'ddm')).toBe('46°00.000′N, 10°00.000′E');
+    expect(formatCoordinate(59.9999999, 10, 'dms')).toBe('60°00′00.00″N, 10°00′00.00″E');
+    expect(formatCoordinate(45.99999999, 10, 'ddm')).toBe('46°00.0000′N, 10°00.0000′E');
   });
 
   it('never prints a negative zero', () => {
-    expect(formatCoordinate(-0.000001, -0.000001, 'dd')).toBe('0.00000, 0.00000');
+    expect(formatCoordinate(-0.0000001, -0.0000001, 'dd')).toBe('0.000000, 0.000000');
   });
 
   it('wraps a camera longitude past the antimeridian', () => {
-    expect(formatCoordinate(10, 200, 'dd')).toBe('10.00000, -160.00000');
-    expect(formatCoordinate(10, -190, 'dms')).toBe('10°00′00.0″N, 170°00′00.0″E');
+    expect(formatCoordinate(10, 200, 'dd')).toBe('10.000000, -160.000000');
+    expect(formatCoordinate(10, -190, 'dms')).toBe('10°00′00.00″N, 170°00′00.00″E');
     expect(formatCoordinate(10, 180, 'utm')).toBe(formatCoordinate(10, -180, 'utm'));
   });
 
   it('falls back to decimal degrees where UTM and MGRS are undefined (UPS)', () => {
-    expect(formatCoordinate(-85, 10, 'mgrs')).toBe('-85.00000, 10.00000');
-    expect(formatCoordinate(86, 10, 'utm', { compact: true })).toBe('86.0000, 10.0000');
+    expect(formatCoordinate(-85, 10, 'mgrs')).toBe('-85.000000, 10.000000');
+    expect(formatCoordinate(86, 10, 'utm')).toBe('86.000000, 10.000000');
   });
 
-  it('DMS and DDM read back through Convert’s parser to within their precision', () => {
-    for (const fmt of ['dms', 'ddm'] as const) {
+  it('every format resolves a point to within about 0.3 m (no format is coarser)', () => {
+    // Metres per degree of latitude; a degree of longitude is cos(lat) of it.
+    const M = 111_320;
+    for (const fmt of ['dd', 'dms', 'ddm'] as const) {
       const [la, lo] = formatCoordinate(QC.lat, QC.lon, fmt).split(', ');
-      expect(parseAngle(la ?? '', 'lat')?.value).toBeCloseTo(QC.lat, 4);
-      expect(parseAngle(lo ?? '', 'lon')?.value).toBeCloseTo(QC.lon, 4);
+      const lat = fmt === 'dd' ? Number(la) : (parseAngle(la ?? '', 'lat')?.value ?? NaN);
+      const lon = fmt === 'dd' ? Number(lo) : (parseAngle(lo ?? '', 'lon')?.value ?? NaN);
+      expect(Math.abs(lat - QC.lat) * M).toBeLessThan(0.16);
+      expect(Math.abs(lon - QC.lon) * M * Math.cos((QC.lat * Math.PI) / 180)).toBeLessThan(0.16);
     }
+  });
+
+  it('DD is one string, the same one the clipboard gets (no ± suffix, no short form)', () => {
+    const s = formatCoordinate(QC.lat, QC.lon, 'dd');
+    expect(s).not.toMatch(/±/);
+    expect(s.split(', ').map((p) => p.split('.')[1]?.length)).toEqual([6, 6]);
   });
 });
 

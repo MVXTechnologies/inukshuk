@@ -1,3 +1,4 @@
+import { IMPERIAL, METRIC } from '@core/format';
 import { placeDistance, placeKindLine } from './format';
 import type { Place } from './place';
 
@@ -12,23 +13,23 @@ const peak: Place = {
 
 describe('placeKindLine', () => {
   it('is the type label, with the elevation when known', () => {
-    expect(placeKindLine({ ...peak, type: 'campground' }, 'metric')).toBe('Campground');
-    expect(placeKindLine({ ...peak, elevationM: 1606 }, 'metric')).toMatch(/^Peak · 1.?606 m$/);
-    expect(placeKindLine({ ...peak, elevationM: 1606 }, 'imperial')).toMatch(/ft$/);
+    expect(placeKindLine({ ...peak, type: 'campground' }, METRIC)).toBe('Campground');
+    expect(placeKindLine({ ...peak, elevationM: 1606 }, METRIC)).toMatch(/^Peak · 1.?606 m$/);
+    expect(placeKindLine({ ...peak, elevationM: 1606 }, IMPERIAL)).toMatch(/ft$/);
   });
 });
 
 describe('placeDistance', () => {
   it('is null without a position', () => {
-    expect(placeDistance(null, 'metric')).toBeNull();
-    expect(placeDistance(Number.NaN, 'metric')).toBeNull();
+    expect(placeDistance(null, METRIC)).toBeNull();
+    expect(placeDistance(Number.NaN, METRIC)).toBeNull();
   });
 
   it('is short nearby and whole units far away', () => {
-    expect(placeDistance(840, 'metric')).toBe('840 m');
-    expect(placeDistance(23_456, 'metric')).toBe('23.5 km');
-    expect(placeDistance(1_234_567, 'metric')).toBe('1 235 km');
-    expect(placeDistance(23_456, 'imperial')).toBe('14.6 mi');
-    expect(placeDistance(500_000, 'imperial')).toBe('311 mi');
+    expect(placeDistance(840, METRIC)).toBe('840 m');
+    expect(placeDistance(23_456, METRIC)).toBe('23.5 km');
+    expect(placeDistance(1_234_567, METRIC)).toBe('1\u202f235 km');
+    expect(placeDistance(23_456, IMPERIAL)).toBe('14.6 mi');
+    expect(placeDistance(500_000, IMPERIAL)).toBe('311 mi');
   });
 });

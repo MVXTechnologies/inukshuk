@@ -7,6 +7,7 @@
 import { rangeAndBearing, shortAge } from '@core/teamui/positions';
 import type { Role } from '@core/team/roles';
 import type { MemberRow } from '@core/teamui/view';
+import { formatAccuracy, formatDistance } from '@state/formatters';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { space } from '@ui/tokens';
@@ -116,10 +117,8 @@ export function MemberScreen() {
       {pos && (
         <Note icon="map-marker-account-outline">
           {`Position ${shortAge(pos.ageMs) === 'now' ? 'just now' : `${shortAge(pos.ageMs)} ago`}${
-            rb
-              ? ` · ${rb.meters < 1000 ? `${Math.round(rb.meters)} m` : `${(rb.meters / 1000).toFixed(1)} km`} ${rb.compass} of you`
-              : ''
-          }${pos.accuracy !== null ? ` · ±${Math.round(pos.accuracy)} m` : ''}`}
+            rb ? ` · ${formatDistance(rb.meters, { style: 'tenths' })} ${rb.compass} of you` : ''
+          }${pos.accuracy !== null ? ` · ${formatAccuracy(pos.accuracy)}` : ''}`}
         </Note>
       )}
       {m.groups.length > 0 && (

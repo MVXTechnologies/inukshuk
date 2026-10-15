@@ -6,7 +6,7 @@
  */
 import { ExtensionSettingsShell } from '@features/extensions/ExtensionSettingsShell';
 import { useExtensionPrefs } from '@features/extensions/prefs';
-import { useTeamStore } from '@state/teamStore';
+import { selectChatUnread, useTeamStore } from '@state/teamStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
@@ -28,7 +28,7 @@ export function TeamSettings() {
   const view = useTeamStore((s) => s.view);
   const peers = useTeamStore((s) => s.peers);
   const meshRunning = useTeamStore((s) => s.meshRunning);
-  const unread = useTeamStore((s) => s.unread);
+  const unread = useTeamStore(selectChatUnread);
 
   return (
     <ExtensionSettingsShell

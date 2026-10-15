@@ -88,7 +88,8 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { AppState, Platform, StyleSheet, View } from 'react-native';
+import { AppState, Platform, StyleSheet } from 'react-native';
+import { FocusBlock } from '@ui/FocusBlock';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import type {
   WebViewErrorEvent,
@@ -2247,7 +2248,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   return (
     <PdfRasterizerContext.Provider value={contextValue}>
       {engine ? (
-        <View style={styles.hidden} pointerEvents="none" collapsable={false}>
+        <FocusBlock style={styles.hidden} pointerEvents="none" collapsable={false}>
           <WebView
             key={engineGeneration}
             ref={webviewRef}
@@ -2282,7 +2283,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
             // Render bitmaps eagerly even while offscreen; never cache the page.
             cacheEnabled={false}
           />
-        </View>
+        </FocusBlock>
       ) : null}
       {children}
     </PdfRasterizerContext.Provider>

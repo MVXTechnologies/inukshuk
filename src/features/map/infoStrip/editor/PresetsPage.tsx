@@ -1,10 +1,18 @@
 import type { AnyExtensionKey } from '@core/extensions/keys';
 import { extensionBasics } from '@core/extensions/registry';
 import { stripTitle } from '@core/infoStrip/edit';
-import { isEditedPreset, missingExtensions, PRESETS, type Preset } from '@core/infoStrip/presets';
+import {
+  isEditedPreset,
+  missingExtensions,
+  presetAidsSummary,
+  PRESETS,
+  type Preset,
+} from '@core/infoStrip/presets';
 import { sampleValue } from '@core/infoStrip/preview';
+import { captionPlan } from '@core/infoStrip/subject';
 import { fieldDescriptor } from '@core/infoStrip/registry';
 import type { InfoStrip } from '@core/infoStrip/types';
+import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -22,18 +30,38 @@ function Miniature({
   installed: ReadonlySet<AnyExtensionKey>;
 }) {
   const t = useSchemeTokens();
+  const units = useSettingsStore((s) => s.units);
+  const shown = (f: InfoStrip['rows'][number][number]) => {
+    const d = fieldDescriptor(f.field);
+    return d === undefined || (d.requires !== undefined && !installed.has(d.requires))
+      ? undefined
+      : d;
+  };
+  // The samples' target named once, as the strip names a live one.
+  const captions = captionPlan(
+    strip.rows.map((row) =>
+      row.map((f) => {
+        const d = shown(f);
+        return d === undefined ? null : sampleValue(d, units);
+      }),
+    ),
+  );
   return (
     <View style={[styles.mini, { backgroundColor: t.surfaceVariant }]}>
       {strip.rows.map((row, r) => (
         <View key={r} style={styles.miniRow}>
           {row.map((f, i) => {
-            const d = fieldDescriptor(f.field);
-            if (d === undefined || (d.requires !== undefined && !installed.has(d.requires))) {
-              return null;
-            }
+            const d = shown(f);
+            if (d === undefined) return null;
             return (
               <View key={`${f.field}-${i}`} style={[styles.miniCell, { flex: d.spaces }]}>
-                <StripField value={sampleValue(d)} shrink muted fit />
+                <StripField
+                  value={sampleValue(d, units)}
+                  shrink
+                  muted
+                  fit
+                  caption={captions[r]?.[i] ?? false}
+                />
               </View>
             );
           })}
@@ -76,6 +104,7 @@ export function PresetsPage({
   onBack: () => void;
 }) {
   const t = useSchemeTokens();
+  const units = useSettingsStore((s) => s.units);
   const { accent } = useSheetAccent();
   const [menu, setMenu] = useState<number | null>(null);
   const edited = isEditedPreset(current, installed);
@@ -113,7 +142,7 @@ export function PresetsPage({
             <View style={styles.aids}>
               <Icon source="image-filter-center-focus" size={14} color={t.inkMuted} />
               <Text style={[styles.aidsText, { color: t.inkMuted }]} numberOfLines={1}>
-                {p.aidsSummary}
+                {presetAidsSummary(p, units)}
               </Text>
             </View>
             {missing.map((k) => (

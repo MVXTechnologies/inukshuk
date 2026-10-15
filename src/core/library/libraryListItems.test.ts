@@ -286,6 +286,38 @@ describe('libraryListItems — drawn areas (#503)', () => {
     );
   });
 
+  it('with folders, a filed area is listed in its folder and the Areas section keeps the rest', () => {
+    const filed = { ...area('a1'), folderId: 'f1' };
+    const loose = area('a2');
+    const folders: Folder[] = [{ id: 'f1', name: 'Trip', createdAt: 0 }];
+    const grouped = groupByFolder(folders, [], [track(1, 'f1')], [], [filed, loose]);
+    const items = libraryListItems(
+      input({
+        tracks: [track(1, 'f1')],
+        hasFolders: true,
+        grouped,
+        sortedAreas: [filed, loose],
+        showAreas: true,
+      }),
+    );
+    expect(shape(items)).toEqual(['# Trip (2)', 'track t1', '-area a1', '# Areas (1)', 'area a2']);
+    // A trail search stands the filed area down too, like the section.
+    expect(
+      shape(
+        libraryListItems(
+          input({
+            tracks: [track(1, 'f1')],
+            hasFolders: true,
+            grouped,
+            sortedAreas: [filed, loose],
+            showAreas: true,
+            narrowed: true,
+          }),
+        ),
+      ),
+    ).toEqual(['# Trip (2)', 'track t1']);
+  });
+
   it('an areas-only list puts the header first', () => {
     const items = libraryListItems(
       input({

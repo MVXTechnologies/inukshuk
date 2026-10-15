@@ -34,6 +34,7 @@ module.exports = {
     '!src/core/teamdraw/testUtils.ts',
     '!src/core/gnss/testUtils.ts',
     '!src/core/infoStrip/testUtils.ts',
+    '!src/core/signal/testUtils.ts',
     '!src/core/geo/pdfjsRealm.testUtils.ts',
   ],
   coverageThreshold: {
