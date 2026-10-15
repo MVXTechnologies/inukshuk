@@ -26,6 +26,12 @@ interface Props {
   accentColor?: string;
   /** Track colour override (defaults to the theme surfaceVariant). */
   trackColor?: string;
+  /** Values snap to multiples of this (and a11y moves by it); default 1. */
+  step?: number;
+  /** The value label; default "lo–hi<unit>". */
+  formatValue?: (lo: number, hi: number) => string;
+  /** testID prefix: thumbs are `<id>-min` / `<id>-max`. */
+  testID?: string;
 }
 
 /**
@@ -50,6 +56,9 @@ export function RangeSlider({
   accessibilityLabel,
   accentColor,
   trackColor,
+  step = 1,
+  formatValue,
+  testID,
 }: Props) {
   const theme = useTheme();
   const accent = accentColor ?? theme.colors.primary;
@@ -64,9 +73,9 @@ export function RangeSlider({
   const span = max - min || 1;
   const xOf = (v: number) => ((v - min) / span) * width;
 
-  const propsRef = useRef({ min, max, lo, hi, width, disabled, onChange });
+  const propsRef = useRef({ min, max, lo, hi, width, disabled, onChange, step });
   useEffect(() => {
-    propsRef.current = { min, max, lo, hi, width, disabled, onChange };
+    propsRef.current = { min, max, lo, hi, width, disabled, onChange, step };
   });
 
   // The initializer only CAPTURES the stable ref objects; every `.current`
@@ -90,12 +99,13 @@ export function RangeSlider({
         onPanResponderMove: (_e, g) => {
           const p = propsRef.current;
           const pSpan = p.max - p.min || 1;
-          const delta = Math.round((g.dx / p.width) * pSpan);
+          const raw = startRef.current + (g.dx / p.width) * pSpan;
+          const snapped = Math.round(raw / p.step) * p.step;
           const cur = liveRef.current ?? { lo: p.lo, hi: p.hi };
           const next =
             which === 'lo'
-              ? { lo: Math.max(p.min, Math.min(cur.hi - 1, startRef.current + delta)), hi: cur.hi }
-              : { lo: cur.lo, hi: Math.min(p.max, Math.max(cur.lo + 1, startRef.current + delta)) };
+              ? { lo: Math.max(p.min, Math.min(cur.hi - p.step, snapped)), hi: cur.hi }
+              : { lo: cur.lo, hi: Math.min(p.max, Math.max(cur.lo + p.step, snapped)) };
           if (next.lo !== cur.lo || next.hi !== cur.hi) {
             liveRef.current = next;
             setLive(next);
@@ -118,12 +128,12 @@ export function RangeSlider({
   const a11yAdjust = (which: 'lo' | 'hi', e: AccessibilityActionEvent) => {
     const action = e.nativeEvent.actionName;
     if (disabled || (action !== 'increment' && action !== 'decrement')) return;
-    const delta = action === 'increment' ? 1 : -1;
+    const delta = action === 'increment' ? step : -step;
     if (which === 'lo') {
-      const next = Math.max(min, Math.min(shownHi - 1, shownLo + delta));
+      const next = Math.max(min, Math.min(shownHi - step, shownLo + delta));
       if (next !== shownLo) onChange(next, shownHi);
     } else {
-      const next = Math.min(max, Math.max(shownLo + 1, shownHi + delta));
+      const next = Math.min(max, Math.max(shownLo + step, shownHi + delta));
       if (next !== shownHi) onChange(shownLo, next);
     }
   };
@@ -151,32 +161,33 @@ export function RangeSlider({
         />
         <View
           {...thumbs.lo}
+          testID={testID !== undefined ? `${testID}-min` : undefined}
           hitSlop={{ top: 18, bottom: 18, left: 14, right: 8 }}
           style={[styles.thumb, { left: xOf(shownLo) - 10, backgroundColor: accent }]}
           accessible
           accessibilityRole="adjustable"
           accessibilityLabel={thumbLabel('minimum')}
-          accessibilityValue={{ min, max: shownHi - 1, now: shownLo, text: `${shownLo}${unit}` }}
+          accessibilityValue={{ min, max: shownHi - step, now: shownLo, text: `${shownLo}${unit}` }}
           accessibilityActions={A11Y_ACTIONS}
           onAccessibilityAction={(e) => a11yAdjust('lo', e)}
           accessibilityState={{ disabled: disabled === true }}
         />
         <View
           {...thumbs.hi}
+          testID={testID !== undefined ? `${testID}-max` : undefined}
           hitSlop={{ top: 18, bottom: 18, left: 8, right: 14 }}
           style={[styles.thumb, { left: xOf(shownHi) - 10, backgroundColor: accent }]}
           accessible
           accessibilityRole="adjustable"
           accessibilityLabel={thumbLabel('maximum')}
-          accessibilityValue={{ min: shownLo + 1, max, now: shownHi, text: `${shownHi}${unit}` }}
+          accessibilityValue={{ min: shownLo + step, max, now: shownHi, text: `${shownHi}${unit}` }}
           accessibilityActions={A11Y_ACTIONS}
           onAccessibilityAction={(e) => a11yAdjust('hi', e)}
           accessibilityState={{ disabled: disabled === true }}
         />
       </View>
       <Text variant="labelMedium" style={[styles.value, { color: accent }]}>
-        {shownLo}–{shownHi}
-        {unit}
+        {formatValue !== undefined ? formatValue(shownLo, shownHi) : `${shownLo}–${shownHi}${unit}`}
       </Text>
     </View>
   );

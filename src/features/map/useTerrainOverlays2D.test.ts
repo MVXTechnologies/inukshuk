@@ -1,6 +1,7 @@
 import type { TerrainResult } from './terrainWorker';
 import { useBusyTasksStore } from '@state/busyTasksStore';
 import { useSettingsStore } from '@state/settingsStore';
+import { useTerrainAreaStore } from '@state/terrainAreaStore';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { fetchDemTileBytes } from './dem';
 import { computeTerrain } from './terrainWorker';
@@ -23,6 +24,7 @@ const out = (): TerrainResult => ({
   slopeWidth: 1,
   slopeHeight: 1,
   heightmap: null,
+  elevationRange: { minM: 312, maxM: 1154 },
   timings: { decode: 0, slope: 0, encode: 0, heightmap: 0 },
 });
 
@@ -110,6 +112,50 @@ describe('useTerrainOverlays2D (#722)', () => {
     expect(result.current.slope).toBeNull();
     expect(kinds).toEqual(expect.arrayContaining(['tiles', 'slope']));
     expect(useBusyTasksStore.getState().tasks).toEqual([]); // all finished
+    unsub();
+  });
+});
+
+describe('useTerrainOverlays2D: aspect/altitude filter and busy progress (#723/#721)', () => {
+  it('feeds the filter into the job, recomputes when it changes, publishes the ground range', async () => {
+    view = [-71.3, 46.7, -71.1, 46.9];
+    useTerrainAreaStore.setState({ elevationRange: null });
+    const filter = { aspectMask: 0b10000011, minAltM: 800, maxAltM: null };
+    useSettingsStore.setState({ terrainSlopeFilter: filter });
+    const { result } = await render();
+    await waitFor(() => expect(result.current.slope).not.toBeNull());
+    expect(compute.mock.calls[0]![0].slope?.filter).toEqual(filter);
+    expect(useTerrainAreaStore.getState().elevationRange).toEqual({ minM: 312, maxM: 1154 });
+    // Same view, new filter: computed again with it.
+    const next = { aspectMask: 0xff, minAltM: null, maxAltM: 1150 };
+    await act(async () => useSettingsStore.setState({ terrainSlopeFilter: next }));
+    await waitFor(() => expect(compute).toHaveBeenCalledTimes(2));
+    expect(compute.mock.calls[1]![0].slope?.filter).toEqual(next);
+  });
+
+  it('counts DEM tiles into the tiles task ("Map tiles 12/40")', async () => {
+    view = [-71.3, 46.7, -71.1, 46.9];
+    const seen: string[] = [];
+    const unsub = useBusyTasksStore.subscribe((s) =>
+      s.tasks.forEach((t) => {
+        if (t.kind === 'tiles' && t.progress) seen.push(`${t.progress.done}/${t.progress.total}`);
+      }),
+    );
+    fetchTiles.mockImplementationOnce(async (b, _max, onProgress) => {
+      onProgress?.(1, 2);
+      onProgress?.(2, 2);
+      return {
+        tiles: [],
+        keys: [],
+        cols: 4,
+        rows: 4,
+        range: { z: 13, minX: 0, maxX: 3, minY: 0, maxY: 3 },
+        bbox: b,
+      };
+    });
+    const { result } = await render();
+    await waitFor(() => expect(result.current.slope).not.toBeNull());
+    expect(seen).toEqual(expect.arrayContaining(['1/2', '2/2']));
     unsub();
   });
 });

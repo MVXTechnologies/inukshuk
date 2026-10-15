@@ -135,7 +135,10 @@ import { HeatPointCarousel } from './components/HeatPointCarousel';
 import { ShownTrailPill, ShownTrailSheet } from './longTrail/ShownTrailChrome';
 import { ShownTrailLayers } from './longTrail/ShownTrailLayers';
 import { MapControlsRail } from './components/MapControlsRail';
-import { RenderingToasts } from './components/RenderingToasts';
+import { BusyChip } from './components/BusyChip';
+import { SlopeLegendChip } from './components/SlopePanel';
+import type { OverlayRow } from '@core/map/overlayTabs';
+import { usePdfBusyTasks } from './usePdfBusyTasks';
 import { ScaleBar } from './components/ScaleBar';
 import { CenterCursor } from './components/CenterCursor';
 import { InfoStripHost } from './infoStrip/InfoStripHost';
@@ -1372,6 +1375,12 @@ export function MapScreen() {
   // `screenFocused` (declared above with the marine chart) is the focus gate:
   // without it the overlay pipeline kept fetching DEM tiles and contouring in
   // the background after switching to Library/Settings.
+  // PDF pages in the rasterizer are busy tasks for the busy chip (#721).
+  usePdfBusyTasks();
+  // The slope legend chip (#723) opens Map layers on Slope's page.
+  const [overlaysRequest, setOverlaysRequest] = useState<{ row: OverlayRow; seq: number } | null>(
+    null,
+  );
   const terrainOverlays2d = useTerrainOverlays2D({
     mapRef,
     boundsVersion: regionVersion,
@@ -3737,6 +3746,7 @@ export function MapScreen() {
             compactOpen={compactControlsOpen}
             onCompactOpenChange={setCompactControlsOpen}
             onMenuOpenChange={setRailMenuOpen}
+            overlaysRequest={overlaysRequest}
           />
         )}
 
@@ -3787,9 +3797,19 @@ export function MapScreen() {
           pointerEvents="box-none"
           onLayout={(e) => setBottomColumnH(e.nativeEvent.layout.height)}
         >
-          {/* Pages still in the rasterizer, one dismissible row each (#269).
-            First in the column so they stack above the scale bar. */}
-          <RenderingToasts />
+          {/* What the map is busy with (#721): one chip, the longest-running
+            task and "+N" (PDF pages, slope, contours, tiles). First in the
+            column so it stacks above the scale bar. */}
+          <BusyChip />
+          {/* The slope filter's legend (#723), above the scale bar: it
+            renders only while slope is on and filtered. */}
+          {!offlineOnly && !selecting && makeMapState === null && (
+            <SlopeLegendChip
+              onPress={() =>
+                setOverlaysRequest((r) => ({ row: 'slopeOptions', seq: (r?.seq ?? 0) + 1 }))
+              }
+            />
+          )}
           {/* The trail-photo chip (#587): legend and hide/show switch, while
             the circles can be on screen. */}
           {!selecting &&

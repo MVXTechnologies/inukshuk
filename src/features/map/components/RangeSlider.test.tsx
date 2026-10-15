@@ -70,3 +70,21 @@ describe('RangeSlider screen-reader adjustment', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 });
+
+describe('RangeSlider step and value label (the altitude slider, #723)', () => {
+  it('moves by its step and keeps a step between the thumbs', async () => {
+    const onChange = await setup({ min: 0, max: 1500, lo: 800, hi: 1500, step: 10 });
+    await a11yAction('Minimum', 'increment');
+    expect(onChange).toHaveBeenLastCalledWith(810, 1500);
+    await a11yAction('Maximum', 'decrement');
+    expect(onChange).toHaveBeenLastCalledWith(800, 1490);
+    expect(screen.getByLabelText('Minimum').props.accessibilityValue).toMatchObject({
+      max: 1490,
+    });
+  });
+
+  it('labels the value with the caller’s formatter', async () => {
+    await setup({ min: 0, max: 1500, lo: 800, hi: 1500, formatValue: (lo) => `${lo} m+` });
+    expect(screen.getByText('800 m+')).toBeTruthy();
+  });
+});

@@ -15,6 +15,7 @@ import type { Basemap, PackFormat } from '@core/geo/tiles';
 import type { BoundingBox } from '@core/models';
 import { reportError } from '@lib/errorReporting';
 import { create } from 'zustand';
+import { beginBusyTask, type BusyTaskHandle } from './busyTasksStore';
 
 /**
  * One basemap layer to download for a region: its serialized style and the zoom
@@ -296,3 +297,28 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
     }
   },
 }));
+
+/**
+ * An offline download is a busy task while it runs (#721): kind 'tiles',
+ * named by the layer or region its progress names, its percentage as the
+ * progress (MapLibre reports no tile count). Updated only when the whole
+ * percent changes, so a fast pack doesn't re-render the map's chip per tile.
+ */
+let downloadTask: { handle: BusyTaskHandle; pct: number; label: string } | null = null;
+useOfflineStore.subscribe((s) => {
+  const p = s.progress;
+  if (p === null) {
+    downloadTask?.handle.finish();
+    downloadTask = null;
+    return;
+  }
+  const pct = Math.round(p.pct);
+  const patch = { subject: p.label, progress: { done: pct, total: 100, percent: true } };
+  if (downloadTask === null) {
+    downloadTask = { handle: beginBusyTask('tiles', patch), pct, label: p.label };
+  } else if (downloadTask.pct !== pct || downloadTask.label !== p.label) {
+    downloadTask.handle.update(patch);
+    downloadTask.pct = pct;
+    downloadTask.label = p.label;
+  }
+});

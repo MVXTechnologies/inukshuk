@@ -192,6 +192,20 @@ describe('fetchDemTileBytes (#722: tiles for the off-thread terrain job)', () =>
     expect(Buffer.compare(Buffer.from(decoded.buffer), Buffer.from(mosaic.data.buffer))).toBe(0);
   });
 
+  it('counts tiles as they settle (the busy chip’s "Map tiles 12/40", #721)', async () => {
+    download.mockResolvedValue(RED);
+    const counts: string[] = [];
+    const bytes = await fetchDemTileBytes(
+      { minLng: -71.25, maxLng: -71.15, minLat: 46.78, maxLat: 46.84 },
+      4,
+      (done, total) => counts.push(`${done}/${total}`),
+    );
+    const n = bytes.cols * bytes.rows;
+    expect(counts).toHaveLength(n);
+    expect(counts.at(-1)).toBe(`${n}/${n}`);
+    expect(counts[0]).toBe(`1/${n}`);
+  });
+
   it('fails like the mosaic when a tile cannot be downloaded', async () => {
     download.mockRejectedValue(new Error('Unable to download a file: timeout'));
     await expect(

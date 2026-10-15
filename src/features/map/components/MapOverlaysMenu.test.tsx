@@ -316,11 +316,32 @@ describe('switches drive the same settings as the old checkboxes', () => {
     expect(onSlopeEnabled).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the slope range thumbs (Maestro keys on "Slope minimum")', async () => {
+  it('keeps the slope range thumbs in Slope’s page (Maestro keys on "Slope minimum")', async () => {
     onTab('terrain');
     await renderMenu();
+    // The sub-menu rule (#723): the window lives in the item's page, not the tab.
+    expect(screen.queryByLabelText('Slope minimum')).toBeNull();
+    await fireEvent.press(screen.getByLabelText('Options for slope'));
     expect(screen.getByLabelText('Slope minimum')).toBeTruthy();
     expect(screen.getByLabelText('Slope maximum')).toBeTruthy();
+    expect(screen.queryByLabelText('Terrain tab')).toBeNull();
+    await fireEvent.press(screen.getByLabelText('Back to overlays'));
+    expect(screen.getByLabelText('Terrain tab').props.accessibilityState).toEqual({
+      selected: true,
+    });
+  });
+
+  it('opens on Slope’s page when asked (the map’s slope legend chip)', async () => {
+    await render(
+      <OverlaysPanel
+        onSlopeEnabled={noop}
+        onOpenFolders={noop}
+        onClose={noop}
+        openOn="slopeOptions"
+      />,
+    );
+    expect(screen.getByLabelText('Altitude minimum')).toBeTruthy();
+    expect(screen.getByLabelText('All aspects')).toBeTruthy();
   });
 
   it('Contours density picks the interval', async () => {

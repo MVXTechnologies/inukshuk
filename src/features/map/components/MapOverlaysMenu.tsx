@@ -53,13 +53,12 @@ import {
   SubPanelHeader,
   SwitchRow,
   useSheetAccent,
-  useSheetWidth,
 } from './mapSheet';
 import { PdfMapsPanel } from './PdfMapsPanel';
 import { PointingLinePanel, PointingLineRow } from './PointingLinePanel';
 import { openStripEditor } from '../infoStrip/stripRuntime';
-import { RangeSlider } from './RangeSlider';
 import { SatellitePanel } from './SatellitePanel';
+import { SlopeRow, SlopeSubPanel } from './SlopePanel';
 
 /**
  * THE overlays menu, titled "Map layers" (#484 redesign; #668–#670): how the
@@ -70,7 +69,7 @@ import { SatellitePanel } from './SatellitePanel';
  * - Map — Content (folder picker), PDF maps, Parks & protected areas.
  * - Terrain — the base map (Map / Satellite cards, #669; it was the rail's
  *   "Base map" panel), then Relief: Shading, 3D relief, Contours (+
- *   density), Slope (+ range), Peaks.
+ *   density), Slope (its page: steepness, altitude, aspect; #723), Peaks.
  * - Sports — Personal heatmap; Live layers: Weather (its list) and Marine,
  *   both parked this release, so not shown at all (no greyed rows, owner
  *   rule, 2.5.1 QA). Climbing crags will join here.
@@ -81,7 +80,7 @@ import { SatellitePanel } from './SatellitePanel';
  * lives in that item's page, never in a greyed-out row): an item with
  * options of its own carries the round chevron accessory (`SubPanelButton`)
  * and opens them as a page of the sheet, through ONE `openSubPanel(id)`: the
- * tab strip hides, a back row leads back to the tab. Satellite (labels,
+ * tab strip hides, a back row leads back to the tab. Slope, Satellite (labels,
  * imagery brightness), PDF maps (See-through white), Weather (its list) and
  * every extension (`ExtensionPanelModule.Panel`). Nothing in a tab greys out
  * (beyond the network-only rows while offline).
@@ -90,7 +89,7 @@ import { SatellitePanel } from './SatellitePanel';
  * the sheet's ✕ is 'Close overlays' — the open-state sentinel. Rows keep the
  * labels the flows key on: 'Content: …', 'PDF maps', 'Personal heatmap',
  * 'Slope', 'Contours', the level names ('Auto', '50 m', 'Heavy', …), 'Slope
- * minimum/maximum', 'Weather'/'Weather: <layer>' and 'Marine' (absent while
+ * minimum/maximum' (in Slope's page), 'Weather'/'Weather: <layer>' and 'Marine' (absent while
  * parked); built-in sub-panels go back with 'Back to
  * overlays', extension ones with 'Back to extensions'. Accessories are named
  * 'Options for <item>' — never starting with the row's own label, so a
@@ -113,10 +112,6 @@ const WEATHER_LAYER_ICONS: Record<WeatherLayerId, string> = {
 
 /** Tallest the sheet's scrolling body gets, as a share of the window. */
 const BODY_MAX_SHARE = 0.6;
-/** The RangeSlider's value label + its gap, beside the track. */
-const RANGE_VALUE_W = 74;
-/** The `below` indent of a sheet row (see mapSheet), left + right. */
-const BELOW_INSET = 52 + 16;
 
 const SHADING = SHADING_LEVELS.map((l) => ({ value: l, label: SHADING_LABEL[l] }));
 const TILT = TILT_RELIEFS.map((r) => ({ value: r, label: TILT_RELIEF_LABEL[r] }));
@@ -144,19 +139,13 @@ function OverlayRows({
   /** Close the sheet (the info strip's editor opens over the map instead). */
   onClose: () => void;
 }) {
-  const { accent } = useSheetAccent();
-  const tokens = useSchemeTokens();
-  const sheetW = useSheetWidth();
   const mapVisibilityMode = useLibraryStore((s) => s.mapVisibilityMode);
   const visibleFolderIds = useLibraryStore((s) => s.visibleFolderIds);
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
   const weatherLayer = useSettingsStore((s) => s.weatherLayer);
   const marineLayers = useSettingsStore((s) => s.marineLayers);
-  const slope = useSettingsStore((s) => s.terrainSlope);
   const contours = useSettingsStore((s) => s.terrainContours);
   const intervalM = useSettingsStore((s) => s.terrainContourIntervalM);
-  const slopeMinDeg = useSettingsStore((s) => s.terrainSlopeMinDeg);
-  const slopeMaxDeg = useSettingsStore((s) => s.terrainSlopeMaxDeg);
   const showHeatmap = useSettingsStore((s) => s.showHeatmap);
   const showPdfMaps = useSettingsStore((s) => s.showPdfOverlay);
   const showHillshade = useSettingsStore((s) => s.showHillshade);
@@ -239,34 +228,8 @@ function OverlayRows({
             />
           }
         />
-        <SwitchRow
-          icon="angle-acute"
-          label="Slope"
-          hint="Steepness shading"
-          value={slope}
-          onToggle={() => {
-            const next = !slope;
-            set('terrainSlope', next);
-            if (next) onSlopeEnabled();
-          }}
-          below={
-            <RangeSlider
-              min={0}
-              max={90}
-              width={sheetW - BELOW_INSET - RANGE_VALUE_W}
-              lo={slopeMinDeg}
-              hi={slopeMaxDeg}
-              disabled={!slope}
-              accessibilityLabel="Slope"
-              onChange={(newLo, newHi) => {
-                set('terrainSlopeMinDeg', newLo);
-                set('terrainSlopeMaxDeg', newHi);
-              }}
-              accentColor={accent}
-              trackColor={tokens.surfaceVariant}
-            />
-          }
-        />
+        {/* #723: the steepness window moved into Slope's page, with altitude and aspect. */}
+        <SlopeRow onOpen={() => openSubPanel('slope')} onSlopeEnabled={onSlopeEnabled} />
         <LevelsRow
           icon="triangle-outline"
           label="Peaks"
@@ -511,6 +474,8 @@ function SubPanel({
       return <PdfMapsPanel onBack={onBack} />;
     case 'pointingLine':
       return <PointingLinePanel onBack={onBack} />;
+    case 'slope':
+      return <SlopeSubPanel onBack={onBack} />;
     default: {
       const { Panel } = EXTENSION_PANELS[panel];
       return <Panel onBack={onBack} onClose={onClose} openSubPanel={openSubPanel} />;
@@ -634,9 +599,12 @@ export function OverlaysDialogs({
 export function MapOverlaysMenu({
   open,
   onToggle,
+  openOn,
 }: {
   open: boolean;
   onToggle: (open: boolean) => void;
+  /** Open on this row instead of the remembered tab (the slope legend chip, #723). */
+  openOn?: OverlayRow;
 }) {
   const [foldersOpen, setFoldersOpen] = useState(false);
   const { snackbar, onSlopeEnabled } = useSlopeDisclaimer();
@@ -657,6 +625,7 @@ export function MapOverlaysMenu({
               setFoldersOpen(true);
             }}
             onClose={() => onToggle(false)}
+            openOn={openOn}
           />
         </MapSheet>
       )}

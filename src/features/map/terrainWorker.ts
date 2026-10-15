@@ -29,6 +29,8 @@ export interface TerrainResult {
   slopeWidth: number;
   slopeHeight: number;
   heightmap: { data: Float32Array; grid: number; minH: number; maxH: number } | null;
+  /** The area's lowest/highest ground with a slope (the altitude scale, #723). */
+  elevationRange: TerrainJobOutput['elevationRange'];
   timings: TerrainJobOutput['timings'];
 }
 
@@ -46,6 +48,8 @@ export type WireResult =
       slopeWidth: number;
       slopeHeight: number;
       hm: { buf: ArrayBuffer; grid: number; minH: number; maxH: number } | null;
+      /** Two plain numbers: crosses as is. */
+      elev: { minM: number; maxM: number } | null;
       timings: TerrainJobOutput['timings'];
     }
   | { ok: false; error: string };
@@ -64,6 +68,10 @@ export function wireJob(input: TerrainJobInput): WireResult {
       hm:
         hm !== null
           ? { buf: hm.data.buffer as ArrayBuffer, grid: hm.grid, minH: hm.minH, maxH: hm.maxH }
+          : null,
+      elev:
+        out.elevationRange !== null
+          ? { minM: out.elevationRange.minM, maxM: out.elevationRange.maxM }
           : null,
       timings: out.timings,
     };
@@ -89,11 +97,21 @@ export function fromWire(res: WireResult): TerrainResult {
     }
     heightmap = { data: new Float32Array(buf), grid, minH: res.hm.minH, maxH: res.hm.maxH };
   }
+  // A range that did not arrive as two numbers is dropped (the scale keeps its last).
+  const elev = res.elev;
+  const elevationRange =
+    elev !== null &&
+    typeof elev === 'object' &&
+    Number.isFinite(elev.minM) &&
+    Number.isFinite(elev.maxM)
+      ? { minM: elev.minM, maxM: elev.maxM }
+      : null;
   return {
     slopePngBase64: res.png64,
     slopeWidth: res.slopeWidth,
     slopeHeight: res.slopeHeight,
     heightmap,
+    elevationRange,
     timings: res.timings,
   };
 }
@@ -105,6 +123,7 @@ function inline(job: TerrainJobInput): TerrainResult {
     slopeWidth: out.slopeWidth,
     slopeHeight: out.slopeHeight,
     heightmap: out.heightmap,
+    elevationRange: out.elevationRange,
     timings: out.timings,
   };
 }

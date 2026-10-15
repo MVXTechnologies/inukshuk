@@ -8,6 +8,7 @@ import {
 import { deletePackUrls, readPackUrls, savePackUrls } from '@data/packUrls';
 import { reportError } from '@lib/errorReporting';
 
+import { useBusyTasksStore } from './busyTasksStore';
 import { useOfflineStore } from './offlineStore';
 
 jest.mock('@data/offline', () => {
@@ -167,6 +168,30 @@ describe('redownload', () => {
     expect(deletePackUrls).not.toHaveBeenCalled();
     expect(useOfflineStore.getState().progress).toBeNull();
   });
+});
+
+it('a download is a busy "Map tiles" task with its percentage until it ends (#721)', async () => {
+  useBusyTasksStore.setState({ tasks: [] });
+  const seen: string[] = [];
+  (replaceRegionPack as jest.Mock).mockImplementationOnce(
+    async (_old: string, _args: unknown, onProgress: (p: number, b: number) => void) => {
+      for (const pct of [0, 12.2, 12.4, 57]) {
+        onProgress(pct, 5);
+        const t = useBusyTasksStore.getState().tasks;
+        expect(t).toHaveLength(1);
+        seen.push(`${t[0]!.kind} ${t[0]!.subject} ${t[0]!.progress?.done}%`);
+      }
+    },
+  );
+  const layer = { basemap: 'map' as const, styleJSON: '{}', minZoom: 8, maxZoom: 14 };
+  await useOfflineStore.getState().redownload(region('r', { label: 'Charlevoix' }), layer);
+  expect(seen).toEqual([
+    'tiles Updating Charlevoix 0%',
+    'tiles Updating Charlevoix 12%',
+    'tiles Updating Charlevoix 12%',
+    'tiles Updating Charlevoix 57%',
+  ]);
+  expect(useBusyTasksStore.getState().tasks).toEqual([]);
 });
 
 it('remove drops the region, its name and its stamp', async () => {

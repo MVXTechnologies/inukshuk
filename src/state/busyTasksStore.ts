@@ -5,6 +5,7 @@ import {
   updateBusyTask,
   type BusyProgress,
   type BusySummary,
+  type BusyTaskPatch,
   type BusyTaskKind,
   type BusyTasks,
 } from '@core/tasks/busyTasks';
@@ -14,8 +15,8 @@ import { create } from 'zustand';
 /**
  * Live registry of background work (#721/#722): slope/contour computes, tile
  * downloads, PDF page renders. Producers call {@link beginBusyTask} and
- * finish the handle (in a `finally`); the future status chip reads
- * {@link useBusyTasks}. No UI here — #721 waits for its mockup.
+ * finish the handle (in a `finally`); the map's busy chip (#721) reads
+ * {@link useBusyTasks}.
  */
 interface BusyTasksState {
   tasks: BusyTasks;
@@ -25,7 +26,7 @@ export const useBusyTasksStore = create<BusyTasksState>(() => ({ tasks: [] }));
 
 export interface BusyTaskHandle {
   readonly id: string;
-  update: (patch: { label?: string; progress?: BusyProgress }) => void;
+  update: (patch: BusyTaskPatch) => void;
   /** Idempotent. */
   finish: () => void;
 }
@@ -34,7 +35,7 @@ let seq = 0;
 
 export function beginBusyTask(
   kind: BusyTaskKind,
-  opts: { label?: string; progress?: BusyProgress; now?: number } = {},
+  opts: { label?: string; subject?: string; progress?: BusyProgress; now?: number } = {},
 ): BusyTaskHandle {
   const id = `${kind}-${++seq}`;
   const { now = Date.now(), ...rest } = opts;

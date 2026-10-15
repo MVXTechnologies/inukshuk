@@ -138,6 +138,8 @@ export interface DemTileBytes {
 export async function fetchDemTileBytes(
   bounds: BoundingBox,
   maxTilesPerSide = 6,
+  /** Tiles settled so far, of all (the busy chip's "Map tiles 12/40", #721). */
+  onProgress?: (done: number, total: number) => void,
 ): Promise<DemTileBytes> {
   const z = pickTerrainZoom(bounds, maxTilesPerSide);
   const range = clampTileRange(tileRangeForBbox(bounds, z), maxTilesPerSide);
@@ -145,12 +147,16 @@ export async function fetchDemTileBytes(
   const cols = range.maxX - range.minX + 1;
   const rows = range.maxY - range.minY + 1;
   const tiles: Uint8Array[] = new Array<Uint8Array>(planned.length);
-  const failures = await fetchAllTiles(planned, async (t) => {
-    tiles[t.row * cols + t.col] = await storage.downloadBytes(
-      demUrl(t.z, t.x, t.y),
-      `dem-${t.z}-${t.x}-${t.y}.png`,
-    );
-  });
+  const failures = await fetchAllTiles(
+    planned,
+    async (t) => {
+      tiles[t.row * cols + t.col] = await storage.downloadBytes(
+        demUrl(t.z, t.x, t.y),
+        `dem-${t.z}-${t.x}-${t.y}.png`,
+      );
+    },
+    onProgress !== undefined ? { onSettled: onProgress } : {},
+  );
   assessTileFailures('elevation', planned.length, failures, 0);
   const keys = planned.map((t) => `${t.z}/${t.x}/${t.y}`);
   return { tiles, keys, cols, rows, range, bbox: rangeBbox(range) };

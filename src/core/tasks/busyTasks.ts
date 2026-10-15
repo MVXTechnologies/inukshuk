@@ -2,7 +2,8 @@
  * Registry of background work the map is doing (#721/#722): slope and
  * contour computes, tile downloads, PDF page renders. Pure state transitions
  * and the summary a status chip needs ("Slope… +2"); the store lives in
- * `@state/busyTasksStore`. No UI here (#721 waits for its mockup).
+ * `@state/busyTasksStore`; the chip's own rules (what shows, how it reads)
+ * are in `./busyChip`.
  */
 
 export type BusyTaskKind = 'slope' | 'contours' | 'tiles' | 'pdf';
@@ -10,6 +11,8 @@ export type BusyTaskKind = 'slope' | 'contours' | 'tiles' | 'pdf';
 export interface BusyProgress {
   done: number;
   total: number;
+  /** `done` is a percentage of 100 (a download that reports no count). */
+  percent?: boolean;
 }
 
 export interface BusyTask {
@@ -17,10 +20,15 @@ export interface BusyTask {
   kind: BusyTaskKind;
   /** Epoch ms the task started (the chip names the longest-running one). */
   startedAt: number;
-  /** Optional detail, e.g. "page 3" for a PDF render. */
+  /** Optional detail, e.g. "p.3" for a PDF render. */
   label?: string;
+  /** What the task works on, e.g. the PDF map's or the offline region's name. */
+  subject?: string;
   progress?: BusyProgress;
 }
+
+/** What a running task may change about itself. */
+export type BusyTaskPatch = Pick<BusyTask, 'label' | 'subject' | 'progress'>;
 
 /** Tasks in start order (oldest first). */
 export type BusyTasks = readonly BusyTask[];
@@ -30,11 +38,7 @@ export function startBusyTask(tasks: BusyTasks, task: BusyTask): BusyTasks {
   return [...tasks.filter((t) => t.id !== task.id), task];
 }
 
-export function updateBusyTask(
-  tasks: BusyTasks,
-  id: string,
-  patch: { label?: string; progress?: BusyProgress },
-): BusyTasks {
+export function updateBusyTask(tasks: BusyTasks, id: string, patch: BusyTaskPatch): BusyTasks {
   if (!tasks.some((t) => t.id === id)) return tasks; // already finished: no resurrection
   return tasks.map((t) => (t.id === id ? { ...t, ...patch } : t));
 }

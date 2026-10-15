@@ -1,4 +1,5 @@
 import { decodePngPixels, encodeIndexedPng, pngPixelsToRgba } from '../encoding/pngCodec';
+import { NODATA_BELOW_M } from './slopeField';
 import { sampleGridBilinear } from './terrain';
 import { slopeOverlayIndexed, type SlopeFilter } from './terrainAnalysis';
 
@@ -33,6 +34,12 @@ export interface TerrainJobOutput {
   slopeWidth: number;
   slopeHeight: number;
   heightmap: { data: Float32Array; grid: number; minH: number; maxH: number } | null;
+  /**
+   * Lowest and highest ground (m) of the mosaic, no-data skipped, when a
+   * slope was asked for (the altitude slider's scale, #723); null otherwise
+   * or when every pixel is void.
+   */
+  elevationRange: { minM: number; maxM: number } | null;
   /** Wall-clock ms per stage (measurement, #722). */
   timings: { decode: number; slope: number; encode: number; heightmap: number };
 }
@@ -135,8 +142,18 @@ export function runTerrainJob(input: TerrainJobInput): TerrainJobOutput {
   let slopePng: Uint8Array | null = null;
   let slopeWidth = 0;
   let slopeHeight = 0;
+  let elevationRange: TerrainJobOutput['elevationRange'] = null;
   if (input.slope !== null) {
     t0 = Date.now();
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let i = 0; i < dem.length; i++) {
+      const e = dem[i] as number;
+      if (!(e >= NODATA_BELOW_M)) continue;
+      if (e < lo) lo = e;
+      if (e > hi) hi = e;
+    }
+    if (lo <= hi) elevationRange = { minM: lo, maxM: hi };
     const s = input.slope;
     const ix = slopeOverlayIndexed(
       dem,
@@ -175,5 +192,5 @@ export function runTerrainJob(input: TerrainJobInput): TerrainJobOutput {
     heightmap = { data, grid: g, minH, maxH };
     timings.heightmap = Date.now() - t0;
   }
-  return { slopePng, slopeWidth, slopeHeight, heightmap, timings };
+  return { slopePng, slopeWidth, slopeHeight, heightmap, elevationRange, timings };
 }

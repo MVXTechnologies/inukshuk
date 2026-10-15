@@ -7,7 +7,7 @@ import type { WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import { documentRevision, rasterFileName } from '@core/library/overlayRaster';
 import { renderStatusLine } from '@core/library/overlayStatus';
 import { PRERENDER_MAX_ATTEMPTS } from '@core/library/prerenderQueue';
-import { renderingToasts } from '@core/library/renderingToasts';
+import { renderingPages } from '@core/library/renderingPages';
 import type { GeoReference, MapDocument } from '@core/models';
 import { reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
@@ -203,7 +203,7 @@ describe('usePrerenderOnImport', () => {
       kind: 'rendering',
       text: 'Preparing page 1…',
     });
-    expect(renderingToasts([map], statuses, new Map())).toEqual([]);
+    expect(renderingPages([map], statuses)).toEqual([]);
     await act(async () => finish());
     await settle();
     expect(useOverlayStatusStore.getState().statuses['m:0']).toEqual({ phase: 'rendered' });

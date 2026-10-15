@@ -59,6 +59,8 @@ describe('overlay tabs', () => {
     expect(panelForRow('geodeticFilter')).toBe('geodetic');
     expect(panelForRow('parks')).toBeNull();
     expect(panelForRow('slope')).toBeNull();
+    expect(panelForRow('slopeOptions')).toBe('slope');
+    expect(tabForSubPanel('slope')).toBe('terrain');
     for (const [row, panel] of Object.entries(OVERLAY_ROW_PANEL)) {
       if (panel === undefined) continue;
       expect(tabForRow(row as OverlayRow)).toBe(tabForSubPanel(panel));

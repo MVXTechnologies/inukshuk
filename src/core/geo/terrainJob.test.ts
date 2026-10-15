@@ -96,6 +96,32 @@ describe('runTerrainJob', () => {
     expect(out.heightmap).toBeNull();
   });
 
+  it('reports the lowest and highest ground with the slope (the altitude scale, #723)', () => {
+    const job = (t: Uint8Array[], slope: boolean) =>
+      runTerrainJob({
+        tiles: t,
+        cols: 2,
+        rows: 2,
+        z: Z,
+        topRow: TOP,
+        slope: slope ? { minDeg: 27, maxDeg: 90, step: 2 } : null,
+        heightmapGrid: 0,
+      });
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const v of want) {
+      lo = Math.min(lo, v);
+      hi = Math.max(hi, v);
+    }
+    expect(job(tiles, true).elevationRange).toEqual({ minM: lo, maxM: hi });
+    expect(job(tiles, false).elevationRange).toBeNull();
+    // Voids (Terrarium −32 768 m) are no ground.
+    const voided = terrariumTiles(2, 2, (x, y) => (x < 40 ? -32768 : hill(x, y)));
+    const r = job(voided.tiles, true).elevationRange!;
+    expect(r.minM).toBeGreaterThan(0);
+    expect(r.maxM).toBeCloseTo(hi, 0);
+  });
+
   it('builds the contour heightmap exactly like the bilinear resample', () => {
     const out = runTerrainJob({
       tiles,

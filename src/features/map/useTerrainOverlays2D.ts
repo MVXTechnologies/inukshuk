@@ -6,6 +6,7 @@ import * as storage from '@data/storage';
 import type { MapRef } from '@maplibre/maplibre-react-native';
 import { beginBusyTask, type BusyTaskHandle } from '@state/busyTasksStore';
 import { useSettingsStore } from '@state/settingsStore';
+import { useTerrainAreaStore } from '@state/terrainAreaStore';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { BoundingBox } from '@core/models';
 import { fetchDemTileBytes, prefetchDemTiles } from './dem';
@@ -93,6 +94,7 @@ export function useTerrainOverlays2D({
   const intervalM = useSettingsStore((s) => s.terrainContourIntervalM);
   const slopeMinDeg = useSettingsStore((s) => s.terrainSlopeMinDeg);
   const slopeMaxDeg = useSettingsStore((s) => s.terrainSlopeMaxDeg);
+  const slopeFilter = useSettingsStore((s) => s.terrainSlopeFilter);
 
   const [state, setState] = useState<TerrainOverlays2D>({
     slope: null,
@@ -135,7 +137,16 @@ export function useTerrainOverlays2D({
         const [w, s, e, n] = view.bounds;
         const viewport: BoundingBox = { minLng: w, minLat: s, maxLng: e, maxLat: n };
         const bounds = padBounds(viewport, PAD);
-        const knobs = [slopeOn, contoursOn, intervalM, slopeMinDeg, slopeMaxDeg].join('|');
+        const knobs = [
+          slopeOn,
+          contoursOn,
+          intervalM,
+          slopeMinDeg,
+          slopeMaxDeg,
+          slopeFilter.aspectMask,
+          slopeFilter.minAltM,
+          slopeFilter.maxAltM,
+        ].join('|');
         // Keep the current result while the view is still well inside it, at
         // a similar zoom, with the same settings: nothing new to draw.
         const covered = coveredRef.current;
@@ -150,14 +161,19 @@ export function useTerrainOverlays2D({
 
         const busy: BusyTaskHandle[] = [];
         try {
-          busy.push(beginBusyTask('tiles'));
-          const dem = await fetchDemTileBytes(bounds, MAX_TILES);
+          const tilesTask = beginBusyTask('tiles');
+          busy.push(tilesTask);
+          const dem = await fetchDemTileBytes(bounds, MAX_TILES, (done, total) =>
+            tilesTask.update({ progress: { done, total } }),
+          );
           busy.pop()?.finish();
           if (reqId !== reqIdRef.current) return;
 
           const width = dem.cols * 256;
           const height = dem.rows * 256;
-          busy.push(beginBusyTask(slopeOn ? 'slope' : 'contours'));
+          // One job computes both; each layer the user waits on is its own task.
+          if (slopeOn) busy.push(beginBusyTask('slope'));
+          if (contoursOn) busy.push(beginBusyTask('contours'));
           const out = await computeTerrain({
             tiles: dem.tiles,
             tileKeys: dem.keys,
@@ -170,12 +186,17 @@ export function useTerrainOverlays2D({
                   minDeg: slopeMinDeg,
                   maxDeg: slopeMaxDeg,
                   step: slopeStepFor(width, height, SLOPE_MAX_PX),
+                  filter: slopeFilter,
                 }
               : null,
             heightmapGrid: contoursOn ? GRID : 0,
           });
           // Superseded while queued, or a newer request arrived meanwhile.
           if (out === null || reqId !== reqIdRef.current) return;
+          // The Slope sub-panel's altitude scale follows the computed area.
+          if (out.elevationRange !== null) {
+            useTerrainAreaStore.getState().setElevationRange(out.elevationRange);
+          }
 
           let slope: TerrainOverlays2D['slope'] = null;
           if (out.slopePngBase64 !== null) {
@@ -214,7 +235,17 @@ export function useTerrainOverlays2D({
       })();
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [enabled, slopeOn, contoursOn, intervalM, slopeMinDeg, slopeMaxDeg, boundsVersion, mapRef]);
+  }, [
+    enabled,
+    slopeOn,
+    contoursOn,
+    intervalM,
+    slopeMinDeg,
+    slopeMaxDeg,
+    slopeFilter,
+    boundsVersion,
+    mapRef,
+  ]);
 
   if (!enabled) return { slope: null, contours: null, error: null };
   return {

@@ -34,10 +34,25 @@ describe('fromWire (what crosses back from the worker runtime)', () => {
       slopeWidth: 1,
       slopeHeight: 1,
       hm: { buf: data.buffer, grid: 2, minH: 1, maxH: 4 },
+      elev: { minM: 312, maxM: 1154 },
       timings,
     });
     expect(Array.from(r.heightmap!.data)).toEqual([1, 2, 3, 4]);
     expect(r.slopePngBase64).toBe('AQID');
+    expect(r.elevationRange).toEqual({ minM: 312, maxM: 1154 });
+  });
+
+  it('drops a ground range that did not arrive as two numbers', () => {
+    const r = fromWire({
+      ok: true,
+      png64: null,
+      slopeWidth: 0,
+      slopeHeight: 0,
+      hm: null,
+      elev: { minM: {} as unknown as number, maxM: 1 },
+      timings,
+    });
+    expect(r.elevationRange).toBeNull();
   });
 
   it('refuses what a broken transport delivers instead of drawing it', () => {
@@ -49,6 +64,7 @@ describe('fromWire (what crosses back from the worker runtime)', () => {
         slopeWidth: 1,
         slopeHeight: 1,
         hm: null,
+        elev: null,
         timings,
       }),
     ).toThrow(/string/);
@@ -59,6 +75,7 @@ describe('fromWire (what crosses back from the worker runtime)', () => {
         slopeWidth: 0,
         slopeHeight: 0,
         hm: { buf: {} as ArrayBuffer, grid: 2, minH: 0, maxH: 0 },
+        elev: null,
         timings,
       }),
     ).toThrow(/ArrayBuffer/);
@@ -84,6 +101,28 @@ describe('wireJob on a worklet runtime (fresh realm, captured closure only)', ()
     expect(typeof r.slopePngBase64).toBe('string');
     expect(r.slopePngBase64!.startsWith('iVBORw0KGgo')).toBe(true); // PNG signature
     expect(Array.from(r.heightmap!.data)).toEqual(new Array(9).fill(100));
+    expect(r.elevationRange).toEqual({ minM: 100, maxM: 100 });
+  });
+
+  it('runs an aspect/altitude-filtered slope there too (#723)', () => {
+    const res = asWorkletRuntime(wireJob)({
+      tiles: [tileView().slice()],
+      cols: 1,
+      rows: 1,
+      z: 14,
+      topRow: 5800 * 256,
+      slope: {
+        minDeg: 27,
+        maxDeg: 90,
+        step: 1,
+        filter: { aspectMask: 0b10000011, minAltM: 50, maxAltM: null },
+      },
+      heightmapGrid: 0,
+    });
+    expect(res).toMatchObject({ ok: true });
+    const r = fromWire(res);
+    expect(r.slopePngBase64!.startsWith('iVBORw0KGgo')).toBe(true);
+    expect(r.elevationRange).toEqual({ minM: 100, maxM: 100 });
   });
 
   it('reports a failure as a message string, not a thrown Error', () => {

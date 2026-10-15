@@ -18,6 +18,8 @@ import {
   sanitizePointingLine,
   type PointingLineSettings,
 } from '@core/map/pointingLineSettings';
+import { DEFAULT_SLOPE_FILTER, sanitizeSlopeFilter } from '@core/map/slopeSettings';
+import type { SlopeFilter } from '@core/geo/terrainAnalysis';
 import {
   defaultExtensionPrefs,
   legacyExtensionFields,
@@ -313,6 +315,12 @@ export interface Settings {
    */
   terrainSlopeMinDeg: number;
   terrainSlopeMaxDeg: number;
+  /**
+   * Slope aspect sectors and altitude bounds (#723): full colour where the
+   * slope's sector, altitude and steepness all match, a faint trace
+   * elsewhere. Default: all 8 sectors, no altitude bounds (no filter).
+   */
+  terrainSlopeFilter: SlopeFilter;
   /** The Recording check (permissions/battery for screen-off GPS) was shown
    * before a first recording; afterwards it only reappears on a problem. */
   recordingCheckShown: boolean;
@@ -439,6 +447,7 @@ const DEFAULTS: Settings = {
   terrainContourIntervalM: 0,
   terrainSlopeMinDeg: 27,
   terrainSlopeMaxDeg: 90,
+  terrainSlopeFilter: DEFAULT_SLOPE_FILTER,
   slopeDisclaimerShown: false,
   recordingCheckShown: false,
   recordingBatteryReviewed: false,
@@ -556,6 +565,7 @@ function snapshot(s: SettingsState): Settings {
     terrainContourIntervalM,
     terrainSlopeMinDeg,
     terrainSlopeMaxDeg,
+    terrainSlopeFilter,
     slopeDisclaimerShown,
     recordingCheckShown,
     recordingBatteryReviewed,
@@ -621,6 +631,7 @@ function snapshot(s: SettingsState): Settings {
     terrainContourIntervalM,
     terrainSlopeMinDeg,
     terrainSlopeMaxDeg,
+    terrainSlopeFilter,
     slopeDisclaimerShown,
     recordingCheckShown,
     recordingBatteryReviewed,
@@ -716,6 +727,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // An object default: the ladder's typeof check would pass object junk.
       next.waypointIcons = sanitizeWaypointIconPrefs(next.waypointIcons);
       next.pointingLine = sanitizePointingLine(next.pointingLine);
+      // An object default (#723): the ladder's typeof check would pass object junk.
+      next.terrainSlopeFilter = sanitizeSlopeFilter(next.terrainSlopeFilter);
       // An object default now (#702): the ladder's typeof check would DROP a
       // pre-2.6.1 string ('metric' / 'imperial') and pass object junk.
       // Recover the raw value; nothing usable falls back to the device default.
