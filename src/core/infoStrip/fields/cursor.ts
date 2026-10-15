@@ -5,13 +5,12 @@
  * cursor showing ("—" in the editor).
  */
 import { distanceUnitLabel, formatDistance } from '@core/format';
-import { haversineMeters, initialBearingDeg } from '@core/geo/geomath';
-import { trueToMagnetic } from '@core/geo/wmm';
+import { haversineMeters } from '@core/geo/geomath';
 
 import { CURSOR_SUBJECT, cursorSubject } from '../cursor';
-import { bearingValue, formatDistanceIn, splitUnit, type DistanceUnit } from '../format';
+import { formatDistanceIn, splitUnit, type DistanceUnit } from '../format';
+import { bearingFromYou } from './bearing';
 import { defineField, REFERENCE_PARAM, type NorthReference } from './define';
-import { declinationHere } from './position';
 
 const CURSOR_DEPS = ['position', 'cursor'] as const;
 
@@ -33,10 +32,12 @@ export const CURSOR_BEARING = defineField<CursorBearingParams>({
   compute(data, params) {
     const c = data.cursor;
     if (c === null || data.position === null) return null;
-    const trueDeg = initialBearingDeg(data.position, c.point);
-    const decl = params.reference === 'magnetic' ? declinationHere(data) : null;
-    const deg = decl === null ? trueDeg : trueToMagnetic(trueDeg, decl);
-    return { glyph: 'explore', ...bearingValue(deg, decl !== null), subject: cursorSubject(c) };
+    // "—" with the cursor on you (inside your fix's error, or a few metres).
+    return {
+      glyph: 'explore',
+      ...bearingFromYou(data, data.position, c.point, params.reference),
+      subject: cursorSubject(c),
+    };
   },
   sample: { glyph: 'explore', value: '142°', unit: 'SE', subject: CURSOR_SUBJECT },
 });

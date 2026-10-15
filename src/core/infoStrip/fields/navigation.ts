@@ -9,11 +9,9 @@
  * straight-line estimate "≈" (owner Q2).
  */
 import { distanceUnitLabel, formatDistance } from '@core/format';
-import { haversineMeters, initialBearingDeg } from '@core/geo/geomath';
-import { trueToMagnetic } from '@core/geo/wmm';
+import { haversineMeters } from '@core/geo/geomath';
 
 import {
-  bearingValue,
   formatArrival,
   formatDistanceIn,
   formatHoursMinutes,
@@ -29,8 +27,8 @@ import type {
   StripValue,
   Target,
 } from '../types';
+import { bearingFromYou } from './bearing';
 import { defineField, REFERENCE_PARAM, TARGET_PARAM, type NorthReference } from './define';
-import { declinationHere } from './position';
 
 /** Below this moving speed there is no honest ETE, m/s (Q2). */
 export const ETE_MIN_SPEED_MPS = 0.5;
@@ -177,11 +175,11 @@ export const TARGET_BEARING = defineField<TargetBearingParams>({
   compute(data, params, ctx) {
     const t = targetOf(data, params.target, ctx);
     if (t === null || data.position === null) return null;
-    const trueDeg = initialBearingDeg(data.position, t.point);
-    // A fix is in hand, so the declination is too; narrowed rather than asserted.
-    const decl = params.reference === 'magnetic' ? declinationHere(data) : null;
-    const deg = decl === null ? trueDeg : trueToMagnetic(trueDeg, decl);
-    return to(t, { glyph: 'explore', ...bearingValue(deg, decl !== null) });
+    // "—" on the target itself (inside your fix's error, or a few metres).
+    return to(t, {
+      glyph: 'explore',
+      ...bearingFromYou(data, data.position, t.point, params.reference),
+    });
   },
   sample: { glyph: 'explore', value: '042°', unit: 'NE', subject: SAMPLE_SUBJECT },
 });
