@@ -99,11 +99,12 @@ namespace_id = "2702"
   period = 60
 
 # TURN credentials per client per minute (burst; the hourly cap is
-# TURN_PER_IP_PER_HOUR in the budget object).
+# TURN_PER_IP_PER_HOUR in the budget object). 15 covers a 12-phone team
+# behind one CGNAT IP all asking at once after a group restart.
 [[ratelimits]]
 name = "TURN_LIMITER"
 namespace_id = "2703"
 
   [ratelimits.simple]
-  limit = 5
+  limit = 15
   period = 60

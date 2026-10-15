@@ -106,7 +106,8 @@ file's value.
 
 Rate-limiting bindings (per Cloudflare location): 120 room connections a
 minute per client IP, 10 failed room entries a minute per client IP **and
-room**, 5 TURN credentials a minute per client IP.
+room**, 15 TURN credentials a minute per client IP (a 12-phone team on one
+carrier IP restarting at once).
 
 Per-IP limits are deliberately generous: mobile carriers put many phones
 behind one public IP (CGNAT), so a whole team on one carrier can share an IP.

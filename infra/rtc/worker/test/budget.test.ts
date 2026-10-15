@@ -4,6 +4,8 @@
  */
 import { Budget, type BudgetEnv, USAGE_FRESH_MS, USAGE_MAX_AGE_MS } from '../src/budget';
 import { BUDGET_ENV, fakeApi, strict, T0 } from './harness';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 function make(env: Partial<BudgetEnv> = {}, api = fakeApi()) {
   const clock = { now: T0 };
@@ -144,18 +146,47 @@ describe('CGNAT: a whole relayed team behind one carrier IP', () => {
     };
   }
 
+  /** The burst limit configured for TURN_LIMITER in wrangler.toml. */
+  const BURST = Number(
+    /name = "TURN_LIMITER"[\s\S]*?limit = (\d+)/.exec(
+      readFileSync(join(__dirname, '..', 'wrangler.toml'), 'utf8'),
+    )![1],
+  );
+
+  it('the configured burst is 15 per client per minute', () => {
+    expect(BURST).toBe(15);
+  });
+
+  it('group restart: 12 phones on one IP ask in the same minute and all get credentials', async () => {
+    const clock = { now: T0 };
+    const api = fakeApi();
+    const budget = new Budget(
+      {},
+      { ...BUDGET_ENV, TURN_PER_IP_PER_HOUR: undefined, TURN_LIMITER: perMinute(BURST, clock) },
+      { now: () => clock.now, fetch: api.fetchFn },
+    );
+    const results = [];
+    for (let p = 0; p < 12; p++) {
+      clock.now = T0 + p * 1000; // all within one minute
+      results.push(await budget.mint('carrier-ip'));
+    }
+    expect(results.every((r) => r.ok)).toBe(true);
+    // The burst still bounds one client: the 16th in that minute is refused.
+    for (let p = 12; p < 15; p++) expect((await budget.mint('carrier-ip')).ok).toBe(true);
+    expect(await budget.mint('carrier-ip')).toEqual({ ok: false, e: 'rate' });
+  });
+
   it('12 phones on one IP, relayed for an hour (first credential + renewal every 15 min), all served', async () => {
     const clock = { now: T0 };
     const api = fakeApi();
     const budget = new Budget(
       {},
-      { ...BUDGET_ENV, TURN_PER_IP_PER_HOUR: undefined, TURN_LIMITER: perMinute(5, clock) },
+      { ...BUDGET_ENV, TURN_PER_IP_PER_HOUR: undefined, TURN_LIMITER: perMinute(BURST, clock) },
       { now: () => clock.now, fetch: api.fetchFn },
     );
     const refused: string[] = [];
-    // Phones come online over the first few minutes (5 a minute at most get
-    // through the burst binding; a refused phone retries a minute later).
-    const due = Array.from({ length: 12 }, (_, i) => T0 + Math.floor(i / 5) * 60_000);
+    // All phones start together (a refused phone would retry a minute later).
+    const due = Array.from({ length: 12 }, () => T0);
     for (let t = T0; t < T0 + 3_600_000; t += 60_000) {
       clock.now = t;
       for (let p = 0; p < 12; p++) {
