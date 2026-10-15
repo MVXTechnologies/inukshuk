@@ -3060,10 +3060,12 @@ export function MapScreen() {
                 zoom: 14,
                 ...(initialCenter ? { center: initialCenter } : {}),
               }}
-              // "Rotate map with heading" setting: the bearing follows OUR
-              // filtered heading at display rate, owned by HeadingCamera so a
-              // heading frame never re-renders this screen (see
-              // useHeadingCamera for why every frame and no native ease).
+              // "Rotate map with heading" setting, owned by HeadingCamera so a
+              // heading frame never re-renders this screen. While following,
+              // it switches the follow to MapLibre's native compass mode (a
+              // bearing sent from JS would END the follow on Android); else
+              // OUR heading turns the camera at display rate. See
+              // @core/map/headingCameraMode.
               // Drawing mode (#683) turns the map with two fingers: no heading.
               followHeading={rotateMapWithHeading && !teamDrawing}
               trackUserLocation={followUser && !externalActive ? 'default' : undefined}

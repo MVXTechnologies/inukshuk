@@ -7,8 +7,9 @@ const MIN_CAMERA_DELTA_DEG = 0.02;
 /**
  * Camera bearing for the "Rotate map with compass" setting, at display rate.
  *
- * Returns the display-rate heading ([0, 360)) while `active`, and `undefined`
- * otherwise: pass it to MapLibre's `<Camera bearing={…} duration={0} />`
+ * Returns the display-rate heading ([0, 360)) while `active`; once inactive,
+ * the last one it returned (undefined if never active): pass it to
+ * MapLibre's `<Camera bearing={…} duration={0} />`
  * (see `HeadingCamera`, which owns this hook so a heading frame re-renders
  * the camera alone, never MapScreen).
  *
@@ -34,7 +35,10 @@ export function useHeadingCamera(active: boolean): number | undefined {
       minDeltaDeg: MIN_CAMERA_DELTA_DEG,
     });
   }, [active]);
-  // While off, mask any state left over from a previous active period. On
-  // re-enable the last heading shows for a frame, then the first frame corrects it.
-  return active ? bearing : undefined;
+  // Sticky: while off, the last bearing stays what the camera was given.
+  // Dropping it would change the native camera's `stop` prop, and applying a
+  // changed stop is itself a camera move — on Android one that ends a
+  // follow (see @core/map/headingCameraMode). On re-enable the first frame
+  // replaces it.
+  return bearing;
 }
