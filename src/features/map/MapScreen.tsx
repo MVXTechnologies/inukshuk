@@ -68,7 +68,15 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useCoordinateFormatter } from '@state/useCoordinateFormatter';
 import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
 import { createGesturePause } from '@core/support/gesturePause';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { AppState, Linking, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -258,11 +266,8 @@ import {
   VECTOR_CONTOURS_SOURCE,
 } from './mapStyle';
 import { useNativeTerrain, useNativeTerrainScene } from './hooks/useNativeTerrain';
+import { useViewToggle } from './hooks/useViewToggle';
 import type { DrapeStyleInput } from '@core/terrain3d/drapeStyle';
-import { is3dPitch, toggleView, VIEW_TOGGLE_MS } from '@core/terrain3d/viewToggle';
-import { TERRAIN_MAX_PITCH_DEG } from '@core/terrain3d/morph';
-import { MAP_MAX_PITCH_DEG } from '@core/map/tiltRelief';
-import { nativeTerrain } from '@lib/nativeTerrain';
 
 import { sceneLines, type TerrainLineSpec } from '@core/terrain3d/sceneInput';
 import { useTerrainQa } from './hooks/useTerrainQa';
@@ -1118,25 +1123,22 @@ export function MapScreen() {
   );
 
   // The 3D/2D button (round 3, beta only): flattens a tilted view and
-  // remembers the tilt; from 2D goes back to it. Natively animated past 60°.
-  const [viewPitch, setViewPitch] = useState(0);
-  const remembered3dRef = useRef<number | null>(null);
-  const onToggleView = useCallback(() => {
-    const module = nativeTerrain();
-    const tag = terrain3d.viewTag;
-    const maxPitch = terrain3d.active ? TERRAIN_MAX_PITCH_DEG : MAP_MAX_PITCH_DEG;
-    const t = toggleView(viewPitch, remembered3dRef.current, maxPitch);
-    if (t.remember !== null) remembered3dRef.current = t.remember;
-    if (module?.animatePitch !== undefined && tag !== null) {
-      void module.animatePitch(tag, t.pitch, VIEW_TOGGLE_MS);
-    } else {
-      void cameraRef.current?.setStop({
-        pitch: Math.min(t.pitch, MAP_MAX_PITCH_DEG),
-        duration: VIEW_TOGGLE_MS,
-        easing: 'ease',
-      });
-    }
-  }, [viewPitch, terrain3d.viewTag, terrain3d.active]);
+  // remembers the tilt; from 2D goes back to it. Natively animated past 60°,
+  // which reports no camera settle: the hook hands the screen one (#720).
+  // `onRegionSettled` is declared further down: reached through a ref.
+  const viewToggleSettledRef = useRef<((view: RegionPayload) => void) | null>(null);
+  const readViewToggleCamera = useCallback(() => readRegion(mapRef.current), []);
+  const onViewToggleSettled = useCallback(
+    (view: RegionPayload) => viewToggleSettledRef.current?.(view),
+    [],
+  );
+  const viewToggle = useViewToggle({
+    cameraRef,
+    viewTag: terrain3d.viewTag,
+    terrainActive: terrain3d.active,
+    readView: readViewToggleCamera,
+    onSettled: onViewToggleSettled,
+  });
 
   // Plain messages and the EDIT / UNDO bar share one slot (useMapSnackbars).
   const mapSnacks = useMapSnackbars();
@@ -2863,7 +2865,7 @@ export function MapScreen() {
     onSettleBearing(view.bearing);
     // Settled pitch → the tilted-map relief pass (#480), and the 3D/2D button.
     tilt.onSettledPitch(view.pitch);
-    setViewPitch(Math.round(view.pitch));
+    viewToggle.onSettledPitch(view.pitch);
     // Settled view → look for contour tiles that failed to load.
     if (view.bounds) onContourSettled({ ...view, bounds: view.bounds });
     // Settled centre → mapStore (wave B): resolves the effective
@@ -2877,6 +2879,9 @@ export function MapScreen() {
     if (windEnabled) onWindRegionDidChange(view);
   };
   const onRegionSettle = useRegionSettle(onRegionSettled);
+  useLayoutEffect(() => {
+    viewToggleSettledRef.current = onRegionSettled;
+  });
   return (
     <MapAreaBottomContext.Provider value={mapAreaBottom}>
       <View
@@ -3683,7 +3688,7 @@ export function MapScreen() {
           <MapControlsRail
             top={insets.top + 8}
             viewToggle={
-              betaTerrain3d ? { is3d: is3dPitch(viewPitch), onPress: onToggleView } : undefined
+              betaTerrain3d ? { is3d: viewToggle.is3d, onPress: viewToggle.onPress } : undefined
             }
             following={followUser}
             onStopFollowing={() => setFollowUser(false)}
