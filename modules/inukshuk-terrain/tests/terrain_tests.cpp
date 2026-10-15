@@ -6,6 +6,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <deque>
+#include <algorithm>
 #include <fstream>
 #include <map>
 #include <set>
@@ -1137,6 +1139,276 @@ static void testEngine() {
 
 }
 
+// ---- drape scheduling (#720) ------------------------------------------------------------
+static void testDrapeOrderCore() {
+  g_cases++;
+  // Footprint: a tile under the screen centre contains it; one at the eye reaches the bottom.
+  const double lng = 7.7491, lat = 46.0207, zoom = 13, w = 412, h = 892;
+  const Mat4 P = refProjection(lng, lat, zoom, 60, 0, w, h);
+  const int n = 1 << 13;
+  const TileId centre{13, static_cast<int>(lngToMercX(lng) * n), static_cast<int>(latToMercY(lat) * n), 0};
+  auto r = footprintOnScreen(P, tileBoundsPx(centre, zoom), w, h);
+  CHECK(r.has_value());
+  if (r) CHECK_NEAR(distanceToRect(w / 2, h / 2, *r), 0, 1e-9);
+  // Tiles further north (the view looks north at bearing 0) lie higher on screen.
+  const TileId north{13, centre.x, centre.y - 3, 0};
+  auto rn = footprintOnScreen(P, tileBoundsPx(north, zoom), w, h);
+  CHECK(rn.has_value());
+  if (r && rn) CHECK(rn->maxY < r->maxY);
+  // A tile far behind the eye is not on screen.
+  const TileId behind{13, centre.x, centre.y + 400, 0};
+  CHECK(!footprintOnScreen(P, tileBoundsPx(behind, zoom), w, h).has_value());
+  CHECK_NEAR(distanceToRect(0, 0, ScreenRect{3, 4, 10, 10}), 5, 1e-12);
+  CHECK(rectsIntersect(ScreenRect{0, 0, 10, 10}, ScreenRect{5, 5, 20, 20}));
+  CHECK(!rectsIntersect(ScreenRect{0, 0, 10, 10}, ScreenRect{11, 0, 20, 10}));
+
+  // Order: own drapes by screen distance from the focus (then eye distance),
+  // coarse covers of the central area after its own drapes, elsewhere ahead of
+  // their tile; the ring last; duplicates keep their first place.
+  const DemId a{14, 1, 1}, b{14, 2, 2}, c{14, 3, 3}, d{14, 4, 4}, ca{11, 0, 0}, cb{11, 1, 1}, ring{8, 0, 0};
+  const auto order = orderDrapeRequests(
+      {
+          {ring, DrapeKind::Ring, 0, 0},
+          {d, DrapeKind::Own, 0.9, 10},
+          {cb, DrapeKind::Coarse, 0.9, 10},
+          {c, DrapeKind::Own, 0.1, 50},
+          {ca, DrapeKind::Coarse, 0.0, 5},
+          {a, DrapeKind::Own, 0.0, 5},
+          {b, DrapeKind::Own, 0.0, 3},
+          {a, DrapeKind::Own, 0.7, 1},  // a duplicate further out
+      },
+      0.5);
+  const std::vector<DemId> expected{b, a, c, ca, cb, d, ring};
+  CHECK(order.size() == expected.size());
+  for (size_t i = 0; i < std::min(order.size(), expected.size()); i++) CHECK(order[i] == expected[i]);
+  // coarseAfter 0: every coarse cover just ahead of its first tile (the pre-#720 pairing).
+  const auto paired = orderDrapeRequests({{a, DrapeKind::Own, 0, 5}, {ca, DrapeKind::Coarse, 0, 5}}, 0);
+  CHECK(paired.size() == 2 && paired[0] == ca && paired[1] == a);
+  // Off-screen (infinite focus) sorts after everything on screen, before the ring.
+  const auto off = orderDrapeRequests(
+      {{ring, DrapeKind::Ring, 0, 0}, {a, DrapeKind::Own, std::numeric_limits<double>::infinity(), 1},
+       {b, DrapeKind::Own, 2.0, 9}},
+      0.5);
+  CHECK(off.size() == 3 && off[0] == b && off[1] == a && off[2] == ring);
+}
+
+struct DrapeSimResult {
+  double pressToActiveMs = -1;
+  double centreSharpMs = -1;  // from the press
+  double allSharpMs = -1;     // from the press
+  int rendersToCentre = 0;
+  int rendersToAll = 0;
+  int cancelled = 0;
+};
+
+/**
+ * The 3D button on a never-visited place, with a model of the platform's
+ * snapshot pump (DrapeRenderer / pumpDrapes): `slots` snapshotters, each 2×2
+ * block taking `renderMs`; DEMs arrive at once (only the drape is measured).
+ * The pitch animates 0 → 60° over 600 ms (AccelerateDecelerate) like
+ * TerrainController.animatePitch. Times are simulated, so the result is exact.
+ */
+static DrapeSimResult simulateDrape3dPress(bool fifo, int slots, double renderMs, double panAtMs = -1) {
+  struct Job {
+    int z, x, y;
+    uint32_t gen;
+  };
+  std::vector<DemId> demReq, imgReq;
+  Engine eng([&](int z, int x, int y) { demReq.push_back({z, x, y}); },
+             [&](int z, int x, int y) { imgReq.push_back({z, x, y}); }, [] {});
+  LookParams lp;
+  if (fifo) lp.debugFlags = Engine::kDebugDrapeFifo;
+  eng.setLook(lp);
+  eng.setDrape(true, 160);
+  const double lng = 7.7491, lat = 46.0207, zoom = 13.5, w = 412, h = 892, bearing = 20;
+  auto dem = [](const DemId& d) {
+    std::vector<float> hs(kDemSize * kDemSize);
+    for (int j = 0; j < kDemSize; j++)
+      for (int i = 0; i < kDemSize; i++) {
+        const double mx = (d.x + (i + 0.5) / kDemSize) / std::pow(2.0, d.z);
+        const double my = (d.y + (j + 0.5) / kDemSize) / std::pow(2.0, d.z);
+        hs[j * kDemSize + i] = static_cast<float>(1500 + 1200 * std::sin(mx * 4000) * std::cos(my * 3000));
+      }
+    return hs;
+  };
+  std::vector<uint8_t> px(16 * 16 * 4, 120);
+  int levels = 0;
+  const auto chain = buildMipChain(px.data(), 16, levels);
+  std::deque<Job> queue;
+  std::vector<std::pair<double, Job>> running;  // finish time, block's job
+  DrapeSimResult res;
+  int renders = 0;
+  const double press = 1000, animMs = 600, target = 60;
+  double panX = 0;
+  if (!fifo) eng.armActivation();  // the button arms the engine (pre-#720: nothing did)
+  for (double t = press; t < press + 30000; t += 16) {
+    // Camera: the press animation, then (optionally) a pan of about a screen width east.
+    const double a = std::clamp((t - press) / animMs, 0.0, 1.0);
+    const double pitch = target * (std::cos((a + 1) * kPi) / 2 + 0.5);
+    if (panAtMs >= 0 && t >= press + panAtMs) panX = std::min(1.0, (t - press - panAtMs) / 400) * 0.03;
+    FrameInput in;
+    in.P = refProjection(lng + panX, lat, zoom, pitch, bearing, w, h);
+    in.width = w;
+    in.height = h;
+    in.zoom = zoom;
+    in.lat = lat;
+    in.lng = lng + panX;
+    in.bearingDeg = bearing;
+    in.pitchDeg = pitch;
+    in.timeMs = t;
+    // Finished snapshots deliver their 2×2 block.
+    for (size_t i = 0; i < running.size();) {
+      if (running[i].first > t) {
+        i++;
+        continue;
+      }
+      const Job j = running[i].second;
+      for (int dy = 0; dy < 2; dy++)
+        for (int dx = 0; dx < 2; dx++)
+          eng.onImageryLevels(j.z, j.x + dx, j.y + dy, chain, 16, levels, j.gen);
+      running.erase(running.begin() + static_cast<long>(i));
+    }
+    for (const auto& d : demReq) eng.onDemHeights(d.z, d.x, d.y, dem(d));
+    demReq.clear();
+    const FrameOutput out = eng.frame(in);
+    if (out.active && res.pressToActiveMs < 0) res.pressToActiveMs = t - press;
+    if (out.drapeCentreSharpMs >= 0) {
+      res.centreSharpMs = t - press;
+      res.rendersToCentre = renders;
+    }
+    if (out.drapeAllSharpMs >= 0) {
+      res.allSharpMs = t - press;
+      res.rendersToAll = renders;
+      if (panAtMs < 0) break;
+    }
+    eng.drainBakes(50);
+    // The platform pump: requests queue up; idle snapshotters take the best job.
+    for (const auto& d : imgReq) queue.push_back({d.z, d.x, d.y, eng.imageryGeneration()});
+    imgReq.clear();
+    while (static_cast<int>(running.size()) < slots && !queue.empty()) {
+      size_t best = 0;
+      if (!fifo) {
+        int bestRank = -1;
+        for (size_t i = 0; i < queue.size();) {
+          const int r = eng.drapeRank(queue[i].z, queue[i].x, queue[i].y);
+          if (r < 0) {
+            eng.onImageryCancelled(queue[i].z, queue[i].x, queue[i].y, queue[i].gen);
+            queue.erase(queue.begin() + static_cast<long>(i));
+            continue;
+          }
+          if (bestRank < 0 || r < bestRank) {
+            bestRank = r;
+            best = i;
+          }
+          i++;
+        }
+        if (queue.empty()) break;
+      }
+      const Job j = queue[best];
+      queue.erase(queue.begin() + static_cast<long>(best));
+      const int x0 = j.x / 2 * 2, y0 = j.y / 2 * 2;
+      for (size_t i = 0; i < queue.size();) {
+        if (queue[i].z == j.z && queue[i].x / 2 * 2 == x0 && queue[i].y / 2 * 2 == y0)
+          queue.erase(queue.begin() + static_cast<long>(i));
+        else
+          i++;
+      }
+      running.push_back({t + renderMs, {j.z, x0, y0, j.gen}});
+      renders++;
+    }
+  }
+  res.cancelled = eng.stats().drapeCancelled;
+  return res;
+}
+
+static void testDrapeSchedule() {
+  g_cases++;
+  // The phone measurement behind #720: ~0.8 s per 2×2 snapshot, three in parallel.
+  const DrapeSimResult before = simulateDrape3dPress(true, 3, 800);
+  const DrapeSimResult after = simulateDrape3dPress(false, 3, 800);
+  std::printf(
+      "drape sim (3 × 800 ms): before centre %.0f ms (%d renders), all %.0f ms (%d) | "
+      "after centre %.0f ms (%d renders), all %.0f ms (%d), %d dropped\n",
+      before.centreSharpMs, before.rendersToCentre, before.allSharpMs, before.rendersToAll,
+      after.centreSharpMs, after.rendersToCentre, after.allSharpMs, after.rendersToAll, after.cancelled);
+  // Simulated time and counted renders: exact, not wall-clock.
+  CHECK(before.centreSharpMs > 0 && before.allSharpMs > 0);
+  CHECK(after.centreSharpMs > 0 && after.allSharpMs > 0);
+  CHECK(after.centreSharpMs <= 2000);  // pre-#720: 3488 ms
+  CHECK(after.rendersToCentre < before.rendersToCentre);
+  CHECK(after.allSharpMs < before.allSharpMs);
+  CHECK(after.rendersToAll <= before.rendersToAll);
+  CHECK(before.cancelled == 0);  // first come, first served never drops
+  const DrapeSimResult emu = simulateDrape3dPress(false, 3, 350);
+  const DrapeSimResult emuBefore = simulateDrape3dPress(true, 3, 350);
+  std::printf("drape sim (3 × 350 ms): before centre %.0f / all %.0f ms | after centre %.0f / all %.0f ms\n",
+              emuBefore.centreSharpMs, emuBefore.allSharpMs, emu.centreSharpMs, emu.allSharpMs);
+  CHECK(emu.centreSharpMs < emuBefore.centreSharpMs);
+  // A pan while the drapes stream in: what left the view is dropped before it renders.
+  const DrapeSimResult pan = simulateDrape3dPress(false, 3, 800, 1500);
+  std::printf("drape sim pan at 1.5 s: %d queued renders dropped\n", pan.cancelled);
+  CHECK(pan.cancelled > 0);
+}
+
+static void testDrapeArming() {
+  g_cases++;
+  std::vector<DemId> img;
+  Engine eng(nullptr, [&](int z, int x, int y) { img.push_back({z, x, y}); }, [] {});
+  eng.setDrape(true, 64);
+  const double lng = 7.7491, lat = 46.0207, zoom = 13.5, w = 412, h = 892;
+  FrameInput in;
+  in.P = refProjection(lng, lat, zoom, 0, 0, w, h);
+  in.width = w;
+  in.height = h;
+  in.zoom = zoom;
+  in.lat = lat;
+  in.lng = lng;
+  in.pitchDeg = 0;
+  in.timeMs = 1000;
+  // 2D, not armed: no work.
+  FrameOutput out = eng.frame(in);
+  CHECK(!out.active && img.empty());
+  // Armed by the 3D button: the drapes are asked for at once, centre first; nothing is drawn.
+  eng.armActivation();
+  in.timeMs += 16;
+  out = eng.frame(in);
+  CHECK(!out.active && out.tiles.empty() && out.labels.empty());
+  CHECK(!img.empty());
+  if (!img.empty()) {
+    CHECK(eng.drapeRank(img.front().z, img.front().x, img.front().y) == 0);
+    // The first is the drape under the screen centre.
+    const int n = 1 << img.front().z;
+    CHECK(std::abs(img.front().x - static_cast<int>(lngToMercX(lng) * n)) <= 1);
+    CHECK(std::abs(img.front().y - static_cast<int>(latToMercY(lat) * n)) <= 1);
+  }
+  // A drape arriving while armed waits: no upload before the ramp.
+  std::vector<uint8_t> px(16 * 16 * 4, 90);
+  int levels = 0;
+  if (!img.empty())
+    eng.onImageryLevels(img.front().z, img.front().x, img.front().y, buildMipChain(px.data(), 16, levels), 16,
+                        levels, eng.imageryGeneration());
+  in.timeMs += 16;
+  out = eng.frame(in);
+  CHECK(out.imageryUploads.empty());
+  // The tilt reaches the ramp: it uploads and draws.
+  FrameInput tilted = in;
+  tilted.pitchDeg = 40;
+  tilted.P = refProjection(lng, lat, zoom, 40, 0, w, h);
+  tilted.timeMs += 16;
+  out = eng.frame(tilted);
+  CHECK(out.active && !out.imageryUploads.empty());
+  // Back to 2D past the arming window: nothing wants a drape (the platform drops its queue).
+  const size_t asked = img.size();
+  CHECK(asked > 1);
+  in.timeMs = tilted.timeMs + Engine::kArmMs + 16;
+  out = eng.frame(in);
+  CHECK(!out.active);
+  if (asked > 1) CHECK(eng.drapeRank(img[1].z, img[1].x, img[1].y) == -1);
+  const auto before = eng.stats().drapeCancelled;
+  if (asked > 1) eng.onImageryCancelled(img[1].z, img[1].x, img[1].y, eng.imageryGeneration());
+  CHECK(eng.stats().drapeCancelled == before + 1);
+}
+
 int main(int argc, char** argv) {
   const std::string path = argc > 1 ? argv[1] : "fixtures/parity.json";
   std::ifstream f(path);
@@ -1153,6 +1425,9 @@ int main(int argc, char** argv) {
   testScene(fx);
   testPng();
   testEngine();
+  testDrapeOrderCore();
+  testDrapeSchedule();
+  testDrapeArming();
   std::printf("terrain C++ tests: %d cases, %d checks, %d failures\n", g_cases, g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;
 }

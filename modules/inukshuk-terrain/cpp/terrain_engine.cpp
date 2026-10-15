@@ -213,6 +213,7 @@ void Engine::onImageryLevels(int z, int x, int y, std::vector<uint8_t> chain, in
     const uint64_t k = demKey64({z, x, y});
     const bool requested = imgPending_.erase(k) > 0;
     imgFailedAt_.erase(k);
+    imgRank_.erase(k);
     auto& e = imagery_[k];
     e.pending = std::make_shared<const std::vector<uint8_t>>(std::move(chain));
     e.size = size;
@@ -238,6 +239,7 @@ void Engine::resetImageryLocked(int slots) {
   imagery_.clear();
   imgPending_.clear();
   imgFailedAt_.clear();
+  imgRank_.clear();
   imgSlotCount_ = std::max(1, slots);
   freeImgSlots_.clear();
   for (int i = imgSlotCount_ - 1; i >= 0; i--) freeImgSlots_.push_back(i);
@@ -267,6 +269,19 @@ void Engine::onImageryFailed(int z, int x, int y) {
   const uint64_t k = demKey64({z, x, y});
   imgPending_.erase(k);
   imgFailedAt_[k] = clockMs_;
+  imgRank_.erase(k);
+}
+
+int Engine::drapeRank(int z, int x, int y) const {
+  std::lock_guard<std::mutex> lock(imgMutex_);
+  auto it = imgRank_.find(demKey64({z, x, y}));
+  return it == imgRank_.end() ? -1 : it->second;
+}
+
+void Engine::onImageryCancelled(int z, int x, int y, uint32_t generation) {
+  std::lock_guard<std::mutex> lock(imgMutex_);
+  if (generation != imgGeneration_.load()) return;
+  if (imgPending_.erase(demKey64({z, x, y})) > 0) imgCancelled_++;
 }
 
 // ---- scene inputs -------------------------------------------------------------------
@@ -408,6 +423,10 @@ EngineStats Engine::stats() const {
   }
   s.requested = requested_.load();
   s.failed = failed_.load();
+  {
+    std::lock_guard<std::mutex> lock(imgMutex_);
+    s.drapeCancelled = imgCancelled_;
+  }
   return s;
 }
 
@@ -687,11 +706,31 @@ FrameOutput Engine::frame(const FrameInput& in) {
 
   out.look = look();
   out.ramp = static_cast<float>(pitchRamp(in.pitchDeg));
-  if (out.ramp <= 0 || in.width <= 0 || in.height <= 0) {
+  const bool fifoDrapes = (out.look.debugFlags & kDebugDrapeFifo) != 0;
+  // #720: the 3D button arms the engine at the press, so the terrain and its
+  // drapes are asked for while the tilt is still below the ramp (~0.3 s of
+  // the 0.6 s animation); nothing is drawn until the ramp starts.
+  if (armRequested_.exchange(false) && !fifoDrapes) armUntilMs_ = now + kArmMs;
+  const bool drawing = out.ramp > 0;
+  if (drawing) armUntilMs_ = -1;
+  const bool armed = !drawing && now < armUntilMs_;
+  if ((!drawing && !armed) || in.width <= 0 || in.height <= 0) {
     stats_.tilesDrawn = 0;
+    if (wasActive_) {
+      // Back to 2D: nothing wants a drape now — the platform drops what it has queued.
+      std::lock_guard<std::mutex> lock(imgMutex_);
+      if (!fifoDrapes) imgRank_.clear();
+    }
+    wasActive_ = false;
     return out;
   }
   out.active = true;
+  if (!wasActive_) {
+    wasActive_ = true;
+    activeSinceMs_ = now;
+    centreSharpSeen_ = allSharpSeen_ = false;
+    stats_.drapeCentreSharpMs = stats_.drapeAllSharpMs = -1;
+  }
   out.width = static_cast<float>(in.width);
   out.height = static_cast<float>(in.height);
   const double exag = out.look.exaggeration;
@@ -792,6 +831,11 @@ FrameOutput Engine::frame(const FrameInput& in) {
     return std::nullopt;
   };
   const Selection sel = selectTiles(cam, opts);
+  // Where each selected tile lies on screen (#720: drape order and milestones).
+  std::vector<std::optional<ScreenRect>> footprints;
+  footprints.reserve(sel.tiles.size());
+  for (const auto& s : sel.tiles)
+    footprints.push_back(footprintOnScreen(in.P, tileBoundsPx(s.tile, in.zoom), in.width, in.height));
   // The 360° base ring: pinned coarse DEMs, meshes and drapes in every
   // direction, so a tile that turns into view always has an ancestor
   // surface and texture (never flat, never white) — and prefetch on rotation.
@@ -999,6 +1043,8 @@ FrameOutput Engine::frame(const FrameInput& in) {
     std::vector<uint64_t> ready;
     for (auto& [key, e] : imagery_)
       if (e.pending && e.wanted) ready.push_back(key);
+    // Armed before the tilt shows the terrain (#720): nothing is drawn, nothing uploaded yet.
+    if (!drawing) ready.clear();
     for (uint64_t key : ready) {
       if (uploads >= kImageryUploadsPerFrame) break;
       auto found = imagery_.find(key);
@@ -1030,6 +1076,34 @@ FrameOutput Engine::frame(const FrameInput& in) {
       e.pending.reset();
       e.lastFrame = frameNo_;
       uploads++;
+    }
+    // #720 milestones: every tile over the screen's central third, then every
+    // tile in view, samples its own drape (uploaded this frame or before).
+    if (drawing && (!centreSharpSeen_ || !allSharpSeen_)) {
+      const ScreenRect centre{in.width / 3, in.height / 3, in.width * 2 / 3, in.height * 2 / 3};
+      bool centreSharp = true, allSharp = true;
+      int centreTiles = 0;
+      for (size_t i = 0; i < sel.tiles.size() && (centreSharp || allSharp); i++) {
+        if (!footprints[i]) continue;
+        const TileId& t = sel.tiles[i].tile;
+        const int zOwn = std::min({t.z, kImageryMaxZoom, imageryCap});
+        auto it = imagery_.find(demKey64(demWindowAt(t, zOwn).dem));
+        const bool sharp = it != imagery_.end() && it->second.slot >= 0;
+        const bool inCentre = rectsIntersect(*footprints[i], centre);
+        centreTiles += inCentre ? 1 : 0;
+        if (!sharp) {
+          allSharp = false;
+          if (inCentre) centreSharp = false;
+        }
+      }
+      if (centreTiles > 0 && centreSharp && !centreSharpSeen_) {
+        centreSharpSeen_ = true;
+        out.drapeCentreSharpMs = stats_.drapeCentreSharpMs = now - activeSinceMs_;
+      }
+      if (!sel.tiles.empty() && allSharp && !allSharpSeen_) {
+        allSharpSeen_ = true;
+        out.drapeAllSharpMs = stats_.drapeAllSharpMs = now - activeSinceMs_;
+      }
     }
   }
 
@@ -1153,10 +1227,58 @@ FrameOutput Engine::frame(const FrameInput& in) {
       if (demRequest_) demRequest_(d.z, d.x, d.y);
     }
   }
-  // Imagery requests: a coarse ancestor first, then the tile's own, nearest first.
+  // Imagery requests.
   if (imageryMode && imageryRequest_) {
     std::vector<DemId> want;
-    {
+    if (!(out.look.debugFlags & kDebugDrapeFifo)) {
+      // #720: centre-first. Every wanted drape takes its place in one order the
+      // platform renders by (drapeRank), re-ranked each frame; a queued render
+      // that no tile wants any more is dropped before it starts.
+      std::vector<DrapeCandidate> cands;
+      cands.reserve(sel.tiles.size() * 2 + ring.size());
+      const double half = std::max(1.0, in.height * 0.5);
+      for (size_t i = 0; i < sel.tiles.size(); i++) {
+        const SelectedTile& s = sel.tiles[i];
+        const double focus = footprints[i]
+                                 ? distanceToRect(in.width * 0.5, in.height * 0.5, *footprints[i]) / half
+                                 : std::numeric_limits<double>::infinity();
+        const int zOwn = std::min({s.tile.z, kImageryMaxZoom, imageryCap});
+        cands.push_back({demWindowAt(s.tile, std::max(0, zOwn - 3)).dem, DrapeKind::Coarse, focus, s.distance});
+        cands.push_back({demWindowAt(s.tile, zOwn).dem, DrapeKind::Own, focus, s.distance});
+      }
+      for (const auto& t : ring) {
+        const int zOwn = std::min({t.z, kImageryMaxZoom, imageryCap});
+        cands.push_back({demWindowAt(t, zOwn).dem, DrapeKind::Ring, 0, 0});
+      }
+      const std::vector<DemId> order = orderDrapeRequests(std::move(cands), kCoarseAfterFocus);
+      std::lock_guard<std::mutex> lock(imgMutex_);
+      // Pending renders missing from the order are being dropped: they hold no room.
+      int room = kMaxImageryInFlight;
+      for (const auto& id : order) room -= imgPending_.count(demKey64(id)) > 0 ? 1 : 0;
+      imgRank_.clear();
+      int rank = 0;
+      for (const auto& id : order) {
+        const uint64_t k = demKey64(id);
+        auto have = imagery_.find(k);
+        if (have != imagery_.end()) {
+          have->second.wanted = true;  // a block sibling that arrived earlier: upload it
+          continue;
+        }
+        if (imgPending_.count(k)) {
+          imgRank_[k] = rank++;
+          continue;
+        }
+        if (room <= 0 || static_cast<int>(want.size()) >= kRequestsPerFrame) continue;
+        auto f = imgFailedAt_.find(k);
+        if (f != imgFailedAt_.end() && now - f->second < kRetryMs) continue;
+        imgPending_.insert(k);
+        imgRank_[k] = rank++;
+        want.push_back(id);
+        room--;
+      }
+    } else {
+      // QA A/B (kDebugDrapeFifo, pre-#720): a coarse ancestor first, then the
+      // tile's own, nearest the eye first; rendered first come, first served.
       std::lock_guard<std::mutex> lock(imgMutex_);
       int room = kMaxInFlight - static_cast<int>(imgPending_.size());
       std::unordered_set<uint64_t> seen;
@@ -1183,6 +1305,7 @@ FrameOutput Engine::frame(const FrameInput& in) {
           auto f = imgFailedAt_.find(k);
           if (f != imgFailedAt_.end() && now - f->second < kRetryMs) continue;
           imgPending_.insert(k);
+          imgRank_[k] = imgSequence_++;
           want.push_back(id);
           room--;
           if (room <= 0 || static_cast<int>(want.size()) >= kRequestsPerFrame) break;
@@ -1190,6 +1313,14 @@ FrameOutput Engine::frame(const FrameInput& in) {
       }
     }
     for (const auto& d : want) imageryRequest_(d.z, d.x, d.y);
+  }
+  if (!drawing) {
+    // Armed (#720): the requests are out; the 2D map still shows.
+    FrameOutput idle;
+    idle.look = out.look;
+    stats_.tilesDrawn = 0;
+    stats_.lastFrameCpuMs = nowCpuMs() - cpuStart;
+    return idle;
   }
 
   // Sky rays and visibility.

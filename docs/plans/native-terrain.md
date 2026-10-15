@@ -77,6 +77,23 @@ Shipping as a beta (2026-10-04):
   (height atlas rows of 2304 texels, two per tile), the same pin footprint
   filter and compact plates.
 
+Drape order (#720, 2026-10-15): on a never-visited place the drapes stream
+in at ~0.8 s per 2×2 snapshot on a phone, and they used to render first come,
+first served (nearest the eye, a coarse ancestor before each tile, never
+dropped): the centre of the screen was sharp after ~3.5 s. Now the engine
+ranks every wanted drape each frame (`orderDrapeRequests`: own drapes by
+screen distance from the centre, then eye distance; coarse covers of the
+central area after its own drapes; the base ring last) and the platform
+pumps render the best-ranked queued block, dropping what no tile wants any
+more (`drapeRank` −1 → `onImageryCancelled`). The 3D button arms the engine
+at the press (`armActivation`), so the requests go out ~0.3 s before the
+tilt reaches the ramp. Final quality is unchanged: same renders, new order.
+The engine logs `drape sharp centre|all <ms>` (from the press) and the QA
+look flags `64` (the old order) and `128` (six snapshotters) A/B it.
+Measured on the arm64 emulator (release, cold caches, 5 runs each, p50/max
+from the press): centre 7.5/9.6 s → 4.0/4.6 s, everything 16.0/18.0 s →
+14.8/17.5 s; with six snapshotters 2.7/3.9 s and 10.9/13.8 s.
+
 Open: pin density vs Outmap, contour legibility at very steep slopes,
 drape throughput on low-end GPUs (~350 ms per snapshot on the emulator).
 

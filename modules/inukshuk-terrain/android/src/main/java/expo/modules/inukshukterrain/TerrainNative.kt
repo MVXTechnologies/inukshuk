@@ -55,6 +55,15 @@ object TerrainNative {
     handle: Long, z: Int, x: Int, y: Int, rgba: ByteArray?, size: Int, generation: Int,
   )
 
+  /** #720: the drape's place in the engine's render order (0 = next), −1 = no tile wants it now. */
+  @JvmStatic external fun nativeDrapeRank(handle: Long, z: Int, x: Int, y: Int): Int
+
+  /** #720: a queued drape render dropped before it started (it may be asked for again). */
+  @JvmStatic external fun nativeOnDrapeCancelled(handle: Long, z: Int, x: Int, y: Int, generation: Int)
+
+  /** #720: the 3D button was pressed; the engine asks for the terrain before the tilt shows it. */
+  @JvmStatic external fun nativeArmActivation(handle: Long)
+
   /** UI bands (logical px) the pins stay clear of. */
   @JvmStatic external fun nativeSetLabelInsets(handle: Long, top: Double, bottom: Double)
 

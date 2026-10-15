@@ -23,7 +23,9 @@
 
 #include <algorithm>
 #include <atomic>
+#include <climits>
 #include <cmath>
+#include <cstdint>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -1406,11 +1408,31 @@ static bool writeTexture(const uint8_t *rgba, int size, NSString *file) {
         idle = (NSInteger)i;
         break;
       }
-    if (idle < 0 && (int)_snapshotters.count >= kDrapeSnapshotters) return;
-    // In request order: the engine asks nearest first, a coarse ancestor before each tile.
-    const DrapeJob job = _drapeJobs.front();
-    _drapeJobs.pop_front();
-    if (job.gen != engineGen) continue;
+    // QA A/B (#720, look debug flag 128): six snapshotters at once.
+    const int maxSnapshotters = (_engine->look().debugFlags & 128) ? 6 : kDrapeSnapshotters;
+    if (idle < 0 && (int)_snapshotters.count >= maxSnapshotters) return;
+    // #720: the engine's current order (the centre of the screen first); jobs of
+    // an old generation, or that no tile wants any more, are dropped unrendered.
+    // (Indices, not iterators: a deque erase invalidates them all.)
+    size_t best = SIZE_MAX;
+    int bestRank = INT_MAX;
+    for (size_t i = 0; i < _drapeJobs.size();) {
+      const DrapeJob &j = _drapeJobs[i];
+      const int r = j.gen == engineGen ? _engine->drapeRank(j.z, j.x, j.y) : -1;
+      if (r < 0) {
+        if (j.gen == engineGen) _engine->onImageryCancelled(j.z, j.x, j.y, j.gen);
+        _drapeJobs.erase(_drapeJobs.begin() + (std::ptrdiff_t)i);
+        continue;
+      }
+      if (r < bestRank) {
+        bestRank = r;
+        best = i;
+      }
+      i++;
+    }
+    if (best == SIZE_MAX) return;
+    const DrapeJob job = _drapeJobs[best];
+    _drapeJobs.erase(_drapeJobs.begin() + (std::ptrdiff_t)best);
     // One snapshot renders the 2×2 block around the tile: four drapes for
     // little more than the cost of one (most of a snapshot is fixed cost).
     const int k = job.z >= 1 ? 2 : 1;
@@ -1845,6 +1867,9 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
   in.pitchDeg = pitchDeg;
   in.timeMs = t0 / 1e6;
   FrameOutput out = _engine->frame(in);
+  // #720 tap-to-sharp, from the 3D press (the engine arms at the press, or the ramp start).
+  if (out.drapeCentreSharpMs >= 0) NSLog(@"[InukshukTerrain] drape sharp centre %.0f ms", out.drapeCentreSharpMs);
+  if (out.drapeAllSharpMs >= 0) NSLog(@"[InukshukTerrain] drape sharp all %.0f ms", out.drapeAllSharpMs);
   _drawnTiles = out.active ? (int)out.tiles.size() : 0;
   if (!out.active) return;
   id<MTLRenderCommandEncoder> enc = [(id<INKMLNCustomLayer>)layer renderEncoder];
@@ -2211,7 +2236,13 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
   if (!map) return;
   id<INKMLNCamera> cam = [map.camera copyWithZone:nil];
   const double distance = cam.viewingDistance;
+  const double from = cam.pitch;
   cam.pitch = fmax(0, fmin(deg, _enabled.load() ? _maxPitch : 60.0));
+  if (_enabled.load() && from < kRampStartDeg && cam.pitch >= kRampStartDeg) {
+    // #720: the drapes are asked for at the press, not once the tilt shows the terrain.
+    NSLog(@"[InukshukTerrain] 3D press: pitch %.0f -> %.0f", from, cam.pitch);
+    _engine->armActivation();
+  }
   // MLNMapCamera keeps its altitude across a pitch change (the zoom would
   // drift); keeping the viewing distance keeps the zoom.
   cam.viewingDistance = distance;

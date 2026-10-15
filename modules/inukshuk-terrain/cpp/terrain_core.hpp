@@ -351,4 +351,42 @@ size_t mipChainBytes(int size, int levels);
  */
 std::vector<uint8_t> buildMipChain(const uint8_t* rgba, int size, int& levels);
 
+// ---- drape scheduling (#720) --------------------------------------------------------
+/** A screen rectangle in px, y down. */
+struct ScreenRect {
+  double minX = 0, minY = 0, maxX = 0, maxY = 0;
+};
+/**
+ * Where a tile lies on screen: its footprint on the reference plane (z = 0)
+ * projected by P, as a px rectangle (y down). Corners behind the eye belong to
+ * a tile under the camera, so the rectangle reaches the bottom edge. Nullopt
+ * when all four are behind the eye.
+ */
+std::optional<ScreenRect> footprintOnScreen(const Mat4& P, const TileBounds& b, double width,
+                                            double height);
+/** Distance (px) from a point to a rectangle; 0 inside. */
+double distanceToRect(double x, double y, const ScreenRect& r);
+bool rectsIntersect(const ScreenRect& a, const ScreenRect& b);
+
+enum class DrapeKind { Own = 0, Coarse = 1, Ring = 2 };
+struct DrapeCandidate {
+  DemId id;
+  DrapeKind kind = DrapeKind::Own;
+  /** Screen distance from the focus (the screen centre), in screen half-heights; 0 = under it. */
+  double focus = 0;
+  /** Distance from the eye (world px): the tie-break. */
+  double eye = 0;
+};
+/**
+ * The order the drapes are rendered in (#720). A snapshot costs ~0.1–1 s and
+ * only a few run at once, so the order decides how long the view stays
+ * blurry where the user looks: own drapes centre-first (screen distance from
+ * the focus, then distance from the eye); a coarse ancestor (the transient
+ * cover of a still-unrendered area) right after the own drapes within
+ * `coarseAfter` of the focus, else just before the first tile it covers;
+ * the base ring (the fallback in every direction) last. Duplicates keep
+ * their earliest place.
+ */
+std::vector<DemId> orderDrapeRequests(std::vector<DrapeCandidate> candidates, double coarseAfter);
+
 }  // namespace inukshuk::terrain

@@ -47,6 +47,10 @@ class TerrainController(
       }
     },
     { lock.read { if (destroyed.get()) 0 else TerrainNative.nativeImageryGeneration(handle) } },
+    { z, x, y -> lock.read { if (destroyed.get()) -1 else TerrainNative.nativeDrapeRank(handle, z, x, y) } },
+    { z, x, y, gen ->
+      lock.read { if (!destroyed.get()) TerrainNative.nativeOnDrapeCancelled(handle, z, x, y, gen) }
+    },
   )
   private var drapeJson: String? = null
   private var drapeSatellite = false
@@ -195,6 +199,10 @@ class TerrainController(
 
   fun update(look: FloatArray, enabled: Boolean, networkAllowed: Boolean) {
     lastLook = look
+    // QA A/B (#720, debug flag 128): six snapshotters at once instead of three.
+    drapes.maxSnapshotters =
+      if (((look.getOrNull(LOOK_DEBUG_INDEX) ?: 0f).toInt() and DEBUG_MORE_SNAPSHOTTERS) != 0) 6
+      else DrapeRenderer.MAX_SNAPSHOTTERS
     lock.read {
       if (destroyed.get()) return
       TerrainNative.nativeSetLook(handle, look)
@@ -356,6 +364,11 @@ class TerrainController(
   fun animatePitch(deg: Double, durationMs: Double) {
     val target = deg.coerceIn(0.0, if (enabled) maxPitch else LEGACY_MAX_PITCH)
     val from = map.cameraPosition.tilt
+    if (enabled && from < RAMP_START_DEG && target >= RAMP_START_DEG) {
+      // #720: the drapes are asked for at the press, not once the tilt shows the terrain.
+      Log.i(TAG, "3D press: pitch $from -> $target")
+      lock.read { if (!destroyed.get()) TerrainNative.nativeArmActivation(handle) }
+    }
     val anim = android.animation.ValueAnimator.ofFloat(0f, 1f)
     anim.duration = durationMs.toLong().coerceAtLeast(1)
     anim.interpolator = android.view.animation.AccelerateDecelerateInterpolator()
@@ -544,6 +557,10 @@ class TerrainController(
     const val LOOK_DEBUG_INDEX = 40
     /** Look debug flag: force the top drape tier (QA screenshots on a low-RAM emulator). */
     const val DEBUG_FULL_DRAPE = 16
+    /** Look debug flag (#720 QA A/B): six drape snapshotters at once. */
+    const val DEBUG_MORE_SNAPSHOTTERS = 128
+    /** The terrain's pitch ramp start (terrain_core.hpp kRampStartDeg). */
+    const val RAMP_START_DEG = 25.0
 
     fun mercX(lng: Double) = (lng + 180.0) / 360.0
 
