@@ -129,7 +129,35 @@ describe('R-RDV-2: room entry', () => {
     const ws = await h.connect(R.roomId, 'tagZ');
     await h.room.webSocketMessage(ws, h.authFrame(OTHER, ws.last()!.c as string));
     expect(ws.closed?.code).toBe(CLOSE.authFailed);
-    expect(keys).toEqual(['tagZ']); // the opaque tag, never an IP
+    expect(keys).toEqual([`tagZ:${R.roomId}`]); // the opaque tag and the room, never an IP
+  });
+
+  it('CGNAT: strikes on a shared IP in one room do not lock that IP out of other rooms', async () => {
+    const counts = new Map<string, number>();
+    const limiter = {
+      limit: async ({ key }: { key: string }) => {
+        const n = (counts.get(key) ?? 0) + 1;
+        counts.set(key, n);
+        return { success: n <= 10 };
+      },
+    };
+    const h = makeRoom({ AUTH_FAIL_LIMITER: limiter });
+    // A bad actor behind the shared IP burns its strikes against room R.
+    for (let i = 0; i < 4; i++) {
+      const bad = await h.connect(R.roomId, 'shared-ip');
+      for (let j = 0; j < 3 && !bad.closed; j++) {
+        await h.room.webSocketMessage(bad, h.authFrame(OTHER, bad.last()!.c as string));
+      }
+    }
+    expect(counts.get(`shared-ip:${R.roomId}`)).toBe(11);
+    // A legitimate phone on the same IP, in its own room, is unaffected,
+    // even after one failed attempt of its own.
+    const other = makeRoom({ AUTH_FAIL_LIMITER: limiter });
+    const fine = await other.connect(OTHER.roomId, 'shared-ip');
+    await other.room.webSocketMessage(fine, other.authFrame(R, fine.last()!.c as string));
+    expect(fine.closed).toBeUndefined();
+    await other.room.webSocketMessage(fine, other.authFrame(OTHER, fine.last()!.c as string));
+    expect(fine.last()!.t).toBe('ok');
   });
 
   it('treats a throwing strike limiter as allowing (per-socket cap still holds)', async () => {
@@ -302,12 +330,23 @@ describe('R-RL-3: room flooding', () => {
     expect(socks[5]!.closed?.code).toBe(CLOSE.full);
   });
 
-  it('admits at most ROOM_MAX_PER_IP sockets of one client in a room', async () => {
+  it('CGNAT: 12 phones of one team behind one shared IP all join one room', async () => {
     const h = makeRoom();
     const socks: FakeSock[] = [];
-    for (let i = 0; i < 5; i++) socks.push(await h.join(R, 'same'));
-    expect(socks.filter((s) => s.closed === undefined)).toHaveLength(4);
-    expect(socks[4]!.closed?.code).toBe(CLOSE.full);
+    for (let i = 0; i < 12; i++) socks.push(await h.join(R, 'carrier-ip'));
+    expect(socks.every((s) => s.closed === undefined)).toBe(true);
+    expect(socks.every((s) => s.ofType('ok').length === 1)).toBe(true);
+    // They can all talk to each other.
+    await h.room.webSocketMessage(socks[0]!, msg('*'));
+    expect(socks.slice(1).every((s) => s.ofType('m').length === 1)).toBe(true);
+  });
+
+  it('admits at most ROOM_MAX_PER_IP (16) sockets of one client in a room', async () => {
+    const h = makeRoom();
+    const socks: FakeSock[] = [];
+    for (let i = 0; i < 17; i++) socks.push(await h.join(R, 'same'));
+    expect(socks.filter((s) => s.closed === undefined)).toHaveLength(16);
+    expect(socks[16]!.closed?.code).toBe(CLOSE.full);
     expect((await h.join(R, 'other')).closed).toBeUndefined();
   });
 

@@ -102,11 +102,16 @@ file's value.
 | `TURN_MONTHLY_ALLOWANCE_GB` | `1000`  | Realtime's free egress per month                              |
 | `TURN_USAGE_OFF_PERCENT`    | `80`    | minting stops at this share of the allowance                  |
 | `ROOM_MAX_SOCKETS`          | `128`   | admitted sockets per room                                     |
-| `ROOM_MAX_PER_IP`           | `4`     | admitted sockets per client in one room                       |
+| `ROOM_MAX_PER_IP`           | `16`    | admitted sockets per client IP in one room                    |
 
-Rate-limiting bindings (per client IP, per Cloudflare location): 30 room
-connections a minute, 10 failed room entries a minute, 5 TURN credentials a
-minute.
+Rate-limiting bindings (per Cloudflare location): 120 room connections a
+minute per client IP, 10 failed room entries a minute per client IP **and
+room**, 5 TURN credentials a minute per client IP.
+
+Per-IP limits are deliberately generous: mobile carriers put many phones
+behind one public IP (CGNAT), so a whole team on one carrier can share an IP.
+The limits that bound abuse are per socket (frame and byte rates, 3 failed
+sign-ins, TURN per socket) and per room (128 sockets).
 
 ## Develop and test locally
 

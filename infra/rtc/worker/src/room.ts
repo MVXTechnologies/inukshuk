@@ -40,9 +40,11 @@ import { verifyRoomAuth } from './rdvVerify';
  *
  * Limits (R-RL-2, R-RL-3): 20 frames/s (burst 60) and 128 KiB/s per socket,
  * frames ≤ one 16 KiB blob, unauthenticated sockets closed after 10 s or 3
- * failed attempts (each failure is also a strike on the client's tag), at most
- * `ROOM_MAX_SOCKETS` authenticated sockets per room and `ROOM_MAX_PER_IP` per
- * client. A socket that breaks a limit is closed, not throttled: the session
+ * failed attempts (each failure is also a strike on the client's tag in this
+ * room), at most `ROOM_MAX_SOCKETS` authenticated sockets per room and
+ * `ROOM_MAX_PER_IP` per client. The per-client limits are generous because a
+ * client tag is an IP, and mobile carriers put many phones behind one (CGNAT):
+ * the per-socket and per-room limits are the real abuse bounds. A socket that breaks a limit is closed, not throttled: the session
  * frames it carries must arrive whole and in order, so a dropped frame would
  * break the session anyway.
  */
@@ -291,7 +293,7 @@ export class Room {
     if (!ok) {
       cur.f++;
       ws.serializeAttachment(cur);
-      const struck = await this.strike(cur.tag);
+      const struck = await this.strike(cur.tag, cur.rid);
       if (cur.f >= MAX_AUTH_FAILS || !struck) return this.kill(ws, CLOSE.authFailed, 'auth');
       cur.c = toB64u(this.deps.randomBytes(CHALLENGE_BYTES));
       ws.serializeAttachment(cur);
@@ -302,7 +304,7 @@ export class Room {
     const sameClient = others.filter(([, o]) => o.tag === cur.tag).length;
     if (
       others.length >= this.maxSockets() ||
-      sameClient >= positiveInt(this.env.ROOM_MAX_PER_IP, 4)
+      sameClient >= positiveInt(this.env.ROOM_MAX_PER_IP, 16)
     ) {
       return this.kill(ws, CLOSE.full, 'room full');
     }
@@ -312,12 +314,16 @@ export class Room {
     for (const [peer] of others) send(peer, { t: 'join', h: cur.h });
   }
 
-  /** Charge a failed auth to the client's tag; false when it is over its strikes. */
-  private async strike(tag: string): Promise<boolean> {
+  /**
+   * Charge a failed auth to (client tag, room); false when that pair is over
+   * its strikes. Keyed per room so that one bad actor behind a shared
+   * (CGNAT) IP can't lock the other phones on that IP out of their rooms.
+   */
+  private async strike(tag: string, roomId: string): Promise<boolean> {
     const limiter = this.env.AUTH_FAIL_LIMITER;
     if (limiter === undefined) return true;
     try {
-      return (await limiter.limit({ key: tag })).success;
+      return (await limiter.limit({ key: `${tag}:${roomId}` })).success;
     } catch {
       return true; // the per-socket cap of 3 still holds
     }

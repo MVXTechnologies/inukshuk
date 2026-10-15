@@ -59,8 +59,11 @@ TURN_DAILY_BUDGET = "2000"
 TURN_MONTHLY_ALLOWANCE_GB = "1000"
 TURN_USAGE_OFF_PERCENT = "80"
 # R-RL-3: authenticated sockets per room, and per client IP in one room.
+# Mobile carriers put many phones behind one public IP (CGNAT), so a whole
+# team on one carrier can share an IP: the per-IP cap is generous, and the
+# per-room cap (128) is what bounds a flood.
 ROOM_MAX_SOCKETS = "128"
-ROOM_MAX_PER_IP = "4"
+ROOM_MAX_PER_IP = "16"
 
 # Secrets (`wrangler secret put <NAME>`, README step 5) — never in this file:
 #   TURN_KEY_ID          Realtime TURN key id
@@ -73,16 +76,18 @@ ROOM_MAX_PER_IP = "4"
 # The client IP is the key only, never stored. namespace_id is any integer
 # unique within this account.
 
-# WebSocket upgrades per client IP per minute.
+# WebSocket upgrades per client IP per minute. Generous: under CGNAT one IP
+# can be a whole team (or several) reconnecting after a dead zone.
 [[ratelimits]]
 name = "WS_LIMITER"
 namespace_id = "2701"
 
   [ratelimits.simple]
-  limit = 30
+  limit = 120
   period = 60
 
-# Failed room authentications per client per minute (strikes).
+# Failed room authentications per minute, keyed on (client, room): one bad
+# actor behind a shared CGNAT IP can't lock its neighbours out of their rooms.
 [[ratelimits]]
 name = "AUTH_FAIL_LIMITER"
 namespace_id = "2702"

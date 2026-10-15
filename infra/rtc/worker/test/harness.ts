@@ -175,7 +175,7 @@ export function makeRoom(
   const budgetCalls: string[] = [];
   const env: RoomEnv = {
     ROOM_MAX_SOCKETS: '128',
-    ROOM_MAX_PER_IP: '4',
+    ROOM_MAX_PER_IP: '16',
     TURN_PER_SOCKET_PER_HOUR: '6',
     BUDGET: {
       idFromName: (name: string) => name,

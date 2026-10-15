@@ -95,9 +95,9 @@ describe('wrangler.toml (R-META-2, R-RL-1, R-TURN-2…4)', () => {
     expect(value('TURN_PER_IP_PER_HOUR')).toBe('20');
     expect(value('TURN_USAGE_OFF_PERCENT')).toBe('80');
     expect(value('ROOM_MAX_SOCKETS')).toBe('128');
-    expect(value('ROOM_MAX_PER_IP')).toBe('4');
+    expect(value('ROOM_MAX_PER_IP')).toBe('16');
     expect(toml).toMatch(
-      /name = "WS_LIMITER"\s+namespace_id = "\d+"\s+\[ratelimits\.simple\]\s+limit = 30\s+period = 60/,
+      /name = "WS_LIMITER"\s+namespace_id = "\d+"\s+\[ratelimits\.simple\]\s+limit = 120\s+period = 60/,
     );
     expect(toml).toMatch(/crons = \["\*\/10 \* \* \* \*"\]/);
   });
