@@ -51,7 +51,9 @@ TURN_TTL_S = "900"
 # R-TURN-2: credentials one room socket may get per hour.
 TURN_PER_SOCKET_PER_HOUR = "6"
 # R-RL-1: credentials one client (IP) may get per hour, all rooms together.
-TURN_PER_IP_PER_HOUR = "20"
+# Generous for CGNAT: a relayed phone renews every 15 min (4/h), so 60 covers
+# a 12-phone team behind one carrier IP plus reconnects.
+TURN_PER_IP_PER_HOUR = "60"
 # R-TURN-3: credentials per UTC day, all clients together.
 TURN_DAILY_BUDGET = "2000"
 # R-TURN-4: Realtime's free egress per month (GB, shared with the SFU) and the

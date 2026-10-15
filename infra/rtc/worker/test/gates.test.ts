@@ -92,7 +92,7 @@ describe('wrangler.toml (R-META-2, R-RL-1, R-TURN-2…4)', () => {
   it('documents limits that match the review', () => {
     expect(value('TURN_TTL_S')).toBe('900');
     expect(value('TURN_PER_SOCKET_PER_HOUR')).toBe('6');
-    expect(value('TURN_PER_IP_PER_HOUR')).toBe('20');
+    expect(value('TURN_PER_IP_PER_HOUR')).toBe('60');
     expect(value('TURN_USAGE_OFF_PERCENT')).toBe('80');
     expect(value('ROOM_MAX_SOCKETS')).toBe('128');
     expect(value('ROOM_MAX_PER_IP')).toBe('16');

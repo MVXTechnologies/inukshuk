@@ -14,7 +14,9 @@ import {
  *
  * In order, a mint is refused when:
  * 1. the kill switch `TURN_ENABLED` is not "1", or the TURN secrets are unset (`off`);
- * 2. this client already had `TURN_PER_IP_PER_HOUR` credentials in the last
+ * 2. this client already had `TURN_PER_IP_PER_HOUR` (default 60: a client is an
+ *    IP, and a team behind one carrier CGNAT IP renews 4 per phone per hour)
+ *    credentials in the last
  *    hour, or the per-minute `TURN_LIMITER` binding says no (`rate`);
  * 3. `TURN_DAILY_BUDGET` credentials were minted this UTC day (`budget`);
  * 4. this month's TURN egress is at `TURN_USAGE_OFF_PERCENT` of the free
@@ -127,7 +129,7 @@ export class Budget {
     }
     this.forgetIdleClients(now);
     const times = recent(this.perClient.get(clientTag) ?? [], now, HOUR_MS);
-    if (times.length >= positiveInt(env.TURN_PER_IP_PER_HOUR, 20)) return { ok: false, e: 'rate' };
+    if (times.length >= positiveInt(env.TURN_PER_IP_PER_HOUR, 60)) return { ok: false, e: 'rate' };
     if (env.TURN_LIMITER !== undefined) {
       let allowed = true;
       try {

@@ -130,6 +130,69 @@ describe('R-RL-1: per-client hourly cap', () => {
   });
 });
 
+describe('CGNAT: a whole relayed team behind one carrier IP', () => {
+  /** The per-minute TURN_LIMITER binding (5 per client per minute), simulated. */
+  function perMinute(limit: number, clock: { now: number }) {
+    const hits = new Map<string, number[]>();
+    return {
+      limit: async ({ key }: { key: string }) => {
+        const recent = (hits.get(key) ?? []).filter((t) => clock.now - t < 60_000);
+        recent.push(clock.now);
+        hits.set(key, recent);
+        return { success: recent.length <= limit };
+      },
+    };
+  }
+
+  it('12 phones on one IP, relayed for an hour (first credential + renewal every 15 min), all served', async () => {
+    const clock = { now: T0 };
+    const api = fakeApi();
+    const budget = new Budget(
+      {},
+      { ...BUDGET_ENV, TURN_PER_IP_PER_HOUR: undefined, TURN_LIMITER: perMinute(5, clock) },
+      { now: () => clock.now, fetch: api.fetchFn },
+    );
+    const refused: string[] = [];
+    // Phones come online over the first few minutes (5 a minute at most get
+    // through the burst binding; a refused phone retries a minute later).
+    const due = Array.from({ length: 12 }, (_, i) => T0 + Math.floor(i / 5) * 60_000);
+    for (let t = T0; t < T0 + 3_600_000; t += 60_000) {
+      clock.now = t;
+      for (let p = 0; p < 12; p++) {
+        if (due[p]! > t) continue;
+        const r = await budget.mint('carrier-ip');
+        if (r.ok) due[p] = t + 15 * 60_000;
+        else {
+          refused.push(`${p}@${(t - T0) / 60_000}:${r.e}`);
+          due[p] = t + 60_000;
+        }
+      }
+    }
+    expect(refused).toEqual([]);
+    expect(api.mints()).toBe(48); // 12 phones × 4 per hour
+  });
+
+  it('the default per-IP cap is 60 an hour', async () => {
+    const { budget, clock } = make({ TURN_PER_IP_PER_HOUR: undefined });
+    for (let i = 0; i < 60; i++) {
+      clock.now += 1000;
+      expect((await budget.mint('ip')).ok).toBe(true);
+    }
+    expect(await budget.mint('ip')).toEqual({ ok: false, e: 'rate' });
+  });
+
+  it('the daily budget still caps everyone together', async () => {
+    const { budget, clock } = make({ TURN_PER_IP_PER_HOUR: undefined, TURN_DAILY_BUDGET: '50' });
+    let ok = 0;
+    for (let i = 0; i < 100; i++) {
+      clock.now += 1000;
+      if ((await budget.mint(`ip${i % 3}`)).ok) ok++;
+    }
+    expect(ok).toBe(50);
+    expect(await budget.mint('fresh-ip')).toEqual({ ok: false, e: 'budget' });
+  });
+});
+
 describe('R-TURN-3: global daily budget (exhaustion)', () => {
   it('stops at TURN_DAILY_BUDGET for everyone, resets at UTC midnight', async () => {
     const { budget, clock, api } = make({ TURN_DAILY_BUDGET: '10' });

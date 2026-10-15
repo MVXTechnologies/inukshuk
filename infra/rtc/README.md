@@ -14,7 +14,7 @@ What it does, and does not do:
 - **Opaque forwarding.** Admitted sockets exchange sealed, padded blobs by
   random handle. The Worker never opens one.
 - **TURN.** Credentials only for an admitted socket with a peer in its room,
-  15-minute lifetime, 6 per socket per hour, 20 per client per hour, a daily
+  15-minute lifetime, 6 per socket per hour, 60 per client IP per hour, a daily
   budget, and a usage check that stops minting at 80 % of the free monthly
   allowance.
 - **Nothing is kept.** No storage, no KV/R2/D1, no Workers Logs, no log calls
@@ -97,7 +97,7 @@ file's value.
 | `TURN_ENABLED`              | `1`     | `0`: no TURN credentials; phones use direct paths only        |
 | `TURN_TTL_S`                | `900`   | credential lifetime (never above 900 whatever is set)         |
 | `TURN_PER_SOCKET_PER_HOUR`  | `6`     | credentials per room socket per hour                          |
-| `TURN_PER_IP_PER_HOUR`      | `20`    | credentials per client per hour, all rooms                    |
+| `TURN_PER_IP_PER_HOUR`      | `60`    | credentials per client IP per hour, all rooms                 |
 | `TURN_DAILY_BUDGET`         | `2000`  | credentials per UTC day, everyone                             |
 | `TURN_MONTHLY_ALLOWANCE_GB` | `1000`  | Realtime's free egress per month                              |
 | `TURN_USAGE_OFF_PERCENT`    | `80`    | minting stops at this share of the allowance                  |

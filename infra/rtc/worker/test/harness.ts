@@ -146,7 +146,7 @@ export function fakeApi(
 export const BUDGET_ENV: BudgetEnv = {
   TURN_ENABLED: '1',
   TURN_TTL_S: '900',
-  TURN_PER_IP_PER_HOUR: '20',
+  TURN_PER_IP_PER_HOUR: '60',
   TURN_DAILY_BUDGET: '2000',
   TURN_MONTHLY_ALLOWANCE_GB: '1000',
   TURN_USAGE_OFF_PERCENT: '80',
