@@ -10,18 +10,19 @@ Protomaps daily planet ──(nas/refresh.sh: extract our regions)──▶ base
 phones ──▶ inukshuk-tiles.…workers.dev (worker/, edge-cached) ──▶ R2 bucket inukshuk-tiles
 ```
 
-| Path                               | What                                                 |
-| ---------------------------------- | ---------------------------------------------------- |
-| `/basemap/{z}/{x}/{y}.mvt`         | vector tile (gzip), z0–15; 204 where there is none   |
-| `/basemap.json`                    | TileJSON                                             |
-| `/peaks/{z}/{x}/{y}.mvt`           | named summits (gzip), z5–12, from `peaks.pmtiles`    |
-| `/parks/{z}/{x}/{y}.mvt`           | national parks (gzip), z4–12 — **not published yet** |
-| `/geodetic/{z}/{x}/{y}.mvt`        | survey marks (gzip), z5–13, from `geodetic.pmtiles`  |
-| `/geodetic.json`                   | its TileJSON; `description` = build date + counts    |
-| `/contours/{z}/{x}/{y}.mvt`        | contour lines, generated on demand from DEM tiles    |
-| `/fonts/{fontstack}/{range}.pbf`   | MapLibre glyphs (Atkinson Hyperlegible Next)         |
-| `/trails/v1/index.json`            | long-distance trail index (Explore, #467)            |
-| `/trails/v1/d/{version}/{id}.json` | one trail's route and stages (range-read)            |
+| Path                               | What                                                             |
+| ---------------------------------- | ---------------------------------------------------------------- |
+| `/basemap/{z}/{x}/{y}.mvt`         | vector tile (gzip), z0–15; 204 where there is none               |
+| `/basemap.json`                    | TileJSON                                                         |
+| `/peaks/{z}/{x}/{y}.mvt`           | named summits (gzip), z5–12, from `peaks.pmtiles`                |
+| `/parks/{z}/{x}/{y}.mvt`           | national parks (gzip), z4–12 — **not published yet**             |
+| `/geodetic/{z}/{x}/{y}.mvt`        | survey marks (gzip), z5–13, from `geodetic.pmtiles`              |
+| `/geodetic.json`                   | its TileJSON; `description` = build date + counts                |
+| `/dem/{z}/{x}/{y}.png`             | Terrarium elevation, z0–16: LiDAR inside coverage, AWS elsewhere |
+| `/contours/{z}/{x}/{y}.mvt`        | contour lines, generated on demand from DEM tiles                |
+| `/fonts/{fontstack}/{range}.pbf`   | MapLibre glyphs (Atkinson Hyperlegible Next)                     |
+| `/trails/v1/index.json`            | long-distance trail index (Explore, #467)                        |
+| `/trails/v1/d/{version}/{id}.json` | one trail's route and stages (range-read)                        |
 
 Coverage (`nas/pieces.json`): **the whole world** (land between 60° S and 84° N) as 20 regional
 archives plus `basemap.index.json` — Canada/US/Greenland and Europe first (2026-09-28 morning),
@@ -473,6 +474,98 @@ Node over a bbox (Alps, Rockies…) for z8–13, write the gzipped tiles into a 
 (`pmtiles` CLI `convert` from an MBTiles, or write the R2 objects directly with the upload
 endpoint), and have the Worker check it before generating. The R2 write-through makes this
 unnecessary unless the free plan's CPU limit still bites.
+
+## Precise elevation (DEM, #725)
+
+`/dem/{z}/{x}/{y}.png` (`worker/src/dem.ts`) serves 256-px Terrarium PNG, z0–16, one URL for
+the whole world:
+
+- **Inside LiDAR coverage** — Québec (NRCan HRDEM 2 m) and the Alps (swissALTI3D, IGN LiDAR HD):
+  tiles from our own archives `dem-quebec.pmtiles` / `dem-alps.pmtiles`, listed in
+  `dem.index.json`. They are [Mapterhorn](https://mapterhorn.com)'s 512-px lossless WebP tiles
+  cut into their four 256-px quadrants and re-encoded as PNG, **bit for bit** (every PNG is
+  decoded again and compared before it is stored; `verify` re-checks a sample after
+  `pmtiles convert`).
+- **Everywhere else** — AWS Terrarium (the app's former source), passed through byte for byte;
+  z16 (AWS stops at z15) is the z15 parent's quadrant, bilinearly upsampled. `X-Dem-Source`
+  says which: `lidar:<piece>`, `aws` or `aws-upsampled`.
+- **Contours** (`/contours`) read the same tiles through the same code (no HTTP round trip), so
+  they match the hillshade; `CONTOUR_VERSION` is `v4` since the switch. **Bump it again whenever
+  a region is added**, or the stored contours there keep the AWS heights.
+- PNG is already deflated: no `Content-Encoding`, so the cache-HIT path re-sends the stored bytes
+  (no double-gzip). Cache: `CACHE_CONTROL` (1 day).
+
+**Only LiDAR-grade terrain is served** (`nas/dem/coverage.py`). Mapterhorn fills every gap with
+Copernicus GLO-30, a _surface_ model (tree tops, roofs) that reads 10–25 m high in forests. The
+NAS keeps a tile only where every pixel comes from an allow-listed terrain model in
+`nas/dem/regions.json`, using Mapterhorn's own source footprints (`coverage-index.pmtiles`,
+`coverage.pmtiles`), 200 m inside them (Mapterhorn blends 150 m across source seams); a finer
+source that is not allow-listed is carved out, because Mapterhorn would draw it on top. Sources
+still waiting for their cross-check (Austria, Bavaria, Baden-Württemberg, Slovenia, South Tyrol,
+Aosta, Zürich canton, RGE ALTI) are listed under `pendingValidation` and left to AWS. Heights stay
+in each country's official system (CGVD2013, LN02, NGF-IGN69); the cross-checks are in
+[DEM-VALIDATION.md](DEM-VALIDATION.md) and gate CI (`worker/src/demValidation.test.ts`).
+
+### The pipeline (`nas/dem.sh`)
+
+Per region, each step resumable (rerun the same command after any failure): mask → `pmtiles
+extract` of `planet.pmtiles` z0–12 and the `6-x-y.pmtiles` z13–15 over the mask's macrotiles only →
+transcode into MBTiles (multiprocessing, 4 PNG per WebP) → `pmtiles convert` → verify (tile count,
+PNG type, uncompressed, sampled bytes, decoded-pixel sha256, mask) → upload (`upload.py`,
+multipart, resumable). `dem.index.json` goes up **last**, then one probe tile per piece is fetched
+back through the live Worker and compared byte for byte. It runs its own unit tests first
+(`nas/dem/test_dem.py`, in the `inukshuk-dem-py:1` image from `nas/dem/Dockerfile`: Python 3.12 +
+Pillow 12.3.0, nothing else). It refuses to upload more than `DEM_MAX_TOTAL_GB` (320) and stops if
+Mapterhorn publishes a new release mid-run. A run with nothing new (same Mapterhorn version as
+the last publish) exits at once, so it is safe monthly.
+
+Expected (Mapterhorn 0.0.13, upper bounds from the whole-bbox `pmtiles extract --dry-run`
+of the plan, PNG ≈ 1.4–1.6× WebP; the mask only removes from them): Québec ≤ ~190 GB, Alps
+≤ ~80 GB (less while Austria/Germany/Italy/Slovenia are pending). `dem.sh` logs each piece's real
+size and refuses more than `DEM_MAX_TOTAL_GB`. One night on the NAS. Dry run on a Mac (two 2 × 1 km boxes, ~60 MB):
+
+```sh
+DEM_DRY_RUN=1 DEM_LOCAL=1 WORK=/tmp/dem-dry infra/tiles/nas/dem.sh   # needs pmtiles + python3 with Pillow
+```
+
+### Owner runbook (first run)
+
+Nothing here needs a new account or DNS change. Steps 1–3 are yours (sign-ins and billing); a
+developer or agent can do 4–8 with you.
+
+1. **Workers Paid** ($5/month): Cloudflare dashboard → Workers & Pages → Plans → _Workers Paid_.
+   The DEM adds Worker requests on top of the base map and contours; the free plan's 100k
+   requests/day will not hold. Then set `CONTOUR_DECODE_BUDGET = "9"` in `worker/wrangler.toml`.
+2. **R2**: nothing to create (bucket `inukshuk-tiles` exists, billing active). The approved budget
+   is ~270 GB on top of the ~140 GB base map (~$4/month).
+3. **Wrangler login** on the Mac, only if `npx wrangler whoami` (in `infra/tiles/worker`) says
+   you are logged out: `npx wrangler login`, approve in the browser.
+4. **Deploy the Worker — from a checkout that contains every live route.** Deploying a branch
+   drops any route only another unmerged branch has. Merge this work into `main` first (or
+   combine the branches), check `main` has every route that is live today (basemap, peaks, parks,
+   geodetic, tides, crags, contours, fonts, trails, climbing, proj-grids, search, route,
+   error-report…), then from `infra/tiles/worker`: `npm ci && npx tsc --noEmit && npx wrangler
+deploy`. Until `dem.index.json` exists `/dem` simply serves AWS everywhere, so the deploy is safe
+   before the data.
+5. **Keep the NAS reachable overnight** (WireGuard + SSH) and copy the scripts:
+   `tar -C infra/tiles -cf - nas | ssh nas 'tar -C ~/inukshuk-tiles/infra -xf -'` (scp is broken
+   there). About 600 GB free in `~/inukshuk-tiles/work` (WebP extracts + MBTiles + PMTiles; the next
+   version's run deletes the previous one's working files).
+6. **Run it** on the NAS (detached, it takes the night):
+   `ssh nas 'nohup ~/inukshuk-tiles/infra/nas/dem.sh > ~/inukshuk-tiles/work/dem.log 2>&1 &'`.
+   If it stops, run the same command again: it resumes. Read the log in the morning: every
+   region `ready`, `published Mapterhorn 0.0.13`, and `probe … OK` per piece.
+7. **Check**: `curl -sI "$HOST/dem/16/19860/23030.png?v=7"` → `200`, `X-Dem-Source:
+lidar:dem-quebec`, no `Content-Encoding`; `…/dem/16/19500/22700.png` → `aws-upsampled`.
+8. **Then** merge the app PR (URL switch). Never before step 6 succeeds: the phone caches what it
+   fetched under the new key.
+
+**Monthly**: add `dem.sh` to `scheduler.sh` after the base map (it exits at once when Mapterhorn
+has not released). **Adding a region or validating a pending source**: add a site to
+`nas/dem/validation-sites.json`, run `nas/dem/validate.py --report … --fixtures
+worker/src/__fixtures__/dem`, record the numbers in DEM-VALIDATION.md, move the source into
+`sources`, regenerate the credits (`dem.py credits --write src/core/map/demCredits.ts`, then
+prettier), bump `CONTOUR_VERSION`, ship the app credits with it.
 
 ## Check it
 
