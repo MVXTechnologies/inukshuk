@@ -898,4 +898,40 @@ std::vector<DemId> orderDrapeRequests(std::vector<DrapeCandidate> candidates, do
   return out;
 }
 
+// ---- drape snapshot guard (#732) ----------------------------------------------------
+
+uint64_t sampleFingerprint(const uint32_t* samples, size_t count) {
+  uint64_t h = 1469598103934665603ull;
+  for (size_t i = 0; i < count; i++) {
+    for (int b = 0; b < 4; b++) {
+      h ^= (samples[i] >> (8 * b)) & 0xffu;
+      h *= 1099511628211ull;
+    }
+  }
+  return h;
+}
+
+uint64_t rgbaFingerprint(const uint8_t* rgba, int width, int height, size_t stride) {
+  if (!rgba || width <= 0 || height <= 0) return 0;
+  std::vector<uint32_t> samples;
+  samples.reserve(kFingerprintGrid * kFingerprintGrid + 1);
+  samples.push_back(static_cast<uint32_t>(width) * 65536u + static_cast<uint32_t>(height));
+  for (int j = 0; j < kFingerprintGrid; j++) {
+    const int y = static_cast<int>((j + 0.5) * height / kFingerprintGrid);
+    for (int i = 0; i < kFingerprintGrid; i++) {
+      const int x = static_cast<int>((i + 0.5) * width / kFingerprintGrid);
+      const uint8_t* p = rgba + static_cast<size_t>(y) * stride + static_cast<size_t>(x) * 4;
+      samples.push_back(static_cast<uint32_t>(p[0]) | static_cast<uint32_t>(p[1]) << 8 |
+                        static_cast<uint32_t>(p[2]) << 16 | static_cast<uint32_t>(p[3]) << 24);
+    }
+  }
+  return sampleFingerprint(samples.data(), samples.size());
+}
+
+bool acceptDrapeSnapshot(bool hasPrevious, uint64_t previousFingerprint, uint64_t previousBlock,
+                         uint64_t fingerprint, uint64_t block, bool retried) {
+  if (retried || !hasPrevious) return true;
+  return fingerprint != previousFingerprint || block == previousBlock;
+}
+
 }  // namespace inukshuk::terrain

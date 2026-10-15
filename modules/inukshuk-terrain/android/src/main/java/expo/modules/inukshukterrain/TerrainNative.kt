@@ -61,6 +61,14 @@ object TerrainNative {
   /** #720: a queued drape render dropped before it started (it may be asked for again). */
   @JvmStatic external fun nativeOnDrapeCancelled(handle: Long, z: Int, x: Int, y: Int, generation: Int)
 
+  /** #732: sampleFingerprint over a snapshot's sampled pixels (DrapeRenderer.fingerprint). */
+  @JvmStatic external fun nativeSampleFingerprint(samples: IntArray): Long
+
+  /** #732: acceptDrapeSnapshot — false when a snapshot repeats its snapshotter's previous block. */
+  @JvmStatic external fun nativeAcceptDrapeSnapshot(
+    hasPrevious: Boolean, previousPrint: Long, previousBlock: Long, print: Long, block: Long, retried: Boolean,
+  ): Boolean
+
   /** #720: the 3D button was pressed; the engine asks for the terrain before the tilt shows it. */
   @JvmStatic external fun nativeArmActivation(handle: Long)
 

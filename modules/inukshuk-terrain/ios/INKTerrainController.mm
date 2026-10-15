@@ -540,7 +540,11 @@ struct GpuTile {
 struct DrapeJob {
   int z, x, y;
   uint32_t gen;
+  bool retried = false;  // #732: rendered again after repeating the previous block
 };
+
+/** #732: per snapshotter (associated object), @[fingerprint, block] of its last accepted image. */
+static char kDrapeLastResultKey;
 
 /** How a drape tile is rendered: the snapshot's zoom shift from the tile's zoom, its size (pt) and scale. */
 struct DrapeParams {
@@ -617,7 +621,7 @@ double mercY(double lat) {
   double _tfHeading, _tfPitch, _tfZoom;
   NSDictionary<NSString *, NSNumber *> *_tfSaved;
   int _tfCounts[5];
-  std::atomic<int> _drapeDiskHits, _drapeDiskWrites, _demDisk, _demNetwork;
+  std::atomic<int> _drapeDiskHits, _drapeDiskWrites, _demDisk, _demNetwork, _drapeStale;
   double _drapeMsTotal;
   std::unordered_map<uint64_t, GpuTile> _tiles;
   std::unordered_map<int, GpuLine> _lines;
@@ -706,6 +710,11 @@ static int64_t nowNs() { return (int64_t)(CACurrentMediaTime() * 1e9); }
   _imageryDir = [caches stringByAppendingPathComponent:@"terrain-imagery"];
   _drapeDir = [caches stringByAppendingPathComponent:@"terrain-drape"];
   [[NSFileManager defaultManager] createDirectoryAtPath:_drapeDir withIntermediateDirectories:YES attributes:nil error:nil];
+  // #732: drapes cached before the snapshot guard (tiles/) may hold another block's image.
+  NSString *oldDrapes = [_drapeDir stringByAppendingPathComponent:@"tiles"];
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+    [[NSFileManager defaultManager] removeItemAtPath:oldDrapes error:nil];
+  });
   [[NSFileManager defaultManager] createDirectoryAtPath:_cacheDir withIntermediateDirectories:YES attributes:nil error:nil];
   [[NSFileManager defaultManager] createDirectoryAtPath:_imageryDir withIntermediateDirectories:YES attributes:nil error:nil];
   NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration ephemeralSessionConfiguration];
@@ -1302,7 +1311,7 @@ static bool writeTexture(const uint8_t *rgba, int size, NSString *file) {
 
 /** Oldest-first trim of every style's drapes down to 3/4 of kDrapeDiskBytes. */
 - (void)trimDrapeCache {
-  NSString *root = [_drapeDir stringByAppendingPathComponent:@"tiles"];
+  NSString *root = [_drapeDir stringByAppendingPathComponent:@"tiles-v2"];
   NSFileManager *fm = [NSFileManager defaultManager];
   NSDirectoryEnumerator *en = [fm enumeratorAtURL:[NSURL fileURLWithPath:root]
                        includingPropertiesForKeys:@[ NSURLContentModificationDateKey, NSURLFileSizeKey ]
@@ -1367,7 +1376,7 @@ static bool writeTexture(const uint8_t *rgba, int size, NSString *file) {
     return;
   }
   _drapeURL = [NSURL fileURLWithPath:path];
-  _drapeTileDir = [[_drapeDir stringByAppendingPathComponent:@"tiles"]
+  _drapeTileDir = [[_drapeDir stringByAppendingPathComponent:@"tiles-v2"]
       stringByAppendingPathComponent:[NSString stringWithFormat:@"%@-%d-%d", hash, params.texture, params.shift]];
   [[NSFileManager defaultManager] createDirectoryAtPath:_drapeTileDir withIntermediateDirectories:YES attributes:nil error:nil];
   _drapeGen++;
@@ -1469,6 +1478,10 @@ static bool writeTexture(const uint8_t *rgba, int size, NSString *file) {
          bool ok = false;
          const int full = tex * k;
          CGImageRef cg = (!error && snapshot) ? [(id<INKMLNSnapshot>)snapshot image].CGImage : nil;
+         // #732: a reused snapshotter can hand back its previous block's image
+         // (acceptDrapeSnapshot), or none: that block is rendered again, once.
+         bool again = !job.retried && !cg && !error;
+         id strongSnap = weakSnap;
          if (cg) {
            std::vector<uint8_t> px((size_t)full * full * 4);
            CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
@@ -1480,8 +1493,18 @@ static bool writeTexture(const uint8_t *rgba, int size, NSString *file) {
              CGContextDrawImage(ctx, CGRectMake(0, 0, full, full), cg);
              CGContextRelease(ctx);
              ok = true;
+             const uint64_t print = rgbaFingerprint(px.data(), full, full, (size_t)full * 4);
+             const uint64_t block = meshKey(job.z, x0, y0);
+             NSArray<NSNumber *> *last = strongSnap ? objc_getAssociatedObject(strongSnap, &kDrapeLastResultKey) : nil;
+             if (!acceptDrapeSnapshot(last != nil, last.firstObject.unsignedLongLongValue,
+                                      last.lastObject.unsignedLongLongValue, print, block, job.retried)) {
+               again = true;
+             } else if (strongSnap) {
+               objc_setAssociatedObject(strongSnap, &kDrapeLastResultKey, @[ @(print), @(block) ],
+                                        OBJC_ASSOCIATION_RETAIN);
+             }
              std::vector<uint8_t> tile((size_t)tex * tex * 4);
-             for (int j = 0; j < k; j++)
+             for (int j = 0; j < k && !again; j++)
                for (int i = 0; i < k; i++) {
                  for (int row = 0; row < tex; row++)
                    memcpy(tile.data() + (size_t)row * tex * 4,
@@ -1500,7 +1523,7 @@ static bool writeTexture(const uint8_t *rgba, int size, NSString *file) {
                }
            }
          }
-         if (!ok)
+         if (!ok && !again)
            for (int j = 0; j < k; j++)
              for (int i = 0; i < k; i++) s->_engine->onImageryFailed(job.z, x0 + i, y0 + j);
          const double ms = (CACurrentMediaTime() - started) * 1000.0;
@@ -1509,6 +1532,12 @@ static bool writeTexture(const uint8_t *rgba, int size, NSString *file) {
            if (!s2 || s2->_detached.load() || s2->_drapeGen != drapeGen) return;
            NSUInteger i = [s2->_snapshotters indexOfObjectIdenticalTo:weakSnap];
            if (i != NSNotFound) s2->_snapshotterBusy[i] = @NO;
+           if (again) {
+             s2->_drapeStale++;
+             NSLog(@"[InukshukTerrain] drape snapshot of %d/%d/%d repeated the previous block: rendering it again",
+                   job.z, x0, y0);
+             s2->_drapeJobs.push_front({job.z, job.x, job.y, job.gen, true});
+           }
            s2->_drapeRendered++;
            s2->_drapeMsTotal += ms;
            if (s2->_drapeRendered.load() % 40 == 0)

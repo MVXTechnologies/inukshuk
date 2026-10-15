@@ -1413,6 +1413,269 @@ static void testDrapeArming() {
   CHECK(eng.stats().drapeCancelled == before + 1);
 }
 
+/** A drape whose level 0 carries its own key (the fake GPU below reads it back). */
+static std::vector<uint8_t> keyedChain(uint64_t key, int& levels) {
+  std::vector<uint8_t> px(8 * 8 * 4, 0);
+  std::memcpy(px.data(), &key, 8);
+  return buildMipChain(px.data(), 8, levels);
+}
+
+/**
+ * #732 / #720: the engine's drape slots under hostile interleavings — late,
+ * duplicated and sibling deliveries, drops of queued renders, a small slot
+ * budget (evictions), rotation, a pan, back to 2D and up again, style resets;
+ * both orders. A fake GPU records which drape each slot holds: every drawn
+ * tile must sample its own drape or an ancestor's, with that ancestor's window.
+ */
+static void testDrapeSlotsUnderInterleavings() {
+  g_cases++;
+  for (int seed = 1; seed <= 8; seed++) {
+    std::mt19937 rng(seed);
+    struct Job {
+      int z, x, y;
+      uint32_t gen;
+    };
+    std::deque<Job> queue;
+    std::vector<std::pair<double, Job>> running;
+    std::vector<DemId> imgReq;
+    std::vector<DemId> demReq;
+    Engine eng([&](int z, int x, int y) { demReq.push_back({z, x, y}); },
+               [&](int z, int x, int y) { imgReq.push_back({z, x, y}); }, [] {}, 32);
+    const bool fifo = seed % 2 == 0;
+    LookParams lp;
+    if (fifo) lp.debugFlags = Engine::kDebugDrapeFifo;
+    eng.setLook(lp);
+    const int slots = 24 + (seed % 3) * 20;
+    eng.setDrape(true, slots);
+    std::map<int, uint64_t> gpu;  // slot -> key held
+    const double lng = 7.7491, lat = 46.0207, zoom = 13.5, w = 412, h = 892;
+    int bad = 0;
+    long samples = 0;
+    for (double t = 1000; t < 30000; t += 16) {
+      const double a = std::clamp((t - 1000) / 600, 0.0, 1.0);
+      double pitch = 60 * (std::cos((a + 1) * kPi) / 2 + 0.5);
+      double bearing = 20 + (t > 5000 ? std::min(1.0, (t - 5000) / 3000) * 200 : 0);
+      double pan = t > 12000 ? std::min(1.0, (t - 12000) / 2000) * 0.02 : 0;
+      if (t > 20000 && t < 21000) pitch = 10;  // back to 2D and up again
+      FrameInput in;
+      in.P = refProjection(lng + pan, lat, zoom, pitch, bearing, w, h);
+      in.width = w;
+      in.height = h;
+      in.zoom = zoom;
+      in.lat = lat;
+      in.lng = lng + pan;
+      in.bearingDeg = bearing;
+      in.pitchDeg = pitch;
+      in.timeMs = t;
+      if (t == 1000 + 16 * 3) eng.armActivation();
+      // Deliveries: finished blocks (siblings included), sometimes twice, sometimes late.
+      for (size_t i = 0; i < running.size();) {
+        if (running[i].first > t) {
+          i++;
+          continue;
+        }
+        const Job j = running[i].second;
+        for (int dy = 0; dy < 2; dy++)
+          for (int dx = 0; dx < 2; dx++) {
+            int levels = 0;
+            auto c = keyedChain(demKey64({j.z, j.x + dx, j.y + dy}), levels);
+            eng.onImageryLevels(j.z, j.x + dx, j.y + dy, c, 8, levels, j.gen);
+            if (std::uniform_int_distribution<int>(0, 9)(rng) == 0)
+              eng.onImageryLevels(j.z, j.x + dx, j.y + dy, c, 8, levels, j.gen);  // a duplicate render
+          }
+        running.erase(running.begin() + static_cast<long>(i));
+      }
+      for (const auto& d : demReq) {
+        std::vector<float> hs(kDemSize * kDemSize, 1500.f);
+        eng.onDemHeights(d.z, d.x, d.y, std::move(hs));
+      }
+      demReq.clear();
+      if (std::uniform_int_distribution<int>(0, 400)(rng) == 0) eng.resetImagery();  // a style change
+      const FrameOutput out = eng.frame(in);
+      eng.drainBakes(5);
+      for (const auto& u : out.imageryUploads) {
+        uint64_t key = 0;
+        std::memcpy(&key, u.pixels->data(), 8);
+        gpu[u.slot] = key;
+      }
+      for (const auto& d : out.tiles) {
+        const int z = static_cast<int>(d.key >> 58);
+        const int x = static_cast<int>((d.key >> 29) & ((1u << 29) - 1));
+        const int y = static_cast<int>(d.key & ((1u << 29) - 1));
+        auto check = [&](int slot, const float* win, const char* which) {
+          if (slot < 0) return;
+          samples++;
+          const uint64_t held = gpu.count(slot) ? gpu[slot] : ~0ull;
+          const int hz = static_cast<int>(held >> 58);
+          const DemWindow ww = demWindowAt({z, x, y, 0}, hz);
+          const bool ok = held != ~0ull && hz <= z && demKey64(ww.dem) == held &&
+                          std::abs(ww.offsetX - win[0]) < 1e-6 && std::abs(ww.offsetY - win[1]) < 1e-6 &&
+                          std::abs(ww.scale - win[2]) < 1e-6;
+          if (!ok && bad++ < 3)
+            std::printf("  seed %d t=%.0f tile %d/%d/%d %s slot %d holds z%d (%llx)\n", seed, t, z, x, y, which,
+                        slot, hz, static_cast<unsigned long long>(held));
+        };
+        check(d.imgB, d.winB, "B");
+        if (d.imgBlend < 1) check(d.imgA, d.winA, "A");
+      }
+      for (const auto& d : imgReq) queue.push_back({d.z, d.x, d.y, eng.imageryGeneration()});
+      imgReq.clear();
+      while (running.size() < 3 && !queue.empty()) {
+        size_t best = 0;
+        int bestRank = -1;
+        for (size_t i = 0; i < queue.size();) {
+          const int r = eng.drapeRank(queue[i].z, queue[i].x, queue[i].y);
+          if (r < 0 || queue[i].gen != eng.imageryGeneration()) {
+            eng.onImageryCancelled(queue[i].z, queue[i].x, queue[i].y, queue[i].gen);
+            queue.erase(queue.begin() + static_cast<long>(i));
+            continue;
+          }
+          if (bestRank < 0 || r < bestRank) {
+            bestRank = r;
+            best = i;
+          }
+          i++;
+        }
+        if (queue.empty()) break;
+        const Job j = queue[best];
+        queue.erase(queue.begin() + static_cast<long>(best));
+        const int x0 = j.x / 2 * 2, y0 = j.y / 2 * 2;
+        for (size_t i = 0; i < queue.size();) {
+          if (queue[i].z == j.z && queue[i].x / 2 * 2 == x0 && queue[i].y / 2 * 2 == y0)
+            queue.erase(queue.begin() + static_cast<long>(i));
+          else
+            i++;
+        }
+        std::uniform_real_distribution<double> latency(100, 1500);
+        running.push_back({t + latency(rng), {j.z, x0, y0, j.gen}});
+      }
+    }
+    CHECK(samples > 1000);
+    CHECK(bad == 0);
+  }
+}
+
+// ---- drape snapshot guard (#732) -------------------------------------------------------
+/**
+ * A model of MapLibre's static-mode snapshotter, reused for job after job
+ * (maplibre-native android-v13.6.1): Map::Impl::onDidFinishRenderingFrame
+ * fulfils whatever still request is pending on any full frame, and
+ * SnapshotterRenderer stores the image of every full frame while its last
+ * update carried a still request. Images are pixel samples of the camera.
+ */
+struct StillSnapshotterModel {
+  using Image = std::optional<std::vector<uint32_t>>;
+  std::deque<int> updates;            // camera updates on their way to the renderer thread
+  int rendererCamera = -1;
+  bool rendererStillRequest = false;  // SnapshotterRenderer::hasPendingStillImageRequest
+  Image stillImage;                   // SnapshotterRenderer::stillImage
+  std::function<void(Image)> request; // Map::Impl::stillImageRequest
+  std::deque<bool> notifications;     // onDidFinishRenderingFrame(Full) on its way to the map thread
+
+  static std::vector<uint32_t> pixels(int cam) {
+    std::vector<uint32_t> px(256);
+    for (size_t i = 0; i < px.size(); i++) px[i] = static_cast<uint32_t>(cam) * 2654435761u + static_cast<uint32_t>(i);
+    return px;
+  }
+  /** Map thread: jumpTo + renderStill (the update carries the still request). */
+  void renderStill(int cam, std::function<void(Image)> cb) {
+    request = std::move(cb);
+    updates.push_back(cam);
+  }
+  /** Renderer thread: the next update arrives. */
+  void applyUpdate() {
+    if (updates.empty()) return;
+    rendererCamera = updates.front();
+    updates.pop_front();
+    rendererStillRequest = true;
+  }
+  /** Renderer thread: a full frame of its current camera. */
+  void renderFullFrame() {
+    if (rendererStillRequest) stillImage = pixels(rendererCamera);
+    notifications.push_back(true);
+  }
+  /** Map thread: a full-frame notification fulfils the pending still request, whichever it is. */
+  void deliverNotification() {
+    if (notifications.empty()) return;
+    notifications.pop_front();
+    if (!request) return;
+    auto r = std::move(request);
+    request = nullptr;
+    Image img = std::move(stillImage);
+    stillImage.reset();
+    r(std::move(img));
+  }
+};
+
+/** The platform pump on one reused snapshotter: blocks 1 then 2; `guarded` = #732's check. */
+static std::map<int, std::vector<uint32_t>> runSnapshotRace(bool guarded, int& rerenders) {
+  StillSnapshotterModel s;
+  std::map<int, std::vector<uint32_t>> delivered;
+  bool hasPrev = false;
+  uint64_t prevFp = 0, prevBlock = 0;
+  rerenders = 0;
+  std::function<void(int, bool)> start = [&](int block, bool retried) {
+    s.renderStill(block, [&, block, retried](StillSnapshotterModel::Image img) {
+      const uint64_t fp = img ? sampleFingerprint(img->data(), img->size()) : 0;
+      const bool ok = img && (!guarded || acceptDrapeSnapshot(hasPrev, prevFp, prevBlock, fp,
+                                                              static_cast<uint64_t>(block), retried));
+      if (!ok) {
+        rerenders++;
+        start(block, true);  // rendered again
+        return;
+      }
+      hasPrev = true;
+      prevFp = fp;
+      prevBlock = static_cast<uint64_t>(block);
+      delivered[block] = *img;
+      if (block == 1) start(2, false);  // the pump reuses the idle snapshotter at once
+    });
+  };
+  start(1, false);
+  s.applyUpdate();
+  s.renderFullFrame();      // block 1 fully rendered
+  s.deliverNotification();  // → block 1 delivered; block 2 requested on the same snapshotter
+  s.renderFullFrame();      // a late resource re-renders block 1's camera before block 2's update arrives
+  s.deliverNotification();  // that notification meets block 2's request
+  for (int i = 0; i < 3; i++) {
+    s.applyUpdate();
+    s.renderFullFrame();
+    s.deliverNotification();
+  }
+  return delivered;
+}
+
+static void testDrapeSnapshotGuard() {
+  g_cases++;
+  // The interleaving: unguarded, block 2 gets block 1's image (the floating slab).
+  int rerenders = 0;
+  auto raw = runSnapshotRace(false, rerenders);
+  CHECK(raw.count(2) == 1);
+  if (raw.count(2)) CHECK(raw[2] == StillSnapshotterModel::pixels(1));
+  // Guarded: the repeat is rejected once and block 2 renders again, correctly.
+  auto fixed = runSnapshotRace(true, rerenders);
+  CHECK(fixed.count(1) == 1 && fixed.count(2) == 1);
+  if (fixed.count(1)) CHECK(fixed[1] == StillSnapshotterModel::pixels(1));
+  if (fixed.count(2)) CHECK(fixed[2] == StillSnapshotterModel::pixels(2));
+  CHECK(rerenders == 1);
+  // The rule: a first result, the same block again, a retry, a new image — accepted.
+  CHECK(acceptDrapeSnapshot(false, 0, 0, 7, 1, false));
+  CHECK(acceptDrapeSnapshot(true, 7, 1, 7, 1, false));
+  CHECK(acceptDrapeSnapshot(true, 7, 1, 7, 2, true));  // open water really looks the same
+  CHECK(acceptDrapeSnapshot(true, 7, 1, 8, 2, false));
+  CHECK(!acceptDrapeSnapshot(true, 7, 1, 7, 2, false));
+  // Fingerprints: equal images match, one changed sample or the size changes them.
+  std::vector<uint8_t> img(64 * 32 * 4, 0);
+  for (size_t i = 0; i < img.size(); i++) img[i] = static_cast<uint8_t>(i * 31);
+  const uint64_t a = rgbaFingerprint(img.data(), 64, 32, 64 * 4);
+  CHECK(a == rgbaFingerprint(img.data(), 64, 32, 64 * 4));
+  std::vector<uint8_t> other = img;
+  other[(static_cast<size_t>(16) * 64 + 32) * 4] ^= 0x40;  // a sampled pixel (row 16, column 32)
+  CHECK(rgbaFingerprint(other.data(), 64, 32, 64 * 4) != a);
+  CHECK(rgbaFingerprint(img.data(), 32, 64, 32 * 4) != a);
+  CHECK(rgbaFingerprint(nullptr, 64, 32, 64 * 4) == 0);
+}
+
 int main(int argc, char** argv) {
   const std::string path = argc > 1 ? argv[1] : "fixtures/parity.json";
   std::ifstream f(path);
@@ -1432,6 +1695,8 @@ int main(int argc, char** argv) {
   testDrapeOrderCore();
   testDrapeSchedule();
   testDrapeArming();
+  testDrapeSnapshotGuard();
+  testDrapeSlotsUnderInterleavings();
   std::printf("terrain C++ tests: %d cases, %d checks, %d failures\n", g_cases, g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;
 }

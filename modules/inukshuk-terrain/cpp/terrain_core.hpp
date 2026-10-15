@@ -389,4 +389,24 @@ struct DrapeCandidate {
  */
 std::vector<DemId> orderDrapeRequests(std::vector<DrapeCandidate> candidates, double coarseAfter);
 
+// ---- drape snapshot guard (#732) ----------------------------------------------------
+/** FNV-1a over pixel samples (any 32-bit pixel format, the same one per platform). */
+uint64_t sampleFingerprint(const uint32_t* samples, size_t count);
+/** sampleFingerprint over a grid of kFingerprintGrid² pixels of an RGBA8 image (rows `stride` bytes). */
+constexpr int kFingerprintGrid = 64;
+uint64_t rgbaFingerprint(const uint8_t* rgba, int width, int height, size_t stride);
+/**
+ * Whether a reused snapshotter's result really is the block it was asked
+ * for (#732). MapLibre's still renderer keeps the image of every full frame,
+ * and any late "fully rendered" notification fulfils whatever still request is
+ * pending (map_impl.cpp onDidFinishRenderingFrame): a second full frame of
+ * the previous camera can complete the next request at once, with the
+ * previous block's image — a 2×2 patch of the wrong place on the terrain,
+ * then on disk. Such an image repeats the snapshotter's previous result
+ * exactly: rejected once (rendered again); a block that really looks the same
+ * (open water) is accepted on its retry.
+ */
+bool acceptDrapeSnapshot(bool hasPrevious, uint64_t previousFingerprint, uint64_t previousBlock,
+                         uint64_t fingerprint, uint64_t block, bool retried);
+
 }  // namespace inukshuk::terrain

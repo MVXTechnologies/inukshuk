@@ -94,6 +94,19 @@ Measured on the arm64 emulator (release, cold caches, 5 runs each, p50/max
 from the press): centre 7.5/9.6 s → 4.0/4.6 s, everything 16.0/18.0 s →
 14.8/17.5 s; with six snapshotters 2.7/3.9 s and 10.9/13.8 s.
 
+Floating slabs (#732, 2026-10-15): a 2×2 patch of the wrong place could
+appear on the terrain (3 of 17 cold emulator runs, every drape order). The
+engine's drape slots are sound (a fake-GPU test checks every drawn tile
+under late, duplicated and dropped renders); the wrong image comes from
+reusing a MapLibre snapshotter: in static mode any "fully rendered"
+notification fulfils whatever still request is pending, and the renderer
+keeps the image of every full frame, so a late second frame of the previous
+camera can complete the next request at once with the previous block's
+image. Both platforms now fingerprint each snapshot and render a block
+again (once) when it repeats its snapshotter's previous block
+(`acceptDrapeSnapshot`); the drape disk cache moved to a new folder (v2) and
+the old one is dropped, since it may hold such images.
+
 Open: pin density vs Outmap, contour legibility at very steep slopes,
 drape throughput on low-end GPUs (~350 ms per snapshot on the emulator).
 

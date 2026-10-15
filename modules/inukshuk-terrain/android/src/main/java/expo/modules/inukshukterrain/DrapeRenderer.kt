@@ -45,7 +45,7 @@ class DrapeRenderer(
   /** #720: z, x, y, generation of a queued render dropped before it started. */
   private val cancelled: (Int, Int, Int, Int) -> Unit,
 ) {
-  private class Job(val z: Int, val x: Int, val y: Int, val gen: Int)
+  private class Job(val z: Int, val x: Int, val y: Int, val gen: Int, val retried: Boolean = false)
 
   /** Draws no logo or attribution over the drape (the app credits its sources in Settings). */
   private class BareSnapshotter(context: Context, options: Options) : MapSnapshotter(context, options) {
@@ -56,6 +56,9 @@ class DrapeRenderer(
   private val jobs = ArrayDeque<Job>()
   private val snapshotters = ArrayList<MapSnapshotter>()
   private val busy = ArrayList<Boolean>()
+  /** #732: per snapshotter, the fingerprint (0 = none) and block of its last accepted image. */
+  private val lastPrint = ArrayList<Long>()
+  private val lastBlock = ArrayList<Long>()
   private val pixels: ExecutorService = Executors.newFixedThreadPool(2) { r ->
     Thread(r, "terrain-drape").apply {
       isDaemon = true
@@ -70,7 +73,16 @@ class DrapeRenderer(
   /** Round 3 counters: snapshot renders and drape tiles served from the disk cache. */
   val renders = java.util.concurrent.atomic.AtomicInteger()
   val diskHits = java.util.concurrent.atomic.AtomicInteger()
-  private val diskRoot = java.io.File(context.cacheDir, "terrain-drape-tiles")
+  /** #732: snapshots that repeated their snapshotter's previous block (rendered again). */
+  val staleImages = java.util.concurrent.atomic.AtomicInteger()
+  /**
+   * v2 (#732): drapes cached before the snapshot guard may hold another
+   * block's image; that cache (v1) is dropped once, off the main thread.
+   */
+  private val diskRoot = java.io.File(context.cacheDir, "terrain-drape-tiles-v2")
+  init {
+    pixels.execute { java.io.File(context.cacheDir, "terrain-drape-tiles").deleteRecursively() }
+  }
   @Volatile private var tileDir: java.io.File? = null
   private var writes = 0
   private var msTotal = 0.0
@@ -119,6 +131,8 @@ class DrapeRenderer(
     }
     snapshotters.clear()
     busy.clear()
+    lastPrint.clear()
+    lastBlock.clear()
     jobs.clear()
   }
 
@@ -200,6 +214,8 @@ class DrapeRenderer(
         }
         snapshotters.add(snap)
         busy.add(false)
+        lastPrint.add(0L)
+        lastBlock.add(0L)
         idle = snapshotters.size - 1
       } else {
         snap = snapshotters[idle]
@@ -220,8 +236,29 @@ class DrapeRenderer(
       try {
         snap.start(
           { snapshot ->
+            // #732: a reused snapshotter can hand back its previous block's
+            // image (acceptDrapeSnapshot): render that block again, once.
             val bmp = snapshot.bitmap
-            pixels.execute { slice(bmp, job, x0, y0, k, tex, dir) }
+            val print = if (bmp.width > 0 && bmp.height > 0) fingerprint(bmp) else 0L
+            val block = (job.z.toLong() shl 58) or (x0.toLong() shl 29) or y0.toLong()
+            val current = gen == styleGen && slot < lastPrint.size
+            val accepted = print != 0L &&
+              (!current || TerrainNative.nativeAcceptDrapeSnapshot(
+                lastPrint[slot] != 0L, lastPrint[slot], lastBlock[slot], print, block, job.retried,
+              ))
+            if (accepted) {
+              if (current) {
+                lastPrint[slot] = print
+                lastBlock[slot] = block
+              }
+              pixels.execute { slice(bmp, job, x0, y0, k, tex, dir) }
+            } else if (!job.retried) {
+              staleImages.incrementAndGet()
+              Log.w(TAG, "drape snapshot of ${job.z}/$x0/$y0 repeated the previous block: rendering it again")
+              jobs.addFirst(Job(job.z, job.x, job.y, job.gen, retried = true))
+            } else {
+              for (j in 0 until k) for (i in 0 until k) deliver(job.z, x0 + i, y0 + j, null, tex, job.gen)
+            }
             finish()
           },
           { error ->
@@ -270,6 +307,18 @@ class DrapeRenderer(
     return best
   }
 
+  /** #732: the snapshot's fingerprint over a 64² grid of its pixels (rgbaFingerprint's sampling). */
+  private fun fingerprint(bmp: Bitmap): Long {
+    val n = FINGERPRINT_GRID
+    val samples = IntArray(n * n + 1)
+    samples[0] = bmp.width * 65536 + bmp.height
+    for (j in 0 until n) {
+      val y = ((j + 0.5) * bmp.height / n).toInt()
+      for (i in 0 until n) samples[1 + j * n + i] = bmp.getPixel(((i + 0.5) * bmp.width / n).toInt(), y)
+    }
+    return TerrainNative.nativeSampleFingerprint(samples)
+  }
+
   private fun finishJob(gen: Int, slot: Int, started: Long) {
     if (closed) return
     if (gen == styleGen && slot < busy.size) busy[slot] = false
@@ -277,7 +326,11 @@ class DrapeRenderer(
     renders.incrementAndGet()
     msTotal += (System.nanoTime() - started) / 1e6
     if (rendered % 40 == 0) {
-      Log.i(TAG, "drape snapshots $rendered (2x2 blocks), mean ${"%.0f".format(msTotal / rendered)} ms, queue ${jobs.size}")
+      Log.i(
+        TAG,
+        "drape snapshots $rendered (2x2 blocks), mean ${"%.0f".format(msTotal / rendered)} ms, " +
+          "queue ${jobs.size}, stale ${staleImages.get()}",
+      )
     }
     pump()
   }
@@ -347,5 +400,6 @@ class DrapeRenderer(
     const val DISK_BYTES = 150L * 1024 * 1024
     const val TAG = "InukshukTerrain"
     const val MAX_SNAPSHOTTERS = 3
+    const val FINGERPRINT_GRID = 64
   }
 }
