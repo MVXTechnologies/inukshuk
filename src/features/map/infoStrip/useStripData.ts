@@ -1,4 +1,5 @@
 import { fixAltitude } from '@core/gnss/receiver';
+import { visibleCursor } from '@core/infoStrip/cursor';
 import { stripNeeds } from '@core/infoStrip/deps';
 import { datumTag } from '@core/infoStrip/edit';
 import { createMovingSpeedWindow } from '@core/infoStrip/movingSpeed';
@@ -29,6 +30,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCenterElevation } from '../centerElevation';
 import type { FollowState } from '../nav/useFollowTrail';
 import { subscribeHeading } from '../useCompass';
+import { useLiveCentre } from './liveCentre';
 import { useInstalledExtensions } from './stripSettings';
 import { useStripTides } from './useStripTides';
 
@@ -205,6 +207,15 @@ export function useStripSnapshot(
     deps.has('elevation') && !youAreCentre ? centre : null,
   );
   const heading = useGatedHeading(deps.has('heading'));
+  // The centre cursor, live while you pan (≤ 10 Hz), only with a cursor field.
+  const liveCentre = useLiveCentre(deps.has('cursor'));
+  const cursorSettings = strip.aids.cursor;
+  // While the map follows you the cursor sits on you: nothing to measure.
+  const cursorOnYou = followsUser && location !== null;
+  const cursor = useMemo(
+    () => visibleCursor(cursorSettings, isRealCenter(liveCentre) ? liveCentre : null, cursorOnYou),
+    [cursorSettings, liveCentre, cursorOnYou],
+  );
   const course = useCourse(deps.has('course'), location);
 
   // An external receiver in use: its altitude, and the fix in other datums.
@@ -326,6 +337,7 @@ export function useStripSnapshot(
       course,
       movingSpeedMps,
       navTarget,
+      cursor,
       follow: followSnap,
       waypoints,
       recording: hero,
@@ -348,6 +360,7 @@ export function useStripSnapshot(
     heading,
     course,
     navTarget,
+    cursor,
     waypoints,
     coordinateFormat,
     external,

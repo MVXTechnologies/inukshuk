@@ -24,6 +24,7 @@ export function snapshot(over: Partial<DepsSnapshot> = {}): DepsSnapshot {
     course: null,
     movingSpeedMps: null,
     navTarget: null,
+    cursor: null,
     follow: null,
     waypoints: {},
     recording: null,

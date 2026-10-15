@@ -118,7 +118,15 @@ describe('the picker list', () => {
     expect(pickableFields(4, NONE, 'dist').map((d) => d.id)).toEqual(
       expect.arrayContaining(['targetDistance', 'offTrail', 'hero:distance']),
     );
-    expect(pickableFields(4, NONE, '  RANGE ').map((d) => d.id)).toEqual(['targetDistance']);
+    expect(pickableFields(4, NONE, '  RANGE ').map((d) => d.id)).toEqual([
+      'targetDistance',
+      'cursorDistance',
+    ]);
+    // The cursor fields sit with the target fields (owner: "Bearing/Distance to cursor").
+    expect(pickableFields(4, NONE, 'cursor').map((d) => d.id)).toEqual([
+      'cursorBearing',
+      'cursorDistance',
+    ]);
     expect(pickableFields(4, NONE, 'déclinaison').length).toBe(0);
     expect(pickableFields(4, NONE, 'DÉCLINATION').map((d) => d.id)).toEqual(['declination']);
   });

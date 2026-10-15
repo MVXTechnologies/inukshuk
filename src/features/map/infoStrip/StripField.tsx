@@ -7,6 +7,7 @@ import { memo, useMemo, useState } from 'react';
 import { PixelRatio, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
 
+import { CursorGlyph } from '../components/CenterCursor';
 import { WaypointPinView } from '../waypoints/WaypointPinView';
 import { glyphIcon } from './glyphs';
 
@@ -135,21 +136,30 @@ export const StripField = memo(function StripField({
 
 /**
  * What a reading is to, as the map draws it: a saved waypoint's own pin (its
- * icon, in its colour), else the target's glyph in the theme's ink.
+ * icon, in its colour), the centre cursor as the map draws it (its icon,
+ * colour and halo), else the target's glyph in the theme's ink.
  * Decorative: the cell's label names it.
  */
 function SubjectIcon({ subject, color }: { subject: StripSubject; color: string }) {
+  const kind =
+    subject.cursor !== undefined ? 'cursor' : subject.pin !== undefined ? 'pin' : 'glyph';
   return (
     <View
       style={styles.subjectIcon}
       importantForAccessibility="no-hide-descendants"
       accessibilityElementsHidden
-      testID={subject.pin === undefined ? 'strip-subject-glyph' : 'strip-subject-pin'}
+      testID={`strip-subject-${kind}`}
     >
-      {subject.pin === undefined ? (
-        <Icon source={glyphIcon(subject.glyph)} size={14} color={color} />
-      ) : (
+      {subject.cursor !== undefined ? (
+        <CursorGlyph
+          cursor={{ ...subject.cursor, enabled: true, size: 'S', hideWhileFollowing: false }}
+          px={CURSOR_PX}
+          testIDPrefix="strip-subject-cursor"
+        />
+      ) : subject.pin !== undefined ? (
         <WaypointPinView icon={subject.pin.icon} color={subject.pin.color} diameter={PIN_DP} />
+      ) : (
+        <Icon source={glyphIcon(subject.glyph)} size={14} color={color} />
       )}
     </View>
   );
@@ -157,6 +167,8 @@ function SubjectIcon({ subject, color }: { subject: StripSubject; color: string 
 
 /** The subject's pin head, dp: the glyph's 14 dp box, its tip inside the 30 dp row. */
 const PIN_DP = 12;
+/** The cursor's strokes, dp: with its padding and halo, the glyph's box. */
+const CURSOR_PX = 10;
 
 function propsEqual(a: StripFieldProps, b: StripFieldProps): boolean {
   return (

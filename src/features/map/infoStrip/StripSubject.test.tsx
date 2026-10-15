@@ -127,6 +127,7 @@ describe('InfoStripView: a target named once, spoken by name', () => {
     course: null,
     movingSpeedMps: 1.2,
     navTarget: { name: 'Camp lac', point: CAMP, waypointId: 'w1', pin: { color: '#1E64C8' } },
+    cursor: null,
     follow: null,
     waypoints: {},
     recording: null,

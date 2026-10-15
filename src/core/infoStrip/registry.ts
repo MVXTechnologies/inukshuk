@@ -11,6 +11,7 @@
 import { foldText } from '@core/catalog/filterCatalog';
 import type { AnyExtensionKey } from '@core/extensions/keys';
 
+import { CURSOR_BEARING, CURSOR_DISTANCE } from './fields/cursor';
 import { GNSS_FIX, GNSS_HEIGHT, TIDE_LEVEL, TIDE_NEXT_HIGH } from './fields/extensions';
 import {
   ETA,
@@ -44,6 +45,8 @@ export const FIELDS = {
   targetBearing: TARGET_BEARING,
   ete: ETE,
   eta: ETA,
+  cursorBearing: CURSOR_BEARING,
+  cursorDistance: CURSOR_DISTANCE,
   offTrail: OFF_TRAIL,
   speed: SPEED,
   heading: HEADING,
