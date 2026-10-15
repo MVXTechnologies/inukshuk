@@ -1,0 +1,102 @@
+# inukshuk-rtc: rendezvous rooms + TURN credentials for phone-to-phone sync
+# (2.7.0, #705). Deployed to its OWN free Cloudflare account, never the tiles
+# account (security review R-OPS-1): relay load must not take the basemap down.
+# Owner checklist: ../README.md. Nothing here is secret.
+name = "inukshuk-rtc"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# Bind to the relay host once the zone is set up (README step 6):
+# routes = [{ pattern = "rtc.example.org", custom_domain = true }]
+
+# R-META-2: no Workers Logs at all. Invocation logs would record every
+# /v1/r/<roomId> URL next to the client IP; the code has no log calls either
+# (gates.mjs and test/gates.test.ts enforce both).
+[observability]
+enabled = false
+
+  [observability.logs]
+  enabled = false
+  invocation_logs = false
+
+# One Durable Object per room (named by the opaque room id) and one singleton
+# for the TURN budget. Both keep state in memory only (R-RLY-1): no KV, R2 or
+# D1 binding. The Free plan only offers SQLite-backed Durable Object classes,
+# hence `new_sqlite_classes`; that database stays empty because the code never
+# opens it (the tests hand the objects a store that throws on any access).
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[durable_objects.bindings]]
+name = "BUDGET"
+class_name = "Budget"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room", "Budget"]
+
+# R-TURN-4: refresh the TURN egress reading every 10 minutes; minting turns
+# itself off at TURN_USAGE_OFF_PERCENT of the monthly allowance.
+[triggers]
+crons = ["*/10 * * * *"]
+
+[vars]
+# Kill switches. "0" closes the door: no new room sockets (503) / no TURN
+# credentials (phones fall back to direct connections only).
+RTC_ENABLED = "1"
+TURN_ENABLED = "1"
+# R-TURN-2: credential lifetime, seconds (capped at 900 in code whatever this says).
+TURN_TTL_S = "900"
+# R-TURN-2: credentials one room socket may get per hour.
+TURN_PER_SOCKET_PER_HOUR = "6"
+# R-RL-1: credentials one client (IP) may get per hour, all rooms together.
+TURN_PER_IP_PER_HOUR = "20"
+# R-TURN-3: credentials per UTC day, all clients together.
+TURN_DAILY_BUDGET = "2000"
+# R-TURN-4: Realtime's free egress per month (GB, shared with the SFU) and the
+# share of it at which minting stops.
+TURN_MONTHLY_ALLOWANCE_GB = "1000"
+TURN_USAGE_OFF_PERCENT = "80"
+# R-RL-3: authenticated sockets per room, and per client IP in one room.
+ROOM_MAX_SOCKETS = "128"
+ROOM_MAX_PER_IP = "4"
+
+# Secrets (`wrangler secret put <NAME>`, README step 5) — never in this file:
+#   TURN_KEY_ID          Realtime TURN key id
+#   TURN_KEY_API_TOKEN   that key's API token (mints credentials)
+#   CF_ACCOUNT_ID        the relay account's id (the usage query reads it)
+#   CF_ANALYTICS_TOKEN   API token, Account Analytics: Read (usage cron)
+#   IP_TAG_KEY           any long random string (keys the in-memory client tags)
+
+# R-RL-1: rate-limiting bindings (free; counted per Cloudflare location).
+# The client IP is the key only, never stored. namespace_id is any integer
+# unique within this account.
+
+# WebSocket upgrades per client IP per minute.
+[[ratelimits]]
+name = "WS_LIMITER"
+namespace_id = "2701"
+
+  [ratelimits.simple]
+  limit = 30
+  period = 60
+
+# Failed room authentications per client per minute (strikes).
+[[ratelimits]]
+name = "AUTH_FAIL_LIMITER"
+namespace_id = "2702"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
+# TURN credentials per client per minute (burst; the hourly cap is
+# TURN_PER_IP_PER_HOUR in the budget object).
+[[ratelimits]]
+name = "TURN_LIMITER"
+namespace_id = "2703"
+
+  [ratelimits.simple]
+  limit = 5
+  period = 60

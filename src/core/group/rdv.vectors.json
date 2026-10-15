@@ -1,0 +1,80 @@
+{
+  "description": "Pinned rendezvous vectors (security review 2026-10 §6.3). Checked by src/core/group/rdv.test.ts and roomBlob.test.ts (noble) and by infra/rtc/worker/test (WebCrypto). Never regenerate: a change here is a wire break.",
+  "input": {
+    "epochKey": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "groupId": "oKGio6SlpqeoqaqrrK2urw",
+    "groupIdHex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+    "inviteSeed": "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"
+  },
+  "rs": "34cdc022185d5a30ffeceaacff323b7943ac511f7a1a38905df2046bdb7116d4",
+  "ir": "115feec426d1a5599b2155f6fecbb926f95800048f9d2d05524bd9df349f9fe8",
+  "roomDays": [
+    {
+      "unixSeconds": 1760486400,
+      "days": [20376, 20375]
+    },
+    {
+      "unixSeconds": 1760486999,
+      "days": [20376, 20375]
+    },
+    {
+      "unixSeconds": 1760487000,
+      "days": [20376]
+    },
+    {
+      "unixSeconds": 1760572799,
+      "days": [20376]
+    }
+  ],
+  "rooms": [
+    {
+      "secret": "rs",
+      "day": 20376,
+      "roomSeed": "d5db5b741364e6933876977ae3fa4bccee975da750cdbf5c9f48423b9e47344c",
+      "roomPub": "ae185e21c93f7ad792ec0ecd88bcf12052c24494e41bbec8f98d44fa656c1ac2",
+      "roomId": "MbsTLokc2O13vZl9l7SEmg",
+      "roomKey": "e74526ac25a73b81cdcdedad29f7f008dbaeab0c09f5a70f68c3f289a6d71fd1"
+    },
+    {
+      "secret": "rs",
+      "day": 20375,
+      "roomSeed": "8bcab0f8d37be95411b75eee0cf15f8244b1bc7d73d7870c4a6199ac1bf1ff4b",
+      "roomPub": "b8c21bd63ee552c52f65579f15e76f9fb0d17ffe24b179f643fff38b39148f27",
+      "roomId": "FaHaJb8mHHuq1slRlItR4Q",
+      "roomKey": "46c11a3cf84e5a9ea52841fdf3f236e26607edfe3c134ae434e5eb63d4068101"
+    },
+    {
+      "secret": "rs",
+      "day": 20377,
+      "roomSeed": "dbab0a44dcb6ad3565ee5f253ab1076ab71e07f19feeac197791f4711278a767",
+      "roomPub": "d5f3b1ab9e139cabfdb81385a2f5b0130c8fd69772311024af237ff3fb636755",
+      "roomId": "wc6nCIL8jjD21cWxB_jGsg",
+      "roomKey": "b3b8c2c3342e1673615d3abaf0431d934c7c1383f674ad43c7b005ec341cdf6f"
+    },
+    {
+      "secret": "ir",
+      "day": 20376,
+      "roomSeed": "fd84f22073d009cb7e0ce5ebfacc2f731d1fcf98147bb6b48afe968f15e280ad",
+      "roomPub": "593510826b004fdf696715f297209bf527626ccfdd0ccd7be0cf7a1ae0eccbff",
+      "roomId": "jCODq_on6amxdqfggy7gHQ",
+      "roomKey": "251e0b52310c1ca7897fc3a632df4c6de962d1f590fc853fd79f87abcc21bcc0"
+    }
+  ],
+  "auth": {
+    "host": "rtc.example.org",
+    "roomId": "MbsTLokc2O13vZl9l7SEmg",
+    "challenge": "c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+    "message": "696e756b7368756b2f7264762f76312f617574680a7274632e6578616d706c652e6f72674d6273544c6f6b63324f3133765a6c396c3753456d67c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+    "roomPub": "ae185e21c93f7ad792ec0ecd88bcf12052c24494e41bbec8f98d44fa656c1ac2",
+    "signature": "69215ddb8f1e4375850a296720390e8ed98c7745b17ab8f21168235353dcc2fd86ca6c29b8bf3078d6470007c597af27ad56948442f173e6c12e305c578a5b0c"
+  },
+  "blob": {
+    "roomId": "MbsTLokc2O13vZl9l7SEmg",
+    "day": 20376,
+    "roomKey": "e74526ac25a73b81cdcdedad29f7f008dbaeab0c09f5a70f68c3f289a6d71fd1",
+    "fromHandle": "AAECAwQFBgc",
+    "nowSeconds": 1760486430,
+    "payloadUtf8": "{\"t\":\"hello\"}",
+    "blobB64u": "AWju5B5AQUJDREVGR0hJSktMTU5PUFFSU1RVVlfUMSCI0Rn2ht2Co3C_TlJIF7q5QwEub38rhQLrVmeL555CI0HYL-D7-rzUyKxZ1jyC4MXwfGBiWvnxeaz-15XzG_LQpXlEUNpuJG7X2biNwO19ucM3z56briy-EG6AkiOjWAHGUvB-B57x82YP3hfaILuf3lGoy4bbjNSU5PeF4RK0FDXSADPvKqOQovCiMz_P6X-wwToKTh4L8lc0QY403FDbBWT1MqcUXigWrxDVoX7SSEImKiiFcXx5BG8Ac4hTsgeuUjLLBmlR9ckXoEMgq4dRHz1ahAJjw1OyBTbUZoKrww"
+  }
+}

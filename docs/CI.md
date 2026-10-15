@@ -3,19 +3,20 @@
 All automation lives in `.github/workflows/`. The goal is a project that builds,
 tests, and corrects itself without anyone watching.
 
-| Workflow                   | Trigger                              | What it does                                                                                         |
-| -------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| `ci.yml`                   | every push / PR                      | typecheck · lint · format-check · unit + script tests · tiles Worker · expo-doctor (advisory)        |
-| `native-build.yml`         | every PR (builds if native); nightly | real **iOS** (`xcodebuild`) + **Android** (`gradlew assembleDebug`) compiles on latest runners       |
-| `e2e.yml`                  | nightly; manual                      | Maestro flows on Android emulators, in parallel shards (`.maestro/shards.json`)                      |
-| `release-path.yml`         | PRs/main touching the hook; weekly   | runs the EAS `eas-build-pre-install` hook like EAS does (Android + iOS → `pod install`)              |
-| `runtime-check.yml`        | every PR; push to `main`             | compares the native runtime fingerprint with the latest store builds; warns, never fails             |
-| `nightly.yml`              | nightly; manual                      | full gate + **blocking** expo-doctor + high+ audits (app, Worker); opens a tracking issue on failure |
-| `ota-update.yml`           | push to `main` (JS/assets)           | publishes an EAS Update so installed apps self-correct                                               |
-| `release.yml`              | version tag `v*`; manual             | EAS build + auto-submit to App Store & Play Store                                                    |
-| `dependabot-automerge.yml` | Dependabot PRs; CI completion        | never merges: labels green minor/patch, non-native updates `ready-for-review` for a human            |
-| `hermes-android.yml`       | push touching its inputs; manual     | builds the patched Hermes for Android once (#648) and publishes it as a release; never replaces one  |
-| `ci-health.yml`            | every 3 h; manual                    | one `ci-health` issue listing every workflow whose latest run on `main` (24 h) is red; auto-closes   |
+| Workflow                   | Trigger                              | What it does                                                                                                         |
+| -------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`                   | every push / PR                      | typecheck · lint · format-check · unit + script tests · tiles Worker · expo-doctor (advisory)                        |
+| `native-build.yml`         | every PR (builds if native); nightly | real **iOS** (`xcodebuild`) + **Android** (`gradlew assembleDebug`) compiles on latest runners                       |
+| `e2e.yml`                  | nightly; manual                      | Maestro flows on Android emulators, in parallel shards (`.maestro/shards.json`)                                      |
+| `release-path.yml`         | PRs/main touching the hook; weekly   | runs the EAS `eas-build-pre-install` hook like EAS does (Android + iOS → `pod install`)                              |
+| `runtime-check.yml`        | every PR; push to `main`             | compares the native runtime fingerprint with the latest store builds; warns, never fails                             |
+| `nightly.yml`              | nightly; manual                      | full gate + **blocking** expo-doctor + high+ audits (app, Worker); opens a tracking issue on failure                 |
+| `ota-update.yml`           | push to `main` (JS/assets)           | publishes an EAS Update so installed apps self-correct                                                               |
+| `release.yml`              | version tag `v*`; manual             | EAS build + auto-submit to App Store & Play Store                                                                    |
+| `dependabot-automerge.yml` | Dependabot PRs; CI completion        | never merges: labels green minor/patch, non-native updates `ready-for-review` for a human                            |
+| `hermes-android.yml`       | push touching its inputs; manual     | builds the patched Hermes for Android once (#648) and publishes it as a release; never replaces one                  |
+| `ci-health.yml`            | every 3 h; manual                    | one `ci-health` issue listing every workflow whose latest run on `main` (24 h) is red; auto-closes                   |
+| `rtc-worker.yml`           | PRs/main touching it; nightly        | relay Worker gates (no storage/logs) · typecheck · tests; nightly audit; deploy from `main` (no-ops without secrets) |
 
 Plus `.github/dependabot.yml` (weekly npm + actions updates, grouped).
 
@@ -477,6 +478,19 @@ ship iOS fixes until 2.3.1/2.4.0 is in the store.
 Workers `tsconfig`). CI installs it with `npm ci --ignore-scripts`, typechecks
 it, and runs its Jest suites. Deploying it is still the owner's manual step
 (`infra/tiles/README.md`).
+
+## RTC Worker (`rtc-worker.yml`)
+
+`infra/rtc/worker` is the rendezvous / TURN relay for 2.7.0 phone-to-phone sync
+(#705), its own npm project deployed to its own Cloudflare account. The
+`gates` job runs the security review's checks (`gates.mjs`: no storage, no
+log calls, Workers Logs off, rate-limit bindings present, no KV/R2/D1), the
+Worker's typecheck, and its Jest suites together with the shared rendezvous
+vectors (`src/core/group/rdv.vectors.json`); the same suites also run in
+`ci.yml` › `quality`. The nightly run audits its lockfile (high+). `deploy`
+runs on `main` in the `rtc` environment and is skipped until
+`CLOUDFLARE_RTC_API_TOKEN` and `CLOUDFLARE_RTC_ACCOUNT_ID` exist
+(`infra/rtc/README.md`).
 
 ## Workflow security
 
