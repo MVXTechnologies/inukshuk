@@ -66,15 +66,45 @@ type CirclePaint = NonNullable<CircleLayerSpecification['paint']>;
  *   them otherwise), and further apart at any fractional zoom above it.
  * - {@link pinClusterRadius} is at least the farthest tip-to-tip offset at
  *   which one pin's glyph could touch another pin's body, ring included, for
- *   every pair of sizes on the map, at the Pin size setting.
+ *   every pair of sizes on the map, at the Pin size setting — in EVERY
+ *   direction, whichever pin is in front: across a tile edge MapLibre stacks
+ *   whole tiles, so `viewport-y` is not a promise the guarantee may lean on.
  *
  * So pins left unclustered never have a glyph over another's body (proven by
- * `waypointClusters.test.ts`). Bodies may still touch at their edges; they
- * are drawn lower-on-screen in front (`viewport-y`), the old north-behind
- * rule. Clusters exist up to the camera's cap ({@link PIN_CLUSTER_MAX_ZOOM}),
- * so the guarantee holds at every zoom the map allows. On a pitched map the
- * far side is foreshortened and the margin shrinks there; that is the one
- * place two pins can still overlap.
+ * `waypointClusters.test.ts`). Clusters exist up to the camera's cap
+ * ({@link PIN_CLUSTER_MAX_ZOOM}), so the guarantee holds at every zoom the
+ * map allows. On a pitched map the far side is foreshortened and the margin
+ * shrinks there; that is the one place two pins can still overlap.
+ *
+ * ## Grouped only once they meet (#724)
+ *
+ * Supercluster merges by a CIRCLE; a pin is a teardrop, taller than wide.
+ * Both distances are measured on the shapes drawn (`pinGeometry`: the round
+ * head √½·d above the tip, the tangents down to it, the ring round both),
+ * exactly, as hulls of discs. Tip to tip, at 100 %:
+ *
+ *            bodies touch   bodies touch   glyph can reach   radius   (2.6.0,
+ *            side by side   stacked        a body (farthest)          boxes)
+ *   S  / S       30             35.4           28.7              30      36
+ *   M  / M       36             42.6           34.8              36      44
+ *   L  / L       44             52.3           43.0              44      54
+ *   XL / XL      54             64.4           53.3              54      66
+ *
+ * The radius is the closest touch (side by side), so two pins are grouped
+ * only once their bodies meet; stacked ones overlap a little before they
+ * are, drawn lower-on-screen in front (`viewport-y`). That is safe because
+ * for one size the glyph's reach is always inside the touch (the table; it
+ * holds up to d ≈ 77 px, past XL at 150 %), so the radius needs no padding
+ * for it — save the integer's rounding: XL at 125 % touches at 66.5 and its
+ * glyph needs 67. With a MIX of sizes it can need more: a big pin's icon
+ * sits high on its head and reaches a small pin's tip from far below (S +
+ * XL: touch 30, glyph 53.3), so a mixed map takes the glyph's 54 and its
+ * small pins group a little before they meet — never past the old box
+ * radius.
+ *
+ * The clusters MapLibre draws at zoom z + f are those of tile zoom z, so
+ * between whole zooms pins up to 2^f × the radius apart can still show
+ * grouped; at whole zooms they are grouped exactly as above.
  *
  * The selected pin and the pin being moved are never in this source: the
  * selected one draws on top in its own source (the one-layer, source-order
@@ -91,30 +121,122 @@ export const PIN_CLUSTER_MAX_ZOOM = 18;
 /** Half the glyph's em box, as a fraction of the pin's diameter (28 of 50 → 0.28). */
 const GLYPH_HALF = GLYPH_SPRITE_BOX / PIN_SPRITE_BASE_D / 2;
 
-/** A pin's drawn body box around its tip (y down, px), its ring included. */
-function bodyBox(size: WaypointSize | undefined, scale: number) {
-  const d = WAYPOINT_PIN_DIAMETER[waypointSize(size)] * scale;
-  const { height } = pinGeometry(d);
-  return {
-    left: -d / 2 - PIN_RING_WIDTH,
-    right: d / 2 + PIN_RING_WIDTH,
-    top: -height - PIN_RING_WIDTH,
-    bottom: PIN_RING_WIDTH,
-  };
+/** A disc (x, y, radius), screen px, y down; a radius of 0 is a point. */
+interface Disc {
+  x: number;
+  y: number;
+  r: number;
 }
 
-/** A pin's glyph box around its tip (y down, px): centred on the head. */
-function glyphBox(size: WaypointSize | undefined, scale: number) {
+/**
+ * A pin's drawn body around its tip, ring included: the convex hull of its
+ * head (√½·d above the tip, `pinGeometry`) and its tip, each widened by the
+ * ring. (The teardrop IS that hull: the sides are the tangents from the tip.)
+ */
+function bodyDiscs(size: WaypointSize | undefined, scale: number): Disc[] {
   const d = WAYPOINT_PIN_DIAMETER[waypointSize(size)] * scale;
-  const half = d * GLYPH_HALF;
+  return [
+    { x: 0, y: -pinGeometry(d).headCenterY, r: d / 2 + PIN_RING_WIDTH },
+    { x: 0, y: 0, r: PIN_RING_WIDTH },
+  ];
+}
+
+/** A pin's glyph em box around its tip, centred on the head: its four corners. */
+function glyphCorners(size: WaypointSize | undefined, scale: number): Disc[] {
+  const d = WAYPOINT_PIN_DIAMETER[waypointSize(size)] * scale;
+  const h = d * GLYPH_HALF;
   const cy = -pinGeometry(d).headCenterY;
-  return { left: -half, right: half, top: cy - half, bottom: cy + half };
+  return [
+    { x: -h, y: cy - h, r: 0 },
+    { x: h, y: cy - h, r: 0 },
+    { x: h, y: cy + h, r: 0 },
+    { x: -h, y: cy + h, r: 0 },
+  ];
+}
+
+/**
+ * The tip offsets (B's tip from A's) at which B's shape meets A's: the hull
+ * of every A disc minus every B disc (a Minkowski difference of two hulls of
+ * discs is the hull of the pairwise differences), with the directions where
+ * two of its discs share a tangent and the hull's reach along each.
+ */
+interface Hull {
+  discs: Disc[];
+  /** [nx, ny, reach]: reach = max(r + c·n), the hull's extent along n. */
+  tangents: [number, number, number][];
+  /** The farthest any point of it is from the origin: max(|c| + r). */
+  far: number;
+}
+
+function reachAlong(discs: readonly Disc[], nx: number, ny: number): number {
+  let reach = -Infinity;
+  for (const c of discs) reach = Math.max(reach, c.r + c.x * nx + c.y * ny);
+  return reach;
+}
+
+function meetingSet(a: readonly Disc[], b: readonly Disc[]): Hull {
+  const discs = a.flatMap((p) => b.map((q) => ({ x: p.x - q.x, y: p.y - q.y, r: p.r + q.r })));
+  const tangents: [number, number, number][] = [[1, 0, reachAlong(discs, 1, 0)]];
+  for (let i = 0; i < discs.length; i++) {
+    for (let j = i + 1; j < discs.length; j++) {
+      const p = discs[i]!;
+      const q = discs[j]!;
+      const len = Math.hypot(p.x - q.x, p.y - q.y);
+      if (len === 0) continue;
+      const c = (q.r - p.r) / len;
+      if (Math.abs(c) > 1) continue;
+      const phi = Math.atan2(p.y - q.y, p.x - q.x);
+      for (const t of [phi + Math.acos(c), phi - Math.acos(c)]) {
+        const nx = Math.cos(t);
+        const ny = Math.sin(t);
+        tangents.push([nx, ny, reachAlong(discs, nx, ny)]);
+      }
+    }
+  }
+  let far = 0;
+  for (const c of discs) far = Math.max(far, Math.hypot(c.x, c.y) + c.r);
+  return { discs, tangents, far };
+}
+
+/**
+ * How deep `v` sits inside the hull (> 0 inside, < 0 out): the least, over
+ * every direction n, of the hull's reach along n past v — max(r + (c − v)·n).
+ * That envelope of sinusoids bottoms out where one term is at its own
+ * minimum (n pointing from that disc's centre at v) or two terms cross (a
+ * shared tangent, the same for every v), so those are the only directions
+ * to try: exact, no sampling.
+ */
+function hullDepth(hull: Hull, vx: number, vy: number): number {
+  let depth = Infinity;
+  for (const t of hull.tangents) depth = Math.min(depth, t[2] - vx * t[0] - vy * t[1]);
+  for (const c of hull.discs) {
+    const len = Math.hypot(vx - c.x, vy - c.y);
+    // At v the term is the constant r: a flat stretch, met at its crossings.
+    if (len === 0) continue;
+    const nx = (vx - c.x) / len;
+    const ny = (vy - c.y) / len;
+    depth = Math.min(depth, reachAlong(hull.discs, nx, ny) - vx * nx - vy * ny);
+  }
+  return depth;
+}
+
+const glyphHulls = new Map<string, Hull>();
+
+/** Where B's glyph meets A's body (memoised: 4 sizes² × the Pin size steps). */
+function glyphHull(a: WaypointSize | undefined, b: WaypointSize | undefined, scale: number): Hull {
+  const key = `${waypointSize(a)}|${waypointSize(b)}|${scale}`;
+  let hull = glyphHulls.get(key);
+  if (hull === undefined) {
+    hull = meetingSet(bodyDiscs(a, scale), glyphCorners(b, scale));
+    glyphHulls.set(key, hull);
+  }
+  return hull;
 }
 
 /**
  * Whether pin B's glyph, B's tip at (`dx`, `dy`) px from A's tip (y down),
- * covers any of pin A's body: the defect 2.5.1 fixed (an icon of one pin
- * drawn on another).
+ * covers any of pin A's drawn body, ring included: the defect 2.5.1 fixed
+ * (an icon of one pin drawn on another).
  */
 export function glyphReachesBody(
   dx: number,
@@ -123,40 +245,66 @@ export function glyphReachesBody(
   sizeB: WaypointSize | undefined,
   scale = 1,
 ): boolean {
-  const a = bodyBox(sizeA, scale);
-  const g = glyphBox(sizeB, scale);
-  return (
-    dx + g.left < a.right && dx + g.right > a.left && dy + g.top < a.bottom && dy + g.bottom > a.top
-  );
+  const hull = glyphHull(sizeA, sizeB, scale);
+  // Quick answers first (a plane sweep asks this a million times): past the
+  // farthest disc is out, inside any disc is in.
+  if (dx * dx + dy * dy >= hull.far * hull.far) return false;
+  for (const c of hull.discs) {
+    if ((dx - c.x) ** 2 + (dy - c.y) ** 2 < c.r * c.r) return true;
+  }
+  return hullDepth(hull, dx, dy) > 0;
 }
 
-/** The farthest tip-to-tip distance at which B's glyph can still touch A's body, px. */
+/**
+ * The farthest tip-to-tip distance at which B's glyph can still touch A's
+ * body, px, in any direction: the meeting set's farthest point, which is on
+ * the disc that reaches farthest (|centre| + radius).
+ */
 export function glyphClearancePx(
   sizeA: WaypointSize | undefined,
   sizeB: WaypointSize | undefined,
   scale = 1,
 ): number {
-  const a = bodyBox(sizeA, scale);
-  const g = glyphBox(sizeB, scale);
-  // The offsets that overlap form a box; its farthest corner is the answer.
-  const x = Math.max(Math.abs(a.right - g.left), Math.abs(a.left - g.right));
-  const y = Math.max(Math.abs(a.bottom - g.top), Math.abs(a.top - g.bottom));
-  return Math.hypot(x, y);
+  return glyphHull(sizeA, sizeB, scale).far;
+}
+
+/**
+ * The closest tip-to-tip distance at which two drawn bodies touch, px, over
+ * every direction: side by side, heads ring to ring (d + 2 rings for one
+ * size). The meeting set holds the origin, so its nearest edge is its depth
+ * there.
+ */
+export function bodyTouchPx(
+  sizeA: WaypointSize | undefined,
+  sizeB: WaypointSize | undefined,
+  scale = 1,
+): number {
+  return hullDepth(meetingSet(bodyDiscs(sizeA, scale), bodyDiscs(sizeB, scale)), 0, 0);
 }
 
 /**
  * The cluster radius (screen px, integer as MapLibre takes it) for pins of
- * these sizes at this Pin size: the largest glyph clearance over every
- * ordered pair of sizes present. Absent sizes are M. Changes only when the
- * setting changes or the largest size on the map does.
+ * these sizes at this Pin size (#724): the closest touch of two bodies — so
+ * pins are grouped only once they meet — but never under the farthest
+ * glyph clearance, so pins left apart never have an icon on another (see
+ * the header). For one size the touch always wins, give or take the
+ * integer's rounding; a mix of sizes can need more. Absent sizes are M.
+ * Changes only when the setting changes or the sizes on the map do.
  */
 export function pinClusterRadius(sizes: Iterable<WaypointSize | undefined>, scale = 1): number {
   const present = new Set<WaypointSize>();
   for (const s of sizes) present.add(waypointSize(s));
   if (present.size === 0) present.add('M');
-  let r = 0;
-  for (const a of present) for (const b of present) r = Math.max(r, glyphClearancePx(a, b, scale));
-  return Math.ceil(r);
+  let touch = Infinity;
+  let glyph = 0;
+  for (const a of present) {
+    for (const b of present) {
+      touch = Math.min(touch, bodyTouchPx(a, b, scale));
+      glyph = Math.max(glyph, glyphClearancePx(a, b, scale));
+    }
+  }
+  // The float touch of 36 px can come out a hair under; never lose the pixel to it.
+  return Math.max(Math.floor(touch + 1e-9), Math.ceil(glyph));
 }
 
 /** The largest radius any mix of sizes can need at `scale` (all four present). */

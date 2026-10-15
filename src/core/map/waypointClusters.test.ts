@@ -1,5 +1,5 @@
 import { nearestPinHitAt, pinHitArea } from '@core/geo/pinHitTest';
-import { WAYPOINT_SIZES } from '@core/library/waypointStyle';
+import { WAYPOINT_PIN_DIAMETER, WAYPOINT_SIZES, pinGeometry } from '@core/library/waypointStyle';
 import type { WaypointSize } from '@core/models';
 import { PIN_SCALES, pinScaleFactor } from '@core/map/pinScale';
 import { validateStyleMin } from '@maplibre/maplibre-gl-style-spec';
@@ -19,6 +19,7 @@ import {
   clusteredBodyPaint,
   clusteredGlyphLayout,
   clusteredGlyphPaint,
+  bodyTouchPx,
   clusteredPhotoLayout,
   glyphClearancePx,
   glyphReachesBody,
@@ -31,7 +32,13 @@ import {
   selectedPin,
   waypointQueryReachPx,
 } from './waypointClusters';
-import { pinLabelLayout, type PinInput } from './waypointPinStyle';
+import {
+  GLYPH_SPRITE_BOX,
+  PIN_RING_WIDTH,
+  PIN_SPRITE_BASE_D,
+  pinLabelLayout,
+  type PinInput,
+} from './waypointPinStyle';
 
 const pin = (over: Partial<PinInput> = {}): PinInput => ({
   key: 'saved-a',
@@ -125,11 +132,13 @@ describe('unclustered pins never have a glyph over another pin', () => {
     for (const scale of SCALES) {
       for (const size of WAYPOINT_SIZES) {
         const c = glyphClearancePx(size, size, scale);
+        // The band round the clearance, finely: nearer in, the sweep above.
         let farthest = 0;
-        for (let dx = -c; dx <= c; dx += 0.25) {
-          for (let dy = -c; dy <= c; dy += 0.25) {
-            if (glyphReachesBody(dx, dy, size, size, scale)) {
-              farthest = Math.max(farthest, Math.hypot(dx, dy));
+        for (let deg = 0; deg < 360; deg += 1) {
+          for (let dist = c - 1; dist <= c + 1; dist += 0.1) {
+            const t = (deg * Math.PI) / 180;
+            if (glyphReachesBody(Math.cos(t) * dist, Math.sin(t) * dist, size, size, scale)) {
+              farthest = Math.max(farthest, dist);
             }
           }
         }
@@ -182,15 +191,281 @@ describe('unclustered pins never have a glyph over another pin', () => {
   });
 
   it('grows with the pin sizes on the map and with the Pin size setting', () => {
-    expect(pinClusterRadius(['M'])).toBe(44);
-    expect(pinClusterRadius([undefined])).toBe(44);
-    expect(pinClusterRadius([])).toBe(44);
-    expect(pinClusterRadius(['XL'])).toBe(66);
+    // #724: the drawn teardrops, not their boxes. The box-corner bound gave
+    // 44 (M) and 66 (XL): pins with a clear gap between them were grouped.
+    expect(pinClusterRadius(['M'])).toBe(36);
+    expect(pinClusterRadius([undefined])).toBe(36);
+    expect(pinClusterRadius([])).toBe(36);
+    expect(pinClusterRadius(['XL'])).toBe(54);
     expect(pinClusterRadius(['S', 'XL'])).toBeGreaterThanOrEqual(pinClusterRadius(['XL']));
     expect(maxPinClusterRadius()).toBe(pinClusterRadius(WAYPOINT_SIZES));
     const bySetting = SCALES.map((k) => pinClusterRadius(['M'], k));
     expect(bySetting).toEqual([...bySetting].sort((a, b) => a - b));
     expect(new Set(bySetting).size).toBe(4);
+  });
+});
+
+/**
+ * The drawn pins, rebuilt here independently of the module (#724): a body
+ * is its round head plus the triangle from the tip to the head's tangent
+ * points (`pinGeometry`: the head's centre √½·d above the tip), widened by
+ * the ring; a glyph is its em box on the head's centre. Every distance is
+ * exact (disc/triangle/box pieces), so a sweep is a proof up to its step.
+ */
+type Pt = [number, number];
+interface Drop {
+  c: Pt;
+  r: number;
+  tri: Pt[];
+}
+
+function drop(size: WaypointSize, scale: number, at: Pt = [0, 0]): Drop {
+  const d = WAYPOINT_PIN_DIAMETER[size] * scale;
+  const { headCenterY } = pinGeometry(d);
+  const c: Pt = [at[0], at[1] - headCenterY];
+  const r = d / 2;
+  // Tangent points seen from the tip: at asin(r / h) either side of the axis.
+  const h = headCenterY;
+  const a = Math.asin(r / h);
+  const len = Math.sqrt(h * h - r * r);
+  const t1: Pt = [at[0] + Math.sin(a) * len, at[1] - Math.cos(a) * len];
+  const t2: Pt = [at[0] - Math.sin(a) * len, at[1] - Math.cos(a) * len];
+  return { c, r, tri: [at, t1, t2] };
+}
+
+function glyphBoxAt(size: WaypointSize, scale: number, at: Pt): Pt[] {
+  const d = WAYPOINT_PIN_DIAMETER[size] * scale;
+  const half = (d * GLYPH_SPRITE_BOX) / PIN_SPRITE_BASE_D / 2;
+  const cy = at[1] - pinGeometry(d).headCenterY;
+  return [
+    [at[0] - half, cy - half],
+    [at[0] + half, cy - half],
+    [at[0] + half, cy + half],
+    [at[0] - half, cy + half],
+  ];
+}
+
+function segDist(p: Pt, a: Pt, b: Pt): number {
+  const vx = b[0] - a[0];
+  const vy = b[1] - a[1];
+  const t = Math.max(
+    0,
+    Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / (vx * vx + vy * vy)),
+  );
+  return Math.hypot(p[0] - a[0] - t * vx, p[1] - a[1] - t * vy);
+}
+
+/** Convex polygons overlap: no edge normal separates them. */
+function polysOverlap(p: Pt[], q: Pt[]): boolean {
+  for (const poly of [p, q]) {
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i]!;
+      const b = poly[(i + 1) % poly.length]!;
+      const nx = a[1] - b[1];
+      const ny = b[0] - a[0];
+      let pMin = Infinity;
+      let pMax = -Infinity;
+      let qMin = Infinity;
+      let qMax = -Infinity;
+      for (const v of p) {
+        const t = v[0] * nx + v[1] * ny;
+        pMin = Math.min(pMin, t);
+        pMax = Math.max(pMax, t);
+      }
+      for (const v of q) {
+        const t = v[0] * nx + v[1] * ny;
+        qMin = Math.min(qMin, t);
+        qMax = Math.max(qMax, t);
+      }
+      if (pMax < qMin || qMax < pMin) return false;
+    }
+  }
+  return true;
+}
+
+function insidePoly(v: Pt, poly: Pt[]): boolean {
+  let pos = false;
+  let neg = false;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i]!;
+    const b = poly[(i + 1) % poly.length]!;
+    const s = (b[0] - a[0]) * (v[1] - a[1]) - (b[1] - a[1]) * (v[0] - a[0]);
+    if (s > 0) pos = true;
+    if (s < 0) neg = true;
+  }
+  return !(pos && neg);
+}
+
+function pointPolyDist(v: Pt, poly: Pt[]): number {
+  if (insidePoly(v, poly)) return 0;
+  let best = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    best = Math.min(best, segDist(v, poly[i]!, poly[(i + 1) % poly.length]!));
+  }
+  return best;
+}
+
+function polyPolyDist(p: Pt[], q: Pt[]): number {
+  if (polysOverlap(p, q)) return 0;
+  let best = Infinity;
+  for (const v of p) best = Math.min(best, pointPolyDist(v, q));
+  for (const v of q) best = Math.min(best, pointPolyDist(v, p));
+  return best;
+}
+
+/** The gap between two shapes, each a union of convex pieces (discs, polygons). */
+type Piece = { disc: Pt; r: number } | { poly: Pt[] };
+const pieces = (d: Drop): Piece[] => [{ disc: d.c, r: d.r }, { poly: d.tri }];
+
+function pieceDist(a: Piece, b: Piece): number {
+  if ('disc' in a && 'disc' in b) {
+    return Math.max(0, Math.hypot(a.disc[0] - b.disc[0], a.disc[1] - b.disc[1]) - a.r - b.r);
+  }
+  if ('disc' in a && 'poly' in b) return Math.max(0, pointPolyDist(a.disc, b.poly) - a.r);
+  if ('poly' in a && 'disc' in b) return pieceDist(b, a);
+  if ('poly' in a && 'poly' in b) return polyPolyDist(a.poly, b.poly);
+  return Infinity;
+}
+
+function gap(a: Piece[], b: Piece[]): number {
+  let best = Infinity;
+  for (const p of a) for (const q of b) best = Math.min(best, pieceDist(p, q));
+  return best;
+}
+
+/** The ringed bodies of A (tip at 0) and B (tip at `v`) overlap. */
+function drawnBodiesOverlap(a: WaypointSize, b: WaypointSize, scale: number, v: Pt): boolean {
+  return gap(pieces(drop(a, scale)), pieces(drop(b, scale, v))) < 2 * PIN_RING_WIDTH;
+}
+
+/** B's glyph (tip at `v`) covers some of A's ringed body (tip at 0). */
+function drawnGlyphOnBody(a: WaypointSize, b: WaypointSize, scale: number, v: Pt): boolean {
+  return gap(pieces(drop(a, scale)), [{ poly: glyphBoxAt(b, scale, v) }]) < PIN_RING_WIDTH;
+}
+
+const dir = (deg: number, dist: number): Pt => [
+  Math.cos((deg * Math.PI) / 180) * dist,
+  Math.sin((deg * Math.PI) / 180) * dist,
+];
+
+/** Where along the ray `deg` the drawn bodies stop touching (bisection). */
+function drawnTouchAlong(a: WaypointSize, b: WaypointSize, scale: number, deg: number): number {
+  let lo = 0;
+  let hi = 400;
+  for (let i = 0; i < 26; i++) {
+    const m = (lo + hi) / 2;
+    if (drawnBodiesOverlap(a, b, scale, dir(deg, m))) lo = m;
+    else hi = m;
+  }
+  return lo;
+}
+
+/** Every non-empty set of sizes a map can hold. */
+const SIZE_SETS: WaypointSize[][] = Array.from({ length: 15 }, (_, m) =>
+  WAYPOINT_SIZES.filter((_, i) => ((m + 1) >> i) & 1),
+);
+
+describe('the radius follows the drawn teardrops (#724)', () => {
+  it('measures the closest touch of two bodies as the drawn shapes do, every direction', () => {
+    for (const scale of SCALES) {
+      for (const a of WAYPOINT_SIZES) {
+        for (const b of WAYPOINT_SIZES) {
+          let closest = Infinity;
+          // The closest touch lies on a flat stretch (side by side, ±45°): 2° finds it.
+          for (let deg = 0; deg < 360; deg += 2) {
+            closest = Math.min(closest, drawnTouchAlong(a, b, scale, deg));
+          }
+          // Sampled every degree, the sweep can only overshoot the true minimum.
+          expect(bodyTouchPx(a, b, scale)).toBeLessThanOrEqual(closest + 1e-4);
+          expect(bodyTouchPx(a, b, scale)).toBeGreaterThan(closest - 0.1);
+        }
+      }
+    }
+  });
+
+  it('the module’s glyph test is the drawn one', () => {
+    for (const scale of SCALES) {
+      for (const a of WAYPOINT_SIZES) {
+        for (const b of WAYPOINT_SIZES) {
+          for (let deg = 0; deg < 360; deg += 11.25) {
+            for (let dist = 0; dist < 90 * scale; dist += 2.3) {
+              const [dx, dy] = dir(deg, dist);
+              expect(glyphReachesBody(dx, dy, a, b, scale)).toBe(
+                drawnGlyphOnBody(a, b, scale, [dx, dy]),
+              );
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it('pins whose bodies are clear of each other are never clustered (one size on the map)', () => {
+    for (const scale of SCALES) {
+      for (const size of WAYPOINT_SIZES) {
+        const r = pinClusterRadius([size], scale);
+        // Clustered means at most r apart. In every direction the bodies at
+        // r still overlap, and nearer is further inside (the overlap is
+        // convex) — save the integer radius's rounding, under 1 px.
+        for (let deg = 0; deg < 360; deg += 0.5) {
+          if (!drawnBodiesOverlap(size, size, scale, dir(deg, r - 1))) {
+            throw new Error(`${size} at ${scale}: clear at ${deg}° though ${r - 1} px apart`);
+          }
+        }
+      }
+    }
+  });
+
+  it('is exactly the closest touch for one size, unless the glyph needs the next pixel', () => {
+    for (const scale of SCALES) {
+      for (const size of WAYPOINT_SIZES) {
+        const touch = Math.floor(bodyTouchPx(size, size, scale));
+        expect(pinClusterRadius([size], scale)).toBe(
+          Math.max(touch, Math.ceil(glyphClearancePx(size, size, scale))),
+        );
+        expect(pinClusterRadius([size], scale)).toBeLessThanOrEqual(touch + 1);
+      }
+    }
+  });
+
+  it('two M pins side by side with a gap stay two pins (the owner’s case)', () => {
+    // Heads 32 px, rings 2 px: they touch 36 px apart, tip to tip.
+    expect(bodyTouchPx('M', 'M')).toBeCloseTo(36, 6);
+    expect(drawnBodiesOverlap('M', 'M', 1, [40, 0])).toBe(false);
+    expect(pinClusterRadius(['M'])).toBeLessThan(40);
+    // Stacked, they overlap well past the radius: drawn, never grouped.
+    expect(drawnBodiesOverlap('M', 'M', 1, [0, -40])).toBe(true);
+  });
+
+  it('never has a glyph over another pin left unclustered, for every mix of sizes (drawn shapes)', () => {
+    for (const scale of SCALES) {
+      for (const set of SIZE_SETS) {
+        const r = pinClusterRadius(set, scale);
+        for (const a of set) {
+          for (const b of set) {
+            // Where a glyph covers a body is convex and holds the origin (a
+            // glyph sits inside its own head), so once a ray is out it stays
+            // out: just past the radius, every degree, is the proof.
+            for (let deg = 0; deg < 360; deg += 1) {
+              for (const dist of [r + 0.01, 1.5 * r]) {
+                if (drawnGlyphOnBody(a, b, scale, dir(deg, dist))) {
+                  throw new Error(`${set.join('+')} ${a}/${b} at ${scale}: ${deg}° ${dist} px`);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it('never grows past the box-corner radius it replaces', () => {
+    // 2.6.0's radius, from the boxes' farthest corners (the guarantee is the
+    // same, measured on the shapes actually drawn).
+    const boxRadius: Record<string, number> = { M: 44, XL: 66 };
+    expect(pinClusterRadius(['M'])).toBeLessThan(boxRadius.M!);
+    expect(pinClusterRadius(['XL'])).toBeLessThan(boxRadius.XL!);
+    expect(maxPinClusterRadius()).toBeLessThan(boxRadius.XL!);
   });
 });
 
