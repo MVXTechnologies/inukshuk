@@ -44,6 +44,7 @@ const pin: TeamPin = {
     { id: 'r', author: 'me', text: 'Thanks', at: 20, mentions: [] },
   ],
   lastAt: 20,
+  note: null,
 };
 
 function input(extra: Partial<MarksInput> = {}): MarksInput {

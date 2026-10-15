@@ -416,8 +416,8 @@ tags:
     notVisible:
       id: 'team-band-gather'
     timeout: 5000
-# A pin: a long-press on the map → Message pin, its card with the thread
-# (pins are made from a spot on the map, not from a menu).
+# A note (#706: a pin that shows its text): a long-press on the map → Note
+# here, then its card (pins are made from a spot on the map, not from a menu).
 - longPressOn:
     point: '50%,55%'
 - extendedWaitUntil:
@@ -425,7 +425,7 @@ tags:
       id: 'team-press-card'
     timeout: 5000
 - tapOn:
-    id: 'team-press-pin'
+    id: 'team-press-note'
 - extendedWaitUntil:
     visible:
       id: 'team-pin-composer'
@@ -433,12 +433,12 @@ tags:
 - tapOn:
     id: 'team-pin-input'
 - inputText: 'Fallen tree here'
-# The composer card stays above the keyboard: tap Send itself.
+# The composer stays above the keyboard: tap Post itself.
 - tapOn:
     id: 'team-pin-send'
 - extendedWaitUntil:
     visible:
-      id: 'team-pin-card'
+      id: 'team-note-card'
     timeout: 5000
 - assertVisible: '.*Fallen tree here.*'
 - takeScreenshot: team-pin

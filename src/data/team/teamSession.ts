@@ -32,6 +32,18 @@ import { teamThreads, type ThreadRow } from '@core/teamui/threads';
 import { editors, editText, SYS_EDIT, teamTrails, type TeamTrailView } from '@core/teamui/trails';
 import { pinThread, resolvedMessages, teamPins, type TeamPin } from '@core/teamui/pins';
 import {
+  hasSeen,
+  MAX_NOTE_CHARS,
+  noteBody,
+  noteEditBody,
+  noteExpiry,
+  noteLength,
+  prepareNoteText,
+  seenBody,
+  type NoteFade,
+} from '@core/domains/team/notes';
+import { seenCount, type SeenCount } from '@core/teamui/notes';
+import {
   statusFields,
   taskFields,
   teamTasks,
@@ -1145,6 +1157,86 @@ export class TeamSession {
     const err = this.writeMsg(body);
     if (err === null) this.markSeen(pinThread(this.me, id));
     return err;
+  }
+
+  // ── Notes (#706): pins that show their text on the map ──────────────────
+
+  /**
+   * Post a note: the pin itself (what a 2.6 phone shows), then its `pnm`
+   * (colour and fade). "Alert team" makes the pin important (`pr: 1`), which
+   * buzzes every phone (`alerts.ts`); otherwise it arrives silently.
+   */
+  postNote(
+    lng: number,
+    lat: number,
+    text: string,
+    style: { col: number; fade: NoteFade; alert: boolean },
+    id: string = this.deps.newId(),
+  ): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const tx = prepareNoteText(text);
+    if (tx.length === 0) return 'invalid';
+    if (noteLength(tx) > MAX_NOTE_CHARS) return 'too-large';
+    if (!Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lng) > 180 || Math.abs(lat) > 90)
+      return 'invalid';
+    const now = this.deps.now();
+    const fx = noteExpiry(style.fade, now, this.view().expiresAt);
+    if (fx === null) return 'invalid';
+    const body: Record<string, Json> = { id, th: pinThread(this.me, id), tx, ll: [lng, lat] };
+    const err = this.writeMsg(body, style.alert ? { pr: 1 } : {});
+    if (err !== null) return err;
+    this.markSeen(pinThread(this.me, id));
+    return this.writeOk(noteBody(id, { col: style.col, fx }));
+  }
+
+  /** Edit my note: its text, colour, fade (counted again from now) or place. */
+  editNote(
+    id: string,
+    patch: { text?: string; col?: number; fade?: NoteFade; ll?: [number, number] },
+  ): ActionError | null {
+    const p: { tx?: string; col?: number; fx?: number; ll?: [number, number] } = {};
+    if (patch.text !== undefined) {
+      const tx = prepareNoteText(patch.text);
+      if (tx.length === 0) return 'invalid';
+      if (noteLength(tx) > MAX_NOTE_CHARS) return 'too-large';
+      p.tx = tx;
+    }
+    if (patch.col !== undefined) p.col = patch.col;
+    if (patch.ll !== undefined) p.ll = patch.ll;
+    if (patch.fade !== undefined) {
+      const fx = noteExpiry(patch.fade, this.deps.now(), this.view().expiresAt);
+      if (fx === null) return 'invalid';
+      p.fx = fx;
+    }
+    if (Object.keys(p).length === 0) return 'no-change';
+    return this.writeOk(noteEditBody(id, p));
+  }
+
+  /** Delete a note: the pin itself goes (its author or an admin), on every version. */
+  deleteNote(owner: string, id: string): ActionError | null {
+    const body: Record<string, Json> = { k: 'msg', id };
+    if (owner !== this.me) body['o'] = owner;
+    return this.writeOk(body);
+  }
+
+  /** I opened a note: read on this phone, and once, a "seen" receipt for its author. */
+  markNoteSeen(owner: string, id: string): void {
+    this.markSeen(pinThread(owner, id));
+    if (owner === this.me || this.guardWrite() !== null) return;
+    if (this.replica.state.sendKeyId === undefined) return;
+    if (hasSeen(this.replica.data(this.deps.now()), this.me, owner, id)) return;
+    const now = this.deps.now();
+    this.run(() => this.replica.write(now, 'e.set', seenBody(owner, id, now)));
+  }
+
+  /** "Seen by 4 of 5" for a note. */
+  noteSeen(owner: string, id: string): SeenCount {
+    const now = this.deps.now();
+    const active = this.view()
+      .members.filter((m) => m.active)
+      .map((m) => m.id);
+    return seenCount(this.replica.data(now), owner, id, active, now);
   }
 
   /** Reply under a pin (guests too). */

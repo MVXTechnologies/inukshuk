@@ -35,6 +35,17 @@ export const RECEIPT_CAP = 'rc';
 /** The receipt protocol this version speaks (the value of `rc`). */
 export const RECEIPT_PROTOCOL = 1;
 
+/**
+ * The notes capability (#706, 2.7.0): this phone shows a pin's note and
+ * writes a "seen" receipt (`pnr`) when it opens one. Its value is the notes
+ * protocol version. "Seen by 4 of 5" counts over the members that advertise
+ * it, so a 2.6 phone (which shows the note as a plain pin and never sends a
+ * receipt) is not counted as missing. Rides the same record as `pen`.
+ */
+export const NOTE_CAP = 'nt';
+/** The notes protocol this version speaks (the value of `nt`). */
+export const NOTE_PROTOCOL = 1;
+
 /** How long a capability claim holds without being renewed. */
 export const CAP_TTL_MS = 7 * 24 * 3600_000;
 /** A claim older than this is renewed on the next team open. */
@@ -90,6 +101,7 @@ export const BLOB_CAP = 'blob';
 export const CAP_SPECS: ReadonlyMap<string, CapSpec> = new Map<string, CapSpec>([
   [PEN_CAP, { versions: [PEN_PROTOCOL], versionField: CAP_VERSION, boundByFlag: false }],
   [RECEIPT_CAP, { versions: [RECEIPT_PROTOCOL], boundByFlag: true }],
+  [NOTE_CAP, { versions: [NOTE_PROTOCOL], boundByFlag: true }],
   [LINK_CAP, { versions: [1], boundByFlag: true }],
   [RTC_CAP, { versions: [1], boundByFlag: true }],
   [BLOB_CAP, { versions: [1], boundByFlag: true }],
@@ -175,19 +187,24 @@ export function capBody(
       [PEN_CAP]: 1,
       [CAP_VERSION]: PEN_PROTOCOL,
       [RECEIPT_CAP]: RECEIPT_PROTOCOL,
+      [NOTE_CAP]: NOTE_PROTOCOL,
       [CAP_EXPIRES]: now + CAP_TTL_MS,
     },
   };
 }
 
 /**
- * Whether this device has to (re-)advertise: no current claim of either
- * capability (a 2.6.0 claim has no `rc`: renewed at once on the first 2.6.1
- * open), or one older than {@link CAP_RENEW_MS} (renewing on every open would
- * grow the log for nothing).
+ * Whether this device has to (re-)advertise: no current claim of a capability
+ * it speaks (a 2.6.0 claim has no `rc`, a 2.6.1 claim no `nt`: renewed at once
+ * on the first open after the update), or one older than {@link CAP_RENEW_MS}
+ * (renewing on every open would grow the log for nothing).
  */
 export function needsCap(data: TeamData, me: string, now: number): boolean {
   const stale = (until: number | undefined) =>
     until === undefined || until - now < CAP_TTL_MS - CAP_RENEW_MS;
-  return stale(capExpiry(data, me)) || stale(capExpiry(data, me, RECEIPT_CAP));
+  return (
+    stale(capExpiry(data, me)) ||
+    stale(capExpiry(data, me, RECEIPT_CAP)) ||
+    stale(capExpiry(data, me, NOTE_CAP))
+  );
 }

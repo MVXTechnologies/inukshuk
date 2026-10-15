@@ -150,6 +150,7 @@ import { ReceiverFollow } from '@features/gnss/ReceiverFollow';
 import { ReceiverMapOverlay } from '@features/gnss/ReceiverMapOverlay';
 import { TeamMapLayers } from '@features/team/map/TeamMapLayers';
 import { TeamDrawLayers } from '@features/team/draw/TeamDrawLayers';
+import { hitTestNotes, NoteCallouts } from '@features/team/notes/NoteCallouts';
 import {
   drawCreditsSheetBottom,
   TeamDrawMode,
@@ -2127,6 +2128,20 @@ export function MapScreen() {
           photoTap.run();
           return;
         }
+        const noteHit = await hitTestNotes(map, px, py);
+        if (noteHit?.kind === 'note') {
+          const p = useTeamStore
+            .getState()
+            .pins.find((x) => x.owner === noteHit.owner && x.id === noteHit.id);
+          if (p) {
+            useTeamPick.getState().choose({
+              anchor: { kind: 'pin', owner: p.owner, id: p.id },
+              label: 'A note',
+              at: [p.lng, p.lat],
+            });
+            return;
+          }
+        }
         const markHit = await hitTestTeamMarks(map, px, py);
         if (markHit?.kind === 'cluster') {
           const split = await clusterExpansionZoom(markHit.id);
@@ -2283,6 +2298,28 @@ export function MapScreen() {
       // everything else (the map extensions, trails, heat).
       if (photoTap !== null && Date.now() - photoTap.at < PHOTO_TAP_FRESH_MS) {
         photoTap.run();
+        return;
+      }
+
+      // Team notes (#706): drawn over the team's marks, so asked first. A
+      // note opens its card; a tile of notes zooms in to split them.
+      const noteHit = await hitTestNotes(map, px, py);
+      if (noteHit !== null) {
+        drawingRef.current.closeAreaCard();
+        setPointAt(null);
+        setViewWp(null);
+        setForecastAt(null);
+        setExtensionHit(null);
+        useTeamDrawStore.getState().openCard(null);
+        if (noteHit.kind === 'note') {
+          useTeamMapSelection
+            .getState()
+            .select({ kind: 'pin', owner: noteHit.owner, id: noteHit.id });
+        } else {
+          const zoom = (await mapRef.current?.getZoom().catch(() => null)) ?? null;
+          if (zoom !== null && zoom < 17) zoomMapTo(noteHit.lngLat, Math.min(zoom + 2, 18));
+          else router.push('/team/notes' as never);
+        }
         return;
       }
 
@@ -3463,6 +3500,8 @@ export function MapScreen() {
             {teamMarks}
             {teamTrailLayers}
             {teamField}
+            {/* Team notes (#706): callouts over the team's marks. */}
+            <NoteCallouts zoom={scaleAt?.zoom ?? null} />
             {/* Revamp puck, replacing MapLibre's default one (children do):
               halo, ring and dot in the scheme's puck tokens, plus the amber
               uncertainty ring on a weak signal while recording. */}

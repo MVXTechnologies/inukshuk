@@ -167,6 +167,25 @@ export async function addBadgeThreads(center: {
   return true;
 }
 
+/** The note the first simulated teammate posts (the flows find it by its text). */
+export const SIM_NOTE_TEXT = 'Hut water is dry. Fill up at the lake.';
+
+/**
+ * The first simulated teammate posts a note (#706) a little north-east of
+ * `center`, fading in 4 h, silent: only when a flow asks (a button), so the
+ * other flows' taps never meet its callout.
+ */
+export function addSimulatedNote(center: { latitude: number; longitude: number }): boolean {
+  const session = bots[0]?.service.active;
+  if (!session) return false;
+  const err = session.postNote(center.longitude + 0.0012, center.latitude + 0.0009, SIM_NOTE_TEXT, {
+    col: 1,
+    fade: '4h',
+    alert: false,
+  });
+  return err === null;
+}
+
 /**
  * The scripted guide: once a teammate's trail arrives with its photos, wait a
  * few seconds (looking at them…) and comment on the summit photo (its caption

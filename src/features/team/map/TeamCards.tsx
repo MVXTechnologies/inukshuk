@@ -49,6 +49,7 @@ export function Round({
   testID,
   tint,
   filled,
+  tag,
 }: {
   icon: string;
   label: string;
@@ -56,6 +57,8 @@ export function Round({
   testID?: string;
   tint?: string;
   filled?: boolean;
+  /** A small "NEW" over the button (a feature just added). */
+  tag?: string;
 }) {
   const t = useSchemeTokens();
   const c = tint ?? t.ink;
@@ -77,6 +80,11 @@ export function Round({
         ]}
       >
         <Icon source={icon} size={26} color={filled ? palette.white : c} />
+        {tag !== undefined && (
+          <View style={[styles.tag, { backgroundColor: t.team.bubbleNew }]}>
+            <Text style={[styles.tagText, { color: t.team.bubbleNewInk }]}>{tag}</Text>
+          </View>
+        )}
       </View>
       <Text variant="labelSmall" style={[styles.roundLabel, { color: t.ink }]} numberOfLines={2}>
         {label}
@@ -344,8 +352,8 @@ function SpotCard({
     >
       <View style={styles.roundRow}>
         <Round
-          icon="comment-text-outline"
-          label="Comment"
+          icon="note-text-outline"
+          label="Note"
           testID="team-spot-comment"
           onPress={() => {
             onClose();
@@ -431,9 +439,10 @@ function PressCard({
     >
       <View style={styles.roundRow}>
         <Round
-          icon="map-marker-account-outline"
-          label="Message pin"
-          testID="team-press-pin"
+          icon="note-text-outline"
+          label="Note here"
+          tag="NEW"
+          testID="team-press-note"
           onPress={() => {
             onClose();
             usePinDraft.getState().open(at[0], at[1]);
@@ -630,6 +639,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   roundLabel: { textAlign: 'center' },
+  tag: {
+    position: 'absolute',
+    top: -6,
+    right: -10,
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  tagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
   people: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   person: { alignItems: 'center', width: 60, gap: 2 },
   personRing: { borderWidth: 3, borderRadius: 26, padding: 1 },

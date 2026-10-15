@@ -15,6 +15,9 @@
  *   Under 12 dp it is dropped; a second finger cancels it.
  * - A tap on my shape selects it; a long-press opens its menu (note, delete).
  *   An admin may do both on anyone's shape.
+ * - The Text tool (#706) places a note: one tap on the map leaves drawing
+ *   mode and opens the note composer there, in the Style button's colour and
+ *   fade (`noteFadeForDrawing`).
  */
 import type { Units } from '@core/format';
 import { DrawGesture, type GestureAction, type Touch } from '@core/teamdraw/gesture';
@@ -59,6 +62,10 @@ import { Icon, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path, Polygon } from 'react-native-svg';
 
+import { noteFadeForDrawing } from '@core/domains/team/notes';
+import { unproject } from '@core/teamdraw/screen';
+
+import { usePinDraft } from '../map/TeamPinComposer';
 import { DrawStylePopover, fadeLabel } from './DrawStylePopover';
 import { useDrawPrefs, useOwnColour } from './drawShared';
 import { hitTestTeamDraw } from './hitTestDraw';
@@ -218,6 +225,8 @@ function DrawModeBody({
   const [pts, setPts] = useState<readonly ScreenPt[]>([]);
   const [chip, setChip] = useState<string | null>(null);
   const [drawn, setDrawn] = useState<string[]>([]);
+  /** The Text tool (#706): the next tap places a note. Not remembered between entries. */
+  const [textTool, setTextTool] = useState(false);
 
   const gesture = useRef(new DrawGesture());
   const view = useRef<Viewport | null>(null);
@@ -229,9 +238,9 @@ function DrawModeBody({
   const throttle = useRef(new PenThrottle());
   const dueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const live = useRef({ tool, prefs, units, styleOpen, locked });
+  const live = useRef({ tool, prefs, units, styleOpen, locked, textTool });
   useEffect(() => {
-    live.current = { tool, prefs, units, styleOpen, locked };
+    live.current = { tool, prefs, units, styleOpen, locked, textTool };
   });
 
   const done = useCallback(() => {
@@ -356,6 +365,8 @@ function DrawModeBody({
       switch (a.type) {
         case 'begin':
           setStyleOpen(false);
+          // The Text tool draws nothing: only its tap counts.
+          if (live.current.textTool) break;
           stroke.current = new StrokeBuilder(
             live.current.tool,
             session()?.newId() ?? String(Date.now()),
@@ -368,6 +379,7 @@ function DrawModeBody({
           void syncView();
           break;
         case 'update': {
+          if (live.current.textTool) break;
           latest.current = a.pts;
           setPts([...a.pts]);
           const b = stroke.current;
@@ -403,6 +415,16 @@ function DrawModeBody({
         case 'long-press': {
           if (live.current.styleOpen) {
             setStyleOpen(false);
+            break;
+          }
+          if (live.current.textTool && a.type === 'tap') {
+            if (vp === null) break;
+            const [lng, lat] = unproject(a.at, vp);
+            const p = live.current.prefs;
+            done();
+            usePinDraft
+              .getState()
+              .open(lng, lat, { col: p.colour, fade: noteFadeForDrawing(p.fadeMs) });
             break;
           }
           const map = mapRef.current;
@@ -580,6 +602,15 @@ function DrawModeBody({
           <Icon source={TOOL_ICON[tool]} size={17} color={color} />
           <Text style={[styles.chipText, { color: drawChrome.chipInk }]}>{chip}</Text>
         </View>
+      ) : textTool ? (
+        <View
+          style={[styles.hint, { top: insets.top + 70, backgroundColor: t.map.chip }]}
+          pointerEvents="none"
+          testID="team-draw-text-hint"
+        >
+          <Icon source="gesture-tap" size={18} color={t.map.chipInk} />
+          <Text style={[styles.hintText, { color: t.map.chipInk }]}>Tap where the note goes</Text>
+        </View>
       ) : hint ? (
         <View
           style={[styles.hint, { top: insets.top + 70, backgroundColor: t.map.chip }]}
@@ -623,11 +654,14 @@ function DrawModeBody({
 
       <View style={[styles.bar, { bottom: barBottom }]} testID="team-draw-toolbar">
         {TOOLS.map(({ k, icon, label }) => {
-          const on = k === tool;
+          const on = k === tool && !textTool;
           return (
             <Pressable
               key={k}
-              onPress={() => useTeamDrawStore.getState().setTool(k)}
+              onPress={() => {
+                setTextTool(false);
+                useTeamDrawStore.getState().setTool(k);
+              }}
               style={[styles.tool, on && { backgroundColor: drawChrome.active }]}
               accessibilityRole="button"
               accessibilityLabel={label}
@@ -638,6 +672,23 @@ function DrawModeBody({
             </Pressable>
           );
         })}
+        <Pressable
+          onPress={() => setTextTool(true)}
+          style={[styles.tool, textTool && { backgroundColor: drawChrome.active }]}
+          accessibilityRole="button"
+          accessibilityLabel="Text note"
+          accessibilityState={{ selected: textTool }}
+          testID="team-draw-tool-text"
+        >
+          <Icon
+            source="format-text"
+            size={26}
+            color={textTool ? drawChrome.onActive : drawChrome.barInk}
+          />
+          <View style={[tagStyles.newTag, { backgroundColor: t.team.bubbleNew }]}>
+            <Text style={[tagStyles.newTagText, { color: t.team.bubbleNewInk }]}>NEW</Text>
+          </View>
+        </Pressable>
         <View style={[styles.divider, { backgroundColor: drawChrome.barDivider }]} />
         <Pressable
           onPress={() => setStyleOpen((o) => !o)}
@@ -687,6 +738,17 @@ function DrawModeBody({
 }
 
 const BAR_H = 66;
+const tagStyles = StyleSheet.create({
+  newTag: {
+    position: 'absolute',
+    top: -8,
+    right: -10,
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  newTagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.4 },
+});
 /** The shape menu's height, about (its note field and buttons). */
 const MENU_H = 260;
 const CREDITS_GAP = 10;

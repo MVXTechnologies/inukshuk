@@ -4,7 +4,8 @@
  * panel), the sender's undo snackbar, the team panel dropped from the bar,
  * the active SOS / gather band in the strip area while the bar is away, and
  * the compact cards; a tapped teammate's card (`TeammateCard`) or shared
- * waypoint; pins and the pin composer. A plain themed View
+ * waypoint; pins and notes (#706: a note's card, the composer, the arrival
+ * snackbar). A plain themed View
  * for the card (paper-surface-ios-flex-collapse); its own state store so
  * MapScreen only routes the tap.
  */
@@ -37,6 +38,9 @@ import { TeamPinCard } from './TeamPinCard';
 import { useTeamPick } from './TeamPick';
 import { TeamPinComposer, usePinDraft } from './TeamPinComposer';
 import { DrawAlertSnack } from '../draw/DrawAlertSnack';
+import { NoteCard } from '../notes/NoteCard';
+import { NoteSnack } from '../notes/NoteSnack';
+import { isNote } from '@core/teamui/notes';
 import { TeamShapeCard } from '../draw/ShapeCard';
 import { useTeamDrawStore } from '@state/teamDrawStore';
 
@@ -199,10 +203,16 @@ export function TeamMapOverlay({
         <SosButton bottom={pending ? fabBottom + 28 + UNDO_SNACK_LIFT : fabBottom} here={here} />
       )}
       {signal && !drawing && <UndoSnack style={snackStyle} />}
+      {signal && !drawing && draft === null && hit === null && !card && (
+        <NoteSnack here={here} style={snackStyle} />
+      )}
       {panel && <TeamPanel top={panelTop} here={here} focused={screenFocused} />}
       {draft !== null && (
         <KeyboardLifted style={cardStyle} testID="team-card-dock">
-          <TeamPinComposer onPinned={(owner, id) => select({ kind: 'pin', owner, id })} />
+          <TeamPinComposer
+            here={here}
+            onPinned={(owner, id) => select({ kind: 'pin', owner, id })}
+          />
         </KeyboardLifted>
       )}
       {!editing && draft === null && card && sheet !== null && (
@@ -218,7 +228,17 @@ export function TeamMapOverlay({
       {signal && !drawing && <DrawAlertSnack style={{ bottom: fabBottom, right: 76 }} />}
       {draft === null && !card && cardSlotFree && pin && (
         <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
-          <TeamPinCard pin={pin} view={view} here={here} onClose={() => select(null)} />
+          {isNote(pin) ? (
+            <NoteCard
+              pin={pin}
+              view={view}
+              here={here}
+              onNavigate={onNavigate}
+              onClose={() => select(null)}
+            />
+          ) : (
+            <TeamPinCard pin={pin} view={view} here={here} onClose={() => select(null)} />
+          )}
         </View>
       )}
       {draft === null && !card && cardSlotFree && member && row && (

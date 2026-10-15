@@ -10,7 +10,8 @@
  * - a comment on MY shared trail or photo alerts me (like a mention: it is
  *   addressed to me), whatever the team size; a comment that mentions me too;
  *   other photo comments follow the normal-message rule;
- * - a reply on MY pin alerts me (a new pin follows the normal-message rule);
+ * - a reply on MY pin alerts me (a new pin follows the normal-message rule,
+ *   unless it is a note posted with "Alert team": important, it alerts, #706);
  * - a task assigned to me alerts me; my task marked done by someone else
  *   alerts me;
  * - every alert carries where tapping it goes (`url`). Pure.
@@ -184,6 +185,9 @@ function messageAlert(
     kind = 'comment';
     url = pinUrl(pin.owner, pin.id);
     if (pin.owner === me && op.env.au !== me && level !== 'none') level = 'alert';
+    // A note posted with "Alert team" (#706): its pin is important, and it buzzes everyone.
+    const root = pin.owner === op.env.au && pin.id === id;
+    if (root && (op.env.pr ?? 0) >= 1 && level !== 'none') level = 'alert';
   } else if (th !== TEAM_THREAD) {
     return null;
   }
