@@ -1,7 +1,13 @@
 import type { AnyExtensionKey } from '@core/extensions/keys';
 import { extensionBasics } from '@core/extensions/registry';
 import { stripTitle } from '@core/infoStrip/edit';
-import { isEditedPreset, missingExtensions, PRESETS, type Preset } from '@core/infoStrip/presets';
+import {
+  isEditedPreset,
+  missingExtensions,
+  presetAidsSummary,
+  PRESETS,
+  type Preset,
+} from '@core/infoStrip/presets';
 import { sampleValue } from '@core/infoStrip/preview';
 import { captionPlan } from '@core/infoStrip/subject';
 import { fieldDescriptor } from '@core/infoStrip/registry';
@@ -98,6 +104,7 @@ export function PresetsPage({
   onBack: () => void;
 }) {
   const t = useSchemeTokens();
+  const units = useSettingsStore((s) => s.units);
   const { accent } = useSheetAccent();
   const [menu, setMenu] = useState<number | null>(null);
   const edited = isEditedPreset(current, installed);
@@ -135,7 +142,7 @@ export function PresetsPage({
             <View style={styles.aids}>
               <Icon source="image-filter-center-focus" size={14} color={t.inkMuted} />
               <Text style={[styles.aidsText, { color: t.inkMuted }]} numberOfLines={1}>
-                {p.aidsSummary}
+                {presetAidsSummary(p, units)}
               </Text>
             </View>
             {missing.map((k) => (

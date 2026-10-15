@@ -1,5 +1,10 @@
 import { ALL_EXTENSION_KEYS, type AnyExtensionKey } from '@core/extensions/keys';
-import { DEFAULT_POINTING_LINE } from '@core/map/pointingLineSettings';
+import { IMPERIAL, METRIC, NAUTICAL } from '@core/format';
+import {
+  DEFAULT_POINTING_LINE,
+  pointingLineLengthText,
+  pointingLineTicksLabel,
+} from '@core/map/pointingLineSettings';
 
 import { fitRow } from './layout';
 import { paramsValid } from './params';
@@ -10,6 +15,7 @@ import {
   DEFAULT_STRIP,
   isEditedPreset,
   missingExtensions,
+  presetAidsSummary,
   presetById,
   PRESETS,
   ref,
@@ -184,5 +190,27 @@ describe('"· edited"', () => {
     delete own.basedOn;
     expect(isEditedPreset(own, EVERY)).toBe(false);
     expect(isEditedPreset({ ...DEFAULT_STRIP, basedOn: 'gone' }, EVERY)).toBe(false);
+  });
+});
+
+describe('presetAidsSummary (QA 2.6.1: the card read metres in mi/ft)', () => {
+  const survey = () => presetById('survey')!;
+  it('metric reads as before', () => {
+    expect(presetAidsSummary(survey(), METRIC)).toBe(
+      'Crosshair · pointing line 500 m, ticks 100 m',
+    );
+    expect(presetAidsSummary(presetById('hiking')!, METRIC)).toBe('Dot cursor');
+  });
+
+  it('mi/ft and nautical read the pointing line as the Pointing line panel does', () => {
+    const line = survey().strip.aids.pointingLine!;
+    for (const units of [IMPERIAL, NAUTICAL]) {
+      const text = presetAidsSummary(survey(), units);
+      expect(text).toBe(
+        `Crosshair · pointing line ${pointingLineLengthText(line.length, units).toLowerCase()}, ticks ${pointingLineTicksLabel(line.ticks, units).toLowerCase()}`,
+      );
+    }
+    expect(presetAidsSummary(survey(), IMPERIAL)).not.toMatch(/\d m\b/);
+    expect(presetAidsSummary(survey(), IMPERIAL)).toMatch(/ft$/);
   });
 });
