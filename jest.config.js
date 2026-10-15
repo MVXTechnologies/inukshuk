@@ -55,6 +55,20 @@ module.exports = {
     },
     // Team drawing (#683) validates peer input and decides what goes on the
     // wire to older phones: every line and branch is exercised.
+    // The shared library (#712) decides what peers' edits do to people's
+    // folders: conflicts, trash, purge. Held near-total.
+    './src/core/domains/library/': {
+      branches: 90,
+      functions: 95,
+      lines: 95,
+      statements: 95,
+    },
+    './src/core/group/conflicts.ts': {
+      branches: 90,
+      functions: 95,
+      lines: 95,
+      statements: 95,
+    },
     './src/core/teamdraw/': {
       branches: 100,
       functions: 100,
