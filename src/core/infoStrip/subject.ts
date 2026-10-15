@@ -122,7 +122,7 @@ export function spokenField(d: Pick<FieldDescriptor, 'label' | 'spokenTo'>, v: S
   const s = v.subject;
   if (s !== undefined && v.namesSubject !== true && d.spokenTo !== undefined) {
     const reading = [v.value, v.unit].filter((x) => x !== undefined && x !== '').join(' ');
-    return `${d.spokenTo} ${s.name}: ${reading}`;
+    return `${d.spokenTo} ${s.spokenName ?? s.name}: ${reading}`;
   }
   return spokenValue(d.label, v);
 }

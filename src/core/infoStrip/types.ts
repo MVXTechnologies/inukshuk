@@ -195,6 +195,7 @@ export type DataDep =
   | 'heading'
   | 'course'
   | 'camera'
+  | 'cursor'
   | 'elevation'
   | 'recording'
   | 'follow'
@@ -207,10 +208,11 @@ export type DataDep =
  * How often a field refreshes: on camera idle (never per frame), per fix,
  * heading at 4 Hz, each second, each minute.
  */
-export type Tick = 'cameraIdle' | 'position' | 'heading4Hz' | 'second' | 'minute';
+export type Tick = 'camera10Hz' | 'cameraIdle' | 'position' | 'heading4Hz' | 'second' | 'minute';
 
 /** Ticks, fastest first: a strip refreshes at the fastest of its fields. */
 export const TICK_ORDER: readonly Tick[] = [
+  'camera10Hz',
   'heading4Hz',
   'position',
   'second',
@@ -244,6 +246,19 @@ export interface FollowSnapshot {
   targetDistanceM: number;
   crossTrackM: number;
   onTrail: boolean;
+}
+
+/** The centre cursor's look, as a strip field draws it beside a reading to it. */
+export interface CursorLook {
+  kind: CursorKind;
+  /** One of `CURSOR_COLORS`. */
+  color: string;
+  halo: boolean;
+}
+
+/** The centre cursor while it shows on the map: where it is and how it looks. */
+export interface StripCursor extends CursorLook {
+  point: LatLng;
 }
 
 /** A coordinate in another datum, as the platform's Convert engine produced it. */
@@ -313,6 +328,11 @@ export interface DepsSnapshot {
    * waypoint's card, not a bare point's chip (#696).
    */
   navTarget: { name: string; point: LatLng; waypointId?: string; pin?: WaypointPin } | null;
+  /**
+   * The centre cursor while it shows on the map (switched on, not hidden
+   * while following), live while the map pans (at most 10 Hz), or null.
+   */
+  cursor: StripCursor | null;
   /** The followed trail's readout, or null when not following. */
   follow: FollowSnapshot | null;
   /** Saved waypoints the strip's targets name, by id. */
@@ -348,6 +368,10 @@ export interface StripSubject {
   glyph: string;
   /** A saved waypoint: its map pin, in its colour. */
   pin?: WaypointPin;
+  /** The centre cursor: drawn as the map draws it (its icon, colour and halo). */
+  cursor?: CursorLook;
+  /** What screen readers say for it when not its name ("cursor" for "Cursor"). */
+  spokenName?: string;
 }
 
 /** What one field draws: glyph or tag, value, unit, tone (mockup `sfield`). */

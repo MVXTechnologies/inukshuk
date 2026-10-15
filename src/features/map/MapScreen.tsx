@@ -140,6 +140,7 @@ import { RenderingToasts } from './components/RenderingToasts';
 import { ScaleBar } from './components/ScaleBar';
 import { CenterCursor } from './components/CenterCursor';
 import { InfoStripHost } from './infoStrip/InfoStripHost';
+import { publishLiveCentre, useStripReadsCursor } from './infoStrip/liveCentre';
 import { useMapBack, useStoreBackLayers } from './useMapBack';
 import type { TargetOpen } from '@core/infoStrip/target';
 import { useInfoStripBottomLift, useStripEditorOpen } from './infoStrip/stripRuntime';
@@ -1442,6 +1443,17 @@ export function MapScreen() {
       }, GESTURE_SETTLE_MS);
     },
     [writeWindView],
+  );
+  // The strip's cursor fields read the centre while it moves (<= 10 Hz on
+  // their side): each report is a plain call into the strip's feed, never
+  // React state here, so panning re-renders the strip leaf, not this screen.
+  const stripReadsCursor = useStripReadsCursor();
+  const onRegionIsChanging = useCallback(
+    (e: { nativeEvent: ViewStateChangeEvent }) => {
+      if (windEnabled) onWindRegionIsChanging(e);
+      publishLiveCentre(e.nativeEvent.center);
+    },
+    [windEnabled, onWindRegionIsChanging],
   );
   // Settled camera (also fires for programmatic moves): re-anchor input.
   const onWindRegionDidChange = useCallback(
@@ -3024,9 +3036,11 @@ export function MapScreen() {
                 setFollowUser(false);
               }
             }}
-            onRegionIsChanging={windEnabled ? onWindRegionIsChanging : undefined}
+            onRegionIsChanging={windEnabled || stripReadsCursor ? onRegionIsChanging : undefined}
             onRegionDidChange={(e) => {
               gesturePause.didChange();
+              // Every settle, unthrottled: the cursor fields end on the settled centre.
+              publishLiveCentre(e.nativeEvent.center);
               onRegionSettledThrottled(e);
             }}
             onLayout={(e) => {

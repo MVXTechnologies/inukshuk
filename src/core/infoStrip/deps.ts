@@ -46,3 +46,12 @@ export function stripNeeds(rows: readonly (readonly FieldRef[])[]): StripNeeds {
   }
   return { deps, clockMs: second ? SECOND_MS : minute ? MINUTE_MS : null, movingSpeed };
 }
+
+/**
+ * Whether a strip reads the live centre cursor: MapScreen asks the map for
+ * gesture-rate camera reports only then (a boolean, so its selector re-renders
+ * MapScreen only when a cursor field is placed or removed).
+ */
+export function stripReadsCursor(rows: readonly (readonly FieldRef[])[]): boolean {
+  return rows.some((row) => row.some((f) => fieldDescriptor(f.field)?.deps.includes('cursor')));
+}

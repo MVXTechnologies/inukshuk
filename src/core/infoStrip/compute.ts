@@ -64,7 +64,10 @@ function sameSubject(a: StripSubject | undefined, b: StripSubject | undefined): 
     a.glyph === b.glyph &&
     a.pin?.icon === b.pin?.icon &&
     a.pin?.color === b.pin?.color &&
-    (a.pin === undefined) === (b.pin === undefined)
+    (a.pin === undefined) === (b.pin === undefined) &&
+    a.cursor?.kind === b.cursor?.kind &&
+    a.cursor?.color === b.cursor?.color &&
+    a.cursor?.halo === b.cursor?.halo
   );
 }
 
