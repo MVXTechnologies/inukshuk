@@ -324,9 +324,12 @@ export function slopeOverlayIndexed(
   minDeg: number,
   maxDeg = 90,
   step = 1,
-  filter: SlopeFilter = NO_SLOPE_FILTER,
+  filterArg?: SlopeFilter,
 ): SlopeOverlayIndexed {
   'worklet';
+  // No default-parameter constant: worklet closures do not capture identifiers
+  // used only in parameter defaults (on device: "NO_SLOPE_FILTER doesn't exist").
+  const filter = filterArg ?? NO_SLOPE_FILTER;
   const active = slopeFilterActive(filter);
   // One pass: slope, and the aspect only when a sector filter needs it.
   const field = slopeAspectField(

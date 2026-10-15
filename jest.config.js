@@ -36,6 +36,7 @@ module.exports = {
     '!src/core/infoStrip/testUtils.ts',
     '!src/core/signal/testUtils.ts',
     '!src/core/geo/pdfjsRealm.testUtils.ts',
+    '!src/core/geo/workletRealm.testUtils.ts',
   ],
   coverageThreshold: {
     // Pure logic in src/core is the safety-critical part — hold it to a high bar.

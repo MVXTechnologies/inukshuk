@@ -1,5 +1,4 @@
 import { parseRegionPayload } from '@core/map/regionPayload';
-import { bytesToBase64 } from '@core/encoding/base64';
 import { contourFeatures, type ContourFeatures } from '@core/geo/contours';
 import { coverageScaleChanged, padBounds, viewStillCovered } from '@core/geo/overlayCoverage';
 import { slopeStepFor } from '@core/geo/terrainJob';
@@ -179,9 +178,9 @@ export function useTerrainOverlays2D({
           if (out === null || reqId !== reqIdRef.current) return;
 
           let slope: TerrainOverlays2D['slope'] = null;
-          if (out.slopePng !== null) {
+          if (out.slopePngBase64 !== null) {
             const slot = shownSlotRef.current === 0 ? 1 : 0;
-            const uri = storage.writeOverlayPng(`slope2d-${slot}`, bytesToBase64(out.slopePng));
+            const uri = storage.writeOverlayPng(`slope2d-${slot}`, out.slopePngBase64);
             shownSlotRef.current = slot;
             slope = {
               uri,

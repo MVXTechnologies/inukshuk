@@ -1,4 +1,4 @@
-import type { TerrainJobOutput } from '@core/geo/terrainJob';
+import type { TerrainResult } from './terrainWorker';
 import { useBusyTasksStore } from '@state/busyTasksStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
@@ -18,8 +18,8 @@ jest.mock('@data/storage', () => ({
 const fetchTiles = jest.mocked(fetchDemTileBytes);
 const compute = jest.mocked(computeTerrain);
 
-const out = (): TerrainJobOutput => ({
-  slopePng: new Uint8Array([1, 2, 3]),
+const out = (): TerrainResult => ({
+  slopePngBase64: 'AQID',
   slopeWidth: 1,
   slopeHeight: 1,
   heightmap: null,
@@ -85,7 +85,7 @@ describe('useTerrainOverlays2D (#722)', () => {
 
   it('drops a result that finishes after a newer request started (stale race)', async () => {
     view = [-71.3, 46.7, -71.1, 46.9];
-    let releaseFirst!: (o: TerrainJobOutput) => void;
+    let releaseFirst!: (o: TerrainResult) => void;
     compute.mockImplementationOnce(() => new Promise((r) => (releaseFirst = r)));
     const { result, rerender } = await render();
     await waitFor(() => expect(compute).toHaveBeenCalledTimes(1));

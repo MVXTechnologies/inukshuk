@@ -1,5 +1,6 @@
 import UPNG from 'upng-js';
 import { sampleGridBilinear } from './terrain';
+import { asWorkletRuntime } from './workletRealm.testUtils';
 import { slopeOverlayMercator } from './terrainAnalysis';
 import {
   clearDemTileCache,
@@ -120,6 +121,31 @@ describe('runTerrainJob', () => {
     }
     expect(hm.minH).toBeCloseTo(min, 3);
     expect(hm.maxH).toBeCloseTo(max, 3);
+  });
+
+  it('runs as a worklet: fresh realm, captured closure only — same bytes as a direct call', () => {
+    const job = asWorkletRuntime(runTerrainJob);
+    for (const filter of [
+      undefined,
+      { aspectMask: 0b0100_0100, minAltM: 450, maxAltM: null },
+    ] as const) {
+      const input = {
+        tiles,
+        tileKeys: ['a', 'b', 'c', 'd'],
+        cols: 2,
+        rows: 2,
+        z: Z,
+        topRow: TOP,
+        slope: { minDeg: 27, maxDeg: 50, step: 2, filter },
+        heightmapGrid: 9,
+      };
+      const viaWorklet = job(input);
+      const direct = runTerrainJob(input);
+      expect(Buffer.compare(Buffer.from(viaWorklet.slopePng!), Buffer.from(direct.slopePng!))).toBe(
+        0,
+      );
+      expect(Array.from(viaWorklet.heightmap!.data)).toEqual(Array.from(direct.heightmap!.data));
+    }
   });
 
   it('re-uses decoded tiles by key, least-recently-used out first', () => {

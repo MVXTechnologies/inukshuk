@@ -7,6 +7,7 @@ const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789
  * so: a boring, dependency-free loop.
  */
 export function bytesToBase64(bytes: Uint8Array): string {
+  'worklet'; // also encodes the slope PNG on the terrain worklet runtime (#722)
   const out: string[] = [];
   for (let i = 0; i < bytes.length; i += 3) {
     const b0 = bytes[i]!;
