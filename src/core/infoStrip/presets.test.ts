@@ -213,4 +213,17 @@ describe('presetAidsSummary (QA 2.6.1: the card read metres in mi/ft)', () => {
     expect(presetAidsSummary(survey(), IMPERIAL)).not.toMatch(/\d m\b/);
     expect(presetAidsSummary(survey(), IMPERIAL)).toMatch(/ft$/);
   });
+
+  it('a switched-off line reads as the cursor alone; no ticks says so', () => {
+    const s = survey();
+    const line = s.strip.aids.pointingLine!;
+    const withLine = (pointingLine: typeof line) => ({
+      ...s,
+      strip: { ...s.strip, aids: { ...s.strip.aids, pointingLine } },
+    });
+    expect(presetAidsSummary(withLine({ ...line, enabled: false }), METRIC)).toBe('Crosshair');
+    expect(presetAidsSummary(withLine({ ...line, ticks: 'off' }), METRIC)).toBe(
+      'Crosshair · pointing line 500 m, no ticks',
+    );
+  });
 });
