@@ -342,6 +342,30 @@ tags:
     notVisible:
       id: 'team-band-sos'
     timeout: 5000
+# A new SOS right after "Resolve for everyone" goes out at once: the team's
+# one-minute guard once dropped it in silence (QA 2.6.1).
+- longPressOn:
+    id: 'team-sos-button'
+    waitToSettleTimeoutMs: 500
+- extendedWaitUntil:
+    visible:
+      id: 'team-undo-snack'
+    timeout: 5000
+- extendedWaitUntil:
+    visible:
+      id: 'team-band-sos'
+    timeout: 10000
+- assertVisible: 'Your SOS is active'
+- assertNotVisible:
+    id: 'team-undo-error'
+- tapOn:
+    id: 'team-band-sos-resolve'
+- tapOn:
+    id: 'team-band-sos-confirm-yes'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-band-sos'
+    timeout: 5000
 # Rally here (from the panel; a team of one shows Invite in the chips): the
 # same 5 s undo, then the gather band; its creator ends it.
 - tapOn:

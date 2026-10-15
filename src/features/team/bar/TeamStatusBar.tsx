@@ -105,7 +105,12 @@ export function TeamStatusBar({
   const rallyHere = async () => {
     const at = await myPosition(here);
     if (at !== null) usePendingAlert.getState().start('rally', at);
-    else usePendingAlert.setState({ error: 'Your position is unknown: no rally point was set.' });
+    else
+      usePendingAlert.getState().fail({
+        text: 'Your position is unknown: no rally point was set.',
+        retry: null,
+        sticky: false,
+      });
   };
 
   const chips: ChipSpec[] = summary.solo

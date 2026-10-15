@@ -14,6 +14,7 @@ import type { DeviceKeys, TeamCrypto } from '@core/team/crypto';
 import type { SignedOp } from '@core/team/envelope';
 import { encodeInvite, type InviteToken, type NetHint } from '@core/team/invite';
 import { activeMembers, cutFor } from '@core/team/membership';
+import { sosCoolingDown } from '@core/team/records';
 import { TeamReplica } from '@core/team/replica';
 import type { Audience, GroupLink, Priority, Role } from '@core/team/roles';
 import { SyncSession, type SessionEvent } from '@core/team/sync';
@@ -395,18 +396,42 @@ export class TeamSession {
     return this.field().rally;
   }
 
-  /** Raise an SOS at my position (anyone, guests too; one open at a time). */
+  /**
+   * Raise an SOS at my position (anyone, guests too; one open at a time).
+   *
+   * For a minute after my last SOS was resolved (`SOS_COOLDOWN_MS`, the
+   * spam guard), every phone's fold refuses a new SOS id, so the SOS reopens
+   * my resolved one instead, at the new place and with the new text: no phone
+   * (2.5.1 on) holds a reopen back, and it alerts the team like a raise
+   * (QA 2.6.1: a new SOS seconds after "Resolve for everyone" was dropped).
+   */
   raiseSos(lng: number, lat: number, text = ''): ActionError | null {
     const blocked = this.guardWrite();
     if (blocked) return blocked;
-    if (this.soses().some((s) => s.owner === this.me && !s.resolved)) return 'invalid';
-    const f: Record<string, Json> = { la: lat, lo: lng };
-    if (text.trim()) f['tx'] = text.trim().slice(0, 200);
+    const mine = this.soses().filter((s) => s.owner === this.me);
+    if (mine.some((s) => !s.resolved)) return 'invalid';
+    const now = this.deps.now();
+    const tx = text.trim().slice(0, 200);
+    const resolved = mine.find((s) => s.resolved);
+    // `now` is never past the op's own stamp (an HLC only moves forward), so
+    // when `now` is out of the cooldown, the write is too.
+    const reopen =
+      resolved !== undefined && sosCoolingDown(this.replica.data(now).index, this.me, now);
     const op = this.run(() =>
-      this.replica.write(this.deps.now(), 'e.set', { k: 'sos', id: this.deps.newId(), f }),
+      reopen
+        ? this.replica.write(now, 'e.set', {
+            k: 'sos',
+            id: resolved.id,
+            f: { la: lat, lo: lng, tx, res: false, rby: null, rat: null },
+          })
+        : this.replica.write(now, 'e.set', {
+            k: 'sos',
+            id: this.deps.newId(),
+            f: tx ? { la: lat, lo: lng, tx } : { la: lat, lo: lng },
+          }),
     );
     if (op === undefined) return 'rotation-pending';
-    return this.accepted(op.id) ? null : 'not-allowed';
+    return this.applied(op.id) ? null : 'not-allowed';
   }
 
   /** Move my open SOS with me (silent: no new alarm). */
@@ -426,7 +451,7 @@ export class TeamSession {
     if (owner !== this.me) body['o'] = owner;
     const op = this.run(() => this.replica.write(now, 'e.set', body));
     if (op === undefined) return 'rotation-pending';
-    return this.accepted(op.id) ? null : 'not-allowed';
+    return this.applied(op.id) ? null : 'not-allowed';
   }
 
   /** Set the team's rally point (members); my previous one goes. */
@@ -454,7 +479,7 @@ export class TeamSession {
       this.replica.write(this.deps.now(), 'e.del', { k: 'rly', id, o: owner }),
     );
     if (op === undefined) return 'rotation-pending';
-    return this.accepted(op.id) ? null : 'not-allowed';
+    return this.applied(op.id) ? null : 'not-allowed';
   }
 
   /**
@@ -512,7 +537,7 @@ export class TeamSession {
     if (blocked) return blocked;
     const op = this.run(() => this.replica.write(this.deps.now(), 'e.set', body));
     if (op === undefined) return 'rotation-pending';
-    return this.accepted(op.id) ? null : 'not-allowed';
+    return this.applied(op.id) ? null : 'not-allowed';
   }
 
   /** Make a team trail from a line (members); returns its id or an error. */
@@ -573,7 +598,7 @@ export class TeamSession {
       this.replica.write(this.deps.now(), 'e.del', { k: 'tve', id: vertexId, o: trail.owner }),
     );
     if (op === undefined) return 'rotation-pending';
-    return this.accepted(op.id) ? null : 'not-allowed';
+    return this.applied(op.id) ? null : 'not-allowed';
   }
 
   /** Rename, describe or recolour a team trail (members). */
@@ -1200,6 +1225,17 @@ export class TeamSession {
   /** Did the fold accept the op we just wrote? */
   private accepted(opId: string): boolean {
     return !this.replica.state.rejected.has(opId);
+  }
+
+  /**
+   * Did the data op we just wrote take effect? The membership fold can accept
+   * it (signed by a member) while the data fold skips it (a record rule:
+   * forbidden or invalid); `accepted` alone called such a write a success,
+   * so a refused SOS was reported as sent (QA 2.6.1).
+   */
+  private applied(opId: string): boolean {
+    if (!this.accepted(opId)) return false;
+    return !this.replica.data(this.deps.now()).skipped.some((s) => s.id === opId);
   }
 
   setRole(memberId: string, role: Role): ActionError | null {

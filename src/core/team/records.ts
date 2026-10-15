@@ -288,8 +288,20 @@ export function reindex(
   }
 }
 
-/** After an SOS is resolved, its raiser waits this long before raising another. */
+/**
+ * After an SOS is resolved, its raiser waits this long before raising
+ * another *new* one (a new id). Reopening the resolved one (`res: false`, the
+ * whole trio) is never held back, and alerts like a raise: that is how the app
+ * sends an SOS within the cooldown (QA 2.6.1), so every phone, old or new,
+ * accepts it.
+ */
 export const SOS_COOLDOWN_MS = 60_000;
+
+/** Whether a new SOS id from `owner` at `wall` falls in the cooldown after their last resolve. */
+export function sosCoolingDown(idx: RecordIndex, owner: string, wall: number): boolean {
+  const last = idx.sosLastResolved.get(owner);
+  return last !== undefined && wall - last < SOS_COOLDOWN_MS;
+}
 
 const live = (r: { state: EntityState } | undefined): r is { state: EntityState } =>
   r !== undefined && isLive(r.state);
@@ -360,8 +372,7 @@ export function authorizeRecord(
         if (!has(f, 'la') || !has(f, 'lo')) return 'invalid';
         // Spam guard: one open SOS per member, and a cooldown after a resolve.
         if ((idx.sosOpen.get(owner)?.size ?? 0) > 0) return 'forbidden';
-        const last = idx.sosLastResolved.get(owner);
-        if (last !== undefined && wall - last < SOS_COOLDOWN_MS) return 'forbidden';
+        if (sosCoolingDown(idx, owner, wall)) return 'forbidden';
       }
       return { owner };
     }

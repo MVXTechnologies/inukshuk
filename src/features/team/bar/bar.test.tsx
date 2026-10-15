@@ -526,6 +526,28 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
     await fireEvent(b, 'pressOut');
   };
 
+  /** How many countdowns begin from now on (a spy on the store's `start` would outlive the test). */
+  const countStarts = () => {
+    let n = 0;
+    const off = usePendingAlert.subscribe((st, prev) => {
+      if (st.pending !== null && st.pending !== prev.pending) n += 1;
+    });
+    unsubscribers.push(off);
+    return () => n;
+  };
+  const unsubscribers: (() => void)[] = [];
+  afterEach(() => {
+    for (const off of unsubscribers.splice(0)) off();
+  });
+
+  const sender = () =>
+    wrap(
+      <>
+        <SosButton bottom={72} here={HERE} />
+        <UndoSnack style={{}} />
+      </>,
+    );
+
   it.each(THEMES)(
     'a short tap only hints; a 2 s hold then 5 s sends the SOS (dark: %s)',
     async (dark) => {
@@ -661,6 +683,53 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
     expect(usePendingAlert.getState().pending?.kind).toBe('sos');
   });
 
+  it.each([6950, 7000, 7050])(
+    'release racing the armed limit (%i ms held): one countdown, the full 5 s, never early',
+    async (held) => {
+      await render(sender());
+      const starts = countStarts();
+      const b = screen.getByTestId('team-sos-button');
+      await fireEvent(b, 'pressIn');
+      await act(async () => {
+        jest.advanceTimersByTime(held);
+      });
+      await fireEvent(b, 'pressOut');
+      const began = usePendingAlert.getState().pending?.clock.startedAt;
+      expect(began).toBeDefined();
+      await act(async () => {
+        jest.advanceTimersByTime(began! + 4990 - Date.now());
+      });
+      expect(app.active!.soses()).toHaveLength(0);
+      expect(screen.getByTestId('team-undo-snack')).toBeTruthy();
+      await act(async () => {
+        jest.advanceTimersByTime(20);
+      });
+      expect(app.active!.soses()).toHaveLength(1);
+      expect(starts()).toBe(1);
+    },
+  );
+
+  it('the button hidden while armed: the countdown still runs its full 5 s, once', async () => {
+    const view = await render(sender());
+    const starts = countStarts();
+    await fireEvent(screen.getByTestId('team-sos-button'), 'pressIn');
+    await act(async () => {
+      jest.advanceTimersByTime(3000);
+    });
+    // A card opens over it mid-hold: the SOS goes to its countdown.
+    await view.rerender(wrap(<UndoSnack style={{}} />));
+    expect(usePendingAlert.getState().pending?.kind).toBe('sos');
+    await act(async () => {
+      jest.advanceTimersByTime(4990);
+    });
+    expect(app.active!.soses()).toHaveLength(0);
+    await act(async () => {
+      jest.advanceTimersByTime(20);
+    });
+    expect(app.active!.soses()).toHaveLength(1);
+    expect(starts()).toBe(1);
+  });
+
   it('Undo during the countdown sends nothing, ever', async () => {
     await render(
       wrap(
@@ -704,6 +773,117 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
       jest.advanceTimersByTime(5000);
     });
     expect(app.active!.rally()).toMatchObject({ lat: HERE.latitude, lng: HERE.longitude });
+  });
+
+  it('"Resolve for everyone", then an SOS seconds later: it goes out (QA 2.6.1)', async () => {
+    const s = app.active!;
+    expect(s.raiseSos(HERE.longitude, HERE.latitude)).toBeNull();
+    await act(async () => useTeamStore.getState().refresh());
+    await render(
+      wrap(
+        <>
+          <AlertBands here={HERE} onNavigate={jest.fn()} />
+          <SosButton bottom={72} here={HERE} />
+          <UndoSnack style={{}} />
+        </>,
+      ),
+    );
+    await fireEvent.press(screen.getByTestId('team-band-sos-resolve'));
+    await fireEvent.press(screen.getByTestId('team-band-sos-confirm-yes'));
+    expect(s.soses().every((x) => x.resolved)).toBe(true);
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
+    await press(2100);
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
+    expect(screen.queryByTestId('team-undo-error')).toBeNull();
+    expect(s.soses().filter((x) => !x.resolved)).toHaveLength(1);
+    await act(async () => useTeamStore.getState().refresh());
+    expect(screen.getByText('Your SOS is active')).toBeTruthy();
+    expect(screen.getByLabelText('Your SOS is active')).toBeTruthy();
+  });
+
+  it.each(THEMES)(
+    'an SOS that fails to send says so, with Retry, and stays until it goes (dark: %s)',
+    async (dark) => {
+      const s = app.active!;
+      const real = s.raiseSos.bind(s);
+      const raise = jest.spyOn(s, 'raiseSos').mockReturnValue('not-allowed');
+      await render(
+        wrap(
+          <>
+            <SosButton bottom={72} here={HERE} />
+            <UndoSnack style={{}} />
+          </>,
+          dark,
+        ),
+      );
+      await press(2100);
+      await act(async () => {
+        jest.advanceTimersByTime(5000);
+      });
+      expect(raise).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId('team-undo-error')).toBeTruthy();
+      expect(screen.getByText(/^SOS not sent/)).toBeTruthy();
+      // Never dismissed by a timer: a dropped SOS must not vanish unseen.
+      await act(async () => {
+        jest.advanceTimersByTime(10 * 60_000);
+      });
+      expect(screen.getByText(/^SOS not sent/)).toBeTruthy();
+      // Retry sends at once (the hold and the undo already confirmed it).
+      raise.mockImplementation(real);
+      await fireEvent.press(screen.getByTestId('team-undo-retry'));
+      expect(s.soses().filter((x) => !x.resolved)).toHaveLength(1);
+      expect(screen.queryByTestId('team-undo-error')).toBeNull();
+      raise.mockRestore();
+    },
+  );
+
+  it('a send that throws is a failure on screen, never a frozen countdown', async () => {
+    const s = app.active!;
+    const raise = jest.spyOn(s, 'raiseSos').mockImplementation(() => {
+      throw new Error('disk full');
+    });
+    await render(sender());
+    await press(2100);
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
+    expect(usePendingAlert.getState().pending).toBeNull();
+    expect(screen.queryByTestId('team-undo-snack')).toBeNull();
+    expect(screen.getByText(/^SOS not sent/)).toBeTruthy();
+    // Dismiss is the user's call, never a timer's.
+    await fireEvent.press(screen.getByTestId('team-undo-dismiss'));
+    expect(screen.queryByTestId('team-undo-error')).toBeNull();
+    raise.mockRestore();
+  });
+
+  it('with my SOS already active, a hold says so at once (no countdown)', async () => {
+    expect(app.active!.raiseSos(HERE.longitude, HERE.latitude)).toBeNull();
+    await act(async () => useTeamStore.getState().refresh());
+    await render(sender());
+    await press(2100);
+    expect(usePendingAlert.getState().pending).toBeNull();
+    expect(screen.getByText('Your SOS is already active')).toBeTruthy();
+  });
+
+  it('no position for an SOS: a failure that stays, never a passing hint', async () => {
+    await render(
+      wrap(
+        <>
+          <SosButton bottom={72} here={null} />
+          <UndoSnack style={{}} />
+        </>,
+      ),
+    );
+    await press(2100);
+    await act(async () => {
+      jest.advanceTimersByTime(60_000);
+    });
+    expect(usePendingAlert.getState().pending).toBeNull();
+    expect(screen.getByText(/^SOS not sent: your position is unknown/)).toBeTruthy();
   });
 
   it('my SOS band: "Sent" (no one can say yet), Resolve confirmed inline', async () => {

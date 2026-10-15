@@ -41,6 +41,30 @@ describe('receipt records (#708)', () => {
     expect(hasReceipt(w.root.data(), bob.id, { ...sos, kind: 'rly' })).toBe(false);
   });
 
+  it('a reopened SOS is a new alert: a receipt for the old one no longer counts (QA 2.6.1)', () => {
+    const { w, bob, eve, rb, re, sync } = crew();
+    const sos: AlertRef = { kind: 'sos', owner: eve.id, id: 's1' };
+    re.write(at(1), 'e.set', { k: 'sos', id: 's1', f: { la: 46.8, lo: -71.2 } });
+    sync(at(2));
+    rb.write(at(3), 'e.set', receiptBody(sos));
+    re.write(at(4), 'e.set', { k: 'sos', id: 's1', f: { res: true, rby: eve.id, rat: at(4) } });
+    sync(at(5));
+    expect(hasReceipt(re.data(), bob.id, sos)).toBe(true);
+    // Reopened (within the cooldown, the app's way to raise again).
+    re.write(at(6), 'e.set', {
+      k: 'sos',
+      id: 's1',
+      f: { la: 46.9, lo: -71.3, tx: '', res: false, rby: null, rat: null },
+    });
+    sync(at(7));
+    for (const r of [w.root, rb, re]) expect(hasReceipt(r.data(), bob.id, sos)).toBe(false);
+    expect(owesReceipt(rb.data(), bob.id, sos)).toBe(true);
+    rb.write(at(8), 'e.set', receiptBody(sos));
+    sync(at(9));
+    for (const r of [w.root, rb, re]) expect(hasReceipt(r.data(), bob.id, sos)).toBe(true);
+    expect(owesReceipt(rb.data(), bob.id, sos)).toBe(false);
+  });
+
   it('guests send receipts too; bad fields, a receipt for my own alert or one with o are invalid', () => {
     const { w, bob, gus, rb, rg, sync } = crew();
     const rly: AlertRef = { kind: 'rly', owner: bob.id, id: 'r1' };

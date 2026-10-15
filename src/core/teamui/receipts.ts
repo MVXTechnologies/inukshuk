@@ -9,9 +9,12 @@
  * "Sent" rather than a misleading "0 of 4".
  */
 import type { Json } from '@core/team/canonical';
-import { isLive, visibleFields } from '@core/team/crdt';
+import { isLive, lastWrite, visibleFields } from '@core/team/crdt';
+import { compareStamp } from '@core/team/hlc';
 import { entityKey, type TeamData } from '@core/team/data';
 import { hasCap, RECEIPT_CAP } from '@core/teamdraw/caps';
+
+import { sosRaisedStamp } from './field';
 
 /** An alert a receipt can name: an SOS (`sos`) or a rally point (`rly`). */
 export interface AlertRef {
@@ -25,12 +28,23 @@ export function receiptBody(alert: AlertRef): { k: 'rcp'; id: string; f: Record<
   return { k: 'rcp', id: alert.id, f: { ak: alert.kind, ao: alert.owner } };
 }
 
-/** Whether `member`'s receipt for `alert` is in the fold. */
+/**
+ * Whether `member`'s receipt for `alert` is in the fold. For an SOS that was
+ * reopened, only a receipt written after the reopen counts: the reopen is a
+ * new alert, and a receipt for the old one says nothing about it (the
+ * receiver's clock has seen the reopen's stamp before it writes, so its
+ * receipt sorts after it).
+ */
 export function hasReceipt(data: TeamData, member: string, alert: AlertRef): boolean {
   const rec = data.entities.get(entityKey('rcp', alert.id, member));
   if (rec === undefined || !isLive(rec.state)) return false;
   const f = visibleFields(rec.state);
-  return f['ak'] === alert.kind && f['ao'] === alert.owner;
+  if (f['ak'] !== alert.kind || f['ao'] !== alert.owner) return false;
+  if (alert.kind !== 'sos') return true;
+  const sos = data.entities.get(entityKey('sos', alert.id, alert.owner));
+  const raised = sos === undefined ? undefined : sosRaisedStamp(sos.state);
+  const wrote = lastWrite(rec.state);
+  return raised === undefined || (wrote !== undefined && compareStamp(wrote, raised) > 0);
 }
 
 /**

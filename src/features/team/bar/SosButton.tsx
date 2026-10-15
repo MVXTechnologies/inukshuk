@@ -66,7 +66,12 @@ export function SosButton({
   const fire = useCallback(async (from: typeof here) => {
     const at = await myPosition(from);
     if (at === null) {
-      setHint('Your position is unknown: say where you are in the chat');
+      // A failed SOS stays on screen until dismissed, never a passing hint.
+      usePendingAlert.getState().fail({
+        text: 'SOS not sent: your position is unknown. Say where you are in the chat.',
+        retry: null,
+        sticky: true,
+      });
       return;
     }
     usePendingAlert.getState().start('sos', at);
@@ -96,7 +101,12 @@ export function SosButton({
   );
 
   const down = () => {
-    if (mineActive || pendingSos || armedRef.current !== null) return;
+    if (mineActive) {
+      // Said up front, never a countdown that would end in "already open".
+      setHint('Your SOS is already active');
+      return;
+    }
+    if (pendingSos || armedRef.current !== null) return;
     const start = Date.now();
     const from = here;
     ticks.current = 0;

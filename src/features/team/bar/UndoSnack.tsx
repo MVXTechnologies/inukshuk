@@ -11,7 +11,7 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Icon, Text } from 'react-native-paper';
 
 import { ProgressRing } from './parts';
 import { usePendingAlert } from './pendingAlert';
@@ -31,6 +31,7 @@ export function UndoSnack({ style }: { style: StyleProp<ViewStyle> }) {
   const error = usePendingAlert((s) => s.error);
   const undo = usePendingAlert((s) => s.undo);
   const clearError = usePendingAlert((s) => s.clearError);
+  const retry = usePendingAlert((s) => s.retry);
   const phones = useTeamStore(
     (s) => (s.view?.members.filter((m) => m.active && !m.isMe).length ?? 0) as number,
   );
@@ -42,22 +43,48 @@ export function UndoSnack({ style }: { style: StyleProp<ViewStyle> }) {
   }, [pending]);
   // Never before the countdown began (the last tick may predate it).
   const now = pending === null ? tick : Math.max(tick, pending.clock.startedAt);
+  // A short notice fades; a failed send never does (QA 2.6.1): it stays
+  // until Retry or Dismiss.
   useEffect(() => {
-    if (error === null) return;
+    if (error === null || error.sticky) return;
     const id = setTimeout(clearError, ERROR_MS);
     return () => clearTimeout(id);
   }, [error, clearError]);
 
-  if (pending === null && error === null) return null;
   if (pending === null) {
+    if (error === null) return null;
     return (
       <View style={style} pointerEvents="box-none">
         <View
           style={[styles.snack, { backgroundColor: t.team.snack, shadowColor: palette.shadow }]}
-          accessibilityLiveRegion="polite"
+          accessibilityLiveRegion={error.sticky ? 'assertive' : 'polite'}
           testID="team-undo-error"
         >
-          <Text style={[styles.title, { color: t.team.snackInk }]}>{error}</Text>
+          <Text style={[styles.title, styles.flex, { color: t.team.snackInk }]}>{error.text}</Text>
+          {error.retry !== null && (
+            <Pressable
+              onPress={retry}
+              style={styles.undo}
+              accessibilityRole="button"
+              accessibilityLabel={error.retry.kind === 'sos' ? 'Retry the SOS' : 'Retry'}
+              testID="team-undo-retry"
+              hitSlop={6}
+            >
+              <Text style={[styles.undoText, { color: t.team.snackAccent }]}>RETRY</Text>
+            </Pressable>
+          )}
+          {error.sticky && (
+            <Pressable
+              onPress={clearError}
+              style={styles.close}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss"
+              testID="team-undo-dismiss"
+              hitSlop={6}
+            >
+              <Icon source="close" size={20} color={t.team.snackInk} />
+            </Pressable>
+          )}
         </View>
       </View>
     );
@@ -130,5 +157,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 14, lineHeight: 18, fontWeight: '700' },
   sub: { fontSize: 12.5, fontWeight: '700', opacity: 0.75 },
   undo: { minHeight: 44, paddingHorizontal: 14, justifyContent: 'center' },
+  close: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' },
   undoText: { fontSize: 14.5, fontWeight: '900', letterSpacing: 0.7 },
 });

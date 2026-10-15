@@ -2,7 +2,8 @@
  * Field coordination readers (#589, owner 2026-10-07): SOS and rally points
  * from the data view, rally arrivals and ETAs from positions. Pure.
  */
-import { isLive, visibleFields } from '@core/team/crdt';
+import { isLive, visibleFields, type EntityState } from '@core/team/crdt';
+import type { Stamp } from '@core/team/hlc';
 import type { TeamData } from '@core/team/data';
 
 export interface TeamSos {
@@ -30,6 +31,17 @@ export interface TeamRally {
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
+/**
+ * When an SOS was last raised: its creating write, or the write that
+ * reopened it (`res: false`, the current value). A reopened SOS is a new
+ * alert ("just now", receipts anew), not the old one moved.
+ */
+export function sosRaisedStamp(state: EntityState): Stamp | undefined {
+  const res = state.fields['res'];
+  if (res !== undefined && res.value === false) return res.stamp;
+  return state.created;
+}
+
 /** Every live SOS, open ones first, newest first. */
 export function teamSos(data: TeamData): TeamSos[] {
   const out: TeamSos[] = [];
@@ -43,7 +55,7 @@ export function teamSos(data: TeamData): TeamSos[] {
       lng: f['lo'],
       lat: f['la'],
       text: typeof f['tx'] === 'string' ? f['tx'] : '',
-      at: rec.state.created?.wall ?? 0,
+      at: sosRaisedStamp(rec.state)?.wall ?? 0,
       resolved: f['res'] === true,
       resolvedBy: f['res'] === true && typeof f['rby'] === 'string' ? f['rby'] : null,
     });
