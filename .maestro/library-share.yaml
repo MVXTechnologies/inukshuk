@@ -1,0 +1,202 @@
+# Share live e2e (#712, G10): one phone shares a Library folder live and walks
+# every screen of the share, in light and dark, with review shots
+# `review-share-<screen>-light|dark`, each asserted before it is taken:
+#
+#   panel   the Share live panel (and the one-time name prompt when no name
+#           was ever set), then "Share and invite"
+#   invite  the folder's own invite (QR code, Send link, SMS): asserted when
+#           "Share and invite" opens it, shot from People › Invite people
+#   sheet   the folder's own sheet ("Live · yours")
+#   people  People, with "Invite people"
+#   activity Activity ("You shared this folder")
+#   stop    the Stop sharing dialog; the light pass confirms it
+#
+# Portability notes:
+# - Runs after make-map.yaml in the catalog shard: its map ("My map …") is
+#   the item the folder holds (an empty folder cannot be shared).
+# - Shared folders are apart from team mode: no team, no second phone.
+# - Theme through subflows/set-theme.yaml (Dark, then back to System).
+# - Cleans up: the share is stopped and the folder deleted, so the map is
+#   back in its usual place and reruns start from the same Library.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'My map .*'
+    timeout: 15000
+# --- A folder holding the made map ---
+- tapOn: 'Import'
+- extendedWaitUntil:
+    visible: 'New folder'
+    timeout: 8000
+- tapOn: 'New folder'
+- extendedWaitUntil:
+    visible: 'Folder name'
+    timeout: 8000
+- waitForAnimationToEnd:
+    timeout: 3000
+- inputText: 'ShareTrip'
+- tapOn: 'Create'
+- extendedWaitUntil:
+    visible: 'ShareTrip.*'
+    timeout: 8000
+- tapOn: 'Map options'
+- extendedWaitUntil:
+    visible: 'Move to ShareTrip'
+    timeout: 8000
+- tapOn: 'Move to ShareTrip'
+- tapOn:
+    point: 50%,8%
+- extendedWaitUntil:
+    visible: 'ShareTrip \(1\)'
+    timeout: 8000
+
+# --- Light: the Share live panel, then close it (the dark pass shares) ---
+- longPressOn: 'ShareTrip \(1\)'
+- extendedWaitUntil:
+    visible:
+      id: 'library-folder-action-share'
+    timeout: 8000
+- tapOn:
+    id: 'library-folder-action-share'
+- extendedWaitUntil:
+    visible:
+      id: 'library-share-live'
+    timeout: 8000
+- tapOn:
+    id: 'library-share-live'
+- extendedWaitUntil:
+    visible:
+      id: 'library-share-live-sheet'
+    timeout: 8000
+- assertVisible: 'PEOPLE YOU INVITE CAN'
+- assertVisible:
+    id: 'share-live-start'
+- takeScreenshot: review-share-panel-light
+- tapOn: 'Close'
+- extendedWaitUntil:
+    notVisible:
+      id: 'library-share-live-sheet'
+    timeout: 8000
+
+# --- Dark: share it (name prompt when shown), then every screen ---
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- runFlow:
+    file: subflows/set-theme.yaml
+    env:
+      NEXT: Dark
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'ShareTrip \(1\)'
+    timeout: 15000
+- longPressOn: 'ShareTrip \(1\)'
+- extendedWaitUntil:
+    visible:
+      id: 'library-folder-action-share'
+    timeout: 8000
+- tapOn:
+    id: 'library-folder-action-share'
+- extendedWaitUntil:
+    visible:
+      id: 'library-share-live'
+    timeout: 8000
+- tapOn:
+    id: 'library-share-live'
+- extendedWaitUntil:
+    visible:
+      id: 'library-share-live-sheet'
+    timeout: 8000
+- assertVisible: 'PEOPLE YOU INVITE CAN'
+# No display name was ever set on a fresh phone: the panel asks once.
+- runFlow:
+    when:
+      visible:
+        id: 'share-live-name'
+    commands:
+      - tapOn:
+          id: 'share-live-name'
+      - inputText: 'Marc'
+      - assertVisible: 'Marc'
+- takeScreenshot: review-share-panel-dark
+- tapOn:
+    id: 'share-live-start'
+# "Share and invite" opens the folder's own invite.
+- extendedWaitUntil:
+    visible:
+      id: 'folder-invite-qr'
+    timeout: 15000
+- assertVisible: 'Invite to ShareTrip'
+- assertVisible: 'Send link'
+- tapOn:
+    id: 'folder-invite-done'
+- extendedWaitUntil:
+    visible:
+      id: 'library-shared-menu'
+    timeout: 15000
+- runFlow:
+    file: subflows/share-live-shots.yaml
+    env:
+      THEME: dark
+      STOP: cancel
+
+# --- Light again: every screen, then stop sharing for good ---
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- runFlow:
+    file: subflows/set-theme.yaml
+    env:
+      NEXT: System
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: 'library-shared-menu'
+    timeout: 15000
+- runFlow:
+    file: subflows/share-live-shots.yaml
+    env:
+      THEME: light
+      STOP: confirm
+
+# --- Clean up: delete the folder (the map goes back to its section) ---
+- tapOn: 'Organize'
+- tapOn: 'Delete folder'
+- extendedWaitUntil:
+    visible: 'Delete'
+    timeout: 8000
+- tapOn: 'Delete'
+- extendedWaitUntil:
+    notVisible: 'ShareTrip.*'
+    timeout: 8000
+- tapOn: 'Done'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 15000
