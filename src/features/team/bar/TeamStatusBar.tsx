@@ -12,6 +12,7 @@
  * map's top-centre chips (destination, marine notice, receiver) move below
  * it instead of colliding with it.
  */
+import { MAP_LANE_INSET } from '@core/map/mapChrome';
 import { gatherBadge } from '@core/teamui/alertBands';
 import { teamBarSummary, type TeamBarSummary } from '@core/teamui/teamBar';
 import { selectChatUnread, useTeamStore } from '@state/teamStore';
@@ -29,6 +30,14 @@ import { FaceStack } from './parts';
 
 /** The pill's height and the gap to the column under it. */
 export const PILL_H = 48;
+/**
+ * The pill's faces (#756): 22 dp, half covered, so the team's name gets the
+ * width (at 360 dp it read "Les Sentie…"), and the name grows with the font
+ * scale up to {@link PILL_NAME_MAX_SCALE} (owner's cap).
+ */
+export const PILL_FACE = 22;
+export const PILL_FACE_OVERLAP = 0.5;
+export const PILL_NAME_MAX_SCALE = 1.15;
 const COLUMN_GAP = 8;
 const CLOCK_MS = 30_000;
 
@@ -123,7 +132,12 @@ export function TeamStatusBar({
               <Icon source="account-plus" size={17} color={t.support.onAccent} />
             </View>
           ) : (
-            <FaceStack faces={summary.faces} size={24} ring={t.map.chrome} />
+            <FaceStack
+              faces={summary.faces}
+              size={PILL_FACE}
+              overlap={PILL_FACE_OVERLAP}
+              ring={t.map.chrome}
+            />
           )}
           {unread > 0 && (
             <View
@@ -142,14 +156,20 @@ export function TeamStatusBar({
             </View>
           )}
           <View style={styles.flex}>
-            <Text style={[styles.name, { color: t.map.chromeInk }]} numberOfLines={1}>
+            <Text
+              style={[styles.name, { color: t.map.chromeInk }]}
+              numberOfLines={1}
+              maxFontSizeMultiplier={PILL_NAME_MAX_SCALE}
+              testID="team-bar-name"
+            >
               {summary.name}
             </Text>
             <View style={styles.statusRow}>
               {connecting ? (
                 <Text
-                  style={[styles.status, { color: t.map.chromeInk }, styles.muted]}
+                  style={[styles.status, styles.shrink, { color: t.map.chromeInkMuted }]}
                   numberOfLines={1}
+                  maxFontSizeMultiplier={PILL_NAME_MAX_SCALE}
                   testID="team-bar-status"
                 >
                   {summary.status}
@@ -158,8 +178,9 @@ export function TeamStatusBar({
                 <>
                   <Icon source={glyph} size={14} color={glyphColor} />
                   <Text
-                    style={[styles.status, { color: t.map.gnssLost }]}
+                    style={[styles.status, styles.shrink, { color: t.map.gnssLost }]}
                     numberOfLines={1}
+                    maxFontSizeMultiplier={PILL_NAME_MAX_SCALE}
                     testID="team-bar-status"
                   >
                     {summary.status}
@@ -167,25 +188,31 @@ export function TeamStatusBar({
                 </>
               ) : (
                 <>
+                  {/* One line, one ellipsis policy (#756): "3/3 online ·" never splits. */}
                   <Text
-                    style={[styles.status, styles.strong, { color: t.map.chromeInk }]}
+                    style={[styles.status, styles.shrink, { color: t.map.chromeInkMuted }]}
                     numberOfLines={1}
+                    maxFontSizeMultiplier={PILL_NAME_MAX_SCALE}
                     testID="team-bar-status"
                   >
-                    {summary.solo ? summary.status : `${summary.online}/${summary.total}`}
-                  </Text>
-                  {!summary.solo && (
-                    <Text style={[styles.status, { color: t.map.chromeInk }, styles.muted]}>
-                      online
+                    {/* Spans name their colour: a nested Paper Text takes the theme's
+                      own ink (dark on the dark pill in light mode, #756 review). */}
+                    <Text
+                      style={[styles.strong, { color: t.map.chromeInk }]}
+                      testID="team-bar-status-count"
+                    >
+                      {summary.solo ? summary.status : `${summary.online}/${summary.total}`}
                     </Text>
-                  )}
-                  <Text style={[styles.status, { color: t.map.chromeInk }, styles.muted]}>·</Text>
+                    <Text style={{ color: t.map.chromeInkMuted }} testID="team-bar-status-muted">
+                      {summary.solo ? ' ·' : ' online ·'}
+                    </Text>
+                  </Text>
                   <Icon source={glyph} size={14} color={glyphColor} />
                 </>
               )}
             </View>
           </View>
-          <Icon source="chevron-down" size={22} color={t.map.chromeInk} />
+          <Icon source="chevron-down" size={16} color={t.map.chromeInk} />
         </Pressable>
       )}
       {/* The "!" rides the pill's corner, half outside it: its own target (a
@@ -222,15 +249,16 @@ export function TeamStatusBar({
 
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
+  shrink: { flexShrink: 1, minWidth: 0 },
   pill: {
     position: 'absolute',
-    left: 76,
-    right: 76,
+    left: MAP_LANE_INSET,
+    right: MAP_LANE_INSET,
     height: PILL_H,
     borderRadius: PILL_H / 2,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     paddingLeft: 8,
     paddingRight: 8,
     shadowOpacity: 0.28,
@@ -243,8 +271,7 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   status: { fontSize: 12, lineHeight: 15, fontWeight: '700' },
   strong: { fontWeight: '800' },
-  muted: { opacity: 0.72 },
-  column: { position: 'absolute', left: 16, right: 76, gap: 8 },
+  column: { position: 'absolute', left: 16, right: MAP_LANE_INSET, gap: 8 },
   unread: {
     position: 'absolute',
     left: 22,
@@ -260,8 +287,8 @@ const styles = StyleSheet.create({
   unreadText: { fontSize: 10, lineHeight: 12, fontWeight: '900' },
   bang: {
     position: 'absolute',
-    // The pill's right edge (76) less the overhang.
-    right: 76 - 6,
+    // The pill's right edge less the overhang.
+    right: MAP_LANE_INSET - 6,
     width: 24,
     height: 24,
     borderRadius: 12,

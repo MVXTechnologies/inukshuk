@@ -11,8 +11,15 @@
  * - While my SOS is active, the ring stays full and the button says so.
  *
  * The ring redraws every {@link FRAME_MS} only while held: a leaf of the map.
+ *
+ * #756: a button of the right rail's column (`@core/map/mapChrome`): its
+ * centre on the rail's axis, {@link MAP_EDGE_INSET} from the edge like Locate,
+ * Layers and +, and its bottom edge at `bottom` (the caller puts that
+ * `MAP_STACK_GAP` above the bottom row). The ring hugs it ({@link RING_PAD}
+ * outside) and the "HOLD" cue is inside the button, never a label under it.
  */
 import { holdProgress, holdTicks, SOS_ARMED_MAX_MS, SOS_HOLD_MS } from '@core/teamui/undo';
+import { MAP_BUTTON, MAP_EDGE_INSET } from '@core/map/mapChrome';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 import { useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
@@ -26,13 +33,16 @@ import { usePendingAlert } from './pendingAlert';
 
 const FRAME_MS = 50;
 const HINT_MS = 2500;
-const SIZE = 48;
-const RING = SIZE + 16;
+const SIZE = MAP_BUTTON;
+/** The ring's reach outside the button. */
+export const RING_PAD = 4;
+const RING = SIZE + 2 * RING_PAD;
 
 export function SosButton({
   bottom,
   here,
 }: {
+  /** Where the button's bottom edge sits (its ring reaches {@link RING_PAD} below). */
   bottom: number;
   here: { latitude: number; longitude: number } | null;
 }) {
@@ -163,7 +173,11 @@ export function SosButton({
         ? 'SOS ready. Let go to start the five second undo'
         : 'SOS. Hold for two seconds to alert the whole team';
   return (
-    <View style={[styles.dock, { bottom }]} pointerEvents="box-none" testID="team-sos-layer">
+    <View
+      style={[styles.dock, { bottom: bottom - RING_PAD }]}
+      pointerEvents="box-none"
+      testID="team-sos-layer"
+    >
       {hint !== null && (
         // Inside the dock's own bounds (a row, left of the button), never
         // absolutely placed outside them: Android leaves a view outside its
@@ -209,21 +223,22 @@ export function SosButton({
             <Text style={[styles.sos, { color: t.team.sosInk }]} allowFontScaling={false}>
               SOS
             </Text>
+            {!mineActive && (
+              <Text
+                style={[styles.cue, { color: t.team.sosInk }]}
+                allowFontScaling={false}
+                accessible={false}
+                testID="team-sos-cue"
+              >
+                {armed
+                  ? 'Let go'
+                  : held !== null
+                    ? `${Math.max(1, Math.ceil((SOS_HOLD_MS - (now - held)) / 1000))} s`
+                    : 'Hold'}
+              </Text>
+            )}
           </Pressable>
         </View>
-        {!mineActive && (
-          <Text
-            style={[styles.under, { color: t.team.mapInk, textShadowColor: t.team.mapHalo }]}
-            allowFontScaling={false}
-            accessible={false}
-          >
-            {armed
-              ? 'Let go'
-              : held !== null
-                ? `${Math.max(1, Math.ceil((SOS_HOLD_MS - (now - held)) / 1000))} s`
-                : 'Hold'}
-          </Text>
-        )}
       </View>
     </View>
   );
@@ -231,11 +246,13 @@ export function SosButton({
 
 const styles = StyleSheet.create({
   // Under the bottom cards (QA 2.6.0, 09b); the button's elevation stays inside.
+  // The ring box's right edge sits RING_PAD outside the button's, which is
+  // MAP_EDGE_INSET from the screen's edge: the rail's column.
   dock: {
     position: 'absolute',
-    right: 10,
+    right: MAP_EDGE_INSET - RING_PAD,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     zIndex: MAP_OVERLAY_Z.teamButton,
   },
   column: { alignItems: 'center' },
@@ -257,17 +274,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
   },
-  sos: { fontSize: 13.5, fontWeight: '900', letterSpacing: 0.5 },
-  under: {
-    marginTop: -6,
-    fontSize: 11,
+  sos: { fontSize: 13.5, lineHeight: 15, fontWeight: '900', letterSpacing: 0.5 },
+  // Inside the 48 dp button, so it never meets the bottom row (#756).
+  cue: {
+    fontSize: 9,
+    lineHeight: 11,
     fontWeight: '800',
-    textShadowRadius: 3,
-    textShadowOffset: { width: 0, height: 0 },
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    opacity: 0.92,
   },
   hint: {
-    marginTop: RING / 2 - 18,
-    marginRight: 4,
+    marginRight: 8,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,

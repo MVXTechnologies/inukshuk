@@ -8,6 +8,7 @@
  * for the card (paper-surface-ios-flex-collapse); its own state store so
  * MapScreen only routes the tap.
  */
+import { MAP_LANE_INSET } from '@core/map/mapChrome';
 import { stripBandLayout, type AlertBandPlace } from '@core/teamui/alertBands';
 import { rangeAndBearing } from '@core/teamui/positions';
 import { useExtensionPrefs } from '@features/extensions/prefs';
@@ -219,7 +220,9 @@ export function TeamMapOverlay({
           <TeamShapeCard here={here} onNavigate={onNavigate} screenFocused={screenFocused} />
         </View>
       )}
-      {signal && !drawing && <DrawAlertSnack style={{ bottom: fabBottom, right: 76 }} />}
+      {signal && !drawing && (
+        <DrawAlertSnack style={{ bottom: fabBottom, right: MAP_LANE_INSET }} />
+      )}
       {draft === null && !card && cardSlotFree && pin && (
         <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
           <TeamPinCard pin={pin} view={view} here={here} onClose={() => select(null)} />

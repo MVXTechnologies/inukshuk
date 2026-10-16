@@ -107,6 +107,7 @@ import { useFollowTrail } from './nav/useFollowTrail';
 import { useNavigationStore } from '@state/navigationStore';
 import { DestinationMarkerPin } from './components/DestinationMarkerPin';
 import { MapCreditsButton, MapCreditsSheet } from './components/MapCredits';
+import { MAP_EDGE_INSET, MAP_LANE_INSET } from '@core/map/mapChrome';
 import { mapCredits } from '@core/map/mapCredits';
 import { bareTapAfterFocus } from '@core/map/mapTap';
 import { centreCursorPoint } from '@core/map/centreCursor';
@@ -4547,18 +4548,23 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   // Top-left instrument column: the compass badge alone since the scale bar
   // moved to the bottom-left corner — no gap left floating under it.
-  topLeft: { position: 'absolute', left: 16, alignItems: 'flex-start' },
+  topLeft: { position: 'absolute', left: MAP_EDGE_INSET, alignItems: 'flex-start' },
   // Between the compass (16 + 48) and the rail, with 12 dp either side.
-  searchPill: { position: 'absolute', left: 76, right: 76 },
+  searchPill: { position: 'absolute', left: MAP_LANE_INSET, right: MAP_LANE_INSET },
   // The open place search takes the whole top band, over compass and rail.
   searchSheet: { position: 'absolute', left: 12, right: 12, zIndex: MAP_OVERLAY_Z.searchSheet },
   // Centred under the search pill, between the compass and the rail.
-  marineChip: { position: 'absolute', left: 76, right: 76, alignItems: 'center' },
+  marineChip: {
+    position: 'absolute',
+    left: MAP_LANE_INSET,
+    right: MAP_LANE_INSET,
+    alignItems: 'center',
+  },
   // Same lane, used by the destination readout (#97).
   topCenterChip: {
     position: 'absolute',
-    left: 76,
-    right: 76,
+    left: MAP_LANE_INSET,
+    right: MAP_LANE_INSET,
     alignItems: 'center',
     zIndex: MAP_OVERLAY_Z.topChip,
   },

@@ -109,13 +109,16 @@ export function UndoSnack({ style }: { style: StyleProp<ViewStyle> }) {
             color={t.team.snackAccent}
             track={`${t.team.snackInk}38`}
           />
-          <Text style={[styles.count, { color: t.team.snackInk }]}>{secs}</Text>
+          {/* A glyph in a fixed ring: it does not grow with the font scale (#756). */}
+          <Text style={[styles.count, { color: t.team.snackInk }]} allowFontScaling={false}>
+            {secs}
+          </Text>
         </View>
         <View style={styles.flex} accessible accessibilityLabel={`${title}. ${sub}`}>
-          <Text style={[styles.title, { color: t.team.snackInk }]} numberOfLines={1}>
+          <Text style={[styles.title, { color: t.team.snackInk }]} numberOfLines={2}>
             {title}
           </Text>
-          <Text style={[styles.sub, { color: t.team.snackInk }]} numberOfLines={1}>
+          <Text style={[styles.sub, { color: t.team.snackInk }]} numberOfLines={2}>
             {sub}
           </Text>
         </View>

@@ -1,7 +1,7 @@
 # Team drawing e2e (#683), one phone, on the loopback mesh build (see team.yaml).
 #
-# Create a team → the team menu's "Draw on map" → drawing mode (tool bar,
-# top bar) → Style: fade Never → Arrow → one-finger drag draws it →
+# Create a team → the Draw chip under the team pill → drawing mode (tool bar,
+# top bar) → Time: fade Never → Arrow → one-finger drag draws it →
 # Done → tap the arrow: its card → leave the team.
 #
 # First of the team shard, on the shard's fresh emulator; it does not clear
@@ -143,18 +143,18 @@ appId: com.inukshuk.app
     id: 'team-sos-button'
 - assertNotVisible: 'Search places'
 - takeScreenshot: team-draw-entered
-# Style: fades Never (the arrow must outlive this flow's taps).
+# Time (#756): fades Never (the arrow must outlive this flow's taps).
 - tapOn:
-    id: 'team-draw-style-button'
+    id: 'team-draw-time'
 - extendedWaitUntil:
     visible:
-      id: 'team-draw-style'
+      id: 'team-draw-panel-time'
     timeout: 5000
-- takeScreenshot: team-draw-style
+- takeScreenshot: team-draw-time
 - tapOn:
     id: 'team-draw-fade-6'
 - tapOn:
-    id: 'team-draw-style-close'
+    id: 'team-draw-panel-close'
 # Arrow: one finger from tail to head.
 - tapOn:
     id: 'team-draw-tool-arrow'

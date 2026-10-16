@@ -76,6 +76,12 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
     ['current bar on surface', t.stats.barCurrent, t.surface, GRAPHIC],
     ['NEW badge ink on its badge', t.stats.onNewBadge, t.stats.newBadge, TEXT],
     // Map chrome (translucent: judged over light and dark tiles).
+    [
+      'muted chrome ink on map chrome (the team pill, #756)',
+      t.map.chromeInkMuted,
+      t.map.chrome,
+      TEXT,
+    ],
     ['chrome ink on map chrome', t.map.chromeInk, t.map.chrome, TEXT],
     ['chrome ink on the mini recording pill', t.map.chromeInk, t.map.chromeMini, TEXT],
     ['follow ink on map chrome', t.map.followInk, t.map.chrome, GRAPHIC],

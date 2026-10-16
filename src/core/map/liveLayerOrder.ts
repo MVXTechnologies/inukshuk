@@ -86,11 +86,18 @@ export const LIVE_LAYER_ORDER = [
   // Team drawings (#683): over the trails and areas, under the flag, the
   // pins and the teammates (a tap on both goes to the teammate or the pin).
   // Heads turn with the map; badges, notes and the pen tip stay upright.
+  // Shapes inside their fade window (#756) each just under their steady twin.
+  'team-draw-fading-fill',
   'team-draw-fill',
+  'team-draw-fading-casing',
   'team-draw-casing',
+  'team-draw-fading-line',
   'team-draw-line',
+  'team-draw-fading-dash',
   'team-draw-dash',
+  'team-draw-fading-head',
   'team-draw-head',
+  'team-draw-fading-sym',
   'team-draw-sym',
   // An active gather's pulse (#708), under its flag.
   'team-rally-pulse',

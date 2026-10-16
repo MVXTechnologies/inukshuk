@@ -7,14 +7,21 @@
  * A MapView child of its own that subscribes to what it draws: teammates'
  * strokes arrive four times a second and must re-render this, never the map
  * screen. The source is rebuilt only when the quantised frame changes
- * (`frameKey`); the fade wakes at the core's `nextChangeAt` (at least 1 s
- * apart) and not at all while nothing fades or expires.
+ * (`frameKey`); the fade wakes at the core's `nextChangeAt` (at most once a
+ * frame) and not at all while nothing fades or expires.
+ *
+ * #756: shapes inside their fade window go to a second source
+ * (`team-draw-fading`, the same six layers just under their steady twins), so
+ * the fade redraws per frame (smooth, 0.01 steps) without re-sending the
+ * steady shapes: their frame key does not change while another shape fades.
  */
 import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import { drawFeatures, frameKey } from '@core/teamdraw/features';
-import { nextChangeAt, tickDelayMs } from '@core/teamdraw/fade';
+import { isFading, nextChangeAt, tickDelayMs } from '@core/teamdraw/fade';
 import {
   CASING_DP,
+  DRAW_FADING_LAYERS,
+  DRAW_FADING_SOURCE,
   DRAW_LAYERS,
   DRAW_SOURCE,
   drawLayerStyles,
@@ -34,8 +41,8 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { useTheme } from 'react-native-paper';
 
-/** Source rebuilds, for the render-budget tests (measure, don't assert). */
-export const drawLayerStats = { builds: 0, ticks: 0 };
+/** Source rebuilds (steady and fading), for the render-budget tests (measure, don't assert). */
+export const drawLayerStats = { builds: 0, fadingBuilds: 0, ticks: 0 };
 
 /** The drawing clock: the replica's HLC, never behind the phone's. */
 function drawNow(): number {
@@ -95,41 +102,60 @@ export const TeamDrawLayers = memo(function TeamDrawLayers({
   }, [members, view, selected]);
   const smooth = useMemo(() => smoothShapes(shapes), [shapes]);
   const visibleLive = useMemo(() => live.filter((l) => l.until > now), [live, now]);
-  // Rebuilt only when the quantised frame changes (one source update).
-  const key = frameKey(shapes, visibleLive, now, zoomBand, opts);
+  // Split by the fade window: the steady set's key holds still while others fade.
+  const split = useMemo(() => {
+    const steady: typeof smooth = [];
+    const fading: typeof smooth = [];
+    for (const s of smooth) (isFading(s, now) ? fading : steady).push(s);
+    return { steady, fading };
+  }, [smooth, now]);
+  // Each rebuilt only when its quantised frame changes (one source update).
+  const key = frameKey(split.steady, visibleLive, now, zoomBand, opts);
   const data = useMemo(
-    () => drawFeatures(smooth, visibleLive, now, zoomBand, opts),
+    () => drawFeatures(split.steady, visibleLive, now, zoomBand, opts),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [key],
+  );
+  const fadingKey = frameKey(split.fading, [], now, zoomBand, opts);
+  const fadingData = useMemo(
+    () => drawFeatures(split.fading, [], now, zoomBand, opts),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [fadingKey],
   );
   useEffect(() => {
     drawLayerStats.builds++;
   }, [data]);
+  useEffect(() => {
+    if (fadingData.features.length > 0) drawLayerStats.fadingBuilds++;
+  }, [fadingData]);
 
   const font = teamLabelFont(glyphs);
   const fontKey = font?.join('|') ?? '';
   const layers = useMemo(() => {
     const fonts = fontKey === '' ? [] : fontKey.split('|');
     const st = drawLayerStyles(drawMapColors(t, dark), selected, fonts);
-    const layer = (id: keyof typeof DRAW_LAYERS, type: 'fill' | 'line' | 'symbol') => (
-      <Layer
-        key={id}
-        id={DRAW_LAYERS[id]}
-        beforeId={liveLayerAnchor(DRAW_LAYERS[id])}
-        type={type}
-        filter={st[id].filter as never}
-        {...(st[id].layout ? { layout: st[id].layout as never } : {})}
-        paint={st[id].paint as never}
-      />
-    );
-    return [
-      layer('fill', 'fill'),
-      layer('casing', 'line'),
-      layer('line', 'line'),
-      layer('dash', 'line'),
-      layer('head', 'symbol'),
-      ...(fonts.length > 0 ? [layer('sym', 'symbol')] : []),
-    ];
+    const build = (ids: typeof DRAW_LAYERS | typeof DRAW_FADING_LAYERS) => {
+      const layer = (id: keyof typeof DRAW_LAYERS, type: 'fill' | 'line' | 'symbol') => (
+        <Layer
+          key={ids[id]}
+          id={ids[id]}
+          beforeId={liveLayerAnchor(ids[id])}
+          type={type}
+          filter={st[id].filter as never}
+          {...(st[id].layout ? { layout: st[id].layout as never } : {})}
+          paint={st[id].paint as never}
+        />
+      );
+      return [
+        layer('fill', 'fill'),
+        layer('casing', 'line'),
+        layer('line', 'line'),
+        layer('dash', 'line'),
+        layer('head', 'symbol'),
+        ...(fonts.length > 0 ? [layer('sym', 'symbol')] : []),
+      ];
+    };
+    return { steady: build(DRAW_LAYERS), fading: build(DRAW_FADING_LAYERS) };
   }, [t, dark, selected, fontKey]);
 
   // #735: the strokes on the 3D terrain too, live strokes included (solid
@@ -140,7 +166,7 @@ export const TeamDrawLayers = memo(function TeamDrawLayers({
     if (terrainView === null || !shown) return null;
     const c = drawMapColors(t, dark);
     const strokes: GroupFeature[] = [];
-    for (const f of data.features) {
+    for (const f of [...data.features, ...fadingData.features]) {
       if (f.properties.k !== 'line' || f.geometry.type !== 'LineString') continue;
       const isSelected = selected !== null && f.properties.drw === selected;
       const w = f.properties.w;
@@ -161,16 +187,25 @@ export const TeamDrawLayers = memo(function TeamDrawLayers({
       haloAdd: CASING_DP,
       order: 0,
     });
-  }, [terrainView, shown, data, selected, t, dark]);
+  }, [terrainView, shown, data, fadingData, selected, t, dark]);
   useTerrainLineGroup('teamDrawings', terrainLines);
 
-  if (installedAt === 0 || !show || view === null || data.features.length === 0) return null;
+  if (installedAt === 0 || !show || view === null) return null;
   // Its sprites (arrowheads, pointers, badge pills) are on the map's one
   // registration (`MapImages`), never here: this layer mounts and unmounts
   // with the drawings, and an unmounting <Images> takes its names with it.
   return (
-    <GeoJSONSource id={DRAW_SOURCE} data={data as never}>
-      {layers}
-    </GeoJSONSource>
+    <>
+      {data.features.length > 0 && (
+        <GeoJSONSource id={DRAW_SOURCE} data={data as never}>
+          {layers.steady}
+        </GeoJSONSource>
+      )}
+      {fadingData.features.length > 0 && (
+        <GeoJSONSource id={DRAW_FADING_SOURCE} data={fadingData as never}>
+          {layers.fading}
+        </GeoJSONSource>
+      )}
+    </>
   );
 });

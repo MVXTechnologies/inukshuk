@@ -174,7 +174,11 @@ export function TeamPanel({
                 size={15}
                 color={summary.sync === 'lan' ? t.status.gnssFixed : t.inkMuted}
               />
-              <Text style={[styles.sync, { color: t.inkMuted }]} numberOfLines={1}>
+              <Text
+                style={[styles.sync, styles.flex, { color: t.inkMuted }]}
+                numberOfLines={2}
+                testID="team-panel-sync"
+              >
                 {summary.sync === 'lan'
                   ? `Nearby · ${teamSyncLine(peers, meshRunning)}`
                   : summary.status === 'Only you'
@@ -206,7 +210,10 @@ export function TeamPanel({
             }}
           />
         )}
-        <View style={[styles.acts, { borderBottomColor: t.outlineVariant }]}>
+        <View
+          style={[styles.acts, { borderBottomColor: t.outlineVariant }]}
+          testID="team-panel-actions"
+        >
           {actions.map(([icon, label, run, id, count]) => (
             <Act key={id} icon={icon} label={label} onPress={run} testID={id} count={count} />
           ))}
@@ -460,16 +467,19 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   title: { fontSize: 18, lineHeight: 22, fontWeight: '800' },
-  syncRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  syncRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5 },
   sync: { fontSize: 12.5 },
   x: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  // One row by construction (#756): four equal columns, never wrapping; a long
+  // label takes a second line under its own icon.
   acts: {
     flexDirection: 'row',
+    flexWrap: 'nowrap',
     paddingHorizontal: 10,
     paddingBottom: 10,
     borderBottomWidth: 1,
   },
-  act: { flex: 1, alignItems: 'center', gap: 5 },
+  act: { flex: 1, minWidth: 0, alignItems: 'center', gap: 5 },
   actIcon: {
     width: 52,
     height: 52,
@@ -521,10 +531,10 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   memberName: { fontSize: 15, lineHeight: 19, fontWeight: '700', flexShrink: 1 },
   line: { fontSize: 12.5, lineHeight: 16 },
-  right: { alignItems: 'flex-end' },
+  right: { alignItems: 'flex-end', flexShrink: 0, minWidth: 56 },
   dist: { fontSize: 13.5, fontWeight: '800' },
   lastPos: { fontSize: 11.5, fontWeight: '700' },
-  schip: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 1 },
+  schip: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 1, flexShrink: 0 },
   schipText: { fontSize: 11, fontWeight: '800' },
   foot: {
     flexDirection: 'row',

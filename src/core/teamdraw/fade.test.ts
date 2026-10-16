@@ -5,7 +5,9 @@ import {
   fadeState,
   fadeWindowMs,
   formatLeft,
-  MIN_TICK_MS,
+  FRAME_MS,
+  isFading,
+  OPACITY_STEP,
   nextChangeAt,
   opacityAt,
   quantLeftS,
@@ -21,7 +23,7 @@ const life = (ms: number | null, created = 0): Life => ({
   expires: ms === null ? null : created + ms,
 });
 
-/** Run the fade timer the way the UI will: sleep until the next change (≥ 1 s), count frames. */
+/** Run the fade timer the way the UI does: sleep until the next change (≥ one frame), count frames. */
 function frames(
   shapes: Life[],
   from: number,
@@ -76,9 +78,11 @@ describe('fade curve', () => {
     }
   });
 
-  it('quantises opacity to 0.05, never below the floor while visible', () => {
+  it('quantises opacity to 0.01, never below the floor while visible', () => {
+    expect(OPACITY_STEP).toBe(0.01);
     expect(quantOpacity(1)).toBe(1);
-    expect(quantOpacity(0.512)).toBeCloseTo(0.5, 9);
+    expect(quantOpacity(0.512)).toBeCloseTo(0.51, 9);
+    expect(quantOpacity(0.5149)).toBeCloseTo(0.51, 9);
     expect(quantOpacity(0.3001)).toBeCloseTo(0.3, 9);
     expect(quantOpacity(0.29)).toBe(0.3);
     expect(quantOpacity(0)).toBe(0);
@@ -114,16 +118,17 @@ describe('nextChangeAt', () => {
     expect(nextChangeAt([life(10 * S)], 10 * S)).toBeNull();
     expect(nextChangeAt([], 0)).toBeNull();
     expect(tickDelayMs(null, 0)).toBeNull();
-    expect(tickDelayMs(10, 0)).toBe(MIN_TICK_MS);
+    expect(tickDelayMs(10, 0)).toBe(FRAME_MS);
     expect(tickDelayMs(5000, 0)).toBe(5000);
   });
 
   it('never misses a change: every quantised step is seen, in order, up to the end', () => {
     for (const ms of [10 * S, 30 * S, MIN, 5 * MIN, 30 * MIN]) {
       const l = life(ms, 1_000_000);
-      // Ground truth: the distinct states, sampled every 50 ms.
-      const truth: string[] = [];
-      for (let t = 1_000_000; t <= 1_000_000 + ms; t += 50) {
+      // Ground truth: the distinct states, sampled every 1 ms through the window
+      // (a step of the badge clock and one of opacity can fall 1 ms apart).
+      const truth: string[] = [JSON.stringify(fadeState(l, 1_000_000))];
+      for (let t = fadeStart(l)!; t <= 1_000_000 + ms; t += 1) {
         const k = JSON.stringify(fadeState(l, t));
         if (truth[truth.length - 1] !== k) truth.push(k);
       }
@@ -137,20 +142,21 @@ describe('nextChangeAt', () => {
       expect(seen[seen.length - 1]).toBe(
         JSON.stringify({ visible: false, opacity: 0, left: null }),
       );
-      // Only the 1 s timer floor merges states: in the last ~15 s, where the
-      // clock ticks every second and opacity moves fastest (a 10 s shape has ~19
-      // states in its 5 s window). Elsewhere, none is lost.
-      if (ms >= MIN) expect(truth.length - seen.length).toBeLessThanOrEqual(10);
+      // Only the one-frame floor merges states (two changes closer than 33 ms
+      // apart, such as a clock step landing just before an opacity step).
+      expect(truth.length - seen.length).toBeLessThanOrEqual(12);
     }
   });
 
-  it('budget: a 5 min shape costs about 30 source rebuilds over its whole life (counted)', () => {
+  it('budget: a 5 min shape costs about 90 source rebuilds over its whole life (counted)', () => {
     const { changes, ticks } = frames([life(5 * MIN)], 0);
-    expect(changes).toBeLessThanOrEqual(35); // measured: 35
+    // 70 opacity steps of 0.01 (1 → 0.3) and the badge clock: all inside the
+    // 75 s window, none before it.
+    expect(changes).toBeLessThanOrEqual(95); // measured: 92
     expect(ticks).toBeLessThanOrEqual(changes + 2);
     // A 4 h shape: no timer for 3 h 45 min, then about the same.
     const long = frames([life(4 * 60 * MIN)], 0);
-    expect(long.ticks).toBeLessThanOrEqual(50);
+    expect(long.ticks).toBeLessThanOrEqual(110); // measured: 105
   });
 
   it('takes the earliest change over many shapes', () => {
@@ -158,6 +164,75 @@ describe('nextChangeAt', () => {
     const b = life(10 * S, 4 * MIN);
     expect(nextChangeAt([a, b], 4 * MIN)).toBe(fadeStart(b)! + 1);
     expect(nextChangeAt([b, a], 4 * MIN)).toBe(fadeStart(b)! + 1);
+  });
+});
+
+describe('a smooth fade (#756)', () => {
+  /** What the map draws at `t` when the timer last woke at `drawnAt`. */
+  const drawn = (l: Life, drawnAt: number) => fadeState(l, drawnAt).opacity;
+
+  it('opacity is a continuous function of time: sub-second samples never jump', () => {
+    for (const ms of [10 * S, 30 * S, MIN, 5 * MIN]) {
+      const l = life(ms);
+      const end = l.expires!;
+      let prev = opacityAt(l, 0);
+      // Every 100 ms through the whole life, up to the last instant before expiry.
+      for (let t = 100; t < end; t += 100) {
+        const o = opacityAt(l, t);
+        // The steepest point of a 5 s window moves 0.7 × 1.5 / 5 s = 0.21 per second.
+        expect(prev - o).toBeLessThanOrEqual(0.021 + 1e-9);
+        expect(o).toBeLessThanOrEqual(prev);
+        prev = o;
+      }
+      // And at 10 ms steps the change is ten times smaller (no hidden step).
+      for (let t = fadeStart(l)!; t + 10 < end; t += 10) {
+        expect(opacityAt(l, t) - opacityAt(l, t + 10)).toBeLessThanOrEqual(0.0021 + 1e-9);
+      }
+    }
+  });
+
+  it('what is drawn tracks the curve within one 0.01 step at every 10 ms instant', () => {
+    for (const ms of [10 * S, 30 * S, 5 * MIN]) {
+      const l = life(ms);
+      let wake = 0;
+      let next = 0;
+      for (let t = 0; t < l.expires!; t += 10) {
+        // The UI's timer: wake at the scheduled time, draw the state then.
+        while (next <= t) {
+          wake = next;
+          const delay = tickDelayMs(nextChangeAt([l], wake), wake);
+          next = delay === null ? Infinity : wake + delay;
+        }
+        // Rounding to 0.01 is ±0.005; one more frame of the steepest slope stays under 0.01.
+        expect(Math.abs(drawn(l, wake) - opacityAt(l, t))).toBeLessThanOrEqual(OPACITY_STEP);
+      }
+    }
+  });
+
+  it('each redraw moves the opacity by at most one step, and the timer wakes at most per frame', () => {
+    const l = life(30 * S);
+    let now = fadeStart(l)!;
+    let prev = drawn(l, now);
+    for (;;) {
+      const delay = tickDelayMs(nextChangeAt([l], now), now);
+      if (delay === null) break;
+      expect(delay).toBeGreaterThanOrEqual(FRAME_MS);
+      now += delay;
+      const o = drawn(l, now);
+      if (o > 0) expect(prev - o).toBeLessThanOrEqual(OPACITY_STEP + 1e-9);
+      prev = o;
+    }
+    expect(prev).toBe(0);
+  });
+
+  it('isFading: only inside the window, never for Never or after expiry', () => {
+    const l = life(30 * S);
+    expect(isFading(l, 0)).toBe(false);
+    expect(isFading(l, fadeStart(l)!)).toBe(false);
+    expect(isFading(l, fadeStart(l)! + 1)).toBe(true);
+    expect(isFading(l, 30 * S - 1)).toBe(true);
+    expect(isFading(l, 30 * S)).toBe(false);
+    expect(isFading(life(null), 1e12)).toBe(false);
   });
 });
 
