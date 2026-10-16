@@ -718,9 +718,10 @@ export function Trail3DGLScreen({ trackId }: Props) {
           or scrolling the content below never shrinks or hides it. */}
       <View
         style={[
-          styles.mapBox,
           folded ? styles.fill : { height: MAP_H + insets.top },
-          { paddingTop: insets.top },
+          // The strip under the status bar follows the theme: a fixed pale
+          // blue there left the status icons white on white in dark mode.
+          { paddingTop: insets.top, backgroundColor: tokens.surface },
         ]}
         testID="trail-map-box"
       >
@@ -1174,7 +1175,6 @@ const styles = StyleSheet.create({
   photoCardDock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20 },
   fill: { flex: 1 },
   pad: { paddingHorizontal: 16 },
-  mapBox: { backgroundColor: '#dfe9f2' },
   readout: {
     position: 'absolute',
     left: 12,

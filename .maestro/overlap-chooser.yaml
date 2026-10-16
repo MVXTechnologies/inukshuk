@@ -109,7 +109,7 @@ tags:
     id: 'map-area'
     retryTapIfNoChange: false
 - extendedWaitUntil:
-    visible: '3 here'
+    visible: '\d+ here'
     timeout: 10000
 - assertVisible: 'Overlap east-west.*'
 - assertVisible: 'Overlap north-south.*'

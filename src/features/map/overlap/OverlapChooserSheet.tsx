@@ -76,7 +76,9 @@ export function OverlapChooserSheet({
           typeName: findCategory(tr.category, custom)?.name ?? null,
           planned: tr.plan !== undefined,
           distanceM: tr.stats.distanceM,
-          startedAt: tr.startedAt,
+          // An untimed trail (a route, a navigation GPX) has no outing date:
+          // its startedAt is when it was imported or drawn.
+          startedAt: tr.stats.durationS > 0 ? tr.startedAt : 0,
         };
       } else {
         const area = areas.find((x) => x.id === hit.id);

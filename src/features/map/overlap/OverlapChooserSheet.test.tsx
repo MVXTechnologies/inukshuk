@@ -22,7 +22,7 @@ const trail = (id: string, name: string, category: string, km: number): TrackSum
     name,
     category,
     startedAt: new Date(2026, 9, 12, 9).getTime(),
-    stats: { distanceM: km * 1000 },
+    stats: { distanceM: km * 1000, durationS: 3600 },
     fileUri: `file:///${id}.gpx`,
   }) as unknown as TrackSummary;
 
@@ -103,6 +103,21 @@ describe('the overlap chooser (#745)', () => {
     expect(StyleSheet.flatten(screen.getByText('Camp zone').props.style).color).toBe(
       schemeTokens(dark).ink,
     );
+  });
+
+  it('gives an untimed trail no date (its date is when it was imported)', async () => {
+    useLibraryStore.setState({
+      tracks: [
+        trail('mw', 'Mont Wright loop', 'hike', 12.4),
+        {
+          ...trail('nav', 'Ridge route', 'navigation', 3.1),
+          stats: { distanceM: 3100, durationS: 0 },
+        } as TrackSummary,
+      ],
+    });
+    useOverlapChooser.getState().open([HITS[0]!, { kind: 'trail', id: 'nav', distanceM: 3 }]);
+    await renderSheet();
+    expect(screen.getByText(/^Navigation trail · 3\.1 km$/)).toBeTruthy();
   });
 
   it('a trail row selects the trail and closes the list', async () => {
