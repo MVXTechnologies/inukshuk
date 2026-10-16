@@ -39,6 +39,7 @@ import {
 } from '@core/library/migrations';
 import { isAbsolutePath } from '@core/storage/documentPaths';
 import { removeNoteById } from '@core/library/notes';
+import { applySyncEdit, type SyncEdit } from '@core/library/syncEdit';
 import { nextFolderVisibility } from '@core/library/visibility';
 import { nextWaypointLabel } from '@core/library/waypoints';
 import { isWaypointSize, normalizeWaypointColor } from '@core/library/waypointStyle';
@@ -297,6 +298,12 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   /** Remove an area and every photo it owns. */
   removeArea: (id: string) => void;
   activeMap: () => MapDocument | null;
+  /**
+   * Share live (#712): what the library bridge (`@data/sync/libraryBridge`)
+   * planned for one shared folder, in ONE index write. The only way synced
+   * changes enter the Library; the bridge never echoes them back.
+   */
+  applySync: (edit: SyncEdit) => boolean;
 }
 
 /**
@@ -1196,5 +1203,17 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   activeMap: () => {
     const { maps, activeMapId } = get();
     return maps.find((m) => m.id === activeMapId) ?? null;
+  },
+
+  applySync: (edit) => {
+    let changed = false;
+    set((s) => {
+      const r = applySyncEdit(s, edit);
+      if (!r.changed) return s;
+      changed = true;
+      persistAndDelete(r.index, r.orphanedUris, r.deletedTrackIds);
+      return r.index;
+    });
+    return changed;
   },
 }));
