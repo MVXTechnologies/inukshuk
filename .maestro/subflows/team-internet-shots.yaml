@@ -18,7 +18,11 @@ appId: com.inukshuk.app
     visible:
       id: 'team-panel-connection'
     timeout: 5000
-- assertVisible: '.*Internet.*'
+# The chip is there because the team's switch is on. Its words follow the
+# path: "Internet" only once this phone reached the team's room on the real
+# relay, else "Looking for teammates" for a team of one (run 38972409026). The
+# flow needs no live relay, so it checks the chip itself, not its path.
+- assertVisible: '.*\. Connection details'
 - takeScreenshot: review-team-internet-panel-${MODE}
 - tapOn:
     id: 'team-panel-connection'

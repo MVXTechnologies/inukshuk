@@ -135,7 +135,11 @@ appId: com.inukshuk.app
       id: 'team-sim-note-done'
     direction: DOWN
     timeout: 30000
-# To the map: her note shows as text, unread (the orange dot).
+# To the map: her note shows as text, unread (the orange dot). The callouts
+# are MapLibre Markers: Maestro cannot read inside them on Android (run
+# 38972409026: the callout drawn, no node in the hierarchy), so the map is a
+# review shot, and the note is reached through the panel's Notes row, which
+# counts it as new.
 - tapOn: 'Back'
 - tapOn: 'Back'
 - tapOn:
@@ -145,18 +149,36 @@ appId: com.inukshuk.app
     visible:
       id: 'team-bar-pill'
     timeout: 10000
+- tapOn:
+    id: 'team-bar-pill'
 - extendedWaitUntil:
-    visible: '.*Hut water is dry.*'
-    timeout: 10000
-- assertVisible:
-    id: 'note-callout-unread'
+    visible:
+      id: 'team-panel-notes'
+    timeout: 5000
+- assertVisible: '1 new'
+- tapOn:
+    id: 'team-panel-close'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-panel-notes'
+    timeout: 5000
 - takeScreenshot: team-notes-map
-# Tap it: its card (opening it marks it read and sends a "seen" receipt).
+# Notes → her row: its card on the map (opening it marks it read and sends a
+# "seen" receipt).
+- tapOn:
+    id: 'team-bar-pill'
+- tapOn:
+    id: 'team-panel-notes'
+- extendedWaitUntil:
+    visible:
+      id: 'team-notes-screen'
+    timeout: 5000
 - tapOn: '.*Hut water is dry.*'
 - extendedWaitUntil:
     visible:
       id: 'team-note-card'
     timeout: 5000
+- assertVisible: '.*Hut water is dry.*'
 - assertVisible:
     id: 'note-seen-by'
 - assertVisible:
@@ -170,8 +192,20 @@ appId: com.inukshuk.app
     notVisible:
       id: 'team-note-card'
     timeout: 5000
-- assertNotVisible:
-    id: 'note-callout-unread'
+# Read now: the Notes row has nothing new.
+- tapOn:
+    id: 'team-bar-pill'
+- extendedWaitUntil:
+    visible:
+      id: 'team-panel-notes'
+    timeout: 5000
+- assertNotVisible: '1 new'
+- tapOn:
+    id: 'team-panel-close'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-panel-notes'
+    timeout: 5000
 # My own note: long-press → Note here → the composer.
 - longPressOn:
     point: '50%,62%'

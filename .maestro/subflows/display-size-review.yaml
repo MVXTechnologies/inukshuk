@@ -35,6 +35,33 @@ appId: com.inukshuk.app
     centerElement: true
 - tapOn:
     id: 'display-size-${SIZE_ID}'
+# The size applies at once to Settings itself: everything above the control
+# shrinks (or grows) and the control moves, up out of view when going
+# smaller from Large (run 38972409026). Find it again where it went, then
+# check it is the one selected.
+- runFlow:
+    when:
+      notVisible:
+        id: 'display-size-${SIZE_ID}'
+    commands:
+      - scrollUntilVisible:
+          element:
+            id: 'display-size-${SIZE_ID}'
+          direction: UP
+          centerElement: true
+          timeout: 10000
+          optional: true
+- runFlow:
+    when:
+      notVisible:
+        id: 'display-size-${SIZE_ID}'
+    commands:
+      - scrollUntilVisible:
+          element:
+            id: 'display-size-${SIZE_ID}'
+          direction: DOWN
+          centerElement: true
+          timeout: 10000
 - extendedWaitUntil:
     visible:
       id: 'display-size-${SIZE_ID}'
