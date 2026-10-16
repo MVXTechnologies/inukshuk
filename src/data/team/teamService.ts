@@ -10,6 +10,11 @@
  * reach the screens, and the LAN advertises its tag while sync is on
  * (`TeamSession.startMesh`). Switching teams stops the LAN and the screens
  * start it again for the new one, as in 2.6.
+ *
+ * One exception (owner decision 2026-10-16): an SOS from ANY of my teams —
+ * its raise, reopen and resolve — reaches the alert listeners with its team
+ * id, so the full alarm rings and the screens can switch to that team. Every
+ * other kind from a team not on screen stays silent.
  */
 import type { InviteToken } from '@core/team/invite';
 import type { TeamAlert } from '@core/teamui/alerts';
@@ -48,7 +53,7 @@ export class TeamService {
     this.host = new GroupHost(deps, {
       onChange: () => this.emit(),
       onAlert: (alert, teamId) => {
-        if (teamId !== this.activeId) return;
+        if (teamId !== this.activeId && alert.kind !== 'sos') return;
         for (const fn of [...this.alertListeners]) fn(alert, teamId);
       },
       onDraw: (teamId) => {

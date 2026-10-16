@@ -18,7 +18,15 @@ jest.mock('@data/team/teamNotifications', () => ({
 }));
 
 const state: { soses: TeamSos[]; rally: TeamRally | null } = { soses: [], rally: null };
-let emit: (a: TeamAlert) => void = () => undefined;
+let emit: (a: TeamAlert, teamId?: string) => void = () => undefined;
+/** Another team on this phone, not on screen (an SOS from it rings too). */
+const hut = { soses: [] as TeamSos[] };
+const hutSession = {
+  me: 'me',
+  teamId: 'hut',
+  view: () => ({ name: 'Hut crew', me: 'me', members: [{ id: 'lea', name: 'Léa Roy' }] }),
+  soses: () => hut.soses,
+};
 const session = {
   me: 'me',
   teamId: 't',
@@ -54,10 +62,11 @@ const session = {
 };
 const mockService = {
   active: session,
-  teams: [],
+  teams: [] as { teamId: string }[],
+  host: { open: (id: string) => (id === 'hut' ? hutSession : undefined) },
   join: null,
   subscribe: () => () => undefined,
-  onAlert: (cb: (a: TeamAlert) => void) => {
+  onAlert: (cb: (a: TeamAlert, teamId?: string) => void) => {
     emit = cb;
     return () => undefined;
   },
@@ -347,5 +356,54 @@ describe('a re-raised SOS rings again on this phone (#752)', () => {
     useTeamStore.getState().acknowledgeAlarm();
     state.soses = [];
     useTeamStore.getState().refresh();
+  });
+});
+
+describe('an SOS from a team not on screen (owner decision 2026-10-16)', () => {
+  afterEach(() => {
+    mockService.teams = [];
+    hut.soses = [];
+    state.soses = [];
+    useTeamStore.getState().acknowledgeAlarm();
+  });
+
+  it('rings the full alarm with its own team and names, and ends with ITS resolve', () => {
+    mockService.teams = [{ teamId: 't' }, { teamId: 'hut' }];
+    hut.soses = [sos('lea', 'h1')];
+    useTeamStore.getState().refresh();
+    emit(sosAlert('lea', 'h1'), 'hut');
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+    expect(mockNotify.mock.calls[0]![0]).toMatchObject({
+      title: 'SOS · Léa Roy',
+      body: 'Needs help · Hut crew',
+      channel: 'sos',
+      identifier: 'sos:lea:h1',
+    });
+    expect(useTeamStore.getState().sosAlarm).toMatchObject({
+      entity: 'sos:lea:h1',
+      teamId: 'hut',
+      teamName: 'Hut crew',
+      authorName: 'Léa Roy',
+    });
+    // The team on screen has no such SOS: a refresh must not end the alarm.
+    useTeamStore.getState().refresh();
+    expect(useTeamStore.getState().sosAlarm).not.toBeNull();
+    expect(mockDismiss).not.toHaveBeenCalled();
+    // Resolved in its own team (here or anywhere): the alarm and notification go.
+    hut.soses = [sos('lea', 'h1', true)];
+    useTeamStore.getState().refresh();
+    expect(useTeamStore.getState().sosAlarm).toBeNull();
+    expect(mockDismiss).toHaveBeenCalledWith('sos:lea:h1');
+    expect(mockInApp).toHaveBeenLastCalledWith(false);
+  });
+
+  it('a reopen in that team rings again', () => {
+    mockService.teams = [{ teamId: 't' }, { teamId: 'hut' }];
+    hut.soses = [sos('lea', 'h2')];
+    useTeamStore.getState().refresh();
+    emit(sosAlert('lea', 'h2', 'raise'), 'hut');
+    emit({ ...sosAlert('lea', 'h2', 'reopen'), sosPhase: 'reopen' }, 'hut');
+    expect(mockNotify).toHaveBeenCalledTimes(2);
+    expect(useTeamStore.getState().sosAlarm).toMatchObject({ teamId: 'hut' });
   });
 });

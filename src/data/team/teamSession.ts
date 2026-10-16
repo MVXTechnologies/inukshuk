@@ -133,8 +133,9 @@ export interface SessionDeps {
   now: () => number;
   /**
    * Whether this team is the one the screens show (the active team). Alerts,
-   * drawing alerts and receipts are for it only, as in 2.6 (other teams sync
-   * in the background without ringing). Default: always.
+   * drawing alerts and receipts are for it only (other teams sync in the
+   * background without ringing), except an SOS: an SOS from ANY of my teams
+   * rings, with its receipt (owner decision 2026-10-16). Default: always.
    */
   foreground?: () => boolean;
   /** A fresh short id (messages, entities, groups). */
@@ -532,13 +533,13 @@ export class TeamSession {
    * from a peer, and on each team open; a no-op when nothing is owed, so a
    * resync never writes twice. Returns how many were written.
    */
-  sendOwedReceipts(): number {
+  sendOwedReceipts(options: { sosOnly?: boolean } = {}): number {
     if (this.guardWrite() !== null || this.replica.state.sendKeyId === undefined) return 0;
     const data = this.replica.data(this.deps.now());
     const owed: AlertRef[] = [];
     for (const s of this.soses())
       if (!s.resolved) owed.push({ kind: 'sos', owner: s.owner, id: s.id });
-    const r = this.rally();
+    const r = options.sosOnly === true ? null : this.rally();
     if (r) owed.push({ kind: 'rly', owner: r.owner, id: r.id });
     const todo = owed.filter((a) => owesReceipt(data, this.me, a));
     if (todo.length === 0) return 0;
@@ -897,10 +898,13 @@ export class TeamSession {
     this.dirty = true;
     this.gossip(ops, from);
     if (ops.some((op) => op.env.t === 'pen' || op.env.t === 'e.set')) this.deps.onDraw?.();
+    const foreground = this.foreground;
+    // A team not on screen still rings for an SOS (an `e.set`); nothing else.
+    const sosOnly = !foreground;
+    let rang = false;
     if (
       from !== null &&
-      this.foreground &&
-      ops.some((op) => op.env.t === 'msg' || op.env.t === 'e.set')
+      ops.some((op) => op.env.t === 'e.set' || (foreground && op.env.t === 'msg'))
     ) {
       const now = this.deps.now();
       // The data first: reading it folds anything the replica deferred (an
@@ -915,13 +919,18 @@ export class TeamSession {
         return sos !== undefined && !sos.resolved;
       };
       for (const op of ops) {
+        if (sosOnly && op.env.t !== 'e.set') continue;
         const alert = alertFor(this.replica.state, op, this.replica.decode(op), this.me, ctx);
-        if (alert) this.deps.onAlert(this.taskThrottle.admit(alert, now, sosOpen));
+        if (!alert || (sosOnly && alert.kind !== 'sos')) continue;
+        rang = true;
+        this.deps.onAlert(this.taskThrottle.admit(alert, now, sosOpen));
       }
     }
-    // A teammate's SOS or rally point just synced: say so (#708).
-    if (from !== null && this.foreground && ops.some((op) => op.env.t === 'e.set')) {
-      this.sendOwedReceipts();
+    // A teammate's SOS or rally point just synced: say so (#708). Not on
+    // screen: only for the SOS that rang here.
+    if (from !== null && ops.some((op) => op.env.t === 'e.set')) {
+      if (foreground) this.sendOwedReceipts();
+      else if (rang) this.sendOwedReceipts({ sosOnly: true });
     }
     this.changed();
     // A new key (a rotation, or our first key after a join): re-post what the

@@ -552,6 +552,7 @@ describe('the in-app SOS alarm (#708)', () => {
       useTeamStore.setState({
         sosAlarm: {
           entity: 'sos:julie:s1',
+          teamId: 't',
           owner: 'julie',
           authorName: 'Julie Tremblay',
           teamName: 'Chic-Chocs crew',
@@ -603,6 +604,7 @@ describe('the in-app SOS alarm (#708)', () => {
       useTeamStore.setState({
         sosAlarm: {
           entity: 'sos:julie:s1',
+          teamId: 't',
           owner: 'julie',
           authorName: 'Julie Tremblay',
           teamName: 'T',
@@ -645,6 +647,7 @@ describe('the in-app SOS alarm (#708)', () => {
         useTeamStore.setState({
           sosAlarm: {
             entity: 'sos:julie:s1',
+            teamId: 't',
             owner: 'julie',
             authorName: 'Julie Tremblay',
             teamName: 'T',
