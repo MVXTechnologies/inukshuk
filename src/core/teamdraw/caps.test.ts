@@ -3,6 +3,7 @@ import type { TeamData } from '@core/team/data';
 import { T0, MIN } from '@core/team/testing/fixtures';
 
 import {
+  advertisedCapBody,
   BLOB_CAP,
   CAP_RENEW_MS,
   CAP_SPECS,
@@ -13,6 +14,8 @@ import {
   capKey,
   hasCap,
   LINK_CAP,
+  LINK_PROTOCOL,
+  needsAdvertisedCap,
   needsCap,
   PEN_CAP,
   RTC_CAP,
@@ -208,5 +211,35 @@ describe('per-capability versions (2.7.0 sync groups)', () => {
     );
     expect(capExpiry(d, bob.id, 'zz', { versions: [1, 2], boundByFlag: true })).toBeUndefined();
     expect(capExpiry(d, bob.id, 'absent', { versions: [1], boundByFlag: false })).toBeUndefined();
+  });
+});
+
+describe('what a 2.7.0 phone advertises (G5)', () => {
+  const at = (n: number) => T0 + n * MIN;
+
+  it('claims lnk on top of the 2.6 record, which stays byte-for-byte what older phones write', () => {
+    const body = advertisedCapBody('m', at(1));
+    expect(body.f).toEqual({ ...capBody('m', at(1)).f, [LINK_CAP]: LINK_PROTOCOL });
+    expect(capBody('m', at(1)).f[LINK_CAP]).toBeUndefined();
+    expect(validCapFields(body.f)).toBe(true);
+  });
+
+  it('peers read the lnk claim; the rtc claim is not made yet', () => {
+    const { w, bob, rb, sync } = crew();
+    rb.write(at(1), 'e.set', advertisedCapBody(bob.id, at(1)));
+    sync(at(2));
+    expect(w.root.canReceive(bob.id, LINK_CAP, at(2))).toBe(true);
+    expect(w.root.canReceive(bob.id, RTC_CAP, at(2))).toBe(false);
+    expect(hasCap(w.root.data(), bob.id, at(2))).toBe(true);
+  });
+
+  it('renews at once over a 2.6 claim, then only once a day', () => {
+    const { bob, rb } = crew();
+    rb.write(at(1), 'e.set', capBody(bob.id, at(1)));
+    expect(needsCap(rb.data(), bob.id, at(2))).toBe(false);
+    expect(needsAdvertisedCap(rb.data(), bob.id, at(2))).toBe(true);
+    rb.write(at(3), 'e.set', advertisedCapBody(bob.id, at(3)));
+    expect(needsAdvertisedCap(rb.data(), bob.id, at(4))).toBe(false);
+    expect(needsAdvertisedCap(rb.data(), bob.id, at(3) + CAP_RENEW_MS + 1)).toBe(true);
   });
 });

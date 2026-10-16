@@ -8,6 +8,7 @@ import {
   LANES,
   LaneScheduler,
   laneOfOp,
+  laneOfStored,
   laneOfWrite,
   type Lane,
 } from './lanes';
@@ -16,6 +17,28 @@ const op = (t: string, pr?: 1 | 2) =>
   ({ env: { t, ...(pr === undefined ? {} : { pr }) } }) as unknown as Parameters<
     typeof laneOfOp
   >[0];
+
+describe('lane of a stored op (relays and live pushes, G5)', () => {
+  it('reads the record kind from the decrypted body', () => {
+    expect(laneOfStored(op('e.set'), { k: 'sos', id: 'a', f: {} })).toBe(LANE_URGENT);
+    expect(laneOfStored(op('e.del'), { k: 'rly', id: 'a' })).toBe(LANE_URGENT);
+    expect(laneOfStored(op('e.set'), { k: 'wpt', id: 'a', f: {} })).toBe(LANE_LIVE);
+  });
+
+  it('falls back to the clear envelope when the body is unreadable or not a record', () => {
+    expect(laneOfStored(op('e.set'), undefined)).toBe(LANE_LIVE);
+    expect(laneOfStored(op('e.set'), [1, 2])).toBe(LANE_LIVE);
+    expect(laneOfStored(op('e.set'), { k: 7 })).toBe(LANE_LIVE);
+    expect(laneOfStored(op('e.set', 2), undefined)).toBe(LANE_URGENT);
+  });
+
+  it('classifies other types by the envelope alone', () => {
+    expect(laneOfStored(op('k.rotate'), undefined)).toBe(LANE_URGENT);
+    expect(laneOfStored(op('msg', 2), { th: 't' })).toBe(LANE_URGENT);
+    expect(laneOfStored(op('msg'), { k: 'sos' })).toBe(LANE_LIVE);
+    expect(laneOfStored(op('pos'), undefined)).toBe(LANE_LIVE);
+  });
+});
 
 describe('lane classification (design §4.4)', () => {
   it('puts removals, rotations, revocations, SOS, rally and pr:2 on lane 0', () => {

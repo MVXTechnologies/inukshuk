@@ -1,4 +1,6 @@
+import type { Json } from '../team/canonical';
 import type { SignedOp } from '../team/envelope';
+import type { Lane } from './registry';
 
 /**
  * Priority lanes of a link (2.7.0 design §4.4, #705).
@@ -16,9 +18,8 @@ import type { SignedOp } from '../team/envelope';
  * | 2 sync   | catch-up `want`/`ops` serving, version vectors, keepalives |
  * | 3 bulk   | blob chunks |
  */
-// TODO(#705 integration): G1 declares this same type in `./registry.ts`;
-// import it from there once both branches land (structurally identical).
-export type Lane = 0 | 1 | 2 | 3;
+// One declaration, in the domain registry (G1); re-exported for the link layer.
+export type { Lane };
 
 export const LANE_URGENT: Lane = 0;
 export const LANE_LIVE: Lane = 1;
@@ -69,6 +70,21 @@ export function laneOfOp(op: Pick<SignedOp, 'env'>, hint: Lane = LANE_LIVE): Lan
     ...(op.env.pr === undefined ? {} : { pr: op.env.pr }),
   });
   return Math.min(own, hint) as Lane;
+}
+
+/**
+ * The lane of a stored op being relayed or pushed live, when its decrypted
+ * body is at hand (`replica.decode`): the record kind of an `e.set`/`e.del`
+ * is inside the AEAD, so only a group member can tell an SOS from a waypoint.
+ * An unreadable body (an older key, a sealed op for someone else) falls back
+ * to what the envelope shows in clear.
+ */
+export function laneOfStored(op: Pick<SignedOp, 'env'>, body: Json | undefined): Lane {
+  const pr = op.env.pr === undefined ? {} : { pr: op.env.pr };
+  if (op.env.t !== 'e.set' && op.env.t !== 'e.del') return laneOfWrite({ type: op.env.t, ...pr });
+  const k =
+    typeof body === 'object' && body !== null && !Array.isArray(body) ? body['k'] : undefined;
+  return laneOfWrite({ type: op.env.t, ...(typeof k === 'string' ? { kind: k } : {}), ...pr });
 }
 
 /**

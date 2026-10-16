@@ -82,10 +82,13 @@ export const RTC_CAP = 'rtc';
 /** Blob channels (2.7.x). */
 export const BLOB_CAP = 'blob';
 
+/** The link-layer protocol this version speaks (the value of `lnk`). */
+export const LINK_PROTOCOL = 1;
+
 /**
  * Every capability this phone reads, by name. A name not here is never held
- * (fail closed). Advertising one is separate (`capBody`): 2.7.0 G1 reads
- * `lnk` / `rtc` / `blob` claims but does not make any.
+ * (fail closed). Advertising one is separate ({@link advertisedCapBody}):
+ * 2.7.0 reads `lnk` / `rtc` / `blob` claims and makes `lnk` (G5) only.
  */
 export const CAP_SPECS: ReadonlyMap<string, CapSpec> = new Map<string, CapSpec>([
   [PEN_CAP, { versions: [PEN_PROTOCOL], versionField: CAP_VERSION, boundByFlag: false }],
@@ -178,6 +181,30 @@ export function capBody(
       [CAP_EXPIRES]: now + CAP_TTL_MS,
     },
   };
+}
+
+/**
+ * The record a 2.7.0 phone writes: the 2.6 body ({@link capBody}, which is
+ * what every older phone writes, kept as is for their fixtures) plus `lnk`,
+ * the LAN upgrade to link-mux framing (design §2.6). A rolled-back phone
+ * renews `pen`/`v`/`rc`/`x` without `lnk`, so its claim lapses (`boundByFlag`).
+ */
+export function advertisedCapBody(
+  me: string,
+  now: number,
+): { k: 'cap'; id: string; f: Record<string, Json> } {
+  const body = capBody(me, now);
+  return { ...body, f: { ...body.f, [LINK_CAP]: LINK_PROTOCOL } };
+}
+
+/**
+ * {@link needsCap} for a 2.7.0 phone: also when its `lnk` claim is missing or
+ * stale (a 2.6 claim renews at once on the first 2.7 open).
+ */
+export function needsAdvertisedCap(data: TeamData, me: string, now: number): boolean {
+  if (needsCap(data, me, now)) return true;
+  const until = capExpiry(data, me, LINK_CAP);
+  return until === undefined || until - now < CAP_TTL_MS - CAP_RENEW_MS;
 }
 
 /**
