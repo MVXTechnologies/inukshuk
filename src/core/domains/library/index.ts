@@ -18,6 +18,7 @@ import {
   LFO,
   LIBRARY_KINDS,
   LIT,
+  LPT,
   MAX_FOLDERS,
   MAX_ITEMS,
   SPECS,
@@ -138,18 +139,38 @@ function authorizeOwned(w: KindWrite, role: Role, view: Readonly<TeamData>): Aut
   return { owner };
 }
 
+/** A trail part: an editor's, written once, complete at its first write; a manager purges. */
+function authorizePart(w: KindWrite, role: Role, view: Readonly<TeamData>): Authorization {
+  const cur = view.entities.get(treeKey(LPT, w.id));
+  if (w.op === 'del')
+    return isAdminRole(role) && cur !== undefined && isLive(cur.state)
+      ? { owner: undefined }
+      : 'forbidden';
+  if (role === 'guest') return 'forbidden';
+  const spec = SPECS.get(LPT)!;
+  if (!knownFieldsValid(w.f, spec.rules)) return 'invalid';
+  if (cur === undefined) {
+    if (!spec.first.every((k) => has(w.f, k))) return 'invalid';
+    if ((w.f['n'] as number) >= (w.f['of'] as number)) return 'invalid';
+    return { owner: undefined };
+  }
+  if (cur.state.deleted !== undefined) return 'forbidden';
+  return rewritesOnce(cur.state, w.f, spec.once) ? 'forbidden' : { owner: undefined };
+}
+
 export const libraryPlugin: DomainPlugin<LibraryView> = {
   id: LIBRARY_DOMAIN,
   kinds: LIBRARY_KINDS,
   owned: isOwnedLibraryKind,
   baseStamps: true,
   validate(w) {
-    if (isTreeKind(w.kind)) return w.o === undefined;
+    if (isTreeKind(w.kind) || w.kind === LPT) return w.o === undefined;
     // Owned: `o` names another's record on a delete only; the cursor is one per member.
     if (w.o !== undefined && w.op !== 'del') return false;
     return w.kind !== 'lac' || w.id === CURSOR_ID;
   },
   authorize(w, role, view) {
+    if (w.kind === LPT) return authorizePart(w, role, view);
     return isTreeKind(w.kind) ? authorizeTree(w, role, view) : authorizeOwned(w, role, view);
   },
   merged(view, rec: Readonly<EntityRecord>, before) {

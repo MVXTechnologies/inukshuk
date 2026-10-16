@@ -1,8 +1,6 @@
-import { MAX_INLINE_GEOMETRY } from './kinds';
 import {
   areaFields,
   areaFrom,
-  fitTrack,
   folderFields,
   localKindOf,
   mapFields,
@@ -81,25 +79,34 @@ describe('liveFields', () => {
     expect(areaFrom({ t: 'area', n: 'x' }, '#000000')).toBeUndefined();
   });
 
-  it('fits a long trail by simplifying it, and gives up past the last step', () => {
-    // A 1 Hz walk of 20 000 fixes wobbling ~1 m: far over the cap unsimplified.
-    const pts = Array.from({ length: 20_000 }, (_, i) => ({
-      latitude: 46.8 + i * 0.00001 + (i % 2 ? 0.000004 : 0),
-      longitude: -71.2 + i * 0.00001,
+  it('writes a whole trail: revision, part count and type; it comes back exact', () => {
+    const points = Array.from({ length: 5_000 }, (_, i) => ({
+      latitude: Math.round((46.8 + i * 0.0000123) * 1e7) / 1e7,
+      longitude: Math.round((-71.2 + i * 0.0000171) * 1e7) / 1e7,
+      altitude: Math.round((50 + Math.sin(i / 40) * 12) * 100) / 100,
+      time: 1_790_000_000_000 + i * 1000,
     }));
-    const g = fitTrack(pts)!;
-    expect(g.length).toBeLessThanOrEqual(MAX_INLINE_GEOMETRY);
-    const f = trackFields({ name: 'Walk', points: pts });
-    expect(validFields('lit', f)).toBe(true);
-    expect(trackFrom(f)!.points.length).toBeGreaterThan(1);
-    // Noise far above every tolerance: no simplification fits it.
-    const noisy = Array.from({ length: 20_000 }, (_, i) => ({
-      latitude: 46.8 + (i % 2 ? 0.01 : 0),
-      longitude: -71.2 + i * 0.001,
-    }));
-    expect(fitTrack(noisy)).toBeUndefined();
-    expect(trackFields({ name: 'Noise', points: noisy })).toEqual({ t: 'trk', n: 'Noise' });
-    expect(fitTrack([{ latitude: 1, longitude: 1 }])).toBeUndefined();
+    const { fields, encoded } = trackFields('t1', {
+      name: 'Run',
+      points,
+      segmentStarts: [2_500],
+      category: 'run',
+    });
+    expect(fields).toMatchObject({ t: 'trk', n: 'Run', ty: 'run', tc: 3 });
+    expect(validFields('lit', fields)).toBe(true);
+    const back = trackFrom(fields, encoded)!;
+    expect(back.category).toBe('run');
+    expect(back.segmentStarts).toEqual([2_500]);
+    expect(back.points).toEqual(points);
+    expect(trackFrom(fields, undefined)).toBeUndefined();
+    // A custom type stays on its phone; an empty trail is written by name only.
+    expect(trackFields('t2', { name: 'X', points, category: 'custom-123' }).fields['ty']).toBe(
+      undefined,
+    );
+    expect(trackFields('t3', { name: 'Empty', points: [] })).toEqual({
+      fields: { t: 'trk', n: 'Empty' },
+    });
+    expect(representable(fields)).toBe(false);
   });
 
   it('writes a catalog map by its id only, an imported PDF by its name', () => {

@@ -14,7 +14,7 @@
 
 import type { Area, MapDocument, TrackSummary, Waypoint } from '@core/models';
 
-import { folderItemCount, type FolderGrouping } from './folders';
+import { folderItemCount, folderTree, type FolderGrouping } from './folders';
 import type { LibraryTypeFilter } from './libraryRows';
 
 export type LibraryListItem =
@@ -30,6 +30,8 @@ export type LibraryListItem =
       dropTarget?: string | null;
       /** Set on a folder's header (its rename/delete actions). */
       folderId?: string;
+      /** A sub-folder's depth (0 or absent: top level). */
+      depth?: number;
     }
   | { kind: 'empty'; key: string; title: string; description: string }
   | { kind: 'map'; key: string; map: MapDocument; divider: boolean }
@@ -158,7 +160,16 @@ function folderItems(input: LibraryListInput): LibraryListItem[] {
       ),
     );
   }
-  grouped.groups.forEach((g, index) => {
+  const nodes = folderTree(grouped.groups.map((g) => g.folder));
+  const tree = new Map(nodes.map((n) => [n.folder.id, n]));
+  const position = new Map(nodes.map((n, i) => [n.folder.id, i]));
+  const order = [...grouped.groups].sort(
+    (a, b) => (position.get(a.folder.id) ?? 0) - (position.get(b.folder.id) ?? 0),
+  );
+  order.forEach((g, index) => {
+    const node = tree.get(g.folder.id);
+    // A collapsed folder hides its sub-folders too.
+    if (node?.ancestors.some((a) => collapsed[`folder:${a}`]) === true) return;
     const section = `folder:${g.folder.id}`;
     const folderWaypoints = showWaypoints
       ? (input.sortedFolderWaypoints.get(g.folder.id) ?? [])
@@ -182,6 +193,7 @@ function folderItems(input: LibraryListInput): LibraryListItem[] {
       first: index === 0,
       dropTarget: g.folder.id,
       folderId: g.folder.id,
+      ...(node !== undefined && node.depth > 0 ? { depth: node.depth } : {}),
     });
     if (collapsed[section]) return;
     if (rowCount === 0) {

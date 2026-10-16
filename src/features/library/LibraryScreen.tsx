@@ -53,7 +53,7 @@ import {
 } from '@core/library/libraryRows';
 import { isSearchActive, searchTracks } from '@core/library/searchTracks';
 import { sortTracks, type SortKey } from '@core/library/sortTracks';
-import { groupByFolder } from '@core/library/folders';
+import { folderTree, groupByFolder } from '@core/library/folders';
 import { libraryListItems, type LibraryListItem } from '@core/library/libraryListItems';
 import { georeferenceNotice, isUnplacedCatalogMap } from '@core/library/overlayPages';
 import { creditLine } from '@core/catalog/credit';
@@ -318,7 +318,13 @@ export function LibraryScreen() {
   );
 
   const grouped = useMemo(
-    () => groupByFolder(folders, maps, visibleTracks, waypoints),
+    () =>
+      groupByFolder(
+        folderTree(folders).map((n) => n.folder),
+        maps,
+        visibleTracks,
+        waypoints,
+      ),
     [folders, maps, visibleTracks, waypoints],
   );
   // Same for the newest-first waypoint lists rendered below — each call copies
@@ -532,6 +538,9 @@ export function LibraryScreen() {
     addFolder(name || 'New folder');
   };
 
+  // A folder inside another (#712: sub-folders), from the folder's Organize actions.
+  const [subFolderOf, setSubFolderOf] = useState<{ id: string; name: string } | null>(null);
+
   const commitRenameFolder = (name: string) => {
     if (renamingFolder && name) renameFolder(renamingFolder.id, name);
     setRenamingFolder(null);
@@ -588,7 +597,9 @@ export function LibraryScreen() {
     actions,
     dropTarget,
     folderId,
+    depth,
   }: {
+    depth?: number;
     key: string;
     title: string;
     count: string;
@@ -602,6 +613,7 @@ export function LibraryScreen() {
       title={title}
       count={count}
       first={first}
+      depth={depth ?? 0}
       live={folderId === undefined ? undefined : liveHeader(folderId)}
       collapsed={collapsed[key] === true}
       onToggle={() => toggleSection(key)}
@@ -1231,6 +1243,7 @@ export function LibraryScreen() {
           first: item.first,
           dropTarget: item.dropTarget,
           folderId: item.folderId,
+          depth: item.depth ?? 0,
           actions:
             organizing && item.folderId !== undefined
               ? folderActions(item.folderId, item.title)
@@ -1288,6 +1301,15 @@ export function LibraryScreen() {
 
   const folderActions = (id: string, name: string) => (
     <View style={styles.folderActions}>
+      <IconButton
+        icon="folder-plus-outline"
+        size={20}
+        onPress={() => {
+          setSubFolderOf({ id, name });
+        }}
+        accessibilityLabel={`New folder inside ${name}`}
+        testID="library-folder-new-sub"
+      />
       <IconButton
         icon="pencil-outline"
         size={20}
@@ -1546,6 +1568,17 @@ export function LibraryScreen() {
               setNewFolderForMove(false);
               sel.moveIntoNewFolder(name);
             } else createFolder(name);
+          }}
+        />
+
+        <NameDialog
+          visible={subFolderOf !== null}
+          title={`New folder in ${subFolderOf?.name ?? ''}`}
+          label="Folder name"
+          onDismiss={() => setSubFolderOf(null)}
+          onSubmit={(name) => {
+            if (subFolderOf !== null) addFolder(name || 'New folder', subFolderOf.id);
+            setSubFolderOf(null);
           }}
         />
 

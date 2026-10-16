@@ -97,8 +97,22 @@ export function applySyncEdit<T extends Lists>(index: T, edit: SyncEdit): SyncEd
     next.activeTrackIds = index.activeTrackIds.filter((t) => !deletedTrackIds.includes(t));
   if (index.activeMapId != null && (edit.maps?.remove ?? []).includes(index.activeMapId))
     next.activeMapId = null;
-  // Items of a removed folder fall back to Ungrouped (as a folder delete does).
+  // Items of a removed folder fall back to Ungrouped (as a folder delete does);
+  // its sub-folders move up to its parent.
   if (removedFolders.size > 0) {
+    const parentOf = new Map(index.folders.map((f) => [f.id, f.parentId]));
+    const lift = (p: string | undefined): string | undefined => {
+      let at = p;
+      for (let i = 0; at !== undefined && removedFolders.has(at) && i < 64; i++)
+        at = parentOf.get(at);
+      return at;
+    };
+    next.folders = next.folders.map((f) => {
+      if (f.parentId === undefined || !removedFolders.has(f.parentId)) return f;
+      const up = lift(f.parentId);
+      const { parentId: _p, ...rest } = f;
+      return up === undefined ? rest : { ...rest, parentId: up };
+    });
     const clear = <I extends { folderId?: string }>(i: I): I =>
       i.folderId !== undefined && removedFolders.has(i.folderId)
         ? { ...i, folderId: undefined }

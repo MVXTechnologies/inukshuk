@@ -103,3 +103,26 @@ it('writes nothing for an empty edit', () => {
   expect(useLibraryStore.getState().applySync({})).toBe(false);
   expect(storage.writeIndex).not.toHaveBeenCalled();
 });
+
+it('sub-folders: a folder inside another, and a delete lifts its children', () => {
+  const sub = useLibraryStore.getState().addFolder('Jour 1', 'f1');
+  const deep = useLibraryStore.getState().addFolder('Matin', sub);
+  expect(useLibraryStore.getState().folders.find((f) => f.id === sub)?.parentId).toBe('f1');
+  // An unknown parent is not committed.
+  const loose = useLibraryStore.getState().addFolder('Loose', 'nope');
+  expect(useLibraryStore.getState().folders.find((f) => f.id === loose)?.parentId).toBeUndefined();
+  useLibraryStore.getState().removeFolder(sub);
+  expect(useLibraryStore.getState().folders.find((f) => f.id === deep)?.parentId).toBe('f1');
+});
+
+it('a synced folder delete lifts its sub-folders to its parent', () => {
+  useLibraryStore.setState({
+    folders: [
+      { id: 'f1', name: 'Gaspésie', createdAt: 1 },
+      { id: 'mid', name: 'Jour 1', createdAt: 1, parentId: 'f1' },
+      { id: 'leaf', name: 'Matin', createdAt: 1, parentId: 'mid' },
+    ],
+  });
+  useLibraryStore.getState().applySync({ folders: { remove: ['mid'] } });
+  expect(useLibraryStore.getState().folders.find((f) => f.id === 'leaf')?.parentId).toBe('f1');
+});

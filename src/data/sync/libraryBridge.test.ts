@@ -147,4 +147,67 @@ describe('library bridge (2.7.0 G10)', () => {
     expect(b.port.lib.folders).toEqual([]);
     expect(await a.bridge.shareItem('track', 't1', { team: active(a).teamId })).toBe('no-change');
   });
+
+  it('a long recorded run arrives whole: every point, elevation and time, its segments and type', async () => {
+    const rig = new Rig();
+    const { a, b } = await team(rig);
+    seed(a);
+    // 6,000 fixes at 1 Hz, as a GPX holds them (7-decimal coordinates, cm elevations, ms times).
+    const points = Array.from({ length: 6_000 }, (_, i) => ({
+      latitude: Math.round((48.9 + i * 0.0000137 + Math.sin(i / 30) * 0.00002) * 1e7) / 1e7,
+      longitude: Math.round((-66.2 + i * 0.0000211) * 1e7) / 1e7,
+      altitude: Math.round((700 + Math.sin(i / 90) * 140 + (i % 7) * 0.03) * 100) / 100,
+      time: 1_790_000_000_000 + i * 1000 + (i % 3) * 7,
+    }));
+    a.port.files.set('file:///a/run.gpx', { points, segmentStarts: [2_000, 4_100] });
+    a.port.lib.tracks.push({
+      id: 'run1',
+      name: 'Morning run',
+      startedAt: points[0]!.time,
+      stats: {} as never,
+      fileUri: 'file:///a/run.gpx',
+      folderId: 'gaspF',
+      category: 'run',
+    });
+    const f = await a.bridge.shareFolder('gaspF', { team: active(a).teamId });
+    if (typeof f === 'string') throw new Error(f);
+    // Several parts, each within the op cap.
+    const parts = [...f.replica.data().entities.values()].filter((e) => e.kind === 'lpt');
+    expect(parts.length).toBeGreaterThan(1);
+    await sync(rig, [a, b]);
+    const got = b.port.lib.tracks.find((t) => t.name === 'Morning run')!;
+    expect(got.category).toBe('run');
+    expect(got.startedAt).toBe(points[0]!.time);
+    const file = b.port.files.get(got.fileUri)!;
+    expect(file.segmentStarts).toEqual([2_000, 4_100]);
+    expect(file.points).toEqual(points);
+  });
+
+  it('sub-folders of a shared folder are shared, with their items', async () => {
+    const rig = new Rig();
+    const { a, b } = await team(rig);
+    seed(a);
+    a.port.lib.folders.push({ id: 'day1', name: 'Jour 1', createdAt: 1, parentId: 'gaspF' });
+    a.port.lib.waypoints.push({
+      id: 'w9',
+      latitude: 48.93,
+      longitude: -66.15,
+      label: 'Source',
+      folderId: 'day1',
+      createdAt: 2,
+    });
+    const f = await a.bridge.shareFolder('gaspF', { team: active(a).teamId });
+    if (typeof f === 'string') throw new Error(f);
+    await sync(rig, [a, b]);
+    const root = b.port.lib.folders.find((x) => x.name === 'Gaspésie 2026')!;
+    const day = b.port.lib.folders.find((x) => x.name === 'Jour 1')!;
+    expect(root.parentId).toBeUndefined();
+    expect(day.parentId).toBe(root.id);
+    expect(b.port.lib.waypoints.find((w) => w.label === 'Source')!.folderId).toBe(day.id);
+    // B moves the refuge into the sub-folder: A's Library follows.
+    const refuge = b.port.lib.waypoints.find((w) => w.label === 'Refuge')!;
+    refuge.folderId = day.id;
+    await sync(rig, [a, b]);
+    expect(a.port.lib.waypoints.find((w) => w.id === 'w1')!.folderId).toBe('day1');
+  });
 });

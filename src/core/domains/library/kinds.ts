@@ -3,6 +3,8 @@ import { isShortId } from '@core/team/ids';
 import { BASE_FIELD, parseBase } from '@core/group/conflicts';
 import { flag, knownFieldsValid, text, type FieldRule } from '@core/group/fields';
 
+import { MAX_TRACK_PARTS, PART_CHARS } from './trackCodec';
+
 /**
  * The library domain's record kinds (2.7.0 #712, `docs/design/sync-layer.md`
  * §5.3; security review §4). Wire names are short: every op carries them.
@@ -13,6 +15,13 @@ import { flag, knownFieldsValid, text, type FieldRule } from '@core/group/fields
  * | `lit` item | shared `(lit, id)` | `t` type (once), `n`, `p`, `o`, `d`, `sty`, `rm`; `g` track/area geometry; `ll` `el` `ic` waypoint; `cat` catalog map | editors+ | managers, from the trash |
  * | `lac` activity cursor | owned, id `g` | `seen` (ms) | anyone, their own | its member or a manager |
  * | `lcm` comment | owned | `on` record id (once), `tx` | anyone (viewers too), their own | its writer or a manager |
+ * | `lpt` trail part | shared `(lpt, <rev>_<n>)` | `i` item, `r` revision, `n` index, `of` count, `d` encoded slice (all once) | editors+ | managers |
+ *
+ * A trail's points travel whole (positions, elevations, times, segments:
+ * `trackCodec.ts`) in `lpt` parts, each within the op cap; its `lit` names
+ * the revision (`tr`) and the part count (`tc`), so a phone rebuilds it once
+ * every part of that revision is in, and an edit of the line is a new
+ * revision (the old parts stay, write-once, until purged).
  *
  * Every `lfo`/`lit` write may carry a base `b` (`@core/group/conflicts`).
  * Deleting is a **soft delete**: `rm: 1` puts the record in the trash (its
@@ -27,7 +36,8 @@ export const LFO = 'lfo';
 export const LIT = 'lit';
 export const LAC = 'lac';
 export const LCM = 'lcm';
-export const LIBRARY_KINDS: readonly string[] = [LFO, LIT, LAC, LCM];
+export const LPT = 'lpt';
+export const LIBRARY_KINDS: readonly string[] = [LFO, LIT, LAC, LCM, LPT];
 /** Kinds forming the shared tree (soft delete, base stamps, purge). */
 export const TREE_KINDS: readonly string[] = [LFO, LIT];
 /** Owned kinds: keyed `(kind, owner, id)`. */
@@ -117,6 +127,21 @@ export const ITEM_RULES: Readonly<Record<string, FieldRule>> = {
   el: elevation,
   ic: icon,
   cat: isCatalogId,
+  /** A trail's geometry revision (its `lpt` parts carry it). */
+  tr: id,
+  /** How many parts that revision has. */
+  tc: (v) => Number.isSafeInteger(v) && (v as number) >= 1 && (v as number) <= MAX_TRACK_PARTS,
+  /** The trail's activity type (a built-in category id). */
+  ty: (v) => typeof v === 'string' && /^[a-z0-9_-]{1,40}$/.test(v),
+};
+
+/** A trail part: one slice of the encoded trail (`trackCodec.ts`). */
+export const PART_RULES: Readonly<Record<string, FieldRule>> = {
+  i: id,
+  r: id,
+  n: (v) => Number.isSafeInteger(v) && (v as number) >= 0 && (v as number) < MAX_TRACK_PARTS,
+  of: (v) => Number.isSafeInteger(v) && (v as number) >= 1 && (v as number) <= MAX_TRACK_PARTS,
+  d: (v) => typeof v === 'string' && v.length > 0 && v.length <= PART_CHARS && /^[?-~A]+$/.test(v),
 };
 
 export const CURSOR_RULES: Readonly<Record<string, FieldRule>> = {
@@ -140,6 +165,7 @@ export const SPECS: ReadonlyMap<string, KindSpec> = new Map<string, KindSpec>([
   [LIT, { rules: ITEM_RULES, first: ['t', 'n'], once: ['t'] }],
   [LAC, { rules: CURSOR_RULES, first: ['seen'], once: [] }],
   [LCM, { rules: COMMENT_RULES, first: ['on', 'tx'], once: ['on'] }],
+  [LPT, { rules: PART_RULES, first: ['i', 'r', 'n', 'of', 'd'], once: ['i', 'r', 'n', 'of', 'd'] }],
 ]);
 
 export const isLibraryKind = (kind: string): boolean => SPECS.has(kind);

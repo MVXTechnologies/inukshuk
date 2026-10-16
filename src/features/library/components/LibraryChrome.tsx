@@ -143,6 +143,7 @@ export function SectionHeader({
   highlighted,
   dropRef,
   live,
+  depth = 0,
 }: {
   title: string;
   count: string;
@@ -158,6 +159,8 @@ export function SectionHeader({
   dropRef?: Ref<View>;
   /** A shared folder (#712): its icon, sync line, faces and ⋮ (its own sheet). */
   live?: SectionLive;
+  /** A sub-folder's depth (#712): indented under its parent. */
+  depth?: number;
 }) {
   const t = useSchemeTokens();
   const theme = useTheme();
@@ -185,7 +188,7 @@ export function SectionHeader({
         accessibilityRole="button"
         accessibilityState={{ expanded: !collapsed, ...(selected ? { selected: true } : {}) }}
         accessibilityHint={onLongPress ? 'Long-press to select the folder' : undefined}
-        style={styles.sectionToggle}
+        style={[styles.sectionToggle, depth > 0 && { paddingLeft: space.md + depth * 16 }]}
       >
         <Icon source={collapsed ? 'chevron-right' : 'chevron-down'} size={20} color={t.ink} />
         {live !== undefined && (

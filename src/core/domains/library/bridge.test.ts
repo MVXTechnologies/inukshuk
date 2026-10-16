@@ -25,8 +25,15 @@ class Phone {
     readonly id: string,
   ) {}
 
-  put(kind: LocalKind, id: string, fields: Record<string, Json>) {
-    this.lib.set(`${kind}:${id}`, { kind, id, fields });
+  put(kind: LocalKind, id: string, fields: Record<string, Json>, parent?: string) {
+    const prev = this.lib.get(`${kind}:${id}`);
+    const at = parent ?? prev?.parent;
+    this.lib.set(`${kind}:${id}`, {
+      kind,
+      id,
+      fields,
+      ...(at !== undefined ? { parent: at } : {}),
+    });
   }
 
   get(kind: LocalKind, id: string) {
@@ -59,16 +66,21 @@ class Phone {
           t,
           w.kind === LFO
             ? newFolder(w.rid, w.fields['n'] as string, undefined, w.fields)
-            : newItem(w.rid, w.fields['t'] as 'wpt', w.fields['n'] as string, ROOT, w.fields),
+            : newItem(w.rid, w.fields['t'] as 'wpt', w.fields['n'] as string, undefined, w.fields),
         );
       else if (w.op === 'edit')
         this.sim.set(this.id, t, edit(history, this.id, w.kind, w.rid, w.fields));
       else this.sim.set(this.id, t, trash(history, this.id, w.kind, w.rid));
     }
     for (const op of plan.local) {
-      if (op.op === 'create') this.put(op.kind, op.local, op.fields);
-      else if (op.op === 'update') this.put(op.kind, op.local, op.fields);
-      else this.lib.delete(`${op.kind}:${op.local}`);
+      if (op.op === 'delete') {
+        this.lib.delete(`${op.kind}:${op.local}`);
+        continue;
+      }
+      const { p: _p, ...fields } = op.fields;
+      // The root folder of a joined share has no Library parent.
+      const parent = op.parent === op.local ? undefined : op.parent;
+      this.put(op.kind, op.local, fields, parent);
     }
     this.links = plan.links;
     this.waiting = plan.waiting;
@@ -227,5 +239,61 @@ describe('library bridge reconcile', () => {
     expect(ju.waiting).toContain('boat');
     expect(fingerprint('x'.repeat(100)).startsWith('#')).toBe(true);
     expect(fingerprint(undefined)).toBe('');
+  });
+
+  it('keeps sub-folders: nesting and moves between them travel both ways', () => {
+    const { sim, me, ju } = world();
+    me.put('folder', 'sub', { n: 'Jour 1' });
+    me.put('folder', 'deep', { n: 'Matin' }, 'sub');
+    me.put('waypoint', 'w9', WPT('Source'), 'deep');
+    me.run(at(1));
+    sim.deliver(OWNER, JU, at(2));
+    ju.run(at(3));
+    expect(ju.get('folder', 'ju-sub')?.parent).toBe('ju-gasp');
+    expect(ju.get('folder', 'ju-deep')?.parent).toBe('ju-sub');
+    expect(ju.get('waypoint', 'ju-w9')?.parent).toBe('ju-deep');
+    expect(ju.get('waypoint', 'ju-w1')?.parent).toBe('ju-gasp');
+    expect(ju.run(at(4))).toEqual({ writes: [], local: 0 });
+    // Julie moves the source up one level; Marc's Library follows.
+    ju.put('waypoint', 'ju-w9', WPT('Source'), 'ju-sub');
+    expect(ju.run(at(5)).writes).toEqual([
+      { op: 'edit', kind: LIT, rid: 'w9', fields: { p: 'sub' } },
+    ]);
+    sim.deliver(JU, OWNER, at(6));
+    me.run(at(7));
+    expect(me.get('waypoint', 'w9')?.parent).toBe('sub');
+    // A new sub-folder on Julie's phone, with an item in it.
+    ju.put('folder', 'jf', { n: 'Jour 2' }, 'ju-gasp');
+    ju.put('area', 'ja', { t: 'area', n: 'Camp', g: '_p~iF~ps|U_ulLnnqC_mqNvxq`@' }, 'jf');
+    ju.run(at(8));
+    sim.deliver(JU, OWNER, at(9));
+    me.run(at(10));
+    expect(me.get('folder', 'ow-jf')?.parent).toBe('gasp');
+    expect(me.get('area', 'ow-ja')?.parent).toBe('ow-jf');
+    expect(me.run(at(11))).toEqual({ writes: [], local: 0 });
+  });
+
+  it('a change this phone cannot hold yet waits, base unmoved, until it can', () => {
+    const { sim, me, ju } = world();
+    me.run(at(1));
+    sim.deliver(OWNER, JU, at(2));
+    ju.run(at(3));
+    sim.set(OWNER, at(4), edit(sim.look(OWNER).history, OWNER, LIT, 'w1', { n: 'Later' }));
+    sim.deliver(OWNER, JU, at(5));
+    const { view } = sim.look(JU);
+    const plan = reconcile({
+      root: { kind: LFO, rid: ROOT },
+      rootLocal: { kind: 'folder', id: 'ju-gasp' },
+      local: [...ju.lib.values()],
+      view,
+      links: ju.links,
+      newLocalId: (rid) => rid,
+      newRecordId: (l) => l.id,
+      holdable: () => false,
+    });
+    expect(plan.local).toEqual([]);
+    expect(plan.links.find((l) => l.rid === 'w1')!.base['n']).toBe(fingerprint('Refuge'));
+    ju.run(at(6));
+    expect(ju.get('waypoint', 'ju-w1')?.fields['n']).toBe('Later');
   });
 });

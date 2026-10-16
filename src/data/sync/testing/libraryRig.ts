@@ -4,15 +4,8 @@
  */
 import { DEFAULT_AREA_COLOR } from '@core/library/areas';
 import { applySyncEdit, type SyncEdit } from '@core/library/syncEdit';
-import type {
-  Area,
-  Folder,
-  LatLng,
-  LngLat,
-  MapDocument,
-  TrackSummary,
-  Waypoint,
-} from '@core/models';
+import type { CodecTrack } from '@core/domains/library/trackCodec';
+import type { Area, Folder, MapDocument, TrackSummary, Waypoint } from '@core/models';
 import { nodeCrypto } from '@core/team/testing/nodeCrypto';
 import { DEFAULT_INVITE, parseAnyInvite, webJoinLink } from '@core/teamui/invites';
 import { lifetimeMs } from '@core/teamui/lifetime';
@@ -38,19 +31,28 @@ export class MemoryLibrary implements LibraryPort {
     tracks: TrackSummary[];
     maps: MapDocument[];
   } = { folders: [], waypoints: [], areas: [], tracks: [], maps: [] };
-  files = new Map<string, LngLat[]>();
+  files = new Map<string, CodecTrack>();
   applied = 0;
   private n = 0;
   private readonly fns = new Set<() => void>();
   constructor(readonly tag: string) {}
   snapshot = () => this.lib;
-  async trackPoints(t: TrackSummary): Promise<LatLng[] | undefined> {
-    return this.files.get(t.fileUri)?.map(([longitude, latitude]) => ({ latitude, longitude }));
+  async trackPoints(t: TrackSummary) {
+    return this.files.get(t.fileUri);
   }
-  writeTrack(id: string, name: string, points: readonly LngLat[]): TrackSummary {
+  writeTrack(id: string, name: string, track: CodecTrack, category?: string): TrackSummary {
     const fileUri = `file:///${this.tag}/${id}.gpx`;
-    this.files.set(fileUri, [...points]);
-    return { id, name, startedAt: 0, stats: {} as TrackSummary['stats'], fileUri };
+    this.files.set(fileUri, track);
+    const timed = track.points.some((p) => p.hasTime !== false);
+    const kind = category ?? (timed ? undefined : 'navigation');
+    return {
+      id,
+      name,
+      startedAt: track.points[0]?.time ?? 0,
+      stats: {} as TrackSummary['stats'],
+      fileUri,
+      ...(kind !== undefined ? { category: kind } : {}),
+    };
   }
   apply(edit: SyncEdit): void {
     this.applied++;
@@ -140,10 +142,13 @@ export function seed(a: Phone): void {
     folderId: 'gaspF',
     createdAt: 1,
   });
-  a.port.files.set('file:///a/t1.gpx', [
-    [-66.2, 48.9],
-    [-66.1, 48.95],
-  ]);
+  a.port.files.set('file:///a/t1.gpx', {
+    points: [
+      { latitude: 48.9, longitude: -66.2, altitude: 892.5, time: 1_790_000_000_000 },
+      { latitude: 48.95, longitude: -66.1, altitude: 1_010.25, time: 1_790_000_060_000 },
+    ],
+    segmentStarts: [],
+  });
   a.port.lib.tracks.push({
     id: 't1',
     name: 'Mont Albert',

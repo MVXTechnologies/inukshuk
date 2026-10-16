@@ -6,7 +6,8 @@
  */
 import { buildGpx, parseGpx } from '@core/geo/gpx';
 import { buildImportedTrack } from '@core/geo/track';
-import type { LatLng, LngLat, TrackPoint, TrackSummary } from '@core/models';
+import type { CodecTrack } from '@core/domains/library/trackCodec';
+import type { TrackPoint, TrackSummary } from '@core/models';
 import { isTeamId } from '@core/team/ids';
 import * as storage from '@data/storage';
 import { appTeamService } from '@data/team/appTeam';
@@ -24,37 +25,48 @@ import { LiveFolders } from './liveFolders';
 
 export const libraryStorePort: LibraryPort = {
   snapshot: () => useLibraryStore.getState(),
-  async trackPoints(t: TrackSummary): Promise<readonly LatLng[] | undefined> {
+  async trackPoints(t: TrackSummary) {
     try {
-      return parseGpx(await storage.readFileText(t.fileUri)).points;
+      const gpx = parseGpx(await storage.readFileText(t.fileUri));
+      return { points: gpx.points, segmentStarts: gpx.segmentStarts };
     } catch (e) {
       reportError(e, 'share-live-read-gpx');
       return undefined;
     }
   },
-  writeTrack(id: string, name: string, points: readonly LngLat[]): TrackSummary {
-    const pts: TrackPoint[] = points.map(([longitude, latitude]) => ({
-      latitude,
-      longitude,
-      time: 0,
-      hasTime: false,
+  writeTrack(id: string, name: string, track: CodecTrack, category?: string): TrackSummary {
+    const points: TrackPoint[] = track.points.map((p) => ({
+      latitude: p.latitude,
+      longitude: p.longitude,
+      time: p.time,
+      ...(p.altitude !== undefined ? { altitude: p.altitude } : {}),
+      ...(p.hasTime === false ? { hasTime: false } : {}),
     }));
-    const fileUri = storage.writeTrackGpx(id, buildGpx({ points: pts, metadata: { name } }));
-    const track = buildImportedTrack({
+    const segmentStarts = track.segmentStarts;
+    const fileUri = storage.writeTrackGpx(
       id,
-      points: pts,
+      buildGpx({ points, metadata: { name }, segmentStarts }),
+    );
+    const built = buildImportedTrack({
+      id,
+      points,
       name,
       fallbackName: name,
       fallbackTime: Date.now(),
+      segmentStarts,
+      category: category ?? null,
     });
+    // A trail without times is a route to follow (as a GPX import files it).
+    const timed = points.some((p) => p.hasTime !== false);
+    const kind = category ?? (timed ? undefined : 'navigation');
     return {
       id,
-      name: track.name,
-      startedAt: track.startedAt,
-      stats: track.stats,
+      name: built.name,
+      startedAt: built.startedAt,
+      ...(built.endedAt !== undefined ? { endedAt: built.endedAt } : {}),
+      stats: built.stats,
       fileUri,
-      // A shared trail carries no timestamps: a route to follow.
-      category: 'navigation',
+      ...(kind !== undefined ? { category: kind } : {}),
     };
   },
   apply: (edit) => {

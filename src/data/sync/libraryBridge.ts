@@ -31,6 +31,9 @@ import {
   type LibraryHistory,
 } from '@core/domains/library/history';
 import { LFO, LIT } from '@core/domains/library/kinds';
+import { assembleTrack, hasPart, partBodies } from '@core/domains/library/parts';
+import type { CodecPoint, CodecTrack } from '@core/domains/library/trackCodec';
+import type { LibNode } from '@core/domains/library/tree';
 import {
   areaFields,
   areaFrom,
@@ -40,6 +43,7 @@ import {
   trackFrom,
   waypointFields,
   waypointFrom,
+  representable,
   type LocalKind,
 } from '@core/domains/library/liveFields';
 import { libraryView } from '@core/domains/library/tree';
@@ -47,15 +51,8 @@ import { edit, newFolder, newItem, trash, type SetBody } from '@core/domains/lib
 import { groupMeta } from '@core/group/meta';
 import { DEFAULT_AREA_COLOR } from '@core/library/areas';
 import type { SyncEdit } from '@core/library/syncEdit';
-import type {
-  Area,
-  Folder,
-  LatLng,
-  LngLat,
-  MapDocument,
-  TrackSummary,
-  Waypoint,
-} from '@core/models';
+import type { TeamData } from '@core/team/data';
+import type { Area, Folder, MapDocument, TrackSummary, Waypoint } from '@core/models';
 import type { Json } from '@core/team/canonical';
 import { isShortId } from '@core/team/ids';
 import type { Role } from '@core/team/roles';
@@ -109,10 +106,12 @@ export interface LibrarySnapshot {
 
 export interface LibraryPort {
   snapshot(): LibrarySnapshot;
-  /** A trail's points (its GPX); undefined when unreadable. */
-  trackPoints(t: TrackSummary): Promise<readonly LatLng[] | undefined>;
-  /** Write a GPX for a trail that arrived; returns its summary (no folder yet). */
-  writeTrack(id: string, name: string, points: readonly LngLat[]): TrackSummary;
+  /** A trail's points with their elevations and times, and its segments (its GPX); undefined when unreadable. */
+  trackPoints(
+    t: TrackSummary,
+  ): Promise<{ points: readonly CodecPoint[]; segmentStarts: readonly number[] } | undefined>;
+  /** Write the GPX of a trail that arrived, whole; returns its summary (no folder yet). */
+  writeTrack(id: string, name: string, track: CodecTrack, category?: string): TrackSummary;
   apply(edit: SyncEdit): void;
   newId(): string;
   subscribe(fn: () => void): () => void;
@@ -132,8 +131,13 @@ export class LibraryBridge {
   private again = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly unsubscribe: (() => void)[] = [];
-  /** Trail fields by `id|fileUri` (reading a GPX per run would cost a parse each time). */
-  private readonly trackCache = new Map<string, Record<string, Json>>();
+  /** Trail fields and geometry by `id|fileUri|category` (reading a GPX per run would cost a parse each time). */
+  private readonly trackCache = new Map<
+    string,
+    { fields: Record<string, Json>; encoded?: string }
+  >();
+  /** Encoded geometry by revision, for writing a trail's parts. */
+  private readonly encodedByRev = new Map<string, string>();
   private readonly records = new Map<string, BridgeRecord>();
   private readonly listeners = new Set<() => void>();
 
@@ -379,7 +383,10 @@ export class LibraryBridge {
       return;
     }
     const used = idsIn(snap);
+    const holdable = (n: LibNode): boolean =>
+      n.fields['t'] === 'trk' ? this.encodedOf(data, n) !== undefined : representable(n.fields);
     const plan = reconcile({
+      holdable,
       root: r.root,
       ...(rootLocal !== undefined ? { rootLocal } : {}),
       local,
@@ -388,22 +395,26 @@ export class LibraryBridge {
       newLocalId: (rid) => (isShortId(rid) && !used.has(rid) ? rid : this.port.newId()),
       newRecordId: (l) => (isShortId(l.id) && !view.items.has(l.id) ? l.id : this.port.newId()),
     });
-    this.write(s, r, plan);
+    this.write(s, data, plan);
     const nextRootLocal =
       rootLocal ??
       (() => {
         const l = plan.links.find((x) => x.rid === r.root.rid);
         return l === undefined ? undefined : { kind: l.localKind, id: l.local };
       })();
-    const created = new Map<string, TrackSummary>();
+    // Trails arriving (or whose line changed there) are written whole from their parts.
+    const written = new Map<string, TrackSummary>();
     for (const op of plan.local) {
-      if (op.op === 'create' && op.kind === 'track') {
-        const t = trackFrom(op.fields);
-        if (t !== undefined)
-          created.set(op.local, this.port.writeTrack(op.local, t.name, t.points));
-      }
+      if (op.kind !== 'track' || op.op === 'delete') continue;
+      if (op.op === 'update' && !op.changed.includes('tr')) continue;
+      const rid = op.op === 'create' ? op.rid : plan.links.find((l) => l.local === op.local)?.rid;
+      const node = rid === undefined ? undefined : view.items.get(rid);
+      const t = node === undefined ? undefined : trackFrom(op.fields, this.encodedOf(data, node));
+      if (t === undefined) continue;
+      const id = op.op === 'create' ? op.local : this.port.newId();
+      written.set(op.local, this.port.writeTrack(id, t.name, t, t.category));
     }
-    const editPlan = this.toEdit(plan.local, nextRootLocal, created);
+    const editPlan = this.toEdit(plan.local, nextRootLocal, written);
     if (plan.local.length > 0) this.port.apply(editPlan);
     const next: BridgeRecord = {
       v: 1,
@@ -416,15 +427,24 @@ export class LibraryBridge {
       this.save(s.teamId, next);
   }
 
-  private write(s: TeamSession, r: BridgeRecord, plan: BridgePlan): void {
+  private write(s: TeamSession, data: Readonly<TeamData>, plan: BridgePlan): void {
     if (plan.writes.length === 0) return;
     const h = this.history(s);
-    const inFolder = r.root.kind === LFO;
     for (const w of plan.writes) {
+      // A trail's parts go first (a phone rebuilds it once all are in).
+      const rev = w.op !== 'trash' ? w.fields['tr'] : undefined;
+      if (typeof rev === 'string') {
+        const encoded = this.encodedByRev.get(rev);
+        if (encoded === undefined) continue;
+        for (const part of partBodies(w.rid, rev, encoded)) {
+          if (hasPart(data, rev, part.f['n'] as number)) continue;
+          s.writeData('e.set', part as unknown as Json);
+        }
+      }
       let body: SetBody;
       if (w.op === 'new') {
         const n = typeof w.fields['n'] === 'string' ? w.fields['n'] : 'Untitled';
-        const parent = inFolder && w.rid !== r.root.rid ? r.root.rid : undefined;
+        const parent = typeof w.fields['p'] === 'string' ? w.fields['p'] : undefined;
         if (w.kind === LFO) body = newFolder(w.rid, n, parent, w.fields);
         else {
           const t = w.fields['t'];
@@ -439,7 +459,15 @@ export class LibraryBridge {
     }
   }
 
-  /** The Library's items in a share's scope, as record fields. */
+  /** A live trail's encoded geometry, once all its parts are in. */
+  private encodedOf(data: Readonly<TeamData>, n: LibNode): string | undefined {
+    const rev = n.fields['tr'];
+    const count = n.fields['tc'];
+    if (typeof rev !== 'string' || typeof count !== 'number') return undefined;
+    return assembleTrack(data, n.id, rev, count);
+  }
+
+  /** The Library's items in a share's scope (the folder, its sub-folders, their items), as record fields. */
   private async scope(
     snap: LibrarySnapshot,
     rootLocal: { kind: LocalKind; id: string } | undefined,
@@ -450,16 +478,39 @@ export class LibraryBridge {
       const f = snap.folders.find((x) => x.id === rootLocal.id);
       if (f === undefined) return [];
       out.push({ kind: 'folder', id: f.id, fields: folderFields(f) });
-      for (const w of snap.waypoints)
-        if (w.folderId === f.id)
-          out.push({ kind: 'waypoint', id: w.id, fields: waypointFields(w) });
-      for (const a of snap.areas)
-        if (a.folderId === f.id) out.push({ kind: 'area', id: a.id, fields: areaFields(a) });
-      for (const m of snap.maps)
-        if (m.folderId === f.id) out.push({ kind: 'map', id: m.id, fields: mapFields(m) });
-      for (const t of snap.tracks)
-        if (t.folderId === f.id)
-          out.push({ kind: 'track', id: t.id, fields: await this.trackOf(t) });
+      const inScope = new Set([f.id]);
+      // Sub-folders, shallow first (a cycle in the Library's own parents is cut).
+      for (let grew = true; grew;) {
+        grew = false;
+        for (const sub of snap.folders) {
+          if (inScope.has(sub.id) || sub.parentId === undefined || !inScope.has(sub.parentId))
+            continue;
+          inScope.add(sub.id);
+          out.push({ kind: 'folder', id: sub.id, fields: folderFields(sub), parent: sub.parentId });
+          grew = true;
+        }
+      }
+      const at = (folderId: string | undefined) =>
+        folderId !== undefined && inScope.has(folderId) ? folderId : undefined;
+      for (const w of snap.waypoints) {
+        const parent = at(w.folderId);
+        if (parent !== undefined)
+          out.push({ kind: 'waypoint', id: w.id, fields: waypointFields(w), parent });
+      }
+      for (const a of snap.areas) {
+        const parent = at(a.folderId);
+        if (parent !== undefined)
+          out.push({ kind: 'area', id: a.id, fields: areaFields(a), parent });
+      }
+      for (const m of snap.maps) {
+        const parent = at(m.folderId);
+        if (parent !== undefined) out.push({ kind: 'map', id: m.id, fields: mapFields(m), parent });
+      }
+      for (const t of snap.tracks) {
+        const parent = at(t.folderId);
+        if (parent !== undefined)
+          out.push({ kind: 'track', id: t.id, fields: await this.trackOf(t), parent });
+      }
       return out;
     }
     const item = itemOf(snap, rootLocal.kind as ItemKind, rootLocal.id);
@@ -476,15 +527,23 @@ export class LibraryBridge {
   }
 
   private async trackOf(t: TrackSummary): Promise<Record<string, Json>> {
-    const key = `${t.id}|${t.fileUri}`;
-    let f = this.trackCache.get(key);
-    if (f === undefined) {
-      const points = (await this.port.trackPoints(t)) ?? [];
-      f = trackFields({ name: t.name, points });
-      this.trackCache.set(key, f);
+    const key = `${t.id}|${t.fileUri}|${t.category ?? ''}`;
+    let entry = this.trackCache.get(key);
+    if (entry === undefined) {
+      const read = await this.port.trackPoints(t);
+      entry = trackFields(t.id, {
+        name: t.name,
+        points: read?.points ?? [],
+        segmentStarts: read?.segmentStarts ?? [],
+        ...(t.category !== undefined ? { category: t.category } : {}),
+      });
+      this.trackCache.set(key, entry);
     }
+    const rev = entry.fields['tr'];
+    if (typeof rev === 'string' && entry.encoded !== undefined)
+      this.encodedByRev.set(rev, entry.encoded);
     // The name lives in the index (a rename never rewrites the GPX).
-    return { ...f, n: trackFields({ name: t.name, points: [] })['n']! };
+    return { ...entry.fields, n: folderFields({ name: t.name })['n']! };
   }
 
   /** Local ops as one Library edit (whole items, local-only fields kept). */
@@ -494,7 +553,6 @@ export class LibraryBridge {
     created: ReadonlyMap<string, TrackSummary>,
   ): SyncEdit {
     const snap = this.port.snapshot();
-    const folderId = rootLocal?.kind === 'folder' ? rootLocal.id : undefined;
     const now = this.now;
     const put = {
       folders: [] as Folder[],
@@ -510,8 +568,11 @@ export class LibraryBridge {
       tracks: [] as string[],
       maps: [] as string[],
     };
-    const inFolder = <T extends { folderId?: string }>(x: T, isRoot: boolean): T =>
-      folderId !== undefined && !isRoot ? { ...x, folderId } : x;
+    /** An item placed where the op says (a create, or a move there); else where it was. */
+    const placed = <T extends { folderId?: string }>(x: T, op: LocalOp, isRoot: boolean): T => {
+      if (isRoot || op.op === 'delete' || op.parent === undefined) return x;
+      return { ...x, folderId: op.parent };
+    };
     for (const op of ops) {
       const isRoot = rootLocal?.kind === op.kind && rootLocal.id === op.local;
       if (op.op === 'delete') {
@@ -523,7 +584,15 @@ export class LibraryBridge {
           const old = snap.folders.find((f) => f.id === op.local);
           const name =
             typeof op.fields['n'] === 'string' ? op.fields['n'] : (old?.name ?? 'Folder');
-          put.folders.push({ id: op.local, name, createdAt: old?.createdAt ?? now });
+          const next: Folder = {
+            ...(old ?? {}),
+            id: op.local,
+            name,
+            createdAt: old?.createdAt ?? now,
+          };
+          if (!isRoot && op.parent !== undefined && op.parent !== op.local)
+            next.parentId = op.parent;
+          put.folders.push(next);
           break;
         }
         case 'waypoint': {
@@ -543,7 +612,7 @@ export class LibraryBridge {
           if (w.size !== undefined) next.size = w.size;
           if (old?.photoUri !== undefined) next.photoUri = old.photoUri;
           if (old?.folderId !== undefined) next.folderId = old.folderId;
-          put.waypoints.push(old === undefined ? inFolder(next, isRoot) : next);
+          put.waypoints.push(placed(next, op, isRoot));
           break;
         }
         case 'area': {
@@ -560,34 +629,36 @@ export class LibraryBridge {
           if (a.note !== undefined) next.note = a.note;
           else delete next.note;
           if (old !== undefined) next.updatedAt = now;
-          put.areas.push(old === undefined ? inFolder(next, isRoot) : next);
+          put.areas.push(placed(next, op, isRoot));
           break;
         }
         case 'track': {
           const fresh = created.get(op.local);
-          if (fresh !== undefined) {
-            put.tracks.push(inFolder(fresh, isRoot));
+          const old = snap.tracks.find((x) => x.id === op.local);
+          if (old === undefined) {
+            if (fresh !== undefined) put.tracks.push(placed(fresh, op, isRoot));
             break;
           }
-          const old = snap.tracks.find((x) => x.id === op.local);
-          if (old === undefined) break;
           const name = typeof op.fields['n'] === 'string' ? op.fields['n'] : old.name;
           let next: TrackSummary = { ...old, name };
-          if (op.op === 'update' && op.changed.includes('g')) {
-            const t = trackFrom(op.fields);
-            if (t !== undefined) {
-              const written = this.port.writeTrack(this.port.newId(), name, t.points);
-              next = { ...next, fileUri: written.fileUri, stats: written.stats };
-            }
-          }
-          put.tracks.push(next);
+          // The line changed there: the new GPX replaces the old one.
+          if (fresh !== undefined)
+            next = {
+              ...next,
+              fileUri: fresh.fileUri,
+              stats: fresh.stats,
+              startedAt: fresh.startedAt,
+              ...(fresh.endedAt !== undefined ? { endedAt: fresh.endedAt } : {}),
+            };
+          put.tracks.push(placed(next, op, isRoot));
           break;
         }
         case 'map': {
           const old = snap.maps.find((x) => x.id === op.local);
           if (old === undefined) break;
           const name = typeof op.fields['n'] === 'string' ? op.fields['n'] : old.name;
-          if (name !== old.name) put.maps.push({ ...old, name });
+          const next = placed({ ...old, name }, op, isRoot);
+          if (name !== old.name || next.folderId !== old.folderId) put.maps.push(next);
           break;
         }
       }

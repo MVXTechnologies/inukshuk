@@ -23,6 +23,12 @@ import type { LibNode, LibraryView } from './tree';
  * - an item gone from the group (in its trash, purged): deleted here;
  * - new on either side: created on the other.
  *
+ * **Placement** is a field like the others: `p`, the parent folder's record
+ * id, compared through the link table (a Library folder's id on this side,
+ * its record's on the other), so sub-folders and moves between them travel
+ * both ways. The view's effective parent is used for the group side (cycles
+ * and depth already repaired there, the same on every phone).
+ *
  * Idempotent: a second run over its own result plans nothing.
  */
 
@@ -33,6 +39,8 @@ export interface LocalRecord {
   kind: LocalKind;
   id: string;
   fields: Record<string, Json>;
+  /** Its Library folder (absent: the share's root folder, or none for a single item). */
+  parent?: string;
 }
 
 /** A record linked to a Library item, with the fields both last agreed on (hashed). */
@@ -52,7 +60,15 @@ export type PlannedWrite =
   | { op: 'trash'; kind: RecordKind; rid: string };
 
 export type LocalOp =
-  | { op: 'create'; kind: LocalKind; local: string; rid: string; fields: Record<string, Json> }
+  | {
+      op: 'create';
+      kind: LocalKind;
+      local: string;
+      rid: string;
+      fields: Record<string, Json>;
+      /** Its Library folder (absent: none, a single shared item). */
+      parent?: string;
+    }
   | {
       op: 'update';
       kind: LocalKind;
@@ -60,6 +76,8 @@ export type LocalOp =
       /** The record's fields after the update (all of them, not only the changed ones). */
       fields: Record<string, Json>;
       changed: string[];
+      /** Its Library folder when the move came with it (`changed` has `p`). */
+      parent?: string;
     }
   | { op: 'delete'; kind: LocalKind; local: string };
 
@@ -87,10 +105,15 @@ export interface ReconcileInput {
   newLocalId(rid: string, kind: LocalKind): string;
   /** A fresh record id for an item new here (its Library id when usable). */
   newRecordId(local: LocalRecord): string;
+  /**
+   * Whether this phone can hold a live item now (a trail with all its parts
+   * in, say). Default: what its fields alone allow (`representable`).
+   */
+  holdable?(node: LibNode): boolean;
 }
 
 /** Fields the bridge never compares (placement and trash are the bridge's own). */
-const SKIP = new Set(['p', 'rm', 'b', 'o']);
+const SKIP = new Set(['rm', 'b', 'o']);
 
 const FNV_OFFSET = 0x811c9dc5;
 function fnv(s: string): string {
@@ -145,12 +168,17 @@ function nodeOf(view: LibraryView, kind: RecordKind, rid: string): LibNode | und
 /** The node is live and out of the trash. */
 const alive = (n: LibNode | undefined): n is LibNode => n !== undefined && !n.inTrash;
 
-/** Remote records in the share's scope: the root and every live item (sub-folders are flattened). */
+/** Remote records in the share's scope: the root, its folders (shallow first), then items. */
 function remoteScope(view: LibraryView, root: ReconcileInput['root']): LibNode[] {
   const out: LibNode[] = [];
   const r = nodeOf(view, root.kind, root.rid);
   if (alive(r)) out.push(r);
-  if (root.kind === LFO) for (const it of view.items.values()) if (alive(it)) out.push(it);
+  if (root.kind !== LFO) return out;
+  const folders = [...view.folders.values()]
+    .filter((f) => alive(f) && f.id !== root.rid)
+    .sort((a, b) => a.depth - b.depth || (a.id < b.id ? -1 : 1));
+  out.push(...folders);
+  for (const it of view.items.values()) if (alive(it)) out.push(it);
   return out;
 }
 
@@ -160,10 +188,76 @@ export function reconcile(input: ReconcileInput): BridgePlan {
   const local: LocalOp[] = [];
   const links: Link[] = [];
   const waiting: string[] = [];
+  const holdable = (n: LibNode) => input.holdable?.(n) ?? representable(n.fields);
   const locals = new Map(input.local.map((l) => [localKey(l.kind, l.id), l]));
   const linkedLocal = new Set<string>();
   const linkedRid = new Set<string>();
   const usedRids = new Set<string>([...view.folders.keys(), ...view.items.keys()]);
+  /** Library folder id ⇄ record id, for placement. */
+  const ridOfFolder = new Map<string, string>();
+  const folderOfRid = new Map<string, string>();
+  const pair = (localFolder: string, rid: string) => {
+    ridOfFolder.set(localFolder, rid);
+    folderOfRid.set(rid, localFolder);
+  };
+  for (const l of input.links) if (l.localKind === 'folder') pair(l.local, l.rid);
+  const rootLocal = input.rootLocal;
+  if (rootLocal?.kind === 'folder') pair(rootLocal.id, root.rid);
+  const isRootLocal = (l: { kind: LocalKind; id: string }) =>
+    l.kind === rootLocal?.kind && l.id === rootLocal.id;
+  const linkByLocal = new Map(input.links.map((l) => [localKey(l.localKind, l.local), l]));
+
+  // A catalog map downloaded into the folder joins the record that named it.
+  const linkedRids = new Set(input.links.map((l) => l.rid));
+  const remoteAll = remoteScope(view, root);
+  const matched = new Map<string, LibNode>();
+  for (const l of input.local) {
+    if (linkByLocal.has(localKey(l.kind, l.id))) continue;
+    if (l.kind !== 'map' || typeof l.fields['cat'] !== 'string') continue;
+    const r = remoteAll.find(
+      (n) =>
+        !linkedRids.has(n.id) &&
+        ![...matched.values()].includes(n) &&
+        n.fields['cat'] === l.fields['cat'],
+    );
+    if (r !== undefined) matched.set(localKey(l.kind, l.id), r);
+  }
+
+  // Record ids for what is new here, decided up front (a new folder's items name it).
+  const newRid = new Map<string, string>();
+  for (const l of input.local) {
+    const key = localKey(l.kind, l.id);
+    if (linkByLocal.has(key) || matched.has(key)) continue;
+    let rid: string;
+    if (isRootLocal(l)) rid = root.rid;
+    else {
+      rid = input.newRecordId(l);
+      if (!isShortId(rid) || usedRids.has(rid) || linkedRids.has(rid)) continue;
+    }
+    usedRids.add(rid);
+    newRid.set(key, rid);
+    if (l.kind === 'folder') pair(l.id, rid);
+  }
+
+  /** The record fields of a Library item, with its placement as a record id. */
+  const withPlace = (l: LocalRecord): Record<string, Json> => {
+    const f = compared(l.fields);
+    delete f['p'];
+    if (isRootLocal(l) || root.kind !== LFO) return f;
+    const parent = l.parent ?? rootLocal?.id;
+    const rid = parent === undefined ? undefined : ridOfFolder.get(parent);
+    f['p'] = rid ?? root.rid;
+    return f;
+  };
+  /** The group's fields of a node, with its effective placement. */
+  const remoteFields = (n: LibNode): Record<string, Json> => {
+    const f = compared(n.fields);
+    delete f['p'];
+    if (n.id !== root.rid && root.kind === LFO && n.parent !== '') f['p'] = n.parent;
+    return f;
+  };
+  const localParent = (rid: Json | undefined): string | undefined =>
+    typeof rid === 'string' ? (folderOfRid.get(rid) ?? rootLocal?.id) : undefined;
 
   for (const link of input.links) {
     const key = localKey(link.localKind, link.local);
@@ -175,19 +269,16 @@ export function reconcile(input: ReconcileInput): BridgePlan {
     if (l === undefined) {
       // Gone from the Library (or out of the folder): into the group's trash.
       if (alive(r) && !isRoot) writes.push({ op: 'trash', kind: link.kind, rid: link.rid });
-      if (isRoot) {
-        links.push(link);
-        linkedRid.add(link.rid);
-      }
+      if (isRoot) links.push(link);
       continue;
     }
     if (!alive(r)) {
       if (r === undefined && link.seen !== true) {
         // Our create never landed (a key rotation was pending): write it again.
-        writes.push({ op: 'new', kind: link.kind, rid: link.rid, fields: compared(l.fields) });
-        links.push({ ...link, base: baseOf(l.fields) });
+        const fields = withPlace(l);
+        writes.push({ op: 'new', kind: link.kind, rid: link.rid, fields });
+        links.push({ ...link, base: baseOf(fields) });
         linkedLocal.add(key);
-        linkedRid.add(link.rid);
         continue;
       }
       // In the group's trash or purged: gone here too (the root is never trashed).
@@ -195,16 +286,16 @@ export function reconcile(input: ReconcileInput): BridgePlan {
       else {
         links.push(link);
         linkedLocal.add(key);
-        linkedRid.add(link.rid);
       }
       continue;
     }
     linkedLocal.add(key);
-    linkedRid.add(link.rid);
-    const lf = compared(l.fields);
-    const rf = compared(r.fields);
+    const lf = withPlace(l);
+    const rf = remoteFields(r);
     const mine = changedFrom(lf, link.base);
-    const theirs = changedFrom(rf, link.base).filter((k) => !mine.includes(k));
+    // A change there this phone cannot hold yet (a trail's parts still coming) waits.
+    const ready = r.kind === LFO || holdable(r);
+    const theirs = ready ? changedFrom(rf, link.base).filter((k) => !mine.includes(k)) : [];
     const base = { ...link.base };
     const out: Record<string, Json> = {};
     for (const k of mine) {
@@ -236,81 +327,88 @@ export function reconcile(input: ReconcileInput): BridgePlan {
         else next[k] = v;
         base[k] = fingerprint(v);
       }
-      local.push({
+      const op: LocalOp = {
         op: 'update',
         kind: link.localKind,
         local: link.local,
         fields: next,
         changed: theirs,
-      });
+      };
+      if (theirs.includes('p')) {
+        const parent = localParent(rf['p']);
+        if (parent !== undefined) op.parent = parent;
+      }
+      local.push(op);
     }
     links.push({ ...link, base, seen: true });
   }
 
-  // A catalog map downloaded into the folder joins the record that named it.
-  const remote = remoteScope(view, root).filter((n) => !linkedRid.has(n.id));
-  const unlinkedLocal = input.local.filter((l) => !linkedLocal.has(localKey(l.kind, l.id)));
-  const matched = new Set<string>();
-  for (const l of unlinkedLocal) {
-    if (l.kind !== 'map' || typeof l.fields['cat'] !== 'string') continue;
-    const r = remote.find((n) => !matched.has(n.id) && n.fields['cat'] === l.fields['cat']);
-    if (r === undefined) continue;
-    matched.add(r.id);
-    linkedLocal.add(localKey(l.kind, l.id));
+  for (const [key, r] of matched) {
+    const [, id] = key.split(/:(.*)/) as [string, string];
+    linkedLocal.add(key);
     linkedRid.add(r.id);
     links.push({
       rid: r.id,
       kind: LIT,
-      local: l.id,
+      local: id,
       localKind: 'map',
-      base: baseOf(r.fields),
+      base: baseOf(remoteFields(r)),
       seen: true,
     });
   }
 
-  // New here: written to the group.
-  for (const l of input.local) {
+  // New here: written to the group (folders first: their items name them).
+  const fresh = input.local
+    .filter((l) => newRid.has(localKey(l.kind, l.id)))
+    .sort((a, b) => Number(b.kind === 'folder') - Number(a.kind === 'folder'));
+  for (const l of fresh) {
     const key = localKey(l.kind, l.id);
-    if (linkedLocal.has(key)) continue;
-    const isRootLocal = l.kind === input.rootLocal?.kind && l.id === input.rootLocal.id;
+    const rid = newRid.get(key)!;
     const kind = recordKindOf(l.kind);
-    let rid: string;
-    if (isRootLocal && !linkedRid.has(root.rid)) rid = root.rid;
-    else {
-      rid = input.newRecordId(l);
-      if (!isShortId(rid) || usedRids.has(rid) || linkedRid.has(rid)) continue;
-    }
-    usedRids.add(rid);
     linkedRid.add(rid);
-    const fields = compared(l.fields);
+    const fields = withPlace(l);
     const r = nodeOf(view, kind, rid);
     if (alive(r)) {
       // The root record exists already (a phone re-linking after a restart): agree on it next run.
-      links.push({ rid, kind, local: l.id, localKind: l.kind, base: baseOf(r.fields), seen: true });
+      links.push({
+        rid,
+        kind,
+        local: l.id,
+        localKind: l.kind,
+        base: baseOf(remoteFields(r)),
+        seen: true,
+      });
       continue;
     }
     writes.push({ op: 'new', kind, rid, fields });
     links.push({ rid, kind, local: l.id, localKind: l.kind, base: baseOf(fields) });
   }
 
-  // New there: created here when this phone can hold it.
-  for (const r of remote) {
-    if (linkedRid.has(r.id) || matched.has(r.id)) continue;
+  // New there: created here when this phone can hold it (folders first, shallow first).
+  for (const r of remoteAll) {
+    if (linkedRid.has(r.id)) continue;
     const lk: LocalKind | undefined = r.kind === LFO ? 'folder' : localKindOf(r.fields);
     if (lk === undefined) continue;
-    if (lk !== 'folder' && !representable(r.fields)) {
+    if (lk !== 'folder' && !holdable(r)) {
       waiting.push(r.id);
       continue;
     }
-    if (lk === 'folder' && r.id !== root.rid) continue;
     const id = input.newLocalId(r.id, lk);
-    local.push({ op: 'create', kind: lk, local: id, rid: r.id, fields: compared(r.fields) });
+    const fields = remoteFields(r);
+    const op: LocalOp = { op: 'create', kind: lk, local: id, rid: r.id, fields };
+    const parent = localParent(fields['p']);
+    if (parent !== undefined) op.parent = parent;
+    local.push(op);
+    if (lk === 'folder') {
+      if (r.id === root.rid) pair(id, r.id);
+      else pair(id, r.id);
+    }
     links.push({
       rid: r.id,
       kind: r.kind,
       local: id,
       localKind: lk,
-      base: baseOf(r.fields),
+      base: baseOf(fields),
       seen: true,
     });
   }
