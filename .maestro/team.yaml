@@ -343,6 +343,9 @@ tags:
     timeout: 30000
 - assertVisible: 'Your SOS is active'
 - takeScreenshot: team-sos-active
+# Review (#756): the SOS band under the pill (asserted just above), with the
+# SOS button on the right-hand column.
+- takeScreenshot: review-team-sos-band-light
 # Resolve takes the same hold as raising (#748): hold, "Let go", release.
 - longPressOn:
     id: 'team-band-sos-resolve'
