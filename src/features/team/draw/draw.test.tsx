@@ -83,6 +83,9 @@ jest.mock('@data/team/teamNotifications', () => ({
   onTeamNotificationTap: () => () => undefined,
   dismissTeamNotification: async () => undefined,
   setInAppAlarm: () => undefined,
+  armSos: () => undefined,
+  silenceSos: () => undefined,
+  SOS_TONE_MS: 8_000,
 }));
 jest.mock('@lib/errorReporting', () => ({ addBreadcrumb: jest.fn(), reportError: jest.fn() }));
 /** Renders of the drawing components (each reads the scheme tokens once per render). */

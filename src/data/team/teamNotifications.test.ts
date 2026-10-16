@@ -2,6 +2,8 @@
  * The team notification channels and contents (#708), against a fake
  * expo-notifications module.
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { AppState, Platform, Vibration } from 'react-native';
 
 const mockN = {
@@ -24,6 +26,7 @@ jest.mock('expo-notifications', () => mockN);
 
 // eslint-disable-next-line import/first
 import {
+  armSos,
   buzzRally,
   dismissTeamNotification,
   notifyTeam,
@@ -31,8 +34,10 @@ import {
   RALLY_VIBRATION,
   resetTeamNotificationsForTests,
   setInAppAlarm,
+  silenceSos,
   SOS_CHANNEL,
   SOS_SOUND,
+  SOS_TONE_MS,
   TEAM_CHANNEL,
 } from './teamNotifications';
 
@@ -133,6 +138,61 @@ describe('team notification channels (#708)', () => {
     mockN.dismissNotificationAsync.mockRejectedValueOnce(new Error('gone'));
     await expect(notifyTeam({ title: 't', body: 'b', url: '/' })).resolves.toBeUndefined();
     await expect(dismissTeamNotification('x')).resolves.toBeUndefined();
+  });
+});
+
+describe('the SOS tone loop and Acknowledge (#708, #752)', () => {
+  const sosNote = { title: 'SOS', body: 'b', url: '/x', channel: 'sos' as const };
+
+  it('SOS_TONE_MS is the bundled tone’s exact length (the re-sound interval)', () => {
+    const wav = readFileSync(join(__dirname, '../../../assets/sounds/team_sos.wav'));
+    const ms = ((wav.readUInt32LE(40) / 2) * 1000) / wav.readUInt32LE(24);
+    expect(ms).toBe(SOS_TONE_MS);
+    expect(SOS_TONE_MS).toBe(8_000);
+    // iOS plays a notification sound only if it is under 30 s.
+    expect(SOS_TONE_MS).toBeLessThan(30_000);
+  });
+
+  it('silenceSos removes the notification at once and stops every re-post of it', async () => {
+    setOS('android');
+    await notifyTeam({ ...sosNote, identifier: 'sos:j:s1' });
+    expect(mockN.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
+    silenceSos('sos:j:s1');
+    // Cancelling the notification is what cuts its sound mid-play.
+    expect(mockN.dismissNotificationAsync).toHaveBeenCalledWith('sos:j:s1');
+    await notifyTeam({ ...sosNote, identifier: 'sos:j:s1' });
+    expect(mockN.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
+    // Another SOS, and other channels, still sound.
+    await notifyTeam({ ...sosNote, identifier: 'sos:n:s2' });
+    await notifyTeam({ title: 't', body: 'b', url: '/', identifier: 'sos:j:s1' });
+    expect(mockN.scheduleNotificationAsync).toHaveBeenCalledTimes(3);
+  });
+
+  it('a re-post already in flight when Acknowledge lands never sounds', async () => {
+    setOS('android');
+    let grant: (v: { granted: true }) => void = () => undefined;
+    mockN.getPermissionsAsync.mockImplementationOnce(
+      () => new Promise((r) => (grant = r)) as Promise<{ granted: true }>,
+    );
+    const posting = notifyTeam({ ...sosNote, identifier: 'sos:j:s1' });
+    // Parked on the permission check (after the channels are set up).
+    for (let i = 0; i < 50 && mockN.getPermissionsAsync.mock.calls.length === 0; i++)
+      await Promise.resolve();
+    expect(mockN.getPermissionsAsync).toHaveBeenCalledTimes(1);
+    silenceSos('sos:j:s1');
+    grant({ granted: true });
+    await posting;
+    expect(mockN.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  it('armSos (a new ring after a resolve, #752) lets the same SOS sound again', async () => {
+    setOS('ios');
+    silenceSos('sos:j:s1');
+    await notifyTeam({ ...sosNote, identifier: 'sos:j:s1' });
+    expect(mockN.scheduleNotificationAsync).not.toHaveBeenCalled();
+    armSos('sos:j:s1');
+    await notifyTeam({ ...sosNote, identifier: 'sos:j:s1' });
+    expect(mockN.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
   });
 });
 

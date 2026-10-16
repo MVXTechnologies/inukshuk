@@ -32,7 +32,7 @@ import { useTeamMapSelection } from '../map/TeamMapOverlay';
 import { useTeamSheet } from '../map/teamMode';
 import { AlertBands } from './AlertBands';
 import { usePendingAlert } from './pendingAlert';
-import { ALARM_MAX_MS, RESOUND_MS, SosAlarmBanner } from './SosAlarmBanner';
+import { RESOUND_MS, SosAlarmBanner } from './SosAlarmBanner';
 import { RING_PAD, SosButton, SWELL_RELEASE_SPRING } from './SosButton';
 import { TeamPanel } from './TeamPanel';
 import { CHIP, CHIP_LABEL_MAX_SCALE, TeamStatusBar, useTeamBarLayout } from './TeamStatusBar';
@@ -58,6 +58,7 @@ jest.mock('@data/storage', () => ({
   deleteFileAt: jest.fn(),
 }));
 const mockNotify = jest.fn(async (_n: unknown) => undefined);
+const mockSilence = jest.fn();
 jest.mock('@data/team/teamNotifications', () => ({
   buzzRally: () => undefined,
   notifyTeam: (n: unknown) => mockNotify(n),
@@ -65,6 +66,9 @@ jest.mock('@data/team/teamNotifications', () => ({
   dismissTeamNotification: async () => undefined,
   setInAppAlarm: () => undefined,
   SOS_VIBRATION: [0, 900, 250, 900],
+  armSos: () => undefined,
+  silenceSos: (id: string) => mockSilence(id),
+  SOS_TONE_MS: 8_000,
 }));
 jest.mock('@lib/errorReporting', () => ({ addBreadcrumb: jest.fn(), reportError: jest.fn() }));
 jest.mock('react-native-safe-area-context', () => ({
@@ -630,8 +634,7 @@ describe('the alert bands (#708)', () => {
 });
 
 describe('the in-app SOS alarm (#708)', () => {
-  it.each(THEMES)('sounds and vibrates until Acknowledge (dark: %s)', async (dark) => {
-    fakeClock();
+  const julieSos = () =>
     crew({
       soses: [
         {
@@ -646,21 +649,41 @@ describe('the in-app SOS alarm (#708)', () => {
         },
       ],
     });
-    useSettingsStore.setState({ lastKnownPosition: HERE });
-    const vibrate = jest.spyOn(Vibration, 'vibrate');
-    const cancel = jest.spyOn(Vibration, 'cancel');
-    await act(async () =>
+  const ring = (teamName = 'T') =>
+    act(async () =>
       useTeamStore.setState({
         sosAlarm: {
           entity: 'sos:julie:s1',
           owner: 'julie',
           authorName: 'Julie Tremblay',
-          teamName: 'Chic-Chocs crew',
+          teamName,
           text: 'SOS · needs help',
           at: Date.now(),
         },
       }),
     );
+  /** When each re-post went out (fake ms). */
+  const postedAt: number[] = [];
+  beforeEach(() => {
+    postedAt.length = 0;
+    mockSilence.mockClear();
+    mockNotify.mockImplementation(async () => {
+      postedAt.push(Date.now());
+    });
+  });
+  afterEach(() => mockNotify.mockImplementation(async () => undefined));
+
+  it('re-sounds every 8 s, exactly the tone’s length (F → D loops, no gap, no overlap)', () => {
+    expect(RESOUND_MS).toBe(8_000);
+  });
+
+  it.each(THEMES)('sounds and vibrates until Acknowledge (dark: %s)', async (dark) => {
+    fakeClock();
+    julieSos();
+    useSettingsStore.setState({ lastKnownPosition: HERE });
+    const vibrate = jest.spyOn(Vibration, 'vibrate');
+    const cancel = jest.spyOn(Vibration, 'cancel');
+    await ring('Chic-Chocs crew');
     await render(wrap(<SosAlarmBanner />, dark));
     expect(screen.getByText('SOS · Julie Tremblay')).toBeTruthy();
     expect(screen.getByText('Needs help · 338 m NE of you · just now')).toBeTruthy();
@@ -678,103 +701,108 @@ describe('the in-app SOS alarm (#708)', () => {
     expect(useTeamStore.getState().sosAlarm).toBeNull();
     expect(screen.queryByTestId('team-sos-alarm')).toBeNull();
     expect(cancel).toHaveBeenCalled();
+    expect(mockSilence).toHaveBeenCalledWith('sos:julie:s1');
     await act(async () => {
       jest.advanceTimersByTime(RESOUND_MS * 3);
     });
     expect(mockNotify).toHaveBeenCalledTimes(2);
   });
 
-  it('stops sounding after ALARM_MAX_MS; Navigate acknowledges and goes to the map', async () => {
+  it('loops back to back for as long as it takes: never a timeout, never a long silence', async () => {
     fakeClock();
-    crew({
-      soses: [
-        {
-          id: 's1',
-          owner: 'julie',
-          lat: 46.804,
-          lng: -71.195,
-          text: '',
-          at: Date.now(),
-          resolved: false,
-          resolvedBy: null,
-        },
-      ],
-    });
-    await act(async () =>
-      useTeamStore.setState({
-        sosAlarm: {
-          entity: 'sos:julie:s1',
-          owner: 'julie',
-          authorName: 'Julie Tremblay',
-          teamName: 'T',
-          text: '',
-          at: Date.now(),
-        },
-      }),
-    );
+    julieSos();
     const cancel = jest.spyOn(Vibration, 'cancel');
     cancel.mockClear();
+    const t0 = Date.now();
+    await ring();
+    await render(wrap(<SosAlarmBanner />));
+    // Ten minutes unanswered (the old alarm went quiet after two).
+    for (let i = 0; i < 75; i++)
+      await act(async () => {
+        jest.advanceTimersByTime(RESOUND_MS);
+      });
+    // The ring itself plays the tone at 0 (the store's notification); then one per 8 s.
+    expect(postedAt).toEqual(Array.from({ length: 75 }, (_, i) => t0 + (i + 1) * 8_000));
+    expect(cancel).not.toHaveBeenCalled();
+    expect(screen.getByTestId('team-sos-alarm')).toBeTruthy();
+    await act(async () => useTeamStore.getState().acknowledgeAlarm());
+  });
+
+  it('Acknowledge mid-tone cuts the sound at once: notification gone, nothing more scheduled', async () => {
+    fakeClock();
+    julieSos();
+    const cancel = jest.spyOn(Vibration, 'cancel');
+    await ring();
     await render(wrap(<SosAlarmBanner />));
     await act(async () => {
-      jest.advanceTimersByTime(ALARM_MAX_MS + RESOUND_MS);
+      jest.advanceTimersByTime(RESOUND_MS);
     });
-    const sounded = mockNotify.mock.calls.length;
-    expect(sounded).toBe(ALARM_MAX_MS / RESOUND_MS - 1);
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+    // 3 s into that 8 s tone (mid stutter): Acknowledge.
+    await act(async () => {
+      jest.advanceTimersByTime(3_000);
+    });
+    cancel.mockClear();
+    expect(mockSilence).not.toHaveBeenCalled();
+    await fireEvent.press(screen.getByTestId('team-sos-acknowledge'));
+    // At once, without waiting for the tone to end.
+    expect(mockSilence).toHaveBeenCalledTimes(1);
+    expect(mockSilence).toHaveBeenCalledWith('sos:julie:s1');
     expect(cancel).toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(0);
+    await act(async () => {
+      jest.advanceTimersByTime(RESOUND_MS * 10);
+    });
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+    // The SOS stays (acknowledging is this phone's sound only).
+    expect(useTeamStore.getState().soses).toHaveLength(1);
+  });
+
+  it('Navigate acknowledges (silences at once) and goes to the map', async () => {
+    fakeClock();
+    julieSos();
+    await ring();
+    await render(wrap(<SosAlarmBanner />));
+    await act(async () => {
+      jest.advanceTimersByTime(RESOUND_MS + 2_000);
+    });
     await fireEvent.press(screen.getByTestId('team-sos-alarm-navigate'));
     expect(mockNavigate).toHaveBeenCalledWith('/');
     expect(useTeamStore.getState().sosAlarm).toBeNull();
-  });
-  it('the same SOS raised again (reopened after a resolve) rings again from the start', async () => {
-    fakeClock();
-    crew({
-      soses: [
-        {
-          id: 's1',
-          owner: 'julie',
-          lat: 46.804,
-          lng: -71.195,
-          text: '',
-          at: Date.now(),
-          resolved: false,
-          resolvedBy: null,
-        },
-      ],
+    expect(mockSilence).toHaveBeenCalledWith('sos:julie:s1');
+    await act(async () => {
+      jest.advanceTimersByTime(RESOUND_MS * 3);
     });
-    const ring = () =>
-      act(async () =>
-        useTeamStore.setState({
-          sosAlarm: {
-            entity: 'sos:julie:s1',
-            owner: 'julie',
-            authorName: 'Julie Tremblay',
-            teamName: 'T',
-            text: '',
-            at: Date.now(),
-          },
-        }),
-      );
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+  });
+
+  it('the same SOS raised again after Acknowledge rings again from the start (#752)', async () => {
+    fakeClock();
+    julieSos();
     await ring();
     const vibrate = jest.spyOn(Vibration, 'vibrate');
     vibrate.mockClear();
     await render(wrap(<SosAlarmBanner />));
     expect(vibrate).toHaveBeenCalledTimes(1);
-    // The first alarm has run its course (silent now, banner still up).
     await act(async () => {
-      jest.advanceTimersByTime(ALARM_MAX_MS + RESOUND_MS);
+      jest.advanceTimersByTime(RESOUND_MS + 1_000);
     });
+    await fireEvent.press(screen.getByTestId('team-sos-acknowledge'));
     const first = mockNotify.mock.calls.length;
     await act(async () => {
       jest.advanceTimersByTime(RESOUND_MS * 2);
     });
     expect(mockNotify.mock.calls.length).toBe(first);
-    // Resolved and raised again in one sync: the store rings the same entity anew.
+    // Raised again: the store rings the same entity anew.
+    const t1 = Date.now();
     await ring();
     expect(vibrate).toHaveBeenCalledTimes(2);
     await act(async () => {
       jest.advanceTimersByTime(RESOUND_MS * 2);
     });
     expect(mockNotify.mock.calls.length).toBe(first + 2);
+    expect(postedAt.slice(-2)).toEqual([t1 + 8_000, t1 + 16_000]);
+    await act(async () => useTeamStore.getState().acknowledgeAlarm());
   });
 });
 

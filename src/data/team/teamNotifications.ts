@@ -18,6 +18,10 @@
  *   Sensitive Notifications capability) with the same tone.
  * - An SOS or rally notification carries its entity as its identifier, so it
  *   is cleared ({@link dismissTeamNotification}) when resolved or ended.
+ * - The SOS tone is 8 s ({@link SOS_TONE_MS}); the in-app alarm re-posts it
+ *   that often so it loops. Acknowledge ({@link silenceSos}) removes it at
+ *   once, cutting its sound, and blocks re-posts until a new ring
+ *   ({@link armSos}).
  * - Shown in the foreground too, except the system banner of an SOS while
  *   the in-app alarm banner is up ({@link setInAppAlarm}): the sound still
  *   plays, the list still has it.
@@ -38,6 +42,8 @@ let cached: Api | null | undefined;
 let configured = false;
 let asked = false;
 let inAppAlarm = false;
+/** SOS notifications acknowledged on this phone: never re-posted until rung anew. */
+const silenced = new Set<string>();
 
 function api(): Api | null {
   if (cached !== undefined) return cached;
@@ -59,6 +65,12 @@ export const RALLY_CHANNEL = 'team-rally';
 
 /** The bundled SOS tone (res/raw on Android, the app bundle on iOS). */
 export const SOS_SOUND = 'team_sos.wav';
+/**
+ * The tone's exact length (4 s stutter, then 4 s whoop): the in-app alarm
+ * re-posts the SOS every this often, so the tone loops with no gap and no
+ * overlap. `teamNotifications.test.ts` reads it from the bundled file.
+ */
+export const SOS_TONE_MS = 8_000;
 
 /** Long, distinctive, three times: ~6 s of "someone needs help". */
 export const SOS_VIBRATION = [
@@ -156,8 +168,13 @@ export async function notifyTeam(n0: {
   const n = api();
   if (n === null) return;
   const channel = n0.channel ?? 'team';
+  const id = n0.identifier ?? null;
+  const hushed = () => channel === 'sos' && id !== null && silenced.has(id);
+  if (hushed()) return;
   try {
     if (!(await ensureTeamNotifications())) return;
+    // Acknowledged while the permission check ran: it must not sound again.
+    if (hushed()) return;
     const sound = n0.quiet === true ? false : channel === 'sos' ? SOS_SOUND : 'default';
     await n.scheduleNotificationAsync({
       ...(n0.identifier ? { identifier: n0.identifier } : {}),
@@ -195,6 +212,23 @@ export async function dismissTeamNotification(identifier: string): Promise<void>
   } catch {
     // Already gone, or never shown.
   }
+}
+
+/**
+ * Acknowledge: stop this phone's SOS sound now. The notification is
+ * removed (Android cancels it and cuts its "Team SOS" sound mid-play; iOS
+ * removes the delivered one, which stops its sound where the OS allows),
+ * and no re-post of it goes out, even one already in flight, until
+ * {@link armSos} (a new ring, #752). The SOS itself stays. Never throws.
+ */
+export function silenceSos(identifier: string): void {
+  silenced.add(identifier);
+  void dismissTeamNotification(identifier);
+}
+
+/** A new ring of this SOS (first raise, or raised again after a resolve, #752): it may sound. */
+export function armSos(identifier: string): void {
+  silenced.delete(identifier);
 }
 
 /** The in-app SOS banner is up (its system banner then stays in the list only). */
@@ -245,4 +279,5 @@ export function resetTeamNotificationsForTests(): void {
   configured = false;
   asked = false;
   inAppAlarm = false;
+  silenced.clear();
 }
