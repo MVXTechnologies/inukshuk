@@ -121,6 +121,10 @@ export interface MapDrawing {
   ownsBottom: boolean;
   viewAreaId: string | null;
   closeAreaCard: () => void;
+  /** Open an area's card (a row of the overlap chooser, #745). */
+  openAreaCard: (areaId: string) => void;
+  /** The areas drawn on the map (the one being edited is the tool's). */
+  shownAreas: readonly Area[];
   startRoute: () => void;
   startArea: () => void;
   /** "Draw" in the "+" menu: the Route / Area chooser. */
@@ -999,6 +1003,8 @@ export function useMapDrawing({
     ownsBottom: active || chooserOpen || areaEditor !== null || viewArea !== null,
     viewAreaId,
     closeAreaCard: () => setViewAreaId(null),
+    openAreaCard: setViewAreaId,
+    shownAreas,
     startRoute,
     startArea,
     openChooser,

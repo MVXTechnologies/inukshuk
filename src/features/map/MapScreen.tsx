@@ -206,6 +206,9 @@ import { MoveWaypointLayers } from './waypoints/MoveWaypointLayers';
 import { MoveWaypointOverlay } from './waypoints/MoveWaypointOverlay';
 import { pinAtPoint, toPinInputs, visiblePinKey } from './waypoints/pinHit';
 import { WaypointClusterSheet } from './waypoints/WaypointClusterSheet';
+import { OverlapChooserSheet } from './overlap/OverlapChooserSheet';
+import { overlapAtTap } from './overlap/overlapAtTap';
+import { useOverlapChooser } from './overlap/overlapChooser';
 import {
   openWaypointCluster,
   useWaypointClusterSheet,
@@ -2122,8 +2125,10 @@ export function MapScreen() {
       photoTapRef.current = null;
       const map = mapRef.current;
       if (!map) return;
-      // Any tap closes the waypoint cluster list (#685); a cluster tap reopens it.
+      // Any tap closes the waypoint cluster list (#685) and the overlap
+      // chooser (#745); a tap on a cluster / an overlap reopens them.
       useWaypointClusterSheet.getState().close();
+      useOverlapChooser.getState().close();
       // #232 — the chip's action row already took this touch (see
       // chipTouchAtRef); the map must not act on it a second time.
       if (Date.now() - chipTouchAtRef.current < CHIP_ACTION_TOUCH_MS) return;
@@ -2426,16 +2431,15 @@ export function MapScreen() {
       // opens the carousel (and a single non-hot tap opens inspect for a
       // shown trail) regardless of the current visibility mode/folder
       // filters/activeTrackIds; see useTrackHeat.
+      // The finger's tolerance: at least TRAIL_HIT_PX, and the whole visible
+      // heat glow when the heatmap is on.
+      const fingerM = lngLatArr
+        ? Math.max(TRAIL_HIT_PX, heatOn ? heatTapRadiusPx(scaleAt?.zoom ?? 16) : 0) *
+          (metersPerPixel(scaleAt?.zoom ?? 16, lngLatArr[1]) ?? 0)
+        : 0;
       const at =
         lngLatArr && showTrackOverlays
-          ? trackHeat.heatAt(
-              { lng: lngLatArr[0], lat: lngLatArr[1] },
-              // The finger's tolerance: at least TRAIL_HIT_PX, and the whole
-              // visible heat glow when the heatmap is on.
-              Math.max(TRAIL_HIT_PX, heatOn ? heatTapRadiusPx(scaleAt?.zoom ?? 16) : 0) *
-                (metersPerPixel(scaleAt?.zoom ?? 16, lngLatArr[1]) ?? 0),
-              heatOn,
-            )
+          ? trackHeat.heatAt({ lng: lngLatArr[0], lat: lngLatArr[1] }, fingerM, heatOn)
           : { trackIds: [], hot: false };
       // Team signal mode: a trail is a place to signal from, never its
       // profile or focus (owner 2026-10-07).
@@ -2451,7 +2455,23 @@ export function MapScreen() {
         });
         return;
       }
-      if (lngLatArr && at.hot && at.trackIds.length >= 2) {
+      // A hot spot on the heatmap opens its carousel. Anything else under the
+      // finger (#745): trails whose line is within its width (the heat grid's
+      // ±50 m candidates, refined) and the areas holding the tap. One is
+      // selected; two or more (crossing trails, a trail in an area, nested
+      // areas) open the chooser — two trails used to select nothing.
+      const heatSpot = lngLatArr !== null && heatOn && at.hot && at.trackIds.length >= 2;
+      const pick =
+        lngLatArr && !heatSpot
+          ? overlapAtTap(
+              [lngLatArr[0], lngLatArr[1]],
+              fingerM,
+              at.trackIds,
+              trackHeat.lineFor,
+              drawingRef.current.shownAreas,
+            )
+          : null;
+      if (lngLatArr && heatSpot) {
         drawingRef.current.closeAreaCard();
         inspect(null); // opening the carousel hides the inspect panel
         setHeatSelection({
@@ -2459,10 +2479,20 @@ export function MapScreen() {
           trackIds: at.trackIds,
           focusedIdx: 0,
         });
-      } else if (at.trackIds.length === 1) {
+      } else if (pick?.kind === 'choose') {
+        drawingRef.current.closeAreaCard();
+        setHeatSelection(null);
+        inspect(null);
+        setPointAt(null);
+        setViewWp(null);
+        setForecastAt(null);
+        setExtensionHit(null);
+        useOverlapChooser.getState().open(pick.hits);
+        return;
+      } else if (pick?.kind === 'one' && pick.hit.kind === 'trail') {
         drawingRef.current.closeAreaCard();
         setHeatSelection(null); // a single-trail tap hides the carousel
-        inspect(at.trackIds[0] ?? null);
+        inspect(pick.hit.id);
       } else {
         // Leaving a focused trail or route (its panel or the heat carousel
         // up) by tapping the map elsewhere (2.1.1, owner): the tap ONLY
@@ -2485,16 +2515,19 @@ export function MapScreen() {
           setFollowUser(true);
           return;
         }
-        // A drawn area under the tap (#503) opens its card — ahead of the
-        // point chip, behind every pin, trail and heat spot (a trail inside
-        // an area stays tappable). A second tap on the same area closes the
+        // A drawn area alone under the tap (#503) opens its card — ahead of
+        // the point chip, behind every pin and heat spot; with a trail too,
+        // the chooser above asked. A second tap on the same area closes the
         // card and falls through to the chip.
-        if (lngLatArr && drawingRef.current.onAreaTap([lngLatArr[0], lngLatArr[1]])) {
+        const areaId = pick?.kind === 'one' && pick.hit.kind === 'area' ? pick.hit.id : null;
+        if (areaId !== null && drawingRef.current.viewAreaId !== areaId) {
+          drawingRef.current.openAreaCard(areaId);
           setPointAt(null);
           setViewWp(null);
           setForecastAt(null);
           return;
         }
+        drawingRef.current.closeAreaCard();
         // Point-chip tap (wave A item 7, widened by wave D §D1/D-5),
         // slotted between the dot route and plain deselect: a bare tap
         // drops the readout chip at the tapped spot; a tap ON the chip (or
@@ -4322,6 +4355,24 @@ export function MapScreen() {
               suppressed={viewWaypoint !== null}
               floating={recordingPanelUp}
               onOpen={(pin) => setViewWp({ source: pin.source, id: pin.id })}
+            />
+          </View>
+        )}
+
+        {/* Several trails / areas under one tap (#745): pick one. */}
+        {cardSlotFree && movingWp === null && (
+          <View
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+            pointerEvents="box-none"
+          >
+            <OverlapChooserSheet
+              floating={recordingPanelUp}
+              suppressed={viewWaypoint !== null}
+              onPickTrail={(id) => {
+                setHeatSelection(null);
+                inspect(id);
+              }}
+              onPickArea={(id) => drawingRef.current.openAreaCard(id)}
             />
           </View>
         )}

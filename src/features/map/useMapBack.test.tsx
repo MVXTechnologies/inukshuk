@@ -5,6 +5,7 @@ import { usePhotoCard } from '@features/photos/PhotoBottomCard';
 import { useTeamSheet } from '@features/team/map/teamMode';
 
 import { topOpenLayer, useMapBack, useStoreBackLayers, type BackLayer } from './useMapBack';
+import { useOverlapChooser } from './overlap/overlapChooser';
 import { useWaypointClusterSheet } from './waypoints/waypointTap';
 
 jest.mock('@features/photos/PhotoBottomCard', () => {
@@ -108,12 +109,16 @@ describe('useStoreBackLayers: the cards the stores hold', () => {
     return null;
   }
 
-  it('Back closes the team menu, a photo card and a cluster list', async () => {
+  it('Back closes the team menu, a photo card, a cluster list and the overlap chooser', async () => {
     await render(<StoreProbe />);
     await act(async () => {
       useTeamSheet.setState({ sheet: { kind: 'menu' } as never });
       usePhotoCard.setState({ target: {} as never });
       useWaypointClusterSheet.getState().open(['a', 'b']);
+      useOverlapChooser.getState().open([
+        { kind: 'trail', id: 't1', distanceM: 2 },
+        { kind: 'area', id: 'a1', sizeM2: 900 },
+      ]);
     });
     await act(async () => void pressBack());
     expect(useTeamSheet.getState().sheet).toBeNull();
@@ -121,6 +126,8 @@ describe('useStoreBackLayers: the cards the stores hold', () => {
     expect(usePhotoCard.getState().target).toBeNull();
     await act(async () => void pressBack());
     expect(useWaypointClusterSheet.getState().keys).toBeNull();
+    await act(async () => void pressBack());
+    expect(useOverlapChooser.getState().hits).toBeNull();
     expect(pressBack()).toBe(false);
   });
 });
