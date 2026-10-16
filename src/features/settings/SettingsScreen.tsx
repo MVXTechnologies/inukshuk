@@ -24,6 +24,7 @@ import { updateCurrentStrip } from '@features/map/infoStrip/stripSettings';
 import { BetaFeaturesSection } from './BetaFeaturesSection';
 import { CoordinateFormatSetting } from './CoordinateFormatSetting';
 import { NavigationButtonsSetting } from './NavigationButtonsSetting';
+import { DisplaySizeSetting } from './DisplaySizeSetting';
 import { PinSizeSetting } from './PinSizeSetting';
 import { UnitsSetting } from './UnitsSetting';
 import { ExtensionsSection } from './ExtensionsSection';
@@ -366,6 +367,8 @@ export function SettingsScreen() {
                 <UnitsSetting />
                 {/* #677: one app-wide coordinate format (map chip, waypoint cards, copies). */}
                 <CoordinateFormatSetting />
+                {/* #760: Small 85 % · Default 100 % · Large 115 %, applied as you tap. */}
+                <DisplaySizeSetting />
                 {/* #686: every waypoint pin on the map at 75–150 %. */}
                 <PinSizeSetting />
                 <List.Item title="Theme" description="Follow the system, or force light / dark" />
