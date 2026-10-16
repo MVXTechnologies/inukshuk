@@ -125,7 +125,8 @@ describe('bandModel', () => {
 
   it('others’ SOS: name, distance and direction, age; Navigate and Centre', () => {
     expect(bandModel(other!, opts)).toEqual({
-      title: 'SOS · Julie Tremblay',
+      title: 'Julie Tremblay',
+      tag: 'SOS',
       sub: '585 m NE · 2 min',
       a11y: 'SOS from Julie Tremblay, 585 m NE · 2 min',
       actions: ['navigate', 'centre'],
@@ -262,7 +263,7 @@ describe('where the active band shows (QA 2.6.1, #708)', () => {
     const base = { fabBottom: 120, drawChromeTop: 300 };
     expect(stripBandLayout({ ...base, drawMode: false, sosButtonShown: true })).toEqual({
       bottom: 128,
-      right: 88,
+      right: 76, // the lane inset: 8 dp past the SOS ring (#756)
       overDraw: false,
     });
     // A card or an area being drawn hides the SOS button: the band takes the width.

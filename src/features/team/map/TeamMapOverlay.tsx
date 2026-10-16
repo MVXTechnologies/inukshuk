@@ -8,6 +8,7 @@
  * for the card (paper-surface-ios-flex-collapse); its own state store so
  * MapScreen only routes the tap.
  */
+import { MAP_LANE_INSET } from '@core/map/mapChrome';
 import { stripBandLayout, type AlertBandPlace } from '@core/teamui/alertBands';
 import { rangeAndBearing } from '@core/teamui/positions';
 import { useExtensionPrefs } from '@features/extensions/prefs';
@@ -89,6 +90,7 @@ const dist = (m: number) => formatDistance(m, { style: 'short' });
 export function TeamMapOverlay({
   here,
   cardStyle,
+  cardFloating = false,
   cardSlotFree,
   fabBottom,
   panelTop,
@@ -102,6 +104,8 @@ export function TeamMapOverlay({
   /** My position, for distance and bearing. */
   here: { latitude: number; longitude: number } | null;
   cardStyle: StyleProp<ViewStyle>;
+  /** The card dock floats over the recording panel (its own side gaps). */
+  cardFloating?: boolean;
   cardSlotFree: boolean;
   /** Where the SOS button sits (above the bottom chrome). */
   fabBottom: number;
@@ -211,7 +215,12 @@ export function TeamMapOverlay({
       )}
       {!editing && draft === null && card && sheet !== null && (
         <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
-          <TeamSheetCard sheet={sheet} here={here} onPointActions={onPointActions} />
+          <TeamSheetCard
+            sheet={sheet}
+            here={here}
+            onPointActions={onPointActions}
+            floating={cardFloating}
+          />
         </View>
       )}
       {!drawing && draft === null && !card && cardSlotFree && hit === null && shapeCard && (
@@ -219,7 +228,9 @@ export function TeamMapOverlay({
           <TeamShapeCard here={here} onNavigate={onNavigate} screenFocused={screenFocused} />
         </View>
       )}
-      {signal && !drawing && <DrawAlertSnack style={{ bottom: fabBottom, right: 76 }} />}
+      {signal && !drawing && (
+        <DrawAlertSnack style={{ bottom: fabBottom, right: MAP_LANE_INSET }} />
+      )}
       {draft === null && !card && cardSlotFree && pin && (
         <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
           <TeamPinCard pin={pin} view={view} here={here} onClose={() => select(null)} />

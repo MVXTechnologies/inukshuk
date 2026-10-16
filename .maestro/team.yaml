@@ -343,6 +343,9 @@ tags:
     timeout: 30000
 - assertVisible: 'Your SOS is active'
 - takeScreenshot: team-sos-active
+# Review (#756): the SOS band under the pill (asserted just above), with the
+# SOS button on the right-hand column.
+- takeScreenshot: review-team-sos-band-light
 # Resolve takes the same hold as raising (#748): hold, "Let go", release.
 - longPressOn:
     id: 'team-band-sos-resolve'
@@ -375,13 +378,11 @@ tags:
     notVisible:
       id: 'team-band-sos'
     timeout: 5000
-# Rally here (from the panel; the map has no chip row, #743): the same 5 s
-# undo, then the pill's amber "!" (no gather band on the map). The pill opens
-# the panel on the gather: who gets there when, and End for its creator.
+# Meet here (the chip under the team pill, #757): the same 5 s undo, then the
+# pill's amber "!" (no gather band on the map). The pill opens the panel on
+# the gather: who gets there when, and End for its creator.
 - tapOn:
-    id: 'team-bar-pill'
-- tapOn:
-    id: 'team-panel-rally'
+    id: 'team-chip-rally'
     waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     visible:
@@ -418,7 +419,7 @@ tags:
     notVisible:
       id: 'team-bar-gather'
     timeout: 5000
-# A pin: a long-press on the map → Message pin, its card with the thread
+# A pin: a long-press on the map → Pin (the grid, #757), its card with the thread
 # (pins are made from a spot on the map, not from a menu).
 - longPressOn:
     point: '50%,55%'
@@ -445,11 +446,9 @@ tags:
 - assertVisible: '.*Fallen tree here.*'
 - takeScreenshot: team-pin
 - tapOn: 'Close'
-# Team chat → Threads (the panel's Chat): the pin's conversation, apart from the channel.
+# Team chat → Threads (the Chat chip under the pill, #757): the pin's conversation, apart from the channel.
 - tapOn:
-    id: 'team-bar-pill'
-- tapOn:
-    id: 'team-panel-chat'
+    id: 'team-chip-chat'
 - extendedWaitUntil:
     visible:
       id: 'team-chat-screen'
@@ -472,9 +471,7 @@ tags:
     optional: true
 - takeScreenshot: review-team-badges
 - tapOn:
-    id: 'team-bar-pill'
-- tapOn:
-    id: 'team-panel-chat'
+    id: 'team-chip-chat'
 - tapOn:
     id: 'team-chat-tab-threads'
 # A teammate's photo thread opens the photo's card on the map. Its comment

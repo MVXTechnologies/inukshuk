@@ -62,9 +62,9 @@ describe('MapScreen ↔ info strip', () => {
     expect(fn).toMatch(
       /open\.kind === 'waypoint'[\s\S]*setPointAt\(null\);\s*setViewWp\(\{ source: 'saved', id: open\.waypointId \}\);/,
     );
-    // A point: the point chip there, flown into view.
+    // A point: the point's card there (#757 c), flown into view.
     expect(fn).toMatch(
-      /setViewWp\(null\);\s*setPointAt\(open\.point\);\s*flyToPoint\(open\.point\);/,
+      /setViewWp\(null\);\s*setPointAsCard\(true\);\s*setPointAt\(open\.point\);\s*flyToPoint\(open\.point\);/,
     );
     expect(fn).toMatch(/setExtensionHit\(null\);/);
   });

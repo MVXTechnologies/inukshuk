@@ -277,13 +277,25 @@ function Band({
         accessibilityState={etaToggle ? { expanded: etasOpen } : undefined}
         testID={`${id}-text`}
       >
-        <View style={[styles.icon, sos ? styles.iconSos : styles.iconGather]}>
-          <Icon source={sos ? 'alert-octagon' : 'flag-variant'} size={22} color={ink} />
-        </View>
+        {m.tag !== null ? (
+          // "SOS" in the badge (#756): the title keeps the whole width for the name.
+          <View style={[styles.icon, styles.tag, { backgroundColor: ink }]} testID={`${id}-tag`}>
+            <Text style={[styles.tagText, { color: bg }]} allowFontScaling={false}>
+              {m.tag}
+            </Text>
+          </View>
+        ) : (
+          <View style={[styles.icon, sos ? styles.iconSos : styles.iconGather]}>
+            <Icon source={sos ? 'alert-octagon' : 'flag-variant'} size={22} color={ink} />
+          </View>
+        )}
         <View style={styles.flex}>
           {/* The fold chevron rides the title line: the detail line keeps the width. */}
           <View style={styles.titleRow}>
-            <Text style={[styles.l1, styles.shrink, { color: ink }]} numberOfLines={1}>
+            <Text
+              style={[styles.l1, styles.shrink, { color: ink }]}
+              numberOfLines={m.tag !== null ? 2 : 1}
+            >
               {m.title}
             </Text>
             {etaToggle && (
@@ -544,6 +556,8 @@ const styles = StyleSheet.create({
   textArea: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
   icon: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   iconSos: { borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)' },
+  tag: { borderRadius: 16 },
+  tagText: { fontSize: 10.5, lineHeight: 13, fontWeight: '900', letterSpacing: 0.3 },
   iconGather: { borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.12)' },
   l1: { fontSize: 14.5, lineHeight: 18, fontWeight: '800' },
   l2: { fontSize: 12.5, lineHeight: 17, fontWeight: '700' },

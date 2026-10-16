@@ -13,7 +13,8 @@ import { nodeCrypto } from '@core/team/testing/nodeCrypto';
 import { DEFAULT_INVITE } from '@core/teamui/invites';
 import { lifetimeMs } from '@core/teamui/lifetime';
 import type { TeamView } from '@core/teamui/view';
-import { DRAW_LAYERS } from '@core/teamdraw/mapStyle';
+import { FRAME_MS } from '@core/teamdraw/fade';
+import { DRAW_FADING_LAYERS, DRAW_FADING_SOURCE, DRAW_LAYERS } from '@core/teamdraw/mapStyle';
 import * as penModule from '@core/teamdraw/pen';
 import { PEN_INTERVAL_MS, penBody, toleranceM, type Stroke } from '@core/teamdraw/pen';
 import { defaultPrefs, penStyle } from '@core/teamdraw/style';
@@ -32,6 +33,7 @@ import { Alert, BackHandler, StyleSheet, View } from 'react-native';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
 
 import { TeamPanel } from '../bar/TeamPanel';
+import { TeamStatusBar } from '../bar/TeamStatusBar';
 import { useTeamMapFocus } from '../map/teamMapFocus';
 import { DrawAlertSnack } from './DrawAlertSnack';
 import { TeamShapeCard } from './ShapeCard';
@@ -81,6 +83,9 @@ jest.mock('@data/team/teamNotifications', () => ({
   onTeamNotificationTap: () => () => undefined,
   dismissTeamNotification: async () => undefined,
   setInAppAlarm: () => undefined,
+  armSos: () => undefined,
+  silenceSos: () => undefined,
+  SOS_TONE_MS: 8_000,
 }));
 jest.mock('@lib/errorReporting', () => ({ addBreadcrumb: jest.fn(), reportError: jest.fn() }));
 /** Renders of the drawing components (each reads the scheme tokens once per render). */
@@ -242,31 +247,25 @@ afterEach(async () => {
 const style = penStyle({ ...defaultPrefs(0), fadeMs: 30_000 });
 const arrow = (id: string): Stroke => ({ id, sh: 'arrow', pts: [QC, NEAR], style });
 
-describe('the team panel (the old team menu, #707)', () => {
-  it('has Draw right after Rally here, which opens drawing mode', async () => {
+describe('Draw, the chip under the team pill (#757)', () => {
+  it('opens drawing mode; the panel no longer repeats it', async () => {
+    await render(wrap(<TeamStatusBar top={8} here={null} onNavigate={jest.fn()} />));
+    await fireEvent.press(screen.getByTestId('team-chip-draw'));
+    await until(() => useTeamDrawStore.getState().active, 'drawing mode');
     await render(wrap(<TeamPanel top={0} here={null} />));
-    const ids = screen
-      .queryAllByTestId(/^team-panel-(chat|rally|draw|status)$/)
-      .map((n) => n.props.testID as string)
-      .filter((id, k, all) => all.indexOf(id) === k);
-    expect(ids).toEqual([
-      'team-panel-chat',
-      'team-panel-rally',
-      'team-panel-draw',
-      'team-panel-status',
-    ]);
-    await fireEvent.press(screen.getByTestId('team-panel-draw'));
-    expect(useTeamDrawStore.getState().active).toBe(true);
+    expect(screen.queryByTestId('team-panel-draw')).toBeNull();
   });
 
-  it('hides Draw and Rally for guests', async () => {
+  it('hides Draw and Meet here for guests', async () => {
     await stubView((v) => ({
       ...v,
       members: v.members.map((m) => ({ ...m, role: 'guest' as const })),
     }));
+    await render(wrap(<TeamStatusBar top={8} here={null} onNavigate={jest.fn()} />));
+    expect(screen.getByTestId('team-chip-chat')).toBeTruthy();
+    expect(screen.queryByTestId('team-chip-draw')).toBeNull();
+    expect(screen.queryByTestId('team-chip-rally')).toBeNull();
     await render(wrap(<TeamPanel top={0} here={null} />));
-    expect(screen.queryByTestId('team-panel-draw')).toBeNull();
-    expect(screen.queryByTestId('team-panel-rally')).toBeNull();
     expect(screen.queryByTestId('team-panel-rally-point')).toBeNull();
   });
 });
@@ -298,7 +297,7 @@ describe('drawing mode', () => {
     return { ...m, r, canvas };
   }
 
-  it('shows its bars in both themes, the tools at ≥ 52 dp, and nothing when closed', async () => {
+  it('shows its bars in both themes: five labelled tools, one row, and nothing when closed', async () => {
     const closed = await render(
       wrap(<TeamDrawMode mapRef={{ current: null }} cameraRef={{ current: null }} focused />),
     );
@@ -308,14 +307,39 @@ describe('drawing mode', () => {
       const { r } = await open(dark);
       expect(screen.getByTestId('team-draw-done')).toBeTruthy();
       expect(screen.getByTestId('team-draw-clear')).toBeTruthy();
-      for (const k of ['free', 'arrow', 'circle', 'rect']) {
-        const flat = Object.assign(
-          {},
-          ...[screen.getByTestId(`team-draw-tool-${k}`).props.style].flat(3),
-        );
-        expect(flat.width).toBeGreaterThanOrEqual(52);
-        expect(flat.height).toBeGreaterThanOrEqual(52);
+      // #756: Freehand · Arrow · Shape · Time · Undo, equal shares of one row, each labelled.
+      const ids = [
+        'team-draw-tool-free',
+        'team-draw-tool-arrow',
+        'team-draw-tool-shape',
+        'team-draw-time',
+        'team-draw-undo',
+      ];
+      const bar = StyleSheet.flatten(screen.getByTestId('team-draw-toolbar').props.style);
+      expect(bar.flexDirection).toBe('row');
+      expect(bar.flexWrap).toBeUndefined();
+      expect(bar).toMatchObject({ left: 6, right: 6 });
+      const labels: string[] = [];
+      for (const id of ids) {
+        const flat = StyleSheet.flatten(screen.getByTestId(id).props.style);
+        expect(flat).toMatchObject({ flex: 1, minWidth: 0 });
+        expect(flat.minHeight).toBeGreaterThanOrEqual(48);
+        const label = screen.getByTestId(`${id}-label`);
+        // One line, never cut: grows with the font up to the owner's 1.2× cap.
+        expect(label.props.numberOfLines).toBe(1);
+        expect(label.props.maxFontSizeMultiplier).toBe(1.2);
+        expect(label.props.adjustsFontSizeToFit).toBeUndefined();
+        labels.push(String(label.props.children));
       }
+      expect(labels).toEqual(['Freehand', 'Arrow', 'Shape', 'Time', 'Undo']);
+      // No Style button any more: its options live in each tool's panel.
+      expect(screen.queryByTestId('team-draw-style-button')).toBeNull();
+      // The top bar's title has the width (no pencil icon), its subtitle may wrap.
+      expect(screen.getByTestId('team-draw-title')).toHaveTextContent('Drawing');
+      expect(screen.getByText('Team sees it live').props.numberOfLines).toBe(2);
+      expect(StyleSheet.flatten(screen.getByTestId('team-draw-top').props.style).height).toBe(
+        undefined,
+      );
       // Undo is dimmed (the button's own state) until something is drawn.
       expect(screen.getByTestId('team-draw-undo').props.accessibilityState.disabled).toBe(true);
       await r.unmount();
@@ -336,26 +360,33 @@ describe('drawing mode', () => {
 
   it('keeps the tool between strokes, and Done or Back leaves', async () => {
     await open();
-    await fireEvent.press(screen.getByTestId('team-draw-tool-circle'));
+    // Shape opens the picker; picking a shape selects it and closes the picker.
+    await fireEvent.press(screen.getByTestId('team-draw-tool-shape'));
+    expect(screen.getByTestId('team-draw-panel-shape')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('team-draw-shape-rect'));
+    expect(useTeamDrawStore.getState().tool).toBe('rect');
+    expect(screen.queryByTestId('team-draw-panel')).toBeNull();
+    expect(screen.getByTestId('team-draw-tool-shape').props.accessibilityState.selected).toBe(true);
+    expect(screen.getByLabelText('Shape, Rectangle')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('team-draw-tool-shape'));
+    await fireEvent.press(screen.getByTestId('team-draw-shape-circle'));
     expect(useTeamDrawStore.getState().tool).toBe('circle');
-    expect(screen.getByTestId('team-draw-tool-circle').props.accessibilityState.selected).toBe(
-      true,
-    );
     await fireEvent.press(screen.getByTestId('team-draw-done'));
     expect(useTeamDrawStore.getState().active).toBe(false);
     expect(useTeamDrawStore.getState().tool).toBe('circle');
-    // Android Back = Done (the style closes first when it is open).
+    // Android Back = Done (an open panel closes first).
     const handlers: (() => boolean)[] = [];
     jest.spyOn(BackHandler, 'addEventListener').mockImplementation((_e, h) => {
       handlers.push(h as () => boolean);
       return { remove: () => undefined };
     });
     await open();
-    await fireEvent.press(screen.getByTestId('team-draw-style-button'));
+    await fireEvent.press(screen.getByTestId('team-draw-time'));
+    expect(screen.getByTestId('team-draw-panel')).toBeTruthy();
     await act(async () => {
       handlers[handlers.length - 1]!();
     });
-    expect(screen.queryByTestId('team-draw-style')).toBeNull();
+    expect(screen.queryByTestId('team-draw-panel')).toBeNull();
     expect(useTeamDrawStore.getState().active).toBe(true);
     await act(async () => {
       handlers[handlers.length - 1]!();
@@ -363,31 +394,49 @@ describe('drawing mode', () => {
     expect(useTeamDrawStore.getState().active).toBe(false);
   });
 
-  it('remembers the style (30 s by default; no red)', async () => {
+  it('remembers the style (30 s by default; no red), each option in its own tool’s panel', async () => {
     await open();
-    await fireEvent.press(screen.getByTestId('team-draw-style-button'));
-    expect(screen.getByTestId('team-draw-style')).toBeTruthy();
-    // 10 s · 30 s · 1 min · 5 min · 30 min · 4 h · Never: 30 s is on.
-    expect(screen.getByTestId('team-draw-fade-1').props.accessibilityState.selected).toBe(true);
+    // Freehand is the tool: a tap on it opens its options (colour, width, line).
+    await fireEvent.press(screen.getByTestId('team-draw-tool-free'));
+    expect(screen.getByTestId('team-draw-panel-free')).toBeTruthy();
     expect(screen.queryByTestId('team-draw-colour-8')).toBeNull();
     // Plain words (2.5.2 QA): "Line", not "Pencil"; "your colour", never its internal name.
     expect(screen.getByText('LINE')).toBeTruthy();
     expect(screen.queryByText('PENCIL')).toBeNull();
     expect(screen.getByTestId('team-draw-own-colour')).toHaveTextContent('● your colour');
+    // The sub-menu rule: no arrow heads and no fade times under Freehand.
+    expect(screen.queryByTestId('team-draw-head-0')).toBeNull();
+    expect(screen.queryByTestId('team-draw-fade-0')).toBeNull();
     // Centred: a full-width dock that centres a card of at most 360 dp.
-    const card = StyleSheet.flatten(screen.getByTestId('team-draw-style').props.style);
+    const card = StyleSheet.flatten(screen.getByTestId('team-draw-panel').props.style);
     expect(card).toMatchObject({ width: '100%', maxWidth: 360 });
     expect(card.left).toBeUndefined();
-    await fireEvent.press(screen.getByTestId('team-draw-fade-6'));
     await fireEvent.press(screen.getByTestId('team-draw-colour-3'));
     await fireEvent.press(screen.getByTestId('team-draw-dash-1'));
+    // Arrow: its own head options (and the shared colour), no dash.
+    await fireEvent.press(screen.getByTestId('team-draw-tool-arrow'));
+    expect(screen.queryByTestId('team-draw-panel')).toBeNull();
+    await fireEvent.press(screen.getByTestId('team-draw-tool-arrow'));
+    expect(screen.getByTestId('team-draw-panel-arrow')).toBeTruthy();
+    expect(screen.getByTestId('team-draw-head-0')).toBeTruthy();
+    expect(screen.queryByTestId('team-draw-dash-0')).toBeNull();
+    expect(screen.getByTestId('team-draw-colour-3').props.accessibilityState.selected).toBe(true);
+    // Time: the seven choices, 30 s on, as a grid at full size.
+    expect(screen.getByLabelText('Time, fades after 30 s')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('team-draw-time'));
+    expect(screen.getByTestId('team-draw-panel-time')).toBeTruthy();
+    expect(screen.getByTestId('team-draw-fade-1').props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId('team-draw-fade-6')).toBeTruthy();
+    expect(screen.getByText('30 min').props.adjustsFontSizeToFit).toBeUndefined();
+    await fireEvent.press(screen.getByTestId('team-draw-fade-6'));
     expect(useTeamDrawStore.getState().rawPrefs).toMatchObject({
       fadeMs: null,
       colour: 3,
       dashed: true,
     });
-    await fireEvent.press(screen.getByTestId('team-draw-style-close'));
-    expect(screen.queryByTestId('team-draw-style')).toBeNull();
+    expect(screen.getByLabelText('Time, fades after Never')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('team-draw-panel-close'));
+    expect(screen.queryByTestId('team-draw-panel')).toBeNull();
   });
 
   it('one finger draws an arrow, with its readout, sent at pen-up; Undo takes it back', async () => {
@@ -857,6 +906,51 @@ describe('the map layers', () => {
     });
     await r.unmount();
     expect(mockImages).toEqual([]);
+  });
+
+  it('a fading shape moves to its own source and fades per frame; the steady ones are not re-sent (#756)', async () => {
+    fakeClock();
+    const d = app.active!.draw;
+    d.finish(arrow('f1'), 1, null); // steady: never fades
+    d.finish(arrow('f2'), 1, 10_000); // fades over its last 5 s
+    await act(() => useTeamStore.getState().refresh());
+    await render(
+      wrap(<TeamDrawLayers glyphs="https://x/fonts/{fontstack}/{range}.pbf" zoom={15} />),
+    );
+    const fadingSource = () =>
+      [...mockSources].reverse().find((p) => p.id === DRAW_FADING_SOURCE) as
+        { data: { features: { properties: { op: number; drw: string } }[] } } | undefined;
+    // Outside the window: both on the steady source, no fading one.
+    expect(fadingSource()).toBeUndefined();
+    await act(async () => {
+      jest.advanceTimersByTime(5_200);
+    });
+    // Inside it: f2 alone on the fading source, under its own six layers.
+    const ids = new Set(mockLayers.map((l) => l.id as string));
+    for (const id of Object.values(DRAW_FADING_LAYERS)) expect(ids.has(id)).toBe(true);
+    const f2 = fadingSource()!.data.features;
+    expect(f2.length).toBeGreaterThan(0);
+    expect(f2.every((f) => f.properties.drw.endsWith(':f2'))).toBe(true);
+    // One second of fading: many small redraws of the fading source, none of the steady one.
+    const builds0 = drawLayerStats.builds;
+    const fading0 = drawLayerStats.fadingBuilds;
+    const ops: number[] = [];
+    for (let i = 0; i < 30; i++) {
+      await act(async () => {
+        jest.advanceTimersByTime(FRAME_MS + 1);
+      });
+      const op = fadingSource()!.data.features[0]!.properties.op;
+      if (ops[ops.length - 1] !== op) ops.push(op);
+    }
+    expect(drawLayerStats.builds - builds0).toBe(0);
+    // Measured: one rebuild per 0.01 step (~10 in this second near the window's start).
+    expect(drawLayerStats.fadingBuilds - fading0).toBeGreaterThanOrEqual(5);
+    expect(drawLayerStats.fadingBuilds - fading0).toBeLessThanOrEqual(31);
+    for (let i = 1; i < ops.length; i++) {
+      expect(ops[i - 1]! - ops[i]!).toBeGreaterThan(0);
+      expect(ops[i - 1]! - ops[i]!).toBeLessThanOrEqual(0.0101);
+    }
+    await realClock();
   });
 
   it('draws nothing without drawings or with the team extension hidden', async () => {

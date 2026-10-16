@@ -90,6 +90,11 @@ export function MapPointChip({
   );
 }
 
+/** The long-press point under its docked card (#757 c): the chip's anchor dot, larger. */
+export function MapPointDot() {
+  return <View style={styles.pointDot} pointerEvents="none" testID="map-point-dot" />;
+}
+
 /** One readout line inside {@link MapPointChip}. */
 export function MapPointLine({ text, muted = false }: { text: string; muted?: boolean }) {
   return (
@@ -336,6 +341,14 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '45deg' }],
   },
   // Small accent anchor dot sitting exactly on the tapped coordinate.
+  pointDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: wc.accent,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
   dot: {
     width: 7,
     height: 7,

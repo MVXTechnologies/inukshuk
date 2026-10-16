@@ -11,9 +11,11 @@ import { useCoordinateFormatter } from '@state/useCoordinateFormatter';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Text } from 'react-native-paper';
+
+import { PressGrid, type GridCell } from '@features/common/components/ActionGrid';
 
 import { MemberAvatar } from '../components';
 import { actionMessage } from '../messages';
@@ -26,6 +28,14 @@ import { startEditing } from './TrailEditor';
 import { loadTrackGeometry } from '@data/trackGeometry';
 import { useLibraryStore } from '@state/libraryStore';
 import { useTeamSheet, type TeamSheet } from './teamMode';
+import { FLOATING_CARD_GAP } from '@features/map/bottomLayers';
+
+/**
+ * Whether the card dock already floats (over the recording panel, with its
+ * own side gaps). Otherwise the card keeps them itself (#757 review): every
+ * bottom card floats with side margins and rounded corners, never flush.
+ */
+const DockFloating = createContext(false);
 
 const STATUS_ICON: Record<StatusId, string> = {
   ok: 'check-circle',
@@ -110,9 +120,14 @@ function Card({
   testID?: string;
 }) {
   const t = useSchemeTokens();
+  const floating = useContext(DockFloating);
   return (
     <View
-      style={[styles.card, { backgroundColor: t.elevation.level2, shadowColor: palette.shadow }]}
+      style={[
+        styles.card,
+        !floating && styles.inset,
+        { backgroundColor: t.elevation.level2, shadowColor: palette.shadow },
+      ]}
       testID={testID}
     >
       <View style={[styles.head, onBack && styles.headBack]}>
@@ -426,11 +441,10 @@ function SpotCard({
 }
 
 /**
- * Long-press in team mode (#744, mockup 6 option 1): four round buttons that
- * fit a 320 dp phone (Meet here, Message pin, Photo, More) over the text row
- * Navigate here / Coordinates / Convert. More opens a sub-panel in place
- * (back arrow): Task, Notify, Shared waypoint. Guests get neither Meet here,
- * Task nor Shared waypoint.
+ * Long-press in team mode (#757: #744 option 2, the wrapping grid): every
+ * action one tap away, five a row — Meet here, Pin, Photo, Task, Notify,
+ * Waypoint, Navigate, Coords, Convert. No More sub-panel. Guests get neither
+ * Meet here, Task nor Waypoint.
  */
 function PressCard({
   at,
@@ -445,159 +459,105 @@ function PressCard({
   const router = useRouter();
   const open = useTeamSheet((s) => s.open);
   const guest = useTeamStore((s) => s.view?.members.find((m) => m.isMe)?.role === 'guest');
-  const [more, setMore] = useState(false);
   // The user's coordinate format (#677; 6-decimal DD by default, #701).
   const formatCoords = useCoordinateFormatter();
   const sub = formatCoords(at[1], at[0]);
-  if (more) {
-    const rows: MoreRow[] = [
-      ...(guest
-        ? []
-        : [
-            {
-              icon: 'checkbox-marked-circle-plus-outline',
-              label: 'Task',
-              testID: 'team-press-task',
-              opens: true,
-              run: () => {
-                onClose();
-                router.push(`/team/task-new?ak=point&la=${at[1]}&lo=${at[0]}` as never);
-              },
-            },
-          ]),
-      {
-        icon: 'bell-ring-outline',
-        label: 'Notify',
-        testID: 'team-press-notify',
-        opens: true,
-        run: () => open({ kind: 'notify', at }),
-      },
-      ...(guest
-        ? []
-        : [
-            {
-              icon: 'map-marker-plus-outline',
-              label: 'Shared waypoint',
-              testID: 'team-press-waypoint',
-              opens: false,
-              run: () => {
-                onClose();
-                const err = teamService()?.active?.shareWaypoint({
-                  latitude: at[1],
-                  longitude: at[0],
-                  label: 'Waypoint',
-                });
-                if (!err) useTeamStore.getState().refresh();
-              },
-            },
-          ]),
-    ];
-    return (
-      <Card
-        title="More here"
-        sub={sub}
-        onBack={() => setMore(false)}
-        onClose={onClose}
-        testID="team-press-more-card"
-      >
-        <View>
-          {rows.map((r) => (
-            <Pressable
-              key={r.testID}
-              onPress={r.run}
-              style={({ pressed }) => [
-                styles.moreRow,
-                { borderTopColor: t.outlineVariant },
-                pressed && { backgroundColor: t.surfaceVariant },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={r.label}
-              testID={r.testID}
-            >
-              <Icon source={r.icon} size={24} color={t.ink} />
-              <Text variant="bodyLarge" style={[styles.flex, { color: t.ink }]}>
-                {r.label}
-              </Text>
-              {r.opens && <Icon source="chevron-right" size={22} color={t.inkMuted} />}
-            </Pressable>
-          ))}
-        </View>
-      </Card>
-    );
-  }
-  return (
-    <Card title="Here" sub={sub} icon="crosshairs" onClose={onClose} testID="team-press-card">
-      <View style={styles.roundRow} testID="team-press-row">
-        {!guest && (
-          <Round
-            icon="flag-variant"
-            label="Meet here"
-            testID="team-press-rally"
-            onPress={() => {
+  const point = (what: 'navigate' | 'coordinates' | 'convert') => () => {
+    onClose();
+    onPointActions(at, what);
+  };
+  const cells: GridCell[] = [
+    ...(guest
+      ? []
+      : [
+          {
+            icon: 'flag-variant',
+            label: 'Meet here',
+            testID: 'team-press-rally',
+            accent: { bg: t.team.gather, ink: t.team.gatherInk },
+            run: () => {
               onClose();
               teamService()?.active?.setRally(at[0], at[1]);
               useTeamStore.getState().refresh();
-            }}
-          />
-        )}
-        <Round
-          icon="map-marker-account-outline"
-          label="Message pin"
-          testID="team-press-pin"
-          onPress={() => {
-            onClose();
-            usePinDraft.getState().open(at[0], at[1]);
-          }}
-        />
-        <Round
-          icon="camera-outline"
-          label="Photo"
-          testID="team-press-photo"
-          onPress={() => askPhotoHere(at, null, onClose)}
-        />
-        <Round
-          icon="dots-horizontal"
-          label="More"
-          testID="team-press-more"
-          onPress={() => setMore(true)}
-        />
-      </View>
-      <View style={[styles.secondary, { borderTopColor: t.outlineVariant }]}>
-        {(
-          [
-            ['navigate', 'Navigate here'],
-            ['coordinates', 'Coordinates'],
-            ['convert', 'Convert'],
-          ] as const
-        ).map(([what, label]) => (
-          <Pressable
-            key={what}
-            onPress={() => {
+            },
+          },
+        ]),
+    {
+      icon: 'map-marker-account-outline',
+      label: 'Pin',
+      testID: 'team-press-pin',
+      run: () => {
+        onClose();
+        usePinDraft.getState().open(at[0], at[1]);
+      },
+    },
+    {
+      icon: 'camera-outline',
+      label: 'Photo',
+      testID: 'team-press-photo',
+      run: () => askPhotoHere(at, null, onClose),
+    },
+    ...(guest
+      ? []
+      : [
+          {
+            icon: 'checkbox-marked-circle-plus-outline',
+            label: 'Task',
+            testID: 'team-press-task',
+            run: () => {
               onClose();
-              onPointActions(at, what);
-            }}
-            accessibilityRole="button"
-            testID={`team-press-${what}`}
-            hitSlop={8}
-          >
-            <Text variant="labelLarge" style={{ color: t.inkVariant }}>
-              {label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+              router.push(`/team/task-new?ak=point&la=${at[1]}&lo=${at[0]}` as never);
+            },
+          },
+        ]),
+    {
+      icon: 'bell-ring-outline',
+      label: 'Notify',
+      testID: 'team-press-notify',
+      run: () => open({ kind: 'notify', at }),
+    },
+    ...(guest
+      ? []
+      : [
+          {
+            icon: 'map-marker-plus-outline',
+            label: 'Waypoint',
+            testID: 'team-press-waypoint',
+            run: () => {
+              onClose();
+              const err = teamService()?.active?.shareWaypoint({
+                latitude: at[1],
+                longitude: at[0],
+                label: 'Waypoint',
+              });
+              if (!err) useTeamStore.getState().refresh();
+            },
+          },
+        ]),
+    {
+      icon: 'navigation-variant-outline',
+      label: 'Navigate',
+      testID: 'team-press-navigate',
+      run: point('navigate'),
+    },
+    {
+      icon: 'map-marker-radius-outline',
+      label: 'Coords',
+      testID: 'team-press-coordinates',
+      run: point('coordinates'),
+    },
+    {
+      icon: 'swap-horizontal',
+      label: 'Convert',
+      testID: 'team-press-convert',
+      run: point('convert'),
+    },
+  ];
+  return (
+    <Card title="Here" sub={sub} icon="crosshairs" onClose={onClose} testID="team-press-card">
+      <PressGrid cells={cells} testID="team-press-grid" />
     </Card>
   );
-}
-
-/** A row of the long-press card's More sub-panel. */
-interface MoreRow {
-  icon: string;
-  label: string;
-  testID: string;
-  /** It opens a screen or a card (a chevron), rather than acting at once. */
-  opens: boolean;
-  run: () => void;
 }
 
 /** Marks at one spot (a cluster at its limit): pick one. */
@@ -654,6 +614,23 @@ function ListCard({ items, onClose }: { items: TeamMarkHit[]; onClose: () => voi
 }
 
 export function TeamSheetCard({
+  floating = false,
+  ...props
+}: {
+  sheet: TeamSheet;
+  here: { latitude: number; longitude: number } | null;
+  onPointActions: (at: [number, number], what: 'navigate' | 'coordinates' | 'convert') => void;
+  /** The dock floats already (over the recording panel): no side gaps of its own. */
+  floating?: boolean;
+}) {
+  return (
+    <DockFloating.Provider value={floating}>
+      <SheetCard {...props} />
+    </DockFloating.Provider>
+  );
+}
+
+function SheetCard({
   sheet,
   here,
   onPointActions,
@@ -700,17 +677,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
   },
+  inset: { marginHorizontal: FLOATING_CARD_GAP, marginBottom: FLOATING_CARD_GAP },
   head: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 4 },
   headBack: { paddingLeft: 0 },
   back: { margin: 0 },
-  moreRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    minHeight: 52,
-    paddingHorizontal: 6,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
   roundRow: { flexDirection: 'row', justifyContent: 'space-around' },
   roundItem: { alignItems: 'center', gap: 4, width: 64 },
   roundBtn: {
@@ -733,10 +703,4 @@ const styles = StyleSheet.create({
     minHeight: 40,
   },
   listRow: { borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 10 },
-  secondary: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 10,
-  },
 });

@@ -1,0 +1,110 @@
+# Subflow of team-draw.yaml: the owner's review screenshots of team mode
+# (#756/#757) in the current theme, named review-*-${THEME}.png (uploaded by
+# e2e.yml). Starts and ends on the map in team mode, with a task of mine in
+# the list. Screenshots only: each shot first waits for, or asserts, the
+# element it shows; nothing here asserts the look itself.
+appId: com.inukshuk.app
+---
+# The team pill, its three chips (Chat, Meet here, Draw) and the SOS button
+# on the right-hand column (#756/#757).
+- extendedWaitUntil:
+    visible:
+      id: 'team-bar-pill'
+    timeout: 10000
+- assertVisible:
+    id: 'team-chip-chat'
+- assertVisible:
+    id: 'team-chip-rally'
+- assertVisible:
+    id: 'team-chip-draw'
+- assertVisible:
+    id: 'team-sos-button'
+- takeScreenshot: review-team-map-${THEME}
+# The slim team panel: My status, members, Tasks, Rally at a point, Manage.
+- tapOn:
+    id: 'team-bar-pill'
+- extendedWaitUntil:
+    visible:
+      id: 'team-panel'
+    timeout: 5000
+- assertVisible:
+    id: 'team-panel-status'
+- assertNotVisible:
+    id: 'team-panel-chat'
+- takeScreenshot: review-team-panel-${THEME}
+# The task list from the panel: Edit and Delete visible on my task.
+- tapOn:
+    id: 'team-panel-tasks'
+- extendedWaitUntil:
+    visible:
+      id: 'team-tasks-screen'
+    timeout: 5000
+- extendedWaitUntil:
+    visible:
+      id: 'team-task-edit'
+    timeout: 5000
+- assertVisible:
+    id: 'team-task-delete'
+- takeScreenshot: review-team-tasks-${THEME}
+- tapOn: 'Back'
+- extendedWaitUntil:
+    visible:
+      id: 'team-bar-pill'
+    timeout: 10000
+# The team long-press grid (#757 b).
+- longPressOn:
+    point: '50%,55%'
+- extendedWaitUntil:
+    visible:
+      id: 'team-press-card'
+    timeout: 5000
+- assertVisible:
+    id: 'team-press-grid'
+- takeScreenshot: review-team-press-grid-${THEME}
+- tapOn: 'Close'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-press-card'
+    timeout: 5000
+# Drawing mode: the top bar and the tool bar, then the Shape and Time panels.
+- tapOn:
+    id: 'team-chip-draw'
+- extendedWaitUntil:
+    visible:
+      id: 'team-draw-toolbar'
+    timeout: 5000
+- assertVisible:
+    id: 'team-draw-top'
+- takeScreenshot: review-team-draw-${THEME}
+- tapOn:
+    id: 'team-draw-tool-shape'
+- extendedWaitUntil:
+    visible:
+      id: 'team-draw-panel-shape'
+    timeout: 5000
+- takeScreenshot: review-team-draw-shape-${THEME}
+- tapOn:
+    id: 'team-draw-panel-close'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-draw-panel'
+    timeout: 5000
+- tapOn:
+    id: 'team-draw-time'
+- extendedWaitUntil:
+    visible:
+      id: 'team-draw-panel-time'
+    timeout: 5000
+- takeScreenshot: review-team-draw-time-${THEME}
+- tapOn:
+    id: 'team-draw-panel-close'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-draw-panel'
+    timeout: 5000
+- tapOn:
+    id: 'team-draw-done'
+- extendedWaitUntil:
+    visible:
+      id: 'team-bar-pill'
+    timeout: 5000

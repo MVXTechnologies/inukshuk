@@ -1,3 +1,4 @@
+import { MAP_STACK_GAP } from '@core/map/mapChrome';
 import type { ViewStyle } from 'react-native';
 
 import { MAP_OVERLAY_Z } from './overlayOrder';
@@ -112,8 +113,12 @@ export function rowLiftAboveColumnBottom(columnHeight: number, rowY: number): nu
   return Math.max(0, columnHeight - rowY);
 }
 
-/** Gap between the team SOS button (#707; once the team button) and the top of the bottom column. */
-export const TEAM_FAB_GAP = 16;
+/**
+ * Gap between the team SOS button's bottom edge (#707; once the team button)
+ * and the top of the bottom column: the rail's own button gap (#756), so the
+ * SOS reads as one more button of the rail's column.
+ */
+export const TEAM_FAB_GAP = MAP_STACK_GAP;
 
 /**
  * Where the team SOS button sits: just above the whole bottom column (the

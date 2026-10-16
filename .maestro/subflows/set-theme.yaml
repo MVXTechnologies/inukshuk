@@ -1,0 +1,41 @@
+# Subflow: set the app theme to ${NEXT} (Dark or System) in Settings → App
+# settings → Theme, as recording-check.yaml and extensions-review.yaml do,
+# then come back to the map. Starts and ends on the Map tab.
+appId: com.inukshuk.app
+---
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Settings'
+    timeout: 15000
+- tapOn: 'Settings'
+- extendedWaitUntil:
+    visible: 'App settings.*'
+    timeout: 15000
+# Expand App settings (guarded: the accordion animates), then scroll to the
+# Theme segment with the standard timeout (see extensions-review.yaml).
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Keep screen awake.*'
+          commands:
+            - tapOn: 'App settings.*'
+      - extendedWaitUntil:
+          visible: 'Keep screen awake.*'
+          timeout: 5000
+- scrollUntilVisible:
+    element:
+      text: ${NEXT}
+    direction: DOWN
+- tapOn: ${NEXT}
+- assertVisible: 'Theme.*'
+- tapOn: 'Back'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 15000

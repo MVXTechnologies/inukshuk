@@ -1,4 +1,5 @@
 import type { OverlayRow } from '@core/map/overlayTabs';
+import { MAP_EDGE_INSET, MAP_STACK_GAP } from '@core/map/mapChrome';
 import { useSettingsStore } from '@state/settingsStore';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -153,7 +154,13 @@ export function MapControlsRail(props: Props) {
 }
 
 const styles = StyleSheet.create({
-  rightControls: { position: 'absolute', right: 16, gap: 8, alignItems: 'flex-end' },
+  // The rail's column (`@core/map/mapChrome`): the team SOS button shares its axis (#756).
+  rightControls: {
+    position: 'absolute',
+    right: MAP_EDGE_INSET,
+    gap: MAP_STACK_GAP,
+    alignItems: 'flex-end',
+  },
   // While a sheet is up, the rail must stack above its backdrop.
   railAboveBackdrop: { zIndex: 5 },
   backdrop: { ...StyleSheet.absoluteFill, zIndex: 4 },

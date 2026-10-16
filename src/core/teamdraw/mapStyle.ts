@@ -25,13 +25,33 @@ export const DRAW_LAYERS = {
   head: 'team-draw-head',
   sym: 'team-draw-sym',
 } as const;
-/** The layers a tap is tested against. */
+/**
+ * The shapes inside their fade window (#756) on a source of their own, with
+ * the same six layers: they redraw every frame while they fade, and the
+ * steady shapes on `team-draw` are never re-sent for it. Each fading layer
+ * sits just under its steady twin (a fading shape is older: under newer ones).
+ */
+export const DRAW_FADING_SOURCE = 'team-draw-fading';
+export const DRAW_FADING_LAYERS = {
+  fill: 'team-draw-fading-fill',
+  casing: 'team-draw-fading-casing',
+  line: 'team-draw-fading-line',
+  dash: 'team-draw-fading-dash',
+  head: 'team-draw-fading-head',
+  sym: 'team-draw-fading-sym',
+} as const;
+/** The layers a tap is tested against (steady and fading). */
 export const DRAW_TAP_LAYERS = [
   DRAW_LAYERS.fill,
   DRAW_LAYERS.line,
   DRAW_LAYERS.dash,
   DRAW_LAYERS.head,
   DRAW_LAYERS.sym,
+  DRAW_FADING_LAYERS.fill,
+  DRAW_FADING_LAYERS.line,
+  DRAW_FADING_LAYERS.dash,
+  DRAW_FADING_LAYERS.head,
+  DRAW_FADING_LAYERS.sym,
 ];
 
 /** Sprite density (px per dp) of `assets/map/draw` (scripts/map/build-draw-icons.mjs). */

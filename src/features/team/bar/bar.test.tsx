@@ -4,7 +4,11 @@
  * the in-app alarm, in both themes. Timers are jest's (modern fake timers):
  * no real sleeps; the clock moves only when a test advances it.
  */
+import { contrastRatio } from '@core/color/contrast';
+import { HOLD_SCALE_MAX, holdScale } from '@core/teamui/holdScale';
+import { SOS_HOLD_MS } from '@core/teamui/undo';
 import { IMPERIAL, METRIC } from '@core/format';
+import { MAP_BUTTON, MAP_EDGE_INSET, MAP_STACK_GAP } from '@core/map/mapChrome';
 import { defaultExtensionPrefs } from '@core/extensions/prefs';
 import { nodeCrypto } from '@core/team/testing/nodeCrypto';
 import type { TeamRally, TeamSos } from '@core/teamui/field';
@@ -16,19 +20,22 @@ import { MemoryTeamDisk } from '@data/team/teamDisk';
 import { TeamService } from '@data/team/teamService';
 import { useSettingsStore } from '@state/settingsStore';
 import { useTeamStore } from '@state/teamStore';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import { AppState, StyleSheet, Vibration } from 'react-native';
+import { AppState, StyleSheet, Vibration, type StyleProp, type ViewStyle } from 'react-native';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
+import * as Reanimated from 'react-native-reanimated';
+
+import { teamFabBottom } from '@features/map/bottomLayers';
 
 import { useTeamMapSelection } from '../map/TeamMapOverlay';
 import { useTeamSheet } from '../map/teamMode';
 import { AlertBands } from './AlertBands';
 import { usePendingAlert } from './pendingAlert';
-import { ALARM_MAX_MS, RESOUND_MS, SosAlarmBanner } from './SosAlarmBanner';
-import { SosButton } from './SosButton';
+import { RESOUND_MS, SosAlarmBanner } from './SosAlarmBanner';
+import { RING_PAD, SosButton, SWELL_RELEASE_SPRING } from './SosButton';
 import { TeamPanel } from './TeamPanel';
-import { TeamStatusBar, useTeamBarLayout } from './TeamStatusBar';
+import { CHIP, CHIP_LABEL_MAX_SCALE, TeamStatusBar, useTeamBarLayout } from './TeamStatusBar';
 import { UNDO_SNACK_LIFT, UndoSnack } from './UndoSnack';
 
 const mockPush = jest.fn();
@@ -51,6 +58,7 @@ jest.mock('@data/storage', () => ({
   deleteFileAt: jest.fn(),
 }));
 const mockNotify = jest.fn(async (_n: unknown) => undefined);
+const mockSilence = jest.fn();
 jest.mock('@data/team/teamNotifications', () => ({
   buzzRally: () => undefined,
   notifyTeam: (n: unknown) => mockNotify(n),
@@ -58,6 +66,9 @@ jest.mock('@data/team/teamNotifications', () => ({
   dismissTeamNotification: async () => undefined,
   setInAppAlarm: () => undefined,
   SOS_VIBRATION: [0, 900, 250, 900],
+  armSos: () => undefined,
+  silenceSos: (id: string) => mockSilence(id),
+  SOS_TONE_MS: 8_000,
 }));
 jest.mock('@lib/errorReporting', () => ({ addBreadcrumb: jest.fn(), reportError: jest.fn() }));
 jest.mock('react-native-safe-area-context', () => ({
@@ -184,7 +195,7 @@ function crew(over: { soses?: TeamSos[]; rally?: TeamRally | null; solo?: boolea
 
 describe('the team status bar (#707)', () => {
   it.each(THEMES)(
-    'pill, faces and the chat’s unread; no chip row on the map; a tap opens the panel (dark: %s)',
+    'pill and faces; Chat (unread), Meet here and Draw as pills under it; a tap opens the panel (dark: %s)',
     async (dark) => {
       crew();
       await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />, dark));
@@ -193,22 +204,50 @@ describe('the team status bar (#707)', () => {
           /^Chic-Chocs crew: 4 of 6 online, looking for teammates.*, 3 unread in chat$/,
         ),
       ).toBeTruthy();
-      expect(screen.getByTestId('team-bar-status').props.children).toBe('4/6');
-      expect(screen.getByTestId('team-bar-unread')).toBeTruthy();
+      expect(screen.getByTestId('team-bar-status')).toHaveTextContent('4/6 online ·');
+      // #757: the count rides the Chat chip, not the faces.
+      expect(screen.queryByTestId('team-bar-unread')).toBeNull();
+      expect(screen.getByLabelText('Chat, 3 unread')).toBeTruthy();
       expect(screen.getByText('3')).toBeTruthy();
-      // Chat, Rally here and Draw live in the panel now (#743).
-      expect(screen.queryByTestId(/^team-chip-/)).toBeNull();
+      const chips = screen
+        .queryAllByTestId(/^team-chip-(chat|rally|draw)$/)
+        .map((n) => n.props.testID as string)
+        .filter((id, k, all) => all.indexOf(id) === k);
+      expect(chips).toEqual(['team-chip-chat', 'team-chip-rally', 'team-chip-draw']);
+      expect(screen.getByTestId('team-chip-rally-label')).toHaveTextContent('Meet here');
+      await fireEvent.press(screen.getByTestId('team-chip-chat'));
+      expect(mockPush).toHaveBeenCalledWith('/team/chat');
       expect(screen.queryByTestId('team-bar-gather')).toBeNull();
       await fireEvent.press(screen.getByTestId('team-bar-pill'));
       expect(useTeamSheet.getState().sheet).toEqual({ kind: 'menu' });
     },
   );
 
+  it.each(THEMES)(
+    'the status words read on the pill: each span ≥ 4.5:1 (dark: %s; #756 review)',
+    async (dark) => {
+      for (const solo of [true, false]) {
+        crew(solo ? { solo: true } : {});
+        const r = await render(
+          wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />, dark),
+        );
+        const bg = String(
+          StyleSheet.flatten(screen.getByTestId('team-bar-pill').props.style).backgroundColor,
+        );
+        for (const id of ['team-bar-status-count', 'team-bar-status-muted']) {
+          const color = String(StyleSheet.flatten(screen.getByTestId(id).props.style).color);
+          expect(contrastRatio(color, bg)).toBeGreaterThanOrEqual(4.5);
+        }
+        await r.unmount();
+      }
+    },
+  );
+
   it('solo: "Only you"; offline reads "Offline"', async () => {
     crew({ solo: true });
     const r = await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />));
-    expect(screen.getByTestId('team-bar-status').props.children).toBe('Only you');
-    expect(screen.queryByTestId(/^team-chip-/)).toBeNull();
+    expect(screen.getByTestId('team-bar-status')).toHaveTextContent('Only you ·');
+    expect(screen.getByTestId('team-chip-chat')).toBeTruthy();
     await r.unmount();
     crew();
     // Not syncing; the newest word from anyone is Sam's, 8 min ago.
@@ -220,17 +259,17 @@ describe('the team status bar (#707)', () => {
       })),
     );
     await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />));
-    expect(screen.getByTestId('team-bar-status').props.children).toBe('Offline · 8 min');
+    expect(screen.getByTestId('team-bar-status')).toHaveTextContent('Offline · 8 min');
   });
 
   it('while the mesh starts at launch: "Connecting…", not a flash of "Offline" (QA 2.6.1)', async () => {
     crew();
     await act(async () => useTeamStore.setState({ meshRunning: false, meshWanted: true }));
     await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />));
-    expect(screen.getByTestId('team-bar-status').props.children).toBe('Connecting…');
+    expect(screen.getByTestId('team-bar-status')).toHaveTextContent('Connecting…');
     expect(screen.queryByText(/Offline/)).toBeNull();
     await act(async () => useTeamStore.setState({ meshRunning: true }));
-    expect(screen.getByTestId('team-bar-status').props.children).toBe('4/6');
+    expect(screen.getByTestId('team-bar-status')).toHaveTextContent('4/6 online ·');
   });
 
   it('publishes the column height for the chips under it', async () => {
@@ -290,7 +329,7 @@ describe('a gather: the pill’s "!" and the panel, no band on the map (#743)', 
     crew({ rally, soses: [sos] });
     await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />));
     expect(screen.getByTestId('team-band-sos')).toBeTruthy();
-    expect(screen.getByText('SOS · Julie Tremblay')).toBeTruthy();
+    expect(screen.getByText('Julie Tremblay')).toBeTruthy();
     // No "+1" folding the gather under it: the gather is not a map band.
     expect(screen.queryByTestId('team-band-more')).toBeNull();
     expect(screen.getByTestId('team-bar-gather')).toBeTruthy();
@@ -331,9 +370,9 @@ describe('a gather: the pill’s "!" and the panel, no band on the map (#743)', 
       expect(rows).toHaveLength(6);
       expect(screen.getByLabelText('Alex Lavoie: 111 m, about 2 minutes')).toBeTruthy();
       expect(screen.getByLabelText('Sam Bouchard: position unknown')).toBeTruthy();
-      // Chat, Rally here and Draw are in the panel.
-      for (const id of ['chat', 'rally', 'draw', 'status'])
-        expect(screen.getByTestId(`team-panel-${id}`)).toBeTruthy();
+      // My status stays; Chat, Meet here and Draw are the chips under the pill (#757).
+      expect(screen.getByTestId('team-panel-status')).toBeTruthy();
+      expect(screen.queryByTestId('team-panel-chat')).toBeNull();
       await fireEvent.press(screen.getByTestId('team-panel-gather-go'));
       expect(nav).toHaveBeenCalledWith(46.81, -71.2);
       expect(useTeamSheet.getState().sheet).toBeNull();
@@ -403,6 +442,68 @@ describe('the team panel (#707)', () => {
   });
 });
 
+describe('no clipped text at 360 dp (#756)', () => {
+  it('the chips stay on one row of the 268 dp column, at the 1.15× label cap (#757)', async () => {
+    crew();
+    await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />));
+    const row = StyleSheet.flatten(screen.getByTestId('team-chips').props.style);
+    expect(row).toMatchObject({ flexDirection: 'row', flexWrap: 'nowrap' });
+    const column = StyleSheet.flatten(screen.getByTestId('team-bar-column').props.style);
+    const room = 360 - Number(column.left) - Number(column.right);
+    expect(room).toBe(268);
+    // Each chip's width at the cap: padding, icon, gap, label (bold ≤ 0.62 em a
+    // character), and the count badge; never shrunk, never cut.
+    let total = 0;
+    for (const [id, label, badge] of [
+      ['chat', 'Chat', 16],
+      ['rally', 'Meet here', 0],
+      ['draw', 'Draw', 0],
+    ] as const) {
+      const chip = StyleSheet.flatten(screen.getByTestId(`team-chip-${id}`).props.style);
+      expect(chip.flexShrink).toBe(0);
+      const text = screen.getByTestId(`team-chip-${id}-label`);
+      expect(text.props.numberOfLines).toBe(1);
+      expect(text.props.maxFontSizeMultiplier).toBe(CHIP_LABEL_MAX_SCALE);
+      const labelW = label.length * 0.62 * CHIP.label * CHIP_LABEL_MAX_SCALE;
+      total +=
+        CHIP.padLeft +
+        CHIP.icon +
+        CHIP.gap +
+        labelW +
+        (badge ? CHIP.gap + badge : 0) +
+        CHIP.padRight;
+    }
+    total += 2 * CHIP.rowGap;
+    expect(total).toBeLessThanOrEqual(room);
+  });
+
+  it('the panel no longer repeats Chat, Meet here or Draw; its status takes the width', async () => {
+    crew();
+    await render(wrap(<TeamPanel top={0} here={HERE} />));
+    for (const id of ['chat', 'rally', 'draw'])
+      expect(screen.queryByTestId(`team-panel-${id}`)).toBeNull();
+    expect(screen.getByTestId('team-panel-status')).toBeTruthy();
+    // The sync line wraps rather than ending in "…with 2 ph…".
+    expect(screen.getByTestId('team-panel-sync').props.numberOfLines).toBe(2);
+  });
+
+  it('the pill: smaller, half-covered faces and a 16 dp chevron give the name the width; it grows to 1.15×', async () => {
+    crew();
+    await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />));
+    const name = screen.getByTestId('team-bar-name');
+    expect(name.props.numberOfLines).toBe(1);
+    expect(name.props.maxFontSizeMultiplier).toBe(1.15);
+    const stacked = screen.getByTestId('team-face-stack').props.children as unknown[];
+    expect(stacked.length).toBeGreaterThan(1);
+    // 22 dp faces, the next one covering half (−11 dp).
+    const second = screen.getByTestId('team-face-stack').children[1] as unknown as {
+      props: { style: StyleProp<ViewStyle> };
+    };
+    expect(StyleSheet.flatten(second.props.style)?.marginLeft).toBe(-11);
+    expect(screen.getByTestId('team-bar-status').props.numberOfLines).toBe(1);
+  });
+});
+
 describe('the alert bands (#708)', () => {
   const sos = (owner: string, id: string, at = Date.now() - 120_000): TeamSos => ({
     id,
@@ -430,7 +531,11 @@ describe('the alert bands (#708)', () => {
     const nav = jest.fn();
     const centre = jest.fn();
     await render(wrap(<AlertBands here={HERE} onNavigate={nav} onCentre={centre} />, dark));
-    expect(screen.getByText('SOS · Julie Tremblay')).toBeTruthy();
+    expect(screen.getByText('Julie Tremblay')).toBeTruthy();
+    // #756: "SOS" rides the badge; the name alone takes the title, on up to 2 lines.
+    expect(screen.getByTestId('team-band-sos-tag')).toHaveTextContent('SOS');
+    expect(screen.getByText('Julie Tremblay').props.numberOfLines).toBe(2);
+    expect(screen.queryByText(/^SOS · /)).toBeNull();
     // Julie's live position (her SOS follows her).
     expect(screen.getByText('338 m NE · 2 min')).toBeTruthy();
     // In the user's units (#702).
@@ -529,8 +634,7 @@ describe('the alert bands (#708)', () => {
 });
 
 describe('the in-app SOS alarm (#708)', () => {
-  it.each(THEMES)('sounds and vibrates until Acknowledge (dark: %s)', async (dark) => {
-    fakeClock();
+  const julieSos = () =>
     crew({
       soses: [
         {
@@ -545,21 +649,41 @@ describe('the in-app SOS alarm (#708)', () => {
         },
       ],
     });
-    useSettingsStore.setState({ lastKnownPosition: HERE });
-    const vibrate = jest.spyOn(Vibration, 'vibrate');
-    const cancel = jest.spyOn(Vibration, 'cancel');
-    await act(async () =>
+  const ring = (teamName = 'T') =>
+    act(async () =>
       useTeamStore.setState({
         sosAlarm: {
           entity: 'sos:julie:s1',
           owner: 'julie',
           authorName: 'Julie Tremblay',
-          teamName: 'Chic-Chocs crew',
+          teamName,
           text: 'SOS · needs help',
           at: Date.now(),
         },
       }),
     );
+  /** When each re-post went out (fake ms). */
+  const postedAt: number[] = [];
+  beforeEach(() => {
+    postedAt.length = 0;
+    mockSilence.mockClear();
+    mockNotify.mockImplementation(async () => {
+      postedAt.push(Date.now());
+    });
+  });
+  afterEach(() => mockNotify.mockImplementation(async () => undefined));
+
+  it('re-sounds every 8 s, exactly the tone’s length (F → D loops, no gap, no overlap)', () => {
+    expect(RESOUND_MS).toBe(8_000);
+  });
+
+  it.each(THEMES)('sounds and vibrates until Acknowledge (dark: %s)', async (dark) => {
+    fakeClock();
+    julieSos();
+    useSettingsStore.setState({ lastKnownPosition: HERE });
+    const vibrate = jest.spyOn(Vibration, 'vibrate');
+    const cancel = jest.spyOn(Vibration, 'cancel');
+    await ring('Chic-Chocs crew');
     await render(wrap(<SosAlarmBanner />, dark));
     expect(screen.getByText('SOS · Julie Tremblay')).toBeTruthy();
     expect(screen.getByText('Needs help · 338 m NE of you · just now')).toBeTruthy();
@@ -577,103 +701,108 @@ describe('the in-app SOS alarm (#708)', () => {
     expect(useTeamStore.getState().sosAlarm).toBeNull();
     expect(screen.queryByTestId('team-sos-alarm')).toBeNull();
     expect(cancel).toHaveBeenCalled();
+    expect(mockSilence).toHaveBeenCalledWith('sos:julie:s1');
     await act(async () => {
       jest.advanceTimersByTime(RESOUND_MS * 3);
     });
     expect(mockNotify).toHaveBeenCalledTimes(2);
   });
 
-  it('stops sounding after ALARM_MAX_MS; Navigate acknowledges and goes to the map', async () => {
+  it('loops back to back for as long as it takes: never a timeout, never a long silence', async () => {
     fakeClock();
-    crew({
-      soses: [
-        {
-          id: 's1',
-          owner: 'julie',
-          lat: 46.804,
-          lng: -71.195,
-          text: '',
-          at: Date.now(),
-          resolved: false,
-          resolvedBy: null,
-        },
-      ],
-    });
-    await act(async () =>
-      useTeamStore.setState({
-        sosAlarm: {
-          entity: 'sos:julie:s1',
-          owner: 'julie',
-          authorName: 'Julie Tremblay',
-          teamName: 'T',
-          text: '',
-          at: Date.now(),
-        },
-      }),
-    );
+    julieSos();
     const cancel = jest.spyOn(Vibration, 'cancel');
     cancel.mockClear();
+    const t0 = Date.now();
+    await ring();
+    await render(wrap(<SosAlarmBanner />));
+    // Ten minutes unanswered (the old alarm went quiet after two).
+    for (let i = 0; i < 75; i++)
+      await act(async () => {
+        jest.advanceTimersByTime(RESOUND_MS);
+      });
+    // The ring itself plays the tone at 0 (the store's notification); then one per 8 s.
+    expect(postedAt).toEqual(Array.from({ length: 75 }, (_, i) => t0 + (i + 1) * 8_000));
+    expect(cancel).not.toHaveBeenCalled();
+    expect(screen.getByTestId('team-sos-alarm')).toBeTruthy();
+    await act(async () => useTeamStore.getState().acknowledgeAlarm());
+  });
+
+  it('Acknowledge mid-tone cuts the sound at once: notification gone, nothing more scheduled', async () => {
+    fakeClock();
+    julieSos();
+    const cancel = jest.spyOn(Vibration, 'cancel');
+    await ring();
     await render(wrap(<SosAlarmBanner />));
     await act(async () => {
-      jest.advanceTimersByTime(ALARM_MAX_MS + RESOUND_MS);
+      jest.advanceTimersByTime(RESOUND_MS);
     });
-    const sounded = mockNotify.mock.calls.length;
-    expect(sounded).toBe(ALARM_MAX_MS / RESOUND_MS - 1);
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+    // 3 s into that 8 s tone (mid stutter): Acknowledge.
+    await act(async () => {
+      jest.advanceTimersByTime(3_000);
+    });
+    cancel.mockClear();
+    expect(mockSilence).not.toHaveBeenCalled();
+    await fireEvent.press(screen.getByTestId('team-sos-acknowledge'));
+    // At once, without waiting for the tone to end.
+    expect(mockSilence).toHaveBeenCalledTimes(1);
+    expect(mockSilence).toHaveBeenCalledWith('sos:julie:s1');
     expect(cancel).toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(0);
+    await act(async () => {
+      jest.advanceTimersByTime(RESOUND_MS * 10);
+    });
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+    // The SOS stays (acknowledging is this phone's sound only).
+    expect(useTeamStore.getState().soses).toHaveLength(1);
+  });
+
+  it('Navigate acknowledges (silences at once) and goes to the map', async () => {
+    fakeClock();
+    julieSos();
+    await ring();
+    await render(wrap(<SosAlarmBanner />));
+    await act(async () => {
+      jest.advanceTimersByTime(RESOUND_MS + 2_000);
+    });
     await fireEvent.press(screen.getByTestId('team-sos-alarm-navigate'));
     expect(mockNavigate).toHaveBeenCalledWith('/');
     expect(useTeamStore.getState().sosAlarm).toBeNull();
-  });
-  it('the same SOS raised again (reopened after a resolve) rings again from the start', async () => {
-    fakeClock();
-    crew({
-      soses: [
-        {
-          id: 's1',
-          owner: 'julie',
-          lat: 46.804,
-          lng: -71.195,
-          text: '',
-          at: Date.now(),
-          resolved: false,
-          resolvedBy: null,
-        },
-      ],
+    expect(mockSilence).toHaveBeenCalledWith('sos:julie:s1');
+    await act(async () => {
+      jest.advanceTimersByTime(RESOUND_MS * 3);
     });
-    const ring = () =>
-      act(async () =>
-        useTeamStore.setState({
-          sosAlarm: {
-            entity: 'sos:julie:s1',
-            owner: 'julie',
-            authorName: 'Julie Tremblay',
-            teamName: 'T',
-            text: '',
-            at: Date.now(),
-          },
-        }),
-      );
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+  });
+
+  it('the same SOS raised again after Acknowledge rings again from the start (#752)', async () => {
+    fakeClock();
+    julieSos();
     await ring();
     const vibrate = jest.spyOn(Vibration, 'vibrate');
     vibrate.mockClear();
     await render(wrap(<SosAlarmBanner />));
     expect(vibrate).toHaveBeenCalledTimes(1);
-    // The first alarm has run its course (silent now, banner still up).
     await act(async () => {
-      jest.advanceTimersByTime(ALARM_MAX_MS + RESOUND_MS);
+      jest.advanceTimersByTime(RESOUND_MS + 1_000);
     });
+    await fireEvent.press(screen.getByTestId('team-sos-acknowledge'));
     const first = mockNotify.mock.calls.length;
     await act(async () => {
       jest.advanceTimersByTime(RESOUND_MS * 2);
     });
     expect(mockNotify.mock.calls.length).toBe(first);
-    // Resolved and raised again in one sync: the store rings the same entity anew.
+    // Raised again: the store rings the same entity anew.
+    const t1 = Date.now();
     await ring();
     expect(vibrate).toHaveBeenCalledTimes(2);
     await act(async () => {
       jest.advanceTimersByTime(RESOUND_MS * 2);
     });
     expect(mockNotify.mock.calls.length).toBe(first + 2);
+    expect(postedAt.slice(-2)).toEqual([t1 + 8_000, t1 + 16_000]);
+    await act(async () => useTeamStore.getState().acknowledgeAlarm());
   });
 });
 
@@ -739,6 +868,76 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
         <UndoSnack style={{}} />
       </>,
     );
+
+  it('swells while held, springs back on an early release, settles once armed; the target never moves', async () => {
+    const timing = jest.spyOn(Reanimated, 'withTiming');
+    const spring = jest.spyOn(Reanimated, 'withSpring');
+    await render(sender());
+    const b = screen.getByTestId('team-sos-button');
+    const target = () => StyleSheet.flatten(b.props.style);
+    const dock = () => StyleSheet.flatten(screen.getByTestId('team-sos-layer').props.style);
+    /** The drawing's scale as rendered (the mocked worklet runs at render). */
+    const scale = () => {
+      const st = StyleSheet.flatten(screen.getByTestId('team-sos-swell').props.style);
+      const t = (st.transform ?? []) as { scale?: number }[];
+      return t.find((x) => x.scale !== undefined)?.scale ?? 1;
+    };
+    /** Where the swell is headed: the scale at the progress last animated to. */
+    const target_ = (spy: jest.SpyInstance) => holdScale(Number(spy.mock.calls.at(-1)?.[0]));
+    const target0 = target();
+    const dock0 = dock();
+    // At rest: 1×.
+    expect(scale()).toBe(1);
+    // Held: the progress runs 0 → 1 over the hold (linear time, eased scale).
+    await fireEvent(b, 'pressIn');
+    expect(timing).toHaveBeenLastCalledWith(1, expect.objectContaining({ duration: SOS_HOLD_MS }));
+    await act(async () => {
+      jest.advanceTimersByTime(SOS_HOLD_MS / 2);
+    });
+    // Headed for the complete swell (the eased scale over progress is
+    // @core/teamui/holdScale's test).
+    expect(target_(timing)).toBeCloseTo(HOLD_SCALE_MAX, 6);
+    expect(target()).toEqual(target0);
+    expect(dock()).toEqual(dock0);
+    // An early release: it springs back to 1×, and nothing is sent.
+    await fireEvent(b, 'pressOut');
+    expect(spring).toHaveBeenLastCalledWith(0, SWELL_RELEASE_SPRING);
+    expect(target_(spring)).toBe(1);
+    expect(usePendingAlert.getState().pending).toBeNull();
+    // A complete hold: armed ("Let go"), the swell settles back before the finger lifts.
+    spring.mockClear();
+    await fireEvent(b, 'pressIn');
+    await act(async () => {
+      jest.advanceTimersByTime(SOS_HOLD_MS + 100);
+    });
+    expect(screen.getByTestId('team-sos-cue')).toHaveTextContent('Let go');
+    expect(spring).toHaveBeenCalledWith(0, SWELL_RELEASE_SPRING);
+    expect(target_(spring)).toBe(1);
+    expect(target()).toEqual(target0);
+    expect(dock()).toEqual(dock0);
+    await fireEvent(b, 'pressOut');
+    // It fires as before: the undo countdown starts; Undo it.
+    expect(usePendingAlert.getState().pending?.kind).toBe('sos');
+    await fireEvent.press(screen.getByTestId('team-undo'));
+    timing.mockRestore();
+    spring.mockRestore();
+  });
+
+  it('sits on the rail’s column: 16 dp from the edge, 48 dp, "Hold" inside the button (#756)', async () => {
+    await render(sender());
+    const dock = StyleSheet.flatten(screen.getByTestId('team-sos-layer').props.style);
+    // The ring reaches RING_PAD outside the button: the button's own edge is the rail's.
+    expect(dock.right + RING_PAD).toBe(MAP_EDGE_INSET);
+    expect(dock.bottom + RING_PAD).toBe(72);
+    const button = StyleSheet.flatten(screen.getByTestId('team-sos-button').props.style);
+    expect(button).toMatchObject({ width: MAP_BUTTON, height: MAP_BUTTON });
+    // The cue is inside the button, not a label under it.
+    expect(
+      within(screen.getByTestId('team-sos-button')).getByTestId('team-sos-cue'),
+    ).toHaveTextContent('Hold');
+    // The bottom row is MAP_STACK_GAP under the button, as the rail's buttons are apart.
+    expect(teamFabBottom(100, 40)).toBe(100 + 40 + MAP_STACK_GAP);
+  });
 
   it.each(THEMES)(
     'a short tap only hints; a 2 s hold then 5 s sends the SOS (dark: %s)',
@@ -978,12 +1177,8 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
     expect(usePendingAlert.getState().pending).toBeNull();
   });
 
-  it('Rally here (in the panel): one tap, 5 s undo, then the "!" and the gather; End in the panel', async () => {
+  it('Meet here (the chip under the pill): one tap, 5 s undo, then the "!" and the gather; End in the panel', async () => {
     await act(async () => useTeamStore.getState().refresh());
-    useTeamSheet.getState().open({ kind: 'menu' });
-    const panel = await render(wrap(<TeamPanel top={0} here={HERE} />));
-    await fireEvent.press(screen.getByTestId('team-panel-rally'));
-    await panel.unmount();
     await render(
       wrap(
         <>
@@ -992,6 +1187,7 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
         </>,
       ),
     );
+    await fireEvent.press(screen.getByTestId('team-chip-rally'));
     expect(screen.getByText('Rally point at your position')).toBeTruthy();
     expect(app.active!.rally()).toBeNull();
     await act(async () => {

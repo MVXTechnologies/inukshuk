@@ -17,6 +17,8 @@ export const drawChrome = {
   active: '#B6C98A',
   onActive: '#28340A',
   activeSoft: 'rgba(182,201,138,0.14)',
+  /** A tool bar button whose panel is open (not the current tool). */
+  openInk: '#DDE8C2',
   /** The readout chip over the map while drawing. */
   chip: 'rgba(24,27,31,0.9)',
   chipInk: 'rgba(255,255,255,0.95)',

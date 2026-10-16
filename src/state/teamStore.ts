@@ -23,10 +23,12 @@ import { useTeamDrawStore } from './teamDrawStore';
 import { appTeamService } from '@data/team/appTeam';
 import { activeEntities, AlertLedger, RallyBuzzGate } from '@core/teamui/alertLedger';
 import {
+  armSos,
   buzzRally,
   dismissTeamNotification,
   notifyTeam,
   setInAppAlarm,
+  silenceSos,
 } from '@data/team/teamNotifications';
 import type { MeshLinkStatus } from '@data/team/meshLink';
 import type { TeamRecord } from '@data/team/teamDisk';
@@ -205,8 +207,11 @@ export const useTeamStore = create<TeamStore>((set) => ({
   },
   dismissBanner: () => set({ banner: null }),
   acknowledgeAlarm: () => {
+    const entity = useTeamStore.getState().sosAlarm?.entity ?? null;
     setInAppAlarm(false);
     set({ sosAlarm: null });
+    // Silence now, mid-tone too: the notification (and its sound) goes; the SOS stays.
+    if (entity !== null) silenceSos(entity);
   },
 }));
 
@@ -267,6 +272,7 @@ export function wireTeamStore(): TeamService | null {
     if (alert.kind === 'sos' || alert.kind === 'rally') {
       const routed = ledger.route(alert, me);
       if (routed !== null && routed.channel === 'sos' && alert.entity) {
+        armSos(alert.entity);
         setInAppAlarm(true);
         useTeamStore.setState({
           sosAlarm: {

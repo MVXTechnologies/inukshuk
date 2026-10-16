@@ -5,20 +5,25 @@
  * of the life (the window clamped to [5 s, 15 min]), then gone. It never
  * reaches 0 % while it can still be tapped. "Never" does not fade.
  *
- * Opacity is quantised to 0.05 and the time left (shown in the badge only
- * inside the window) to 1 s under 10 s, 5 s under a minute and whole minutes
- * above, so the map source is rebuilt only when the quantised frame changes:
- * {@link nextChangeAt} says when that next happens (no timer at all while
- * every shape is long or Never and outside its window).
+ * Opacity is quantised to 0.01 (a step the eye cannot see) and the time left
+ * (shown in the badge only inside the window) to 1 s under 10 s, 5 s under a
+ * minute and whole minutes above, so the map source is rebuilt only when the
+ * quantised frame changes: {@link nextChangeAt} says when that next happens
+ * (no timer at all while every shape is long or Never and outside its window).
+ *
+ * #756: the fade was a 0.05 staircase redrawn at most once a second, so a
+ * 30 s shape dropped ~0.1 in one visible jump each second. The timer may now
+ * wake every frame ({@link FRAME_MS}) while a shape is fading, so what is
+ * drawn tracks {@link opacityAt} within one step at every instant.
  */
 
 export const FADE_SHARE = 0.25;
 export const FADE_MIN_MS = 5_000;
 export const FADE_MAX_MS = 15 * 60_000;
 export const FADE_FLOOR = 0.3;
-export const OPACITY_STEP = 0.05;
-/** The fade timer never wakes more often than this. */
-export const MIN_TICK_MS = 1_000;
+export const OPACITY_STEP = 0.01;
+/** The fade timer never wakes more often than this: one frame at 30 fps. */
+export const FRAME_MS = 33;
 
 /** What the fade needs of a shape: its creation and expiry (null = never), epoch ms. */
 export interface Life {
@@ -51,7 +56,13 @@ export function opacityAt(l: Life, now: number): number {
   return 1 - (1 - FADE_FLOOR) * smoothstep(p);
 }
 
-/** Opacity in steps of 0.05 (never below the floor while visible). */
+/** Is the shape inside its fade window at `now` (fading, not yet gone)? */
+export function isFading(l: Life, now: number): boolean {
+  if (l.expires === null || now >= l.expires) return false;
+  return now > fadeStart(l)!;
+}
+
+/** Opacity in steps of {@link OPACITY_STEP} (never below the floor while visible). */
 export function quantOpacity(o: number): number {
   if (o <= 0) return 0;
   const steps = Math.round(1 / OPACITY_STEP);
@@ -127,9 +138,9 @@ export function nextChangeAt(shapes: readonly Life[], now: number): number | nul
   return best;
 }
 
-/** How long the fade timer sleeps until `next` (at least {@link MIN_TICK_MS}), or null. */
+/** How long the fade timer sleeps until `next` (at least {@link FRAME_MS}), or null. */
 export function tickDelayMs(next: number | null, now: number): number | null {
-  return next === null ? null : Math.max(MIN_TICK_MS, next - now);
+  return next === null ? null : Math.max(FRAME_MS, next - now);
 }
 
 /**

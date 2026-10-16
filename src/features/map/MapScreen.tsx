@@ -77,7 +77,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { AppState, Linking, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { AppState, Linking, Share, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
@@ -107,6 +107,7 @@ import { useFollowTrail } from './nav/useFollowTrail';
 import { useNavigationStore } from '@state/navigationStore';
 import { DestinationMarkerPin } from './components/DestinationMarkerPin';
 import { MapCreditsButton, MapCreditsSheet } from './components/MapCredits';
+import { MAP_EDGE_INSET, MAP_LANE_INSET } from '@core/map/mapChrome';
 import { mapCredits } from '@core/map/mapCredits';
 import { bareTapAfterFocus } from '@core/map/mapTap';
 import { centreCursorPoint } from '@core/map/centreCursor';
@@ -230,7 +231,7 @@ import {
   waypointCardDockStyle,
 } from './bottomLayers';
 import { MAP_OVERLAY_Z } from './overlayOrder';
-import { destinationReadout } from '@core/geo/destination';
+import { destinationReadout, pointCardReadout } from '@core/geo/destination';
 import { nextWaypointLabel } from '@core/library/waypoints';
 import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
@@ -293,7 +294,13 @@ import { MarineLegend } from './marine/MarineLegend';
 import { marineChartSource, useMarineChart } from './marine/useMarineChart';
 import { MainMapPhotoChip, MainMapPhotoLayers, useMainMapPhotos } from '../photos/MainMapPhotos';
 import { PHOTO_TAP_FRESH_MS } from '@core/photos/mapStyle';
-import { MapPointChip, MapPointLine, hitMapPointChip } from './components/MapPointChip';
+import {
+  MapPointChip,
+  MapPointDot,
+  MapPointLine,
+  hitMapPointChip,
+} from './components/MapPointChip';
+import { PointCard, pointShareText, type PointCardAction } from './components/PointCard';
 import { PointChipScreenReaderActions } from './components/PointChipScreenReaderActions';
 import { usePointChip } from './usePointChip';
 import { ForecastCard } from './weather/ForecastCard';
@@ -842,6 +849,9 @@ export function MapScreen() {
   // are on. Tapping the chip itself dismisses it (and copies the coordinates
   // in the bare-map case) — hit-tested in onMapPress below.
   const [pointAt, setPointAt] = useState<LatLng | null>(null);
+  // #757 c: the point opened by a long-press (or a "show this point") is the
+  // bottom card with the grid; a weather or marine tap readout stays the bubble.
+  const [pointAsCard, setPointAsCard] = useState(false);
   // Frame-swap crossfade (wave A item 3): the throttled TIME's tile URL runs
   // through a two-slot A/B stage-then-flip so the outgoing frame stays on
   // screen while the incoming one prefetches at opacity 0 — the drape never
@@ -1975,6 +1985,7 @@ export function MapScreen() {
         setViewWp({ source: 'saved', id: open.waypointId });
       } else {
         setViewWp(null);
+        setPointAsCard(true);
         setPointAt(open.point);
         flyToPoint(open.point);
       }
@@ -2218,7 +2229,8 @@ export function MapScreen() {
       // drawing on iOS — see MapPointChip), so its press handling is this
       // hit-test, the same idiom the waypoint pins use.
       let chipHit: PointChipHit | null = null;
-      if (pointAt !== null) {
+      // The card (#757 c) takes its own taps: only the bubble is hit-tested here.
+      if (pointAt !== null && !pointAsCard) {
         try {
           const p = await map.project([pointAt.longitude, pointAt.latitude]);
           if (p != null) chipHit = hitMapPointChip(px - p[0], py - p[1], pointChip.shiftX);
@@ -2562,6 +2574,7 @@ export function MapScreen() {
           // coordinates / Navigate / Convert chip is a long-press. Weather and
           // marine keep their tap readout (it is what those layers are for).
           if (weatherLayer !== null || marineActive) {
+            setPointAsCard(false);
             setPointAt(
               pointChipAfterBareTap(pointAt, { latitude: lngLatArr[1], longitude: lngLatArr[0] }),
             );
@@ -2599,6 +2612,7 @@ export function MapScreen() {
       location,
       setFollowUser,
       pointAt,
+      pointAsCard,
       pointChip.shiftX,
       runPointChipHit,
       viewWp,
@@ -3026,6 +3040,7 @@ export function MapScreen() {
                 const { mapCenter, followUser: following } = useMapStore.getState();
                 const cursor = centreCursorPoint(mapCenter, following, location);
                 if (following) setFollowUser(false);
+                setPointAsCard(true);
                 setPointAt(cursor ?? at);
               };
               // #676 — a long-press on a saved pin is Move's shortcut. Projecting
@@ -3464,7 +3479,17 @@ export function MapScreen() {
               — dismissal (and the coordinates copy) is hit-tested in
               onMapPress (Marker onPress doesn't fire on Android, the
               waypoint-pin precedent). */}
-            {pointAt !== null && (
+            {pointAt !== null && pointAsCard && (
+              // The card's point on the map (#757 c): a small dot, the card is docked below.
+              <Marker
+                id="map-point-dot"
+                lngLat={[pointAt.longitude, pointAt.latitude]}
+                anchor="center"
+              >
+                <MapPointDot />
+              </Marker>
+            )}
+            {pointAt !== null && !pointAsCard && (
               <Marker id="map-point" lngLat={[pointAt.longitude, pointAt.latitude]} anchor="bottom">
                 {/* #232 — the chip is the hub for the two things you can do
                   with a point you can see. Compact, in the chip, gone with
@@ -3628,7 +3653,7 @@ export function MapScreen() {
         </View>
         {/* Screen readers only: the pins (GL symbols, no a11y nodes) as a list,
           nearest first; a row opens the pin's card as a tap on it does. */}
-        {pointAt !== null && (
+        {pointAt !== null && !pointAsCard && (
           <PointChipScreenReaderActions
             label={pointChip.label}
             top={insets.top + 120}
@@ -4175,11 +4200,15 @@ export function MapScreen() {
               if (what === 'navigate') setDestination(at);
               else if (what === 'convert')
                 openConvert(router, prefillFromPoint(at.latitude, at.longitude));
-              else setPointAt(at);
+              else {
+                setPointAsCard(true);
+                setPointAt(at);
+              }
             }}
             here={location}
             cardSlotFree={cardSlotFree && viewWaypoint === null && extensionHit === null}
             cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+            cardFloating={recordingPanelUp}
             onNavigate={(latitude, longitude) => setDestination({ latitude, longitude })}
             screenFocused={isFocused}
           />
@@ -4360,6 +4389,40 @@ export function MapScreen() {
             />
           </View>
         )}
+
+        {/* The long-press point's card (#757 c): Waypoint, Navigate, Copy, Convert, Share. */}
+        {cardSlotFree &&
+          movingWp === null &&
+          viewWaypoint === null &&
+          pointAt !== null &&
+          pointAsCard && (
+            <View
+              style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+              pointerEvents="box-none"
+              testID="point-card-dock"
+            >
+              <PointCard
+                coords={formatCoords(pointAt.latitude, pointAt.longitude)}
+                // Nothing without a fix or within 5 m of it (#757 review: "0 ft · 000° N").
+                readout={pointCardReadout(location, pointAt, units)}
+                floating={recordingPanelUp}
+                onAction={(a: PointCardAction) => {
+                  if (a === 'share') {
+                    const text = pointShareText(
+                      formatCoords(pointAt.latitude, pointAt.longitude),
+                      pointAt.latitude,
+                      pointAt.longitude,
+                    );
+                    setPointAt(null);
+                    void Share.share({ message: text }).catch(() => undefined);
+                    return;
+                  }
+                  runPointChipHit(a, pointAt);
+                }}
+                onClose={() => setPointAt(null)}
+              />
+            </View>
+          )}
 
         {/* A cluster's pins at the camera's cap (#685): pick one to open its card. */}
         {cardSlotFree && movingWp === null && (
@@ -4547,18 +4610,23 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   // Top-left instrument column: the compass badge alone since the scale bar
   // moved to the bottom-left corner — no gap left floating under it.
-  topLeft: { position: 'absolute', left: 16, alignItems: 'flex-start' },
+  topLeft: { position: 'absolute', left: MAP_EDGE_INSET, alignItems: 'flex-start' },
   // Between the compass (16 + 48) and the rail, with 12 dp either side.
-  searchPill: { position: 'absolute', left: 76, right: 76 },
+  searchPill: { position: 'absolute', left: MAP_LANE_INSET, right: MAP_LANE_INSET },
   // The open place search takes the whole top band, over compass and rail.
   searchSheet: { position: 'absolute', left: 12, right: 12, zIndex: MAP_OVERLAY_Z.searchSheet },
   // Centred under the search pill, between the compass and the rail.
-  marineChip: { position: 'absolute', left: 76, right: 76, alignItems: 'center' },
+  marineChip: {
+    position: 'absolute',
+    left: MAP_LANE_INSET,
+    right: MAP_LANE_INSET,
+    alignItems: 'center',
+  },
   // Same lane, used by the destination readout (#97).
   topCenterChip: {
     position: 'absolute',
-    left: 76,
-    right: 76,
+    left: MAP_LANE_INSET,
+    right: MAP_LANE_INSET,
     alignItems: 'center',
     zIndex: MAP_OVERLAY_Z.topChip,
   },
