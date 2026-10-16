@@ -36,6 +36,7 @@ const HEX_ALLOWLIST = [
  */
 const DISPLAY_SCALE_PENDING = [
   'src/features/map/MapScreen.tsx',
+  'src/features/map/components/MapControlsRail.tsx',
   'src/features/map/components/MapPointChip.tsx',
   'src/features/team/TeamTasksScreen.tsx',
   'src/features/team/bar/AlertBands.tsx',
