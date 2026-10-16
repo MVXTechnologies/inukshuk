@@ -18,15 +18,16 @@ import { aliasTileUrl } from '@core/map/tileUrls';
 export const TILE_KEY_HOST = 'https://inukshuk-tiles.marcandre-vigneault-96.workers.dev';
 
 /**
- * Our Worker's address: where every request to it actually goes. The free
- * workers.dev host for now: the mvxtechnologies.com zone is on Namecheap DNS,
- * so a custom domain waits for it to move to Cloudflare. Moving is THIS ONE
- * LINE (OTA-updatable): plain `fetch` callers follow it directly, and
- * MapLibre's requests for {@link TILE_KEY_HOST} templates are rewritten to it
- * in the network layer (`installTileHostAlias`), after the offline lookup —
- * so downloaded regions keep working with no re-download.
+ * Our Worker's address: where every request to it actually goes. Since #731
+ * the Worker runs on the company Cloudflare account, on its own domain; the
+ * old personal-account workers.dev host ({@link TILE_KEY_HOST}) keeps serving
+ * older installs until it is retired. Moving is THIS ONE LINE
+ * (OTA-updatable): plain `fetch` callers follow it directly, and MapLibre's
+ * requests for {@link TILE_KEY_HOST} templates are rewritten to it in the
+ * network layer (`installTileHostAlias`), after the offline lookup — so
+ * downloaded regions keep working with no re-download.
  */
-export const TILE_HOST: string = TILE_KEY_HOST;
+export const TILE_HOST: string = 'https://tiles.mvxtechnologies.com';
 
 /**
  * A tile URL built on {@link TILE_KEY_HOST}, aimed at {@link TILE_HOST}: for

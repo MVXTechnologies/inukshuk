@@ -5,6 +5,8 @@ no S3 credentials — only the Worker's upload token.
 
     upload.py FILE KEY [--host URL] [--token-file PATH] [--part-mb 95] [--jobs 4]
 
+The host defaults to $TILE_HOST, else the company-account Worker (#731).
+
 Resumable: finished parts are recorded in FILE.upload.json; rerun the same
 command after an interruption and only the missing parts are sent. The live
 object is replaced only when every part is in (R2 `complete`).
@@ -19,7 +21,10 @@ import time
 import urllib.error
 import urllib.request
 
-DEFAULT_HOST = 'https://inukshuk-tiles.marcandre-vigneault-96.workers.dev'
+# The Worker on the company Cloudflare account (#731). The old personal-account
+# host (inukshuk-tiles.marcandre-vigneault-96.workers.dev) is frozen: nothing
+# uploads there any more.
+DEFAULT_HOST = os.environ.get('TILE_HOST', 'https://tiles.mvxtechnologies.com')
 
 
 def request(method, url, token, body=None, length=None, timeout=900):
@@ -72,8 +77,16 @@ def main():
     state_path = args.file + '.upload.json'
 
     state = json.load(open(state_path)) if os.path.exists(state_path) else {}
-    if state.get('size') != size or state.get('key') != args.key or state.get('partSize') != part_size:
+    # An uploadId belongs to one Worker's bucket: a state file left by an
+    # upload to another host starts over instead of resuming into the void.
+    if (
+        state.get('size') != size
+        or state.get('key') != args.key
+        or state.get('partSize') != part_size
+        or state.get('host') != args.host
+    ):
         state = {
+            'host': args.host,
             'key': args.key,
             'size': size,
             'partSize': part_size,
