@@ -73,7 +73,7 @@ export class LibraryGroups {
   private loaded: Promise<void> | null = null;
 
   constructor(
-    private readonly host: GroupHost,
+    readonly host: GroupHost,
     private readonly store: DismissedStore = memoryDismissed(),
   ) {}
 

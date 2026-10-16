@@ -620,6 +620,15 @@ export class SyncSession {
     );
   }
 
+  /**
+   * How far the peer's last version vector says it holds `author`'s chain
+   * (0: nothing; undefined before its first vector). Share live's "changes
+   * waiting" (#712).
+   */
+  peerSeq(author: string): number | undefined {
+    return this.peerVv === undefined ? undefined : (this.peerVv[author] ?? 0);
+  }
+
   /** Send WebRTC signalling; nothing when {@link canSignal} is false or the signal is malformed. */
   signal(signal: RtcSignal, now?: number): Step {
     const step = empty();

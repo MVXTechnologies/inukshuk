@@ -330,6 +330,11 @@ export class LibraryBridge {
     return undefined;
   }
 
+  /** The bridge's record of a shared folder (its root in the Library, links, waiting records). */
+  recordOf(groupId: string): BridgeRecord | undefined {
+    return this.records.get(groupId);
+  }
+
   /** Records of a shared folder this phone cannot hold yet. */
   waiting(groupId: string): readonly string[] {
     return this.records.get(groupId)?.waiting ?? [];
