@@ -14,6 +14,11 @@ import { sanitizeLastKnownPosition } from '@core/geo/lastKnownPosition';
 import { sanitizeOverlayTab, type OverlayTab } from '@core/map/overlayTabs';
 import { DEFAULT_PIN_SCALE, normalizePinScale, type PinScale } from '@core/map/pinScale';
 import {
+  DEFAULT_DISPLAY_SCALE,
+  normalizeDisplayScale,
+  type DisplayScale,
+} from '@core/display/displayScale';
+import {
   DEFAULT_POINTING_LINE,
   sanitizePointingLine,
   type PointingLineSettings,
@@ -245,6 +250,12 @@ export interface Settings {
    */
   pinScale: PinScale;
   /**
+   * Settings › Display › Display size (#760): the whole UI's type, spacing,
+   * icons and map chrome at 60–150 % (default 100 %), on top of which the OS
+   * font size still applies (`@core/display/displayScale`).
+   */
+  displayScale: DisplayScale;
+  /**
    * "Labels on satellite" (overlays menu → On the map, #484): while the base
    * map is Satellite, draw our vector map's roads, trails and names over the
    * imagery. No effect on the Map base, which carries its own.
@@ -436,6 +447,7 @@ const DEFAULTS: Settings = {
   showCenterCursor: true,
   coordinateFormat: DEFAULT_COORDINATE_FORMAT,
   pinScale: DEFAULT_PIN_SCALE,
+  displayScale: DEFAULT_DISPLAY_SCALE,
   satelliteLabels: true,
   satelliteImagery: DEFAULT_IMAGERY_LOOK,
   showHillshade: DEFAULT_SHOW_HILLSHADE,
@@ -555,6 +567,7 @@ function snapshot(s: SettingsState): Settings {
     showCenterCursor,
     coordinateFormat,
     pinScale,
+    displayScale,
     satelliteLabels,
     satelliteImagery,
     showHillshade,
@@ -622,6 +635,7 @@ function snapshot(s: SettingsState): Settings {
     showCenterCursor,
     coordinateFormat,
     pinScale,
+    displayScale,
     satelliteLabels,
     satelliteImagery,
     showHillshade,
@@ -718,6 +732,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       }
       // A number default: the ladder keeps any number, so snap junk to 100 %.
       next.pinScale = normalizePinScale(next.pinScale);
+      next.displayScale = normalizeDisplayScale(next.displayScale);
       if (!isTiltRelief(next.tiltRelief)) next.tiltRelief = DEFAULT_TILT_RELIEF;
       // See-through white is a slider stop (0–4) now; the feature's first cut
       // stored names, which the ladder's typeof check would DROP against the

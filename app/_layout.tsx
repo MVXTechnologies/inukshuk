@@ -27,6 +27,7 @@ import { useStravaStore } from '@state/stravaStore';
 import { useSupportStore } from '@state/supportStore';
 import { DisplayConditionContext } from '@ui/displayCondition';
 import { resolveTheme } from '@ui/theme';
+import { displayScaleFactor } from '@core/display/displayScale';
 import { useAndroidImmersive } from '@ui/useAndroidImmersive';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -61,7 +62,10 @@ export default function RootLayout() {
   const scheme = themeMode === 'system' ? (osScheme ?? 'light') : themeMode;
   // Display mode (decision 4): Sunlight and Night red override light/dark.
   const condition = useEffectiveDisplayCondition();
-  const theme = resolveTheme(scheme === 'dark' ? 'dark' : 'light', condition);
+  // Display size (#760): Paper's type scale follows the setting; components
+  // size themselves through `@ui/displayScale`.
+  const displayFactor = displayScaleFactor(useSettingsStore((s) => s.displayScale));
+  const theme = resolveTheme(scheme === 'dark' ? 'dark' : 'light', condition, displayFactor);
 
   const hydrateLibrary = useLibraryStore((s) => s.hydrate);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
