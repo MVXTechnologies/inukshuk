@@ -89,6 +89,7 @@ function Card({
   title,
   sub,
   icon,
+  onBack,
   onClose,
   children,
   testID,
@@ -96,6 +97,8 @@ function Card({
   title: string;
   sub?: string;
   icon?: string;
+  /** A sub-panel's way back (#744): an arrow in place of the icon. */
+  onBack?: () => void;
   onClose: () => void;
   children: React.ReactNode;
   testID?: string;
@@ -106,8 +109,19 @@ function Card({
       style={[styles.card, { backgroundColor: t.elevation.level2, shadowColor: palette.shadow }]}
       testID={testID}
     >
-      <View style={styles.head}>
-        {icon ? <Icon source={icon} size={22} color={t.ink} /> : null}
+      <View style={[styles.head, onBack && styles.headBack]}>
+        {onBack ? (
+          <IconButton
+            icon="arrow-left"
+            size={22}
+            onPress={onBack}
+            style={styles.back}
+            accessibilityLabel="Back"
+            testID={testID ? `${testID}-back` : undefined}
+          />
+        ) : icon ? (
+          <Icon source={icon} size={22} color={t.ink} />
+        ) : null}
         <View style={styles.flex}>
           <Text variant="titleSmall" style={{ color: t.ink }} numberOfLines={1}>
             {title}
@@ -405,7 +419,13 @@ function SpotCard({
   );
 }
 
-/** Long-press in team mode: the team's actions here; Navigate/Coordinates/Convert below. */
+/**
+ * Long-press in team mode (#744, mockup 6 option 1): four round buttons that
+ * fit a 320 dp phone (Meet here, Message pin, Photo, More) over the text row
+ * Navigate here / Coordinates / Convert. More opens a sub-panel in place
+ * (back arrow): Task, Notify, Shared waypoint. Guests get neither Meet here,
+ * Task nor Shared waypoint.
+ */
 function PressCard({
   at,
   onClose,
@@ -419,17 +439,101 @@ function PressCard({
   const router = useRouter();
   const open = useTeamSheet((s) => s.open);
   const guest = useTeamStore((s) => s.view?.members.find((m) => m.isMe)?.role === 'guest');
+  const [more, setMore] = useState(false);
   // The user's coordinate format (#677; 6-decimal DD by default, #701).
   const formatCoords = useCoordinateFormatter();
+  const sub = formatCoords(at[1], at[0]);
+  if (more) {
+    const rows: MoreRow[] = [
+      ...(guest
+        ? []
+        : [
+            {
+              icon: 'checkbox-marked-circle-plus-outline',
+              label: 'Task',
+              testID: 'team-press-task',
+              opens: true,
+              run: () => {
+                onClose();
+                router.push(`/team/task-new?ak=point&la=${at[1]}&lo=${at[0]}` as never);
+              },
+            },
+          ]),
+      {
+        icon: 'bell-ring-outline',
+        label: 'Notify',
+        testID: 'team-press-notify',
+        opens: true,
+        run: () => open({ kind: 'notify', at }),
+      },
+      ...(guest
+        ? []
+        : [
+            {
+              icon: 'map-marker-plus-outline',
+              label: 'Shared waypoint',
+              testID: 'team-press-waypoint',
+              opens: false,
+              run: () => {
+                onClose();
+                const err = teamService()?.active?.shareWaypoint({
+                  latitude: at[1],
+                  longitude: at[0],
+                  label: 'Waypoint',
+                });
+                if (!err) useTeamStore.getState().refresh();
+              },
+            },
+          ]),
+    ];
+    return (
+      <Card
+        title="More here"
+        sub={sub}
+        onBack={() => setMore(false)}
+        onClose={onClose}
+        testID="team-press-more-card"
+      >
+        <View>
+          {rows.map((r) => (
+            <Pressable
+              key={r.testID}
+              onPress={r.run}
+              style={({ pressed }) => [
+                styles.moreRow,
+                { borderTopColor: t.outlineVariant },
+                pressed && { backgroundColor: t.surfaceVariant },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={r.label}
+              testID={r.testID}
+            >
+              <Icon source={r.icon} size={24} color={t.ink} />
+              <Text variant="bodyLarge" style={[styles.flex, { color: t.ink }]}>
+                {r.label}
+              </Text>
+              {r.opens && <Icon source="chevron-right" size={22} color={t.inkMuted} />}
+            </Pressable>
+          ))}
+        </View>
+      </Card>
+    );
+  }
   return (
-    <Card
-      title="Here"
-      sub={formatCoords(at[1], at[0])}
-      icon="crosshairs"
-      onClose={onClose}
-      testID="team-press-card"
-    >
-      <View style={styles.roundRow}>
+    <Card title="Here" sub={sub} icon="crosshairs" onClose={onClose} testID="team-press-card">
+      <View style={styles.roundRow} testID="team-press-row">
+        {!guest && (
+          <Round
+            icon="flag-variant"
+            label="Meet here"
+            testID="team-press-rally"
+            onPress={() => {
+              onClose();
+              teamService()?.active?.setRally(at[0], at[1]);
+              useTeamStore.getState().refresh();
+            }}
+          />
+        )}
         <Round
           icon="map-marker-account-outline"
           label="Message pin"
@@ -445,51 +549,12 @@ function PressCard({
           testID="team-press-photo"
           onPress={() => askPhotoHere(at, null, onClose)}
         />
-        {!guest && (
-          <Round
-            icon="checkbox-marked-circle-plus-outline"
-            label="Task"
-            testID="team-press-task"
-            onPress={() => {
-              onClose();
-              router.push(`/team/task-new?ak=point&la=${at[1]}&lo=${at[0]}` as never);
-            }}
-          />
-        )}
         <Round
-          icon="bell-ring-outline"
-          label="Notify"
-          testID="team-press-notify"
-          onPress={() => open({ kind: 'notify', at })}
+          icon="dots-horizontal"
+          label="More"
+          testID="team-press-more"
+          onPress={() => setMore(true)}
         />
-        {!guest && (
-          <Round
-            icon="map-marker-plus-outline"
-            label="Waypoint"
-            testID="team-press-waypoint"
-            onPress={() => {
-              onClose();
-              const err = teamService()?.active?.shareWaypoint({
-                latitude: at[1],
-                longitude: at[0],
-                label: 'Waypoint',
-              });
-              if (!err) useTeamStore.getState().refresh();
-            }}
-          />
-        )}
-        {!guest && (
-          <Round
-            icon="flag-variant"
-            label="Meet here"
-            testID="team-press-rally"
-            onPress={() => {
-              onClose();
-              teamService()?.active?.setRally(at[0], at[1]);
-              useTeamStore.getState().refresh();
-            }}
-          />
-        )}
       </View>
       <View style={[styles.secondary, { borderTopColor: t.outlineVariant }]}>
         {(
@@ -517,6 +582,16 @@ function PressCard({
       </View>
     </Card>
   );
+}
+
+/** A row of the long-press card's More sub-panel. */
+interface MoreRow {
+  icon: string;
+  label: string;
+  testID: string;
+  /** It opens a screen or a card (a chevron), rather than acting at once. */
+  opens: boolean;
+  run: () => void;
 }
 
 /** Marks at one spot (a cluster at its limit): pick one. */
@@ -620,6 +695,16 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   head: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 4 },
+  headBack: { paddingLeft: 0 },
+  back: { margin: 0 },
+  moreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    minHeight: 52,
+    paddingHorizontal: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
   roundRow: { flexDirection: 'row', justifyContent: 'space-around' },
   roundItem: { alignItems: 'center', gap: 4, width: 64 },
   roundBtn: {
