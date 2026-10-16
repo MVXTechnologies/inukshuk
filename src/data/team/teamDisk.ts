@@ -66,6 +66,8 @@ export interface TeamRecord {
   app?: 'lib';
   /** The team a shared folder was shared with (it rides that team's links). */
   parent?: string;
+  /** A renewed folder's predecessor group (#712 renewal): picked up through its members. */
+  via?: string;
 }
 
 /** Device secrets, base64url (the public keys are derived on load). */

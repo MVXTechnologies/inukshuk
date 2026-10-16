@@ -1,5 +1,5 @@
 import type { Json } from '@core/team/canonical';
-import { isShortId } from '@core/team/ids';
+import { isShortId, isTeamId } from '@core/team/ids';
 import { BASE_FIELD, parseBase } from '@core/group/conflicts';
 import { flag, knownFieldsValid, text, type FieldRule } from '@core/group/fields';
 
@@ -16,6 +16,7 @@ import { MAX_TRACK_PARTS, PART_CHARS } from './trackCodec';
  * | `lac` activity cursor | owned, id `g` | `seen` (ms) | anyone, their own | its member or a manager |
  * | `lcm` comment | owned | `on` record id (once), `tx` | anyone (viewers too), their own | its writer or a manager |
  * | `lpt` trail part | shared `(lpt, <rev>_<n>)` | `i` item, `r` revision, `n` index, `of` count, `d` encoded slice (all once) | editors+ | managers |
+ * | `lnx` successor | shared, id `g` | `g` the group that carries the folder on (renewal) | managers | nobody |
  *
  * A trail's points travel whole (positions, elevations, times, segments:
  * `trackCodec.ts`) in `lpt` parts, each within the op cap; its `lit` names
@@ -37,7 +38,11 @@ export const LIT = 'lit';
 export const LAC = 'lac';
 export const LCM = 'lcm';
 export const LPT = 'lpt';
-export const LIBRARY_KINDS: readonly string[] = [LFO, LIT, LAC, LCM, LPT];
+/** The folder's successor group (renewal before the group's year is up). */
+export const LNX = 'lnx';
+export const LIBRARY_KINDS: readonly string[] = [LFO, LIT, LAC, LCM, LPT, LNX];
+/** A record copied into a successor group at renewal (not a change by its writer). */
+export const COPY_FIELD = 'cp';
 /** Kinds forming the shared tree (soft delete, base stamps, purge). */
 export const TREE_KINDS: readonly string[] = [LFO, LIT];
 /** Owned kinds: keyed `(kind, owner, id)`. */
@@ -165,6 +170,7 @@ export const SPECS: ReadonlyMap<string, KindSpec> = new Map<string, KindSpec>([
   [LIT, { rules: ITEM_RULES, first: ['t', 'n'], once: ['t'] }],
   [LAC, { rules: CURSOR_RULES, first: ['seen'], once: [] }],
   [LCM, { rules: COMMENT_RULES, first: ['on', 'tx'], once: ['on'] }],
+  [LNX, { rules: { g: (v) => isTeamId(v) }, first: ['g'], once: [] }],
   [LPT, { rules: PART_RULES, first: ['i', 'r', 'n', 'of', 'd'], once: ['i', 'r', 'n', 'of', 'd'] }],
 ]);
 

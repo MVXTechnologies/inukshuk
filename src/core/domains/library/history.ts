@@ -244,6 +244,8 @@ export function activity(h: LibraryHistory, now: number): ActivityEntry[] {
   const out: ActivityEntry[] = [];
   for (const w of h.writes) {
     if (w.stamp.wall < since) continue;
+    // A renewal's copies are not anybody's change.
+    if (w.fields['cp'] === 1) continue;
     out.push({
       opId: w.id,
       author: w.stamp.author,

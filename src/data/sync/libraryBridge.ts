@@ -218,9 +218,43 @@ export class LibraryBridge {
     for (const e of ended) await this.end(e);
     for (const s of this.groups.sessions()) {
       if (s.pickupParent() !== undefined) continue;
+      // A renewed folder is never bridged again: its record moves to the
+      // successor once that is in (until then, it waits where it is).
+      if (this.groups.renewed(s)) {
+        const next = this.groups.liveSuccessor(s);
+        if (next !== undefined) await this.migrate(s.teamId, next.teamId);
+        continue;
+      }
+      if (this.groups.lostRenewal(s)) continue;
+      await this.runGroup(s);
+    }
+    for (const s of this.groups.sessions()) {
+      if (s.pickupParent() !== undefined || this.groups.renewed(s)) continue;
+      if (this.groups.lostRenewal(s) || !this.migrated.has(s.teamId)) continue;
+      this.migrated.delete(s.teamId);
       await this.runGroup(s);
     }
     this.emit();
+  }
+
+  /** Groups whose bridge record just moved in (one more run in this pass). */
+  private readonly migrated = new Set<string>();
+
+  /**
+   * Move a folder's bridge record to its successor (renewal). The bases are
+   * cleared, so the first run there writes whatever this phone has that the
+   * successor's copy lacks (an edit made in the old group after the copy),
+   * and takes the rest from the successor; nothing is lost either way.
+   */
+  private async migrate(from: string, to: string): Promise<void> {
+    const r = await this.record(from);
+    if (r === null) return;
+    if ((await this.record(to)) === null) {
+      this.save(to, { ...r, links: r.links.map((l) => ({ ...l, base: {}, seen: true })) });
+      this.migrated.add(to);
+    }
+    this.records.delete(from);
+    this.disk.remove(from);
   }
 
   private async record(groupId: string): Promise<BridgeRecord | null> {
@@ -302,6 +336,9 @@ export class LibraryBridge {
   }
 
   private async end(e: Ended): Promise<void> {
+    // A successor that lost a renewal race: its bridge moves to the winner.
+    const winner = this.groups.winnerOf(e.groupId);
+    if (winner !== undefined) await this.migrate(e.groupId, winner.teamId);
     // A folder that ended (stopped, removed) stays as a normal folder here.
     this.records.delete(e.groupId);
     this.disk.remove(e.groupId);
@@ -364,6 +401,9 @@ export class LibraryBridge {
     if (meta.app !== 'lib' || meta.root === undefined) return;
     const view = libraryView(data);
     let r = await this.record(s.teamId);
+    // A successor of a folder this phone holds: its record moves over from there (renewal).
+    if (r === null && meta.prev !== undefined && this.groups.host.open(meta.prev) !== undefined)
+      return;
     if (r === null) {
       // A folder this phone joined: its root comes from the group.
       const kind: RecordKind = view.items.has(meta.root) ? LIT : LFO;

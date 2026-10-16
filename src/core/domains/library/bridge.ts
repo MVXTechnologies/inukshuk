@@ -113,7 +113,7 @@ export interface ReconcileInput {
 }
 
 /** Fields the bridge never compares (placement and trash are the bridge's own). */
-const SKIP = new Set(['rm', 'b', 'o']);
+const SKIP = new Set(['rm', 'b', 'o', 'cp']);
 
 const FNV_OFFSET = 0x811c9dc5;
 function fnv(s: string): string {

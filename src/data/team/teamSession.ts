@@ -1309,7 +1309,8 @@ export class TeamSession {
    * teammate for it, whichever side dialled (`LinkHost`).
    */
   pickupParent(): string | undefined {
-    const parent = this.record.parent;
+    // A renewal's successor is picked up through the old folder's members.
+    const parent = this.record.via ?? this.record.parent;
     if (this.record.app !== 'lib' || parent === undefined) return undefined;
     return this.replica.isActiveMember(this.me) ? undefined : parent;
   }

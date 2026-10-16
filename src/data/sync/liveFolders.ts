@@ -136,6 +136,9 @@ export class LiveFolders {
   list(): LiveFolder[] {
     const out: LiveFolder[] = [];
     for (const s of this.groups.sessions()) {
+      // A renewal is invisible: the old folder shows until its successor is in.
+      if (s.record.via !== undefined && s.pickupParent() !== undefined) continue;
+      if (this.groups.liveSuccessor(s) !== undefined || this.groups.lostRenewal(s)) continue;
       const f = this.summary(s);
       if (f !== undefined) out.push(f);
     }

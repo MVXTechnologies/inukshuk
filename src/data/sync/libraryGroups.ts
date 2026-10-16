@@ -24,16 +24,36 @@ import {
   sharedRefs,
   DEFAULT_LIBRARY_ROLE,
 } from '@core/domains/library/share';
+import {
+  LIBRARY_LIFETIME_MS,
+  renewDue,
+  snapshotBodies,
+  successorMembers,
+  successorOf,
+  SUPERSEDED_KEEP_MS,
+} from '@core/domains/library/renewal';
+import { CURSOR_ID, LNX } from '@core/domains/library/kinds';
 import { GREF } from '@core/domains/team/groupKinds';
 import { GMETA, GROUP_RECORD_ID, groupMeta, type GroupMeta } from '@core/group/meta';
 import type { Json } from '@core/team/canonical';
-import { activeMembers, MAX_TEAM_LIFETIME_MS } from '@core/team/membership';
+import { activeMembers } from '@core/team/membership';
 import type { Role } from '@core/team/roles';
 
 import { DEFAULT_TEAM_PREFS, type TeamRecord } from '@data/team/teamDisk';
 import type { ActionError, TeamSession } from '@data/team/teamSession';
 
 import type { GroupHost } from './groupHost';
+
+/** What `TeamSession.writeData` returns when it did not write (else the op id). */
+const ACTION_ERRORS: ReadonlySet<string> = new Set<ActionError>([
+  'read-only',
+  'not-allowed',
+  'rotation-pending',
+  'not-member',
+  'invalid',
+  'too-large',
+  'no-change',
+]);
 
 /** At most this many folders wait to be picked up at once (a teammate's `gref` spam stays bounded). */
 export const MAX_PICKUPS = 32;
@@ -66,7 +86,10 @@ export interface ShareOptions {
 }
 
 /** Why a library group ended on this phone (the bridge then keeps a copy). */
-export type Ended = { groupId: string; why: 'stopped' | 'removed' | 'refused' };
+export type Ended = {
+  groupId: string;
+  why: 'stopped' | 'removed' | 'refused' | 'superseded' | 'lost';
+};
 
 export class LibraryGroups {
   private dismissed = new Set<string>();
@@ -121,7 +144,7 @@ export class LibraryGroups {
     const created = await this.host.create({
       name: options.name,
       myName,
-      lifetimeMs: MAX_TEAM_LIFETIME_MS,
+      lifetimeMs: LIBRARY_LIFETIME_MS,
       app: 'lib',
       ...(options.team !== undefined ? { parent: options.team } : {}),
     });
@@ -133,7 +156,7 @@ export class LibraryGroups {
       meta['follow'] = 1;
     }
     const wrote = s.writeData('e.set', { k: GMETA, id: GROUP_RECORD_ID, f: meta });
-    if (typeof wrote !== 'string' || wrote.length === 0) return 'invalid';
+    if (ACTION_ERRORS.has(wrote)) return 'invalid';
     s.setMyName(myName);
     if (team !== undefined) {
       const role = options.role ?? DEFAULT_LIBRARY_ROLE;
@@ -195,15 +218,46 @@ export class LibraryGroups {
     }
     this.host.linkLayer?.groupsChanged();
 
-    // 2. Each folder: refused pickups, ended folders, following its team.
+    // 2. Renewal: roll folders forward before their group's year is up, and
+    //    pick up the successors other managers made.
+    for (const s of this.sessions()) {
+      if (s.pickupParent() !== undefined) continue;
+      const next = successorOf(s.replica.data(now));
+      if (next === undefined) {
+        if (renewDue(s.replica.state, s.me, now)) await this.renew(s);
+        continue;
+      }
+      if (this.dismissed.has(next) || this.host.allRecords.some((r) => r.teamId === next)) continue;
+      const meta = this.meta(s);
+      await this.host.adopt({
+        teamId: next,
+        name: s.record.name,
+        myName: s.record.myName,
+        joinedAt: now,
+        prefs: { ...DEFAULT_TEAM_PREFS },
+        lastReadAt: 0,
+        app: 'lib',
+        ...(meta.parent !== undefined ? { parent: meta.parent } : {}),
+        via: s.teamId,
+      });
+    }
+    this.host.linkLayer?.groupsChanged();
+
+    // 3. Each folder: refused pickups, ended folders, following its team.
     const ended: Ended[] = [];
     for (const s of this.sessions()) {
       const state = s.replica.state;
       const mine = state.members.get(s.me);
       const parent = s.pickupParent();
       if (parent !== undefined) {
-        // Removed before it arrived, or the share is gone from the team: stop waiting.
-        const gone = !announced.has(s.teamId) && this.host.open(parent) !== undefined;
+        // Removed before it arrived, or the share is gone (from the team, or
+        // the old folder now names another successor): stop waiting.
+        const via = s.record.via;
+        const viaSession = via === undefined ? undefined : this.host.open(via);
+        const gone =
+          viaSession !== undefined
+            ? successorOf(viaSession.replica.data(now)) !== s.teamId
+            : !announced.has(s.teamId) && this.host.open(parent) !== undefined;
         if (mine?.status === 'removed' || state.closedAt !== undefined || gone) {
           ended.push({ groupId: s.teamId, why: 'refused' });
         }
@@ -213,8 +267,25 @@ export class LibraryGroups {
         ended.push({ groupId: s.teamId, why: 'removed' });
         continue;
       }
+      // A successor that lost to another (two managers renewed at once): its
+      // creator closes it, and every phone forgets it once the winner is in
+      // (its bridge record moves there first).
+      if (this.lostRenewal(s)) {
+        if (state.closedAt === undefined && state.members.get(s.me)?.role === 'owner')
+          s.closeTeam();
+        if (this.winnerOf(s.teamId) !== undefined) ended.push({ groupId: s.teamId, why: 'lost' });
+        continue;
+      }
       if (state.closedAt !== undefined) {
         ended.push({ groupId: s.teamId, why: 'stopped' });
+        continue;
+      }
+      // A superseded folder: kept read-only a while past its expiry, then forgotten.
+      const next = successorOf(s.replica.data(now));
+      const nextSession = next === undefined ? undefined : this.host.open(next);
+      if (nextSession !== undefined && nextSession.pickupParent() === undefined) {
+        if (now > state.expiresAt + SUPERSEDED_KEEP_MS)
+          ended.push({ groupId: s.teamId, why: 'superseded' });
         continue;
       }
       if (s.record.name !== s.view().name && s.view().name !== '')
@@ -228,6 +299,78 @@ export class LibraryGroups {
       for (const id of plan.remove) s.removeMember(id);
     }
     return ended;
+  }
+
+  /**
+   * Roll a folder forward (renewal, `@core/domains/library/renewal`): a
+   * successor group with the same members, roles and records, then `lnx` in
+   * the old group. Returns the successor, or undefined when it could not.
+   */
+  async renew(s: TeamSession): Promise<TeamSession | undefined> {
+    const now = this.now;
+    const data = s.replica.data(now);
+    const meta = this.meta(s);
+    if (meta.root === undefined) return undefined;
+    const created = await this.host.create({
+      name: s.record.name,
+      myName: s.record.myName,
+      lifetimeMs: LIBRARY_LIFETIME_MS,
+      app: 'lib',
+      ...(meta.parent !== undefined ? { parent: meta.parent } : {}),
+    });
+    const n = created.session;
+    n.replica.addKey(created.key);
+    const gm: Record<string, Json> = { app: 'lib', v: 1, root: meta.root, prev: s.teamId };
+    if (meta.parent !== undefined) gm['parent'] = meta.parent;
+    if (meta.follow) gm['follow'] = 1;
+    n.writeData('e.set', { k: GMETA, id: GROUP_RECORD_ID, f: gm });
+    n.setMyName(s.record.myName);
+    for (const m of successorMembers(s.replica.state, s.me)) n.addMember(m);
+    for (const body of snapshotBodies(data)) n.writeData('e.set', body as unknown as Json);
+    const r = s.writeData('e.set', { k: LNX, id: CURSOR_ID, f: { g: n.teamId } });
+    if (ACTION_ERRORS.has(r)) {
+      // The old group no longer takes writes: nobody could follow this one.
+      n.closeTeam();
+      await this.forget(n.teamId);
+      return undefined;
+    }
+    // Teammates who join the team later find the successor directly.
+    const team = meta.parent === undefined ? undefined : this.host.open(meta.parent);
+    team?.writeData('e.set', {
+      k: GREF,
+      id: n.teamId,
+      f: { app: 'lib', name: s.record.name.slice(0, 80) },
+    });
+    return n;
+  }
+
+  /** The joined successor of a renewed folder (undefined: none yet, or still being picked up). */
+  liveSuccessor(s: TeamSession): TeamSession | undefined {
+    const next = successorOf(s.replica.data(this.now));
+    const n = next === undefined ? undefined : this.host.open(next);
+    if (n === undefined || n.pickupParent() !== undefined) return undefined;
+    return this.meta(n).root === undefined ? undefined : n;
+  }
+
+  /** Whether a folder names a successor (renewed: never written or bridged again). */
+  renewed(s: TeamSession): boolean {
+    return successorOf(s.replica.data(this.now)) !== undefined;
+  }
+
+  /** Whether a folder is a successor that lost a renewal race (another one carries the folder). */
+  lostRenewal(s: TeamSession): boolean {
+    const prev = this.meta(s).prev;
+    const p = prev === undefined ? undefined : this.host.open(prev);
+    const winner = p === undefined ? undefined : successorOf(p.replica.data(this.now));
+    return winner !== undefined && winner !== s.teamId;
+  }
+
+  /** For a successor that lost a renewal race: the joined winner. */
+  winnerOf(groupId: string): TeamSession | undefined {
+    const s = this.host.open(groupId);
+    if (s === undefined || !this.lostRenewal(s)) return undefined;
+    const p = this.host.open(this.meta(s).prev!);
+    return p === undefined ? undefined : this.liveSuccessor(p);
   }
 
   /** Forget a folder on this phone (after the bridge kept or removed its copy). */

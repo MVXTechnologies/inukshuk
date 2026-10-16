@@ -35,7 +35,7 @@ export const GROUP_RECORD_ID = 'g';
 /** The app of a group with no `gmeta`. */
 export const DEFAULT_APP = 'team';
 /** Fields a later write may repeat but never change. */
-export const GMETA_ONCE: readonly string[] = ['app', 'parent', 'root'];
+export const GMETA_ONCE: readonly string[] = ['app', 'parent', 'root', 'prev'];
 
 const MAX_DATA_VERSION = 0xffff;
 
@@ -46,6 +46,8 @@ const GMETA_FIELDS: Readonly<Record<string, FieldRule>> = {
   follow: flag,
   net: flag,
   root: (v) => v === '*' || isShortId(v),
+  /** The group this one renews (#712: a library outliving its group's year). */
+  prev: isTeamId,
 };
 
 export function validGroupMetaFields(f: Readonly<Record<string, Json>>): boolean {
@@ -134,6 +136,8 @@ export interface GroupMeta {
   follow: boolean;
   net: boolean;
   root?: string;
+  /** The group this one renews. */
+  prev?: string;
 }
 
 /** The group's meta as folded (no record, or an unreadable one: a team). */
@@ -148,6 +152,7 @@ export function groupMeta(data: Readonly<TeamData>): GroupMeta {
   };
   if (typeof f['parent'] === 'string') out.parent = f['parent'];
   if (typeof f['root'] === 'string') out.root = f['root'];
+  if (isTeamId(f['prev'])) out.prev = f['prev'];
   return out;
 }
 

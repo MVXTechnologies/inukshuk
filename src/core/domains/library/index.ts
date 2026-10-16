@@ -18,6 +18,7 @@ import {
   LFO,
   LIBRARY_KINDS,
   LIT,
+  LNX,
   LPT,
   MAX_FOLDERS,
   MAX_ITEMS,
@@ -164,13 +165,20 @@ export const libraryPlugin: DomainPlugin<LibraryView> = {
   owned: isOwnedLibraryKind,
   baseStamps: true,
   validate(w) {
-    if (isTreeKind(w.kind) || w.kind === LPT) return w.o === undefined;
+    if (isTreeKind(w.kind) || w.kind === LPT || w.kind === LNX) return w.o === undefined;
     // Owned: `o` names another's record on a delete only; the cursor is one per member.
     if (w.o !== undefined && w.op !== 'del') return false;
     return w.kind !== 'lac' || w.id === CURSOR_ID;
   },
   authorize(w, role, view) {
     if (w.kind === LPT) return authorizePart(w, role, view);
+    if (w.kind === LNX) {
+      // The successor: a manager's, never deleted; LWW picks one on every phone.
+      if (w.op === 'del' || !isAdminRole(role) || w.id !== CURSOR_ID) return 'forbidden';
+      return knownFieldsValid(w.f, SPECS.get(LNX)!.rules) && has(w.f, 'g')
+        ? { owner: undefined }
+        : 'invalid';
+    }
     return isTreeKind(w.kind) ? authorizeTree(w, role, view) : authorizeOwned(w, role, view);
   },
   merged(view, rec: Readonly<EntityRecord>, before) {

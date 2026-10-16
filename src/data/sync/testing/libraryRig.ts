@@ -88,10 +88,18 @@ export type Phone = ReturnType<typeof phone>;
 
 export const active = (p: Phone): TeamSession => p.service.active!;
 
-export async function team(rig: Rig) {
-  const a = phone(rig, 'a');
-  const b = phone(rig, 'b');
-  await a.service.createTeam({ name: 'Chic-Chocs', myName: 'Marc', lifetimeMs: lifetimeMs('14d') });
+/** `a` founds a team, `b` joins it, both on the LAN with the link upgraded. */
+export async function teamOf(
+  rig: Rig,
+  a: Phone,
+  b: Phone,
+  options: { name?: string; lifetimeMs?: number } = {},
+): Promise<void> {
+  await a.service.createTeam({
+    name: options.name ?? 'Chic-Chocs',
+    myName: 'Marc',
+    lifetimeMs: options.lifetimeMs ?? lifetimeMs('14d'),
+  });
   await rig.settle();
   const inv = active(a).createInvite(DEFAULT_INVITE) as CreatedInvite;
   await active(a).startMesh();
@@ -106,6 +114,12 @@ export async function team(rig: Rig) {
   await rig.settle();
   active(a).tick();
   await rig.settle();
+}
+
+export async function team(rig: Rig, options: { lifetimeMs?: number } = {}) {
+  const a = phone(rig, 'a');
+  const b = phone(rig, 'b');
+  await teamOf(rig, a, b, options);
   return { a, b };
 }
 

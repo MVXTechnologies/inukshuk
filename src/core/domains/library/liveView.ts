@@ -93,7 +93,7 @@ export function rowNote(
   }
   const writes = h.records.get(`${kind}:${rid}`) ?? [];
   const last = writes[writes.length - 1];
-  if (last === undefined || last.stamp.author === me) return undefined;
+  if (last === undefined || last.stamp.author === me || last.fields['cp'] === 1) return undefined;
   const action = actionOf(last, writes.length === 1);
   return {
     text: `${VERB[action]} by ${name(last.stamp.author)} · ${shortAge(now - last.stamp.wall)}`,
