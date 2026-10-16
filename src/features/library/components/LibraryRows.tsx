@@ -98,6 +98,25 @@ function RowFrame({
   );
 }
 
+/** A row's caption line, with an optional small icon before it (Share live's clock). */
+function CaptionLine({ caption, icon }: { caption: string; icon: string | undefined }) {
+  const t = useSchemeTokens();
+  if (icon === undefined)
+    return (
+      <Text numberOfLines={1} style={[styles.caption, { color: t.inkMuted }]}>
+        {caption}
+      </Text>
+    );
+  return (
+    <View style={styles.captionRow}>
+      <Icon source={icon} size={14} color={t.status.pausedInk} />
+      <Text numberOfLines={1} style={[styles.caption, styles.captionShrink, { color: t.inkMuted }]}>
+        {caption}
+      </Text>
+    </View>
+  );
+}
+
 /** Spoken state of a row in select mode ("selected" / "not selected"). */
 function selectionState(selecting: boolean | undefined, selected: boolean | undefined) {
   return selecting ? { selected: selected === true } : undefined;
@@ -108,6 +127,7 @@ export function TrailRow({
   category,
   stats,
   caption,
+  captionIcon,
   accessibilityLabel,
   onPress,
   onLongPress,
@@ -123,6 +143,8 @@ export function TrailRow({
   category: CategoryDefinition | null;
   stats: string;
   caption: string;
+  /** Share live (#712): a small icon before the caption (the "not sent yet" clock). */
+  captionIcon?: string;
   accessibilityLabel: string;
   onPress: () => void;
   onLongPress: () => void;
@@ -161,9 +183,7 @@ export function TrailRow({
             </View>
             {/* Never truncated: the three stats are the point of the row. */}
             <Text style={[styles.stats, { color: t.ink }]}>{stats}</Text>
-            <Text numberOfLines={1} style={[styles.caption, { color: t.inkMuted }]}>
-              {caption}
-            </Text>
+            <CaptionLine caption={caption} icon={captionIcon} />
           </View>
         </Pressable>
       }
@@ -335,6 +355,7 @@ export function WaypointRow({
   name,
   detail,
   caption,
+  captionIcon,
   photoUri,
   glyph,
   accessibilityLabel,
@@ -351,6 +372,8 @@ export function WaypointRow({
   name: string;
   detail: string;
   caption: string;
+  /** Share live (#712): a small icon before the caption (the "not sent yet" clock). */
+  captionIcon?: string;
   photoUri?: string;
   /** The waypoint's chosen pin icon (MaterialCommunityIcons), when it has one. */
   glyph?: string | null;
@@ -399,9 +422,7 @@ export function WaypointRow({
             <Text numberOfLines={1} style={[styles.stats, { color: t.ink }]}>
               {detail}
             </Text>
-            <Text numberOfLines={1} style={[styles.caption, { color: t.inkMuted }]}>
-              {caption}
-            </Text>
+            <CaptionLine caption={caption} icon={captionIcon} />
           </View>
         </Pressable>
       }
@@ -417,6 +438,7 @@ export function AreaRow({
   name,
   detail,
   caption,
+  captionIcon,
   color,
   photoUri,
   accessibilityLabel,
@@ -434,6 +456,8 @@ export function AreaRow({
   name: string;
   detail: string;
   caption: string;
+  /** Share live (#712): a small icon before the caption (the "not sent yet" clock). */
+  captionIcon?: string;
   color: string;
   photoUri?: string;
   accessibilityLabel: string;
@@ -480,9 +504,7 @@ export function AreaRow({
             <Text numberOfLines={1} style={[styles.stats, { color: t.ink }]}>
               {detail}
             </Text>
-            <Text numberOfLines={1} style={[styles.caption, { color: t.inkMuted }]}>
-              {caption}
-            </Text>
+            <CaptionLine caption={caption} icon={captionIcon} />
           </View>
         </Pressable>
       }
@@ -520,6 +542,8 @@ const styles = StyleSheet.create({
   nameShrink: { flexShrink: 1 },
   stats: { fontSize: 14, lineHeight: 19, fontWeight: '600', ...tabularNums },
   caption: { fontSize: 12, lineHeight: 16, fontWeight: '500' },
+  captionRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  captionShrink: { flexShrink: 1 },
   divider: { height: 1, marginLeft: space.lg + THUMB_SIZE + space.md },
   trailingIcon: { width: 44, height: target.min, alignItems: 'center', justifyContent: 'center' },
   chipHit: { height: target.min, justifyContent: 'center', paddingHorizontal: 2 },

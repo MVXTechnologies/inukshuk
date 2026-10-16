@@ -143,6 +143,50 @@ describe('scrubText — coordinates', () => {
   });
 });
 
+describe('scrubText — team sync over the internet (R-PRIV-1)', () => {
+  it('drops the fragment of an invite link', () => {
+    expect(
+      scrubText('join https://inukshuk.mvxtechnologies.com/j#AQEtZWFtSWRfX19fX19fX19fX18 failed'),
+    ).toBe('join https://inukshuk.mvxtechnologies.com/<path> failed');
+  });
+
+  it('redacts base64url keys and ids of 22 to 86 characters', () => {
+    const member = 'q3Zr8kQ0x_Yv-1mNpL2sT9uWb4cDeFgHiJkLmNoPqRs';
+    const room = 'Xk3PZ0aQ_7rTnB2cVw9yLm';
+    expect(scrubText(`member ${member} in room ${room}`)).toBe('member <id> in room <id>');
+    // Random without digits or dashes: still a quarter capitals.
+    expect(scrubText('seed QWErtYUiOPasDFghJKlzXC')).toBe('seed <id>');
+  });
+
+  it('keeps long camelCase names readable', () => {
+    const text = 'at handleSessionOpenedEventFromRoom (bundle) and teamSessionRepublishIfNewKey';
+    expect(scrubText(text)).toBe(text);
+  });
+
+  it('redacts DTLS fingerprints and ICE candidates', () => {
+    expect(scrubText('a=fingerprint:sha-256 AB:CD:EF:01:23:45:67:89')).toBe(
+      'a=fingerprint:<redacted>',
+    );
+    expect(
+      scrubText('bad candidate:842163049 1 udp 1677729535 203.0.113.7 46154 typ srflx\nnext'),
+    ).toBe('bad candidate:<redacted>\nnext');
+  });
+
+  it('redacts IPv4 and IPv6 literals, a host included', () => {
+    expect(scrubText('dial 192.168.1.20:41234 failed')).toBe('dial <ip>:41234 failed');
+    expect(scrubText('ws://10.0.0.2:8080/x closed')).toBe('ws://<ip>:8080/<path> closed');
+    expect(scrubText('peer 2001:db8::1 and fe80::1ff:fe23:4567:890a left')).toBe(
+      'peer <ip> and <ip> left',
+    );
+    expect(scrubText('peer 2001:0db8:0000:0000:0000:ff00:0042:8329 left')).toBe('peer <ip> left');
+  });
+
+  it('leaves versions, times, stack positions and C++ scopes alone', () => {
+    const text = 'v2.7.0 at 12:34:56 in main.jsbundle:1:2345 via std::vector';
+    expect(scrubText(text)).toBe(text);
+  });
+});
+
 describe('scrubText — as a whole', () => {
   // What the app actually composed before this change (useReparseStoredMaps,
   // MapScreen's map-tap, makeMap's context): each leaked user content.

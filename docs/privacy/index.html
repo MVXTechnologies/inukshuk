@@ -110,7 +110,7 @@
       ><a href="../fr/privacy/" lang="fr" hreflang="fr">FR</a>
     </div>
     <h1>Inukshuk — Privacy Policy</h1>
-    <p class="updated">Last updated: 1 October 2026</p>
+    <p class="updated">Last updated: 16 October 2026</p>
 
     <p>
       Inukshuk is a free, open-source app for offline trail navigation: it displays georeferenced
@@ -173,7 +173,9 @@
       below), the Explore map catalogue downloaded from our website, the points of a route you draw
       in Trails or Roads mode (see "Snapping a drawn route to trails or roads" below), and, if you
       connect Strava, the sign-in tokens that pass through our tile server on their way to Strava.
-      None of them carry your identity or your GPS position, and the tokens are not stored.
+      None of them carry your identity or your GPS position, and the tokens are not stored. A team
+      with the internet on also uses our relay, which only ever sees encrypted data (see "Team mode
+      over the internet" below).
     </p>
     <p>
       <strong>Tips.</strong> An optional tip (Settings → Support Inukshuk) is processed entirely by
@@ -360,6 +362,29 @@
         and sent when a connection returns.
       </li>
     </ul>
+
+    <h2>Team mode over the internet</h2>
+    <p>
+      When a team admin turns on the internet for a team, its members' phones find each other
+      through a small relay service of ours, run on Cloudflare (Cloudflare acts as our processor).
+      Positions, messages and everything else a team shares are end-to-end encrypted between the
+      members' phones: the relay cannot read them.
+    </p>
+    <p>
+      The relay sees the IP address of each phone that connects, when it connects and how much it
+      sends. It keeps nothing: no storage, no logs. Phones meet in rooms named by a code that
+      changes every day and that only team members can work out, so the relay cannot tell which team
+      is which.
+    </p>
+    <p>
+      When two phones can reach each other directly, they connect phone to phone, and each one sees
+      the other's IP address. "Always use the relay", in a team's Connection screen, sends
+      everything through the relay instead (Cloudflare's TURN service), so teammates never see your
+      IP address.
+    </p>
+    <p>
+      Someone removed from a team keeps what their phone already received; they receive nothing new.
+    </p>
 
     <h2>Strava</h2>
     <p>

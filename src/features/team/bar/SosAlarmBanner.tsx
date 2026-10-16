@@ -14,6 +14,7 @@
  * Navigate), a resolve, or the banner unmounting; never on a timeout. A plain absolutely positioned View: never a Paper
  * Portal on this spontaneous path (paper-portal-touch-swallow).
  */
+import { sosUrl, withTeam } from '@core/teamui/alerts';
 import { metres } from '@core/teamui/field';
 import { compassPoint, shortAge } from '@core/teamui/positions';
 import { distanceText } from '@core/teamui/teamBar';
@@ -21,7 +22,7 @@ import { initialBearingDeg } from '@core/geo/geomath';
 import { notifyTeam, SOS_TONE_MS, SOS_VIBRATION } from '@data/team/teamNotifications';
 import { useNavigationStore } from '@state/navigationStore';
 import { useSettingsStore } from '@state/settingsStore';
-import { useTeamStore } from '@state/teamStore';
+import { switchToTeam, useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
@@ -49,6 +50,7 @@ export function SosAlarmBanner() {
     s.sosAlarm === null ? undefined : s.positions.find((p) => p.id === s.sosAlarm?.owner),
   );
   const here = useSettingsStore((s) => s.lastKnownPosition);
+  const activeId = useTeamStore((s) => s.activeId);
   const entity = alarm?.entity ?? null;
   // A new ring for the same SOS (reopened after a resolve): the alarm starts over.
   const rangAt = alarm?.at ?? null;
@@ -70,7 +72,7 @@ export function SosAlarmBanner() {
       void notifyTeam({
         title: `SOS · ${a.authorName}`,
         body: `Needs help · ${a.teamName}`,
-        url: `/team/sos/${a.owner}/${a.entity.split(':')[2] ?? ''}`,
+        url: withTeam(sosUrl(a.owner, a.entity.split(':')[2] ?? ''), a.teamId),
         channel: 'sos',
         identifier: a.entity,
       });
@@ -93,9 +95,22 @@ export function SosAlarmBanner() {
   const sub = ['Needs help', where, age === 'now' ? 'just now' : `${age} ago`]
     .filter(Boolean)
     .join(' · ');
-  const navigate = () => {
+  // An SOS from another of my teams (owner 2026-10-16): its team goes on
+  // screen first, so its band and position are there.
+  const otherTeam = alarm !== null && alarm.teamId !== activeId;
+  const navigate = async () => {
+    const entityNow = alarm?.entity;
     acknowledge();
-    if (at) useNavigationStore.getState().setDestination({ latitude: at[1], longitude: at[0] });
+    let dest = at;
+    if (otherTeam) {
+      await switchToTeam(alarm.teamId);
+      const st = useTeamStore.getState();
+      const s2 = st.soses.find((x) => `sos:${x.owner}:${x.id}` === entityNow);
+      const live2 = st.positions.find((p) => p.id === alarm.owner);
+      dest = live2 ? [live2.lon, live2.lat] : s2 ? [s2.lng, s2.lat] : null;
+    }
+    if (dest)
+      useNavigationStore.getState().setDestination({ latitude: dest[1], longitude: dest[0] });
     router.navigate('/' as never);
   };
   return (
@@ -123,6 +138,22 @@ export function SosAlarmBanner() {
             <Text style={[styles.t2, { color: t.team.sosInk }]} numberOfLines={2}>
               {sub}
             </Text>
+            {otherTeam && (
+              <Pressable
+                onPress={() => void switchToTeam(alarm.teamId)}
+                style={styles.team}
+                accessibilityRole="button"
+                accessibilityLabel={`Show ${alarm.teamName}`}
+                hitSlop={8}
+                testID="team-sos-alarm-team"
+              >
+                <Icon source="account-group" size={15} color={t.team.sosInk} />
+                <Text style={[styles.teamText, { color: t.team.sosInk }]} numberOfLines={1}>
+                  {alarm.teamName}
+                </Text>
+                <Icon source="chevron-right" size={15} color={t.team.sosInk} />
+              </Pressable>
+            )}
           </View>
         </View>
         <View style={styles.vr}>
@@ -143,7 +174,7 @@ export function SosAlarmBanner() {
             <Text style={[styles.btnText, { color: t.team.sos }]}>Acknowledge</Text>
           </Pressable>
           <Pressable
-            onPress={navigate}
+            onPress={() => void navigate()}
             style={[styles.btn, styles.ghost]}
             accessibilityRole="button"
             accessibilityLabel={`Navigate to ${alarm.authorName}`}
@@ -195,6 +226,20 @@ const styles = StyleSheet.create({
   t1: { fontSize: 18, lineHeight: 22, fontWeight: '800' },
   t2: { fontSize: 14, lineHeight: 19, fontWeight: '700' },
   vr: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
+  team: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    marginTop: 6,
+    paddingLeft: 6,
+    paddingRight: 4,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    maxWidth: '100%',
+  },
+  teamText: { fontSize: 13, fontWeight: '800', flexShrink: 1 },
   vrText: { fontSize: 12.5, fontWeight: '700' },
   btns: { flexDirection: 'row', gap: 8, marginTop: 12 },
   btn: {

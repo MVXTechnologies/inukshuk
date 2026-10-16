@@ -25,6 +25,13 @@ import type { ErrorReport } from './types';
  * - Coordinates, as `<coord>`: a pair of decimals with 4+ places each (the
  *   ~10 m precision that points at a place; projected metres too), and any
  *   number labelled lat, lon, lng, latitude or longitude.
+ * - Team sync secrets and metadata (security review 2026-10 §5.3, R-PRIV-1):
+ *   WebRTC `a=fingerprint` values and `candidate:` lines (they carry IPs),
+ *   IPv4 and IPv6 literals as `<ip>`, and base64url tokens of 22–86
+ *   characters as `<id>` (invite seeds, keys, member, team and room ids).
+ *   A token counts when it holds a digit, `-` or `_`, or is at least a
+ *   quarter capitals, so camelCase names in a stack stay readable. An
+ *   invite link loses its `#` fragment with the rest of the URI's path.
  *
  * Stack frames keep their function names and `:line:column`; only the bundle
  * path in front of them goes. Pure and idempotent.
@@ -73,6 +80,26 @@ const SINGLE_QUOTED = /(^|[\s(\[{=:,])'([^'\n]*)'(?=$|[\s)\]},.;:!?])/g;
 const IDENTIFIER_PATH = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/;
 // Up to 7 integer digits: projected coordinates (UTM metres) place a map too.
 const COORD_PAIR = /-?\b\d{1,7}\.\d{4,}\s*[,;/ ]\s*-?\d{1,7}\.\d{4,}\b/g;
+// WebRTC: the DTLS fingerprint and ICE candidates (`candidate:… <ip> <port> typ …`).
+const FINGERPRINT = /\b(a=fingerprint:)[^\r\n]*/gi;
+const CANDIDATE = /\b(candidate:)[^\r\n"]*/gi;
+const IPV4 =
+  /(?<![\w.])(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}(?![\w.])/g;
+const H16 = '[0-9A-Fa-f]{1,4}';
+// The full form (8 groups), or a compressed one with `::` (never a bare `::`).
+const IPV6 = new RegExp(
+  `(?<![\\w:])(?:(?:${H16}:){7}${H16}|(?:${H16}:){1,7}:(?:${H16}(?::${H16}){0,6})?|::${H16}(?::${H16}){0,6})(?![\\w:])`,
+  'g',
+);
+const B64_TOKEN = /(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{22,86}(?![A-Za-z0-9_-])/g;
+
+/** Whether a base64url-shaped run looks random (a key or an id), not a camelCase name. */
+function looksRandom(token: string): boolean {
+  if (/[0-9_-]/.test(token)) return true;
+  const capitals = token.replace(/[^A-Z]/g, '').length;
+  return capitals * 4 >= token.length;
+}
+
 const LABELLED_COORD = /\b(lat|lon|lng|latitude|longitude)("?\s*[:=]\s*)-?\d{1,3}(?:\.\d+)?\b/gi;
 
 /** Scrub one piece of report text (a message, a stack, a breadcrumb…). */
@@ -86,6 +113,11 @@ export function scrubText(text: string): string {
     .replace(ABSOLUTE_PATH, (_m, lead: string, path: string) => `${lead}${placeholderFor(path)}`)
     .replace(PHOTO_PATH, (_m, lead: string, path: string) => `${lead}${placeholderFor(path)}`)
     .replace(UUID, '<uuid>')
+    .replace(FINGERPRINT, '$1<redacted>')
+    .replace(CANDIDATE, '$1<redacted>')
+    .replace(IPV4, '<ip>')
+    .replace(IPV6, '<ip>')
+    .replace(B64_TOKEN, (token: string) => (looksRandom(token) ? '<id>' : token))
     .replace(TYPOGRAPHIC, '<str>')
     .replace(DOUBLE_QUOTED, (quoted: string, offset: number, whole: string) =>
       // A JSON key is code, not data: keep `"name":` readable.

@@ -4,6 +4,11 @@
  * without `rcp`), in an isolated module registry: its fold skips each receipt
  * as invalid, keeps every chain whole, and still reads the `cap.pen` claim
  * that now also carries `rc`.
+ *
+ * Since the sync-group seam (2.7.0 G1) the simulated fold labels a kind it
+ * does not know `unknown` (the real 2.6.0 says `invalid`; the frozen 2.6.1
+ * fold in `@core/team/testing/legacyFold26` pins that, and
+ * `@core/domains/team/compat.test` runs it against a 2.7 phone).
  */
 import type { SignedOp } from '@core/team/envelope';
 import type { TeamReplica } from '@core/team/replica';
@@ -64,7 +69,7 @@ describe('receipts with 2.6.0 peers (#708)', () => {
     oldOwner.ingest(ops, now);
     const data = oldOwner.data(now);
     const skipped = new Map(data.skipped.map((s) => [s.id, s.why]));
-    for (const op of [r1, r2, r3] as SignedOp[]) expect(skipped.get(op.id)).toBe('invalid');
+    for (const op of [r1, r2, r3] as SignedOp[]) expect(skipped.get(op.id)).toBe('unknown');
     expect(data.entities.get(`msg:${bob.id}:m1`)).toBeDefined();
     expect(after.env.pv).toBe(r1.id);
     expect(oldOwner.versionVector()).toEqual(w.root.versionVector());

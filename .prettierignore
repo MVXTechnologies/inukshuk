@@ -41,3 +41,5 @@ src/core/gnss/fixtures/
 scripts/catalog/sources/cartespleinair-rivers.json
 # Cartes Plein-air listing fixture: an anonymised snippet of the page, kept as captured
 src/core/catalog/cartesPleinAir/fixtures/
+# Recorded golden team log + its pre-seam fold (sync-group seam gate, 2.7.0 G1), kept as recorded.
+src/core/team/testing/golden/*.json

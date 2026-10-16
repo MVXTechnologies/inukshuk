@@ -654,6 +654,7 @@ describe('the in-app SOS alarm (#708)', () => {
       useTeamStore.setState({
         sosAlarm: {
           entity: 'sos:julie:s1',
+          teamId: 't',
           owner: 'julie',
           authorName: 'Julie Tremblay',
           teamName,
@@ -803,6 +804,57 @@ describe('the in-app SOS alarm (#708)', () => {
     expect(mockNotify.mock.calls.length).toBe(first + 2);
     expect(postedAt.slice(-2)).toEqual([t1 + 8_000, t1 + 16_000]);
     await act(async () => useTeamStore.getState().acknowledgeAlarm());
+  });
+
+  it('an SOS from another of my teams loops F → D the same way, and Acknowledge cuts it at once (2.7.0 × #757)', async () => {
+    fakeClock();
+    julieSos();
+    useTeamStore.setState({ activeId: 't' });
+    const cancel = jest.spyOn(Vibration, 'cancel');
+    cancel.mockClear();
+    const t0 = Date.now();
+    await act(async () =>
+      useTeamStore.setState({
+        sosAlarm: {
+          entity: 'sos:julie:s9',
+          teamId: 'hut',
+          owner: 'julie',
+          authorName: 'Julie Tremblay',
+          teamName: 'Gaspésie 2026',
+          text: 'SOS · needs help',
+          at: Date.now(),
+        },
+      }),
+    );
+    await render(wrap(<SosAlarmBanner />));
+    // Its banner offers that team.
+    expect(screen.getByTestId('team-sos-alarm-team')).toBeTruthy();
+    // Back to back, never a timeout: three minutes (past the old 2 min cap).
+    for (let i = 0; i < 23; i++)
+      await act(async () => {
+        jest.advanceTimersByTime(RESOUND_MS);
+      });
+    expect(postedAt).toEqual(Array.from({ length: 23 }, (_, i) => t0 + (i + 1) * 8_000));
+    expect(cancel).not.toHaveBeenCalled();
+    // Each re-post opens that team, under the SOS's own id.
+    expect(mockNotify.mock.calls.at(-1)![0]).toMatchObject({
+      channel: 'sos',
+      identifier: 'sos:julie:s9',
+      url: '/team/sos/julie/s9?team=hut',
+    });
+    // 3 s into a tone: Acknowledge silences it at once, nothing more scheduled.
+    await act(async () => {
+      jest.advanceTimersByTime(3_000);
+    });
+    await fireEvent.press(screen.getByTestId('team-sos-acknowledge'));
+    expect(mockSilence).toHaveBeenCalledTimes(1);
+    expect(mockSilence).toHaveBeenCalledWith('sos:julie:s9');
+    expect(cancel).toHaveBeenCalled();
+    expect(useTeamStore.getState().sosAlarm).toBeNull();
+    await act(async () => {
+      jest.advanceTimersByTime(RESOUND_MS * 5);
+    });
+    expect(postedAt).toHaveLength(23);
   });
 });
 

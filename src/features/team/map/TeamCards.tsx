@@ -28,6 +28,7 @@ import { startEditing } from './TrailEditor';
 import { loadTrackGeometry } from '@data/trackGeometry';
 import { useLibraryStore } from '@state/libraryStore';
 import { useTeamSheet, type TeamSheet } from './teamMode';
+import { ConnectionCard } from './ConnectionCard';
 import { FLOATING_CARD_GAP } from '@features/map/bottomLayers';
 
 /**
@@ -101,7 +102,7 @@ export function Round({
   );
 }
 
-function Card({
+export function Card({
   title,
   sub,
   icon,
@@ -643,6 +644,8 @@ function SheetCard({
   switch (sheet.kind) {
     case 'status':
       return <StatusCard onClose={close} />;
+    case 'connection':
+      return <ConnectionCard onClose={close} />;
     case 'notify':
       return <NotifyCard at={sheet.at} onClose={close} />;
     case 'spot':

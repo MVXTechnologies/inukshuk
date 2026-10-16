@@ -54,6 +54,10 @@ export interface TrackListRowProps {
   selected: boolean;
   /** Just moved: the brief sage wash (#711). */
   flash?: boolean;
+  /** Share live (#712): who changed it last, or "Live with …"; replaces the date caption. */
+  note?: string;
+  /** An icon before the note (the "not sent yet" clock). */
+  noteIcon?: string;
   menuOpen: boolean;
   /** Elevation peek: undefined = closed, null = loading, else the trail. */
   elevation: ElevationPreviewTrack | null | undefined;
@@ -78,6 +82,8 @@ export const TrackListRow = memo(function TrackListRow({
   selecting,
   selected,
   flash,
+  note,
+  noteIcon,
   menuOpen,
   elevation,
   grip,
@@ -98,7 +104,7 @@ export const TrackListRow = memo(function TrackListRow({
         .filter((part): part is string => part !== null)
         .join(' · ')
     : (category?.name ?? null);
-  const caption = trailCaption(t.startedAt, typeName, nowMs);
+  const caption = note ?? trailCaption(t.startedAt, typeName, nowMs);
   const spoken = [
     t.name,
     typeName ?? undefined,
@@ -186,6 +192,7 @@ export const TrackListRow = memo(function TrackListRow({
         category={category}
         stats={stats}
         caption={caption}
+        captionIcon={noteIcon}
         // Long-press enters select mode (#711); while selecting, taps toggle
         // the row instead of opening the trail.
         accessibilityLabel={

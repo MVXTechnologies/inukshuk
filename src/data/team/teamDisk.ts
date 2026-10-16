@@ -59,6 +59,19 @@ export interface TeamRecord {
   teamNameKeyId?: string;
   /** Newest message time seen per thread (`photo:<id>`, `pin:<id>`): the map's "new" bubbles. */
   seen?: Record<string, number>;
+  /**
+   * What the group is (2.7.0, design §3.3): absent for a team; `lib` for a
+   * shared folder or item (#712), whose replica folds the library domain.
+   */
+  app?: 'lib';
+  /** A renewed folder's predecessor group (#712 renewal): picked up through its members. */
+  via?: string;
+  /**
+   * Joined over the internet without comparing the safety code (R-INV-4):
+   * no position and no direct WebRTC until another member vouches for the
+   * log (`@core/group/provisional`); cleared then.
+   */
+  provisional?: { inviteId: string; admittedBy: string };
 }
 
 /** Device secrets, base64url (the public keys are derived on load). */

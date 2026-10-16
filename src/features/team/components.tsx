@@ -5,6 +5,7 @@
  * paper-surface-ios-flex-collapse).
  */
 import type { Role } from '@core/team/roles';
+import { LINK_LABEL, type MemberLink } from '@core/teamui/links';
 import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -90,6 +91,49 @@ export function RoleChip({ role, left }: { role: Role; left?: boolean }) {
     >
       <Text style={[styles.chipText, { color: left ? t.status.pausedInk : t.inkVariant }]}>
         {left ? 'Left' : ROLE_LABEL[role]}
+      </Text>
+    </View>
+  );
+}
+
+const LINK_ICON: Record<MemberLink, string> = {
+  direct: 'swap-horizontal',
+  relay: 'cloud-outline',
+  nearby: 'access-point',
+  connecting: 'dots-horizontal',
+  old: 'cellphone-arrow-down',
+  out: 'cloud-off-outline',
+};
+
+/** The link chip's text grows to this much of the font scale at most (a chip, like map chrome). */
+export const LINK_FONT_CAP = 1.15;
+
+/**
+ * How a teammate is reached (#705): Direct (green), Relayed, Nearby,
+ * Connecting, Needs update or Out of reach (amber). Small, and capped at
+ * {@link LINK_FONT_CAP}, so a member's line still fits at 360 dp.
+ */
+export function LinkChip({ link }: { link: MemberLink }) {
+  const t = useSchemeTokens();
+  const color =
+    link === 'direct'
+      ? t.status.gnssFixed
+      : link === 'out' || link === 'old'
+        ? t.status.pausedInk
+        : t.inkVariant;
+  return (
+    <View
+      style={[styles.link, { backgroundColor: t.surfaceVariant }]}
+      accessibilityLabel={LINK_LABEL[link]}
+      testID={`team-link-${link}`}
+    >
+      <Icon source={LINK_ICON[link]} size={12} color={color} />
+      <Text
+        style={[styles.linkText, { color }]}
+        maxFontSizeMultiplier={LINK_FONT_CAP}
+        numberOfLines={1}
+      >
+        {LINK_LABEL[link]}
       </Text>
     </View>
   );
@@ -290,6 +334,17 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   chipText: { fontSize: 12, fontWeight: '600' },
+  link: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderRadius: 6,
+    paddingLeft: 4,
+    paddingRight: 6,
+    paddingVertical: 1,
+    flexShrink: 0,
+  },
+  linkText: { fontSize: 11, lineHeight: 14, fontWeight: '700' },
   note: {
     flexDirection: 'row',
     gap: 10,

@@ -17,7 +17,7 @@ import type { SignedOp } from '@core/team/envelope';
 import type { TeamReplica } from '@core/team/replica';
 import { isAdminRole, type Role } from '@core/team/roles';
 import { DrawAlerts, type DrawAlert } from '@core/teamdraw/alerts';
-import { capBody, needsCap } from '@core/teamdraw/caps';
+import { advertisedCapBody, needsAdvertisedCap } from '@core/teamdraw/caps';
 import {
   finishStroke,
   liveStrokes,
@@ -195,7 +195,8 @@ export class SessionDrawing {
   }
 
   /**
-   * Advertise `cap.pen` (a team joined or opened): written when there is no
+   * Advertise `cap.pen` (and since 2.7.0 `lnk`, the LAN mux upgrade) when a
+   * team is joined or opened: written when there is no
    * current claim or it is over a day old, so a claim lapses within a week of
    * the phone's last 2.5.2+ open (a rollback); true when written.
    */
@@ -204,8 +205,8 @@ export class SessionDrawing {
     const r = this.h.replica;
     if (this.h.guardWrite() !== null || r.state.sendKeyId === undefined) return false;
     const now = this.h.now();
-    if (!needsCap(r.data(now), me, now)) return false;
-    const op = this.h.run(() => r.write(now, 'e.set', capBody(me, now)));
+    if (!needsAdvertisedCap(r.data(now), me, now)) return false;
+    const op = this.h.run(() => r.write(now, 'e.set', advertisedCapBody(me, now)));
     return op !== undefined;
   }
 

@@ -8,6 +8,7 @@ import {
   reduceData,
 } from './data';
 import { resolveTeam } from './membership';
+import { teamRegistry } from '@core/domains/team';
 import { addMember, c, device, exchange, joinReplica, MIN, newWorld, T0 } from './testing/fixtures';
 import { forAll, int, mulberry32, pick, shuffle } from './testing/prop';
 
@@ -117,7 +118,7 @@ describe('reduceData', () => {
       ...w.root.log.logged(),
       ...w.root.liveEphemeral(T0 + 3 * MIN),
     ]);
-    const blind = reduceData(s, () => undefined);
+    const blind = reduceData(s, () => undefined, teamRegistry());
     expect(blind.skipped.every((x) => x.why === 'undecryptable')).toBe(true);
   });
 
@@ -143,7 +144,7 @@ describe('reduceData', () => {
     const all = [...w.root.log.logged()];
     const view = (ops: typeof all) => {
       const s = resolveTeam(c, w.teamId, ops);
-      const d = reduceData(s, (op) => w.root.decode(op));
+      const d = reduceData(s, (op) => w.root.decode(op), teamRegistry());
       return [...d.entities].map(([k, e]) => [k, isLive(e.state), visibleFields(e.state)]).sort();
     };
     const ref = view(all);
