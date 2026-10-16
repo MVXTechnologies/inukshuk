@@ -9,7 +9,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@ui/paper';
 
 import { mciGlyph } from '../components/waypointGlyph';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 interface Props {
   /** `undefined` = the default inukshuk pin. */
@@ -39,6 +39,8 @@ export const IconTile = memo(function IconTile({
   favorite = false,
   onToggleFavorite,
 }: Props) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const theme = useTheme();
@@ -72,16 +74,16 @@ export const IconTile = memo(function IconTile({
     >
       <View>
         {glyph === null ? (
-          <InukshukGlyph size={26} frame="square" tone="mono" color={ink} />
+          <InukshukGlyph size={sz(26)} frame="square" tone="mono" color={ink} />
         ) : (
-          <MaterialCommunityIcons name={glyph} size={26} color={ink} />
+          <MaterialCommunityIcons name={glyph} size={sz(26)} color={ink} />
         )}
         {favorite && (
           <View
             style={[styles.star, { backgroundColor: theme.colors.surface }]}
             testID={`favorite-${icon ?? 'default'}`}
           >
-            <MaterialCommunityIcons name="star" size={11} color={palette.ochre} />
+            <MaterialCommunityIcons name="star" size={sz(11)} color={palette.ochre} />
           </View>
         )}
       </View>

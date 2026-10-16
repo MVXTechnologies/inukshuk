@@ -14,7 +14,7 @@ import {
   useSheetAccent,
   useSheetWidth,
 } from './mapSheet';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 const IMAGERY = IMAGERY_LOOKS.map((l) => ({ value: l, label: IMAGERY_LOOK_LABEL[l] }));
 const STRIP_H = 84;
@@ -28,6 +28,8 @@ const RING = 3;
  * right says "Base map in use", or offers "Use" when it is not.
  */
 export function SatellitePanel({ onBack }: { onBack: () => void }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const tokens = useSchemeTokens();
@@ -77,7 +79,7 @@ export function SatellitePanel({ onBack }: { onBack: () => void }) {
           size={STRIP_H - 2 * RING}
           width={stripW - 2 * RING}
           height={STRIP_H - 2 * RING}
-          radius={11}
+          radius={sz(11)}
           // Four tiles across, one zoom pair deeper: sharp at the strip's width.
           columns={4}
         />

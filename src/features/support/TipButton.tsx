@@ -43,7 +43,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * The tip button, bottom-right of the Map only (#476). Opens Support
@@ -311,10 +311,12 @@ interface GlyphProps {
 
 /** 1 · A jar with a coin; the whole jar wobbles (p = degrees). */
 function JarCoin({ t, p }: GlyphProps) {
+  const { sz } = useDisplayScale();
+
   const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${p.value}deg` }] }));
   return (
     <Animated.View style={style}>
-      <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+      <Svg width={sz(26)} height={sz(26)} viewBox="0 0 24 24" fill="none">
         <Path
           d="M8 3h8M9 3v2.5C6.5 6.5 5.5 8.5 5.5 11v6.5A3.5 3.5 0 009 21h6a3.5 3.5 0 003.5-3.5V11c0-2.5-1-4.5-3.5-5.5V3"
           stroke={t.support.onAccent}
@@ -330,6 +332,8 @@ function JarCoin({ t, p }: GlyphProps) {
 
 /** 2 · A gold coin drops onto three stones (p: 0 → 0.7 lands → 1 fades). */
 function CairnCoin({ t, p }: GlyphProps) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const coin = useAnimatedStyle(() => ({
@@ -338,7 +342,7 @@ function CairnCoin({ t, p }: GlyphProps) {
   }));
   return (
     <View style={styles.glyphBox}>
-      <Svg width={28} height={28} viewBox="0 0 24 24">
+      <Svg width={sz(28)} height={sz(28)} viewBox="0 0 24 24">
         <Rect x={5} y={15} width={14} height={4.5} rx={2} fill={t.support.cairnLight} />
         <Rect x={7} y={11} width={10} height={4} rx={1.8} fill={t.support.cairnMid} />
         <Rect x={9} y={7.5} width={6} height={3.5} rx={1.5} fill={t.support.cairnLight} />
@@ -350,10 +354,12 @@ function CairnCoin({ t, p }: GlyphProps) {
 
 /** 3 · A granite heart that beats twice (p = scale). */
 function StoneHeart({ t, p }: GlyphProps) {
+  const { sz } = useDisplayScale();
+
   const style = useAnimatedStyle(() => ({ transform: [{ scale: p.value }] }));
   return (
     <Animated.View style={style}>
-      <Svg width={26} height={26} viewBox="0 0 24 24">
+      <Svg width={sz(26)} height={sz(26)} viewBox="0 0 24 24">
         <Path
           d="M12 20.5c-1.2-.9-8-5.4-8-10.6A4.3 4.3 0 0112 7.6a4.3 4.3 0 018 2.3c0 5.2-6.8 9.7-8 10.6z"
           fill={t.support.stone}
@@ -543,6 +549,8 @@ function MugFace({ f, on, ink }: { f: SharedValue<number>; on: SharedValue<numbe
 
 /** 5 · The inukshuk with a heart; a soft ring pulses out (p: 0 → 1). */
 function InukshukHeart({ t, p }: GlyphProps) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const ring = useAnimatedStyle(() => ({
@@ -555,7 +563,7 @@ function InukshukHeart({ t, p }: GlyphProps) {
         pointerEvents="none"
         style={[styles.ring, { borderColor: t.support.accent }, ring]}
       />
-      <Svg width={28} height={28} viewBox="0 0 24 24">
+      <Svg width={sz(28)} height={sz(28)} viewBox="0 0 24 24">
         <Rect x={10} y={3} width={4.5} height={3.5} rx={1} fill={t.support.stoneDeep} />
         <Rect x={5} y={7} width={14} height={3} rx={1.2} fill={t.support.stoneDeep} />
         <Rect x={8} y={10.8} width={8} height={3} rx={1.1} fill={t.support.stone} />

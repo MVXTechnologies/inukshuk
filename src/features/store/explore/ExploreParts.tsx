@@ -11,7 +11,7 @@ import { Icon, Text } from '@ui/paper';
 import Svg, { Path } from 'react-native-svg';
 
 import { FootprintThumb } from './FootprintThumb';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * Building blocks of the map explorer (#447, boards `Main.dc.html` et al.):
@@ -305,6 +305,8 @@ export function ActivityTile({
   width: number;
   onPress: () => void;
 }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -319,7 +321,7 @@ export function ActivityTile({
         pressed && styles.pressed,
       ]}
     >
-      <MaterialCommunityIcons name={icon as IconName} size={26} color={t.explore.accent} />
+      <MaterialCommunityIcons name={icon as IconName} size={sz(26)} color={t.explore.accent} />
       <Text numberOfLines={1} style={[styles.activityLabel, { color: t.ink }]}>
         {label}
       </Text>
@@ -379,6 +381,8 @@ export function CollectionRow({
   external?: boolean;
   accessibilityHint?: string;
 }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -403,7 +407,7 @@ export function CollectionRow({
         {badge.kind === 'park' ? (
           <MaterialCommunityIcons
             name="image-filter-hdr"
-            size={26}
+            size={sz(26)}
             color={t.explore.collectionBadgeInk}
           />
         ) : (

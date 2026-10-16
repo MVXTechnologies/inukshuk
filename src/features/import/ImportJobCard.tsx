@@ -18,7 +18,7 @@ import { Icon, Text } from '@ui/paper';
 
 import { dismissImportJob, resumeSourceImport, stopSourceImport } from './importController';
 import { Card, CountTile, PillButton, ProgressBar, SourceTile } from './importParts';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * The import job's card at the top of the Library (#432/#435, boards
@@ -75,6 +75,8 @@ function Notice({ text, bold }: { text: string; bold?: string }) {
 }
 
 export function ImportJobCard() {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const job = useImportStore((s) => s.job);
@@ -108,7 +110,7 @@ export function ImportJobCard() {
       <Card style={styles.card}>
         <View style={styles.body}>
           <View style={styles.headRow}>
-            <SourceTile kind={job.source} size={28} />
+            <SourceTile kind={job.source} size={sz(28)} />
             <Text style={[styles.headTitle, { color: t.ink }]} numberOfLines={1}>
               {running ? `Importing from ${label}` : 'Import paused'}
             </Text>
@@ -159,7 +161,7 @@ export function ImportJobCard() {
       <Card style={styles.card}>
         <View style={styles.body}>
           <View style={styles.headRow}>
-            <SourceTile kind={job.source} size={28} />
+            <SourceTile kind={job.source} size={sz(28)} />
             <Text style={[styles.headTitle, { color: t.ink }]}>Import stopped</Text>
           </View>
           <Text style={[styles.caption, { color: t.inkMuted }]}>

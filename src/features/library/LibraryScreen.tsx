@@ -101,7 +101,7 @@ import { useDragToFolder, type DragItem } from './useDragToFolder';
 import { SetCategoryDialog } from './SetCategoryDialog';
 import { TrackFilterDialog } from './TrackFilterDialog';
 import { useTrackElevationPreview } from './useTrackElevationPreview';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /** Quiet time after a keystroke before the list re-filters. */
 const SEARCH_DEBOUNCE_MS = 200;
@@ -159,6 +159,8 @@ const DELETE_COPY: Record<DeleteTarget['kind'], { title: string; body: (name: st
  * over the list.
  */
 export function LibraryScreen() {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const insets = useSafeAreaInsets();
@@ -1429,7 +1431,7 @@ export function LibraryScreen() {
             accessibilityLabel="Filter trails"
           />
           {activeFilterCount > 0 && (
-            <Badge size={16} style={styles.filterBadge}>
+            <Badge size={sz(16)} style={styles.filterBadge}>
               {activeFilterCount}
             </Badge>
           )}

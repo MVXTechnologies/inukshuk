@@ -12,7 +12,7 @@ import { Button, Icon, IconButton, ProgressBar, Text, useTheme } from '@ui/paper
 import { LocatorThumb } from './LocatorThumb';
 import { openExternalLink } from '@lib/openLink';
 import { useCreditLanguage } from './useCreditLanguage';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * One Maps-tab row (revamp `After-Maps.html`): a 56 dp locator thumbnail,
@@ -73,6 +73,8 @@ export function CatalogItemRow({
   onOpen,
   onCancel,
 }: CatalogItemRowProps) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const theme = useTheme();
@@ -166,7 +168,7 @@ export function CatalogItemRow({
             { backgroundColor: tokens.elevation.level1, borderColor: tokens.divider },
           ]}
         >
-          <LocatorThumb bbox={item.bbox} size={56} />
+          <LocatorThumb bbox={item.bbox} size={sz(56)} />
         </View>
         <View style={styles.text}>
           {/* Two lines, not the board's one: sheet titles carry their NTS/quad

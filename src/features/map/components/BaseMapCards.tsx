@@ -7,7 +7,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Icon, Text } from '@ui/paper';
 import { RegionPreviewThumb } from '../RegionPreviewThumb';
 import { SubPanelButton, useSheetAccent, useSheetWidth } from './mapSheet';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * The base-map choices (#484, owner's option A). Relief was retired as a base
@@ -58,6 +58,8 @@ export function usePreviewBbox(): BoundingBox | null {
  * (never a bare 'Map', which the tab bar's Map tab already owns).
  */
 export function BaseMapCards({ onOpenSatellite }: { onOpenSatellite: () => void }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const tokens = useSchemeTokens();
@@ -90,7 +92,7 @@ export function BaseMapCards({ onOpenSatellite }: { onOpenSatellite: () => void 
                   size={PREVIEW_H - 2 * RING}
                   width={cardW - 2 * RING}
                   height={PREVIEW_H - 2 * RING}
-                  radius={11}
+                  radius={sz(11)}
                 />
                 {selected && (
                   <View style={[styles.check, { backgroundColor: accent }]} testID="map-type-check">

@@ -29,7 +29,7 @@ import { itemFacets, itemScaleDenominator } from './facetsAdapter';
 import { useCatalogDownloadFlow } from './useCatalogDownloadFlow';
 import { openExternalLink } from '@lib/openLink';
 import { useCreditLanguage } from '../useCreditLanguage';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * One map's detail page (#447, board `Detail.dc.html`): preview (the
@@ -56,6 +56,8 @@ function formatLabel(item: CatalogItem): string {
 }
 
 export function CatalogDetailScreen({ id }: { id: string }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -227,7 +229,7 @@ export function CatalogDetailScreen({ id }: { id: string }) {
             accessible
             accessibilityLabel={`${coverageLabel}. ${coverageText(item.bbox)}`}
           >
-            <CoverageMap bbox={item.bbox} position={position} height={150} />
+            <CoverageMap bbox={item.bbox} position={position} height={sz(150)} />
             <Text style={[styles.coverageText, { color: t.inkMuted }]}>
               {coverageLabel} · {coverageText(item.bbox)}
             </Text>

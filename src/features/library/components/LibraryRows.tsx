@@ -12,7 +12,7 @@ import { useMapThumbnail } from '../useMapThumbnail';
 import { useRouteThumbnail } from '../useRouteThumbnail';
 import { SourceMark } from '../../import/importParts';
 import { MapThumbnail, THUMB_SIZE, TrailThumbnail } from './Thumbnails';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * Library rows (revamp §5, `After-Library.html`): 76 dp, a 56 dp thumbnail,
@@ -398,6 +398,8 @@ export function WaypointRow({
   leading?: ReactNode;
   trailing?: ReactNode;
 }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -429,7 +431,7 @@ export function WaypointRow({
             ) : glyph ? (
               <Icon source={glyph} size={28} color={t.ink} />
             ) : (
-              <InukshukGlyph size={30} frame="square" />
+              <InukshukGlyph size={sz(30)} frame="square" />
             )}
           </View>
           <View style={styles.text}>

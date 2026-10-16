@@ -7,7 +7,7 @@ import { Button, Icon, IconButton, Surface, Text, useTheme } from '@ui/paper';
 
 import { HoldButton } from '../components/HoldButton';
 import { useRealSafeAreaInsets } from '../infoStrip/InfoStripInsets';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 interface Props {
   area: Area;
@@ -29,6 +29,8 @@ interface Props {
  * bottom card, never a Portal dialog: the map stays visible while reading.
  */
 export function AreaCard({ area, units, onEdit, onDelete, onClose, onAddPhoto, onShare }: Props) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const theme = useTheme();
@@ -59,7 +61,7 @@ export function AreaCard({ area, units, onEdit, onDelete, onClose, onAddPhoto, o
           accessibilityLabel="Edit area"
         />
         <HoldButton
-          size={40}
+          size={sz(40)}
           onConfirm={onDelete}
           accessibilityLabel="Delete area"
           accessibilityHint="Press and hold to delete"

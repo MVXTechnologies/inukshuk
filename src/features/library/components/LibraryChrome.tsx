@@ -9,7 +9,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 import { Icon, Text, useTheme } from '@ui/paper';
 
 import { SelectCheck } from './LibraryRows';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * The Library's chrome (revamp §5, boards `After-Library.html` and
@@ -274,6 +274,8 @@ export function LibraryEmptyState({
   onBrowseMaps: () => void;
   busy: boolean;
 }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -284,7 +286,7 @@ export function LibraryEmptyState({
         <View
           style={[styles.emptyBadge, { backgroundColor: t.surface, borderColor: t.outlineVariant }]}
         >
-          <InukshukGlyph size={64} frame="square" />
+          <InukshukGlyph size={sz(64)} frame="square" />
         </View>
         <View style={styles.emptyText}>
           <Text accessibilityRole="header" style={[styles.emptyTitle, { color: t.ink }]}>

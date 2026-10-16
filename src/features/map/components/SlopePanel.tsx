@@ -36,7 +36,7 @@ import {
   useSheetWidth,
 } from './mapSheet';
 import { RangeSlider } from './RangeSlider';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * The slope layer's options (#723, mockup B1–B4, owner pick: Option 2
@@ -280,9 +280,17 @@ export function AspectRose({ mask, onChange }: { mask: number; onChange: (mask: 
 
 /** The legend chip's 20 px rose: the selected sectors in the bands' red. */
 export function MiniRose({ mask }: { mask: number }) {
+  const { sz } = useDisplayScale();
+
   const tokens = useSchemeTokens();
   return (
-    <Svg width={20} height={20} accessibilityElementsHidden importantForAccessibility="no">
+    <Svg
+      viewBox="0 0 20 20"
+      width={sz(20)}
+      height={sz(20)}
+      accessibilityElementsHidden
+      importantForAccessibility="no"
+    >
       {ASPECT_SECTORS.map((name, k) => (
         <Path
           key={name}

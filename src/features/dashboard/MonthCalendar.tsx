@@ -3,7 +3,7 @@ import { findCategory, type CustomCategory } from '@core/library/categories';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Badge, Icon, IconButton, Text, useTheme } from '@ui/paper';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * The dashboard's month calendar: Monday-first grid where every day with an
@@ -38,6 +38,8 @@ export function MonthCalendar({
   canNext: boolean;
   onDayPress: (entry: CalendarDayEntry) => void;
 }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const theme = useTheme();
@@ -131,7 +133,7 @@ export function MonthCalendar({
                     />
                     {n > 1 && (
                       <Badge
-                        size={14}
+                        size={sz(14)}
                         style={[styles.badge, { backgroundColor: theme.colors.primary }]}
                       >
                         {n}

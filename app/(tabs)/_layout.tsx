@@ -17,7 +17,7 @@ import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Platform, Pressable, StyleSheet, Text, View, type ColorValue } from 'react-native';
 import { useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
@@ -63,6 +63,8 @@ export default function TabsLayout() {
     // left exposed it prefixes the tab's label ("󰉖, Library"), which breaks
     // VoiceOver/TalkBack and every Maestro 'Library(, tab.*)?' selector.
     const TabIcon = ({ color, focused }: { color: ColorValue; focused: boolean }) => {
+      const { sz } = useDisplayScale();
+
       const styles = useScaledStyles(stylesSheet);
       return (
         <View
@@ -70,7 +72,7 @@ export default function TabsLayout() {
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
         >
-          <MaterialCommunityIcons name={name} color={color} size={22} />
+          <MaterialCommunityIcons name={name} color={color} size={sz(22)} />
         </View>
       );
     };

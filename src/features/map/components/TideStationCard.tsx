@@ -13,7 +13,7 @@ import { convertFromTideStation, type ConvertRequest } from '@core/convert/entry
 import { tideImage } from '../tideImages';
 import { CopyValueButton } from './CopyValueButton';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 interface Props {
   station: TideStation | null;
@@ -60,6 +60,8 @@ export function TideStationCard({
   offline = false,
   floating = false,
 }: Props) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const theme = useTheme();
@@ -259,7 +261,7 @@ export function TideStationCard({
                     text={r.copy}
                     label={`Copy ${r.code} in every datum`}
                     onCopy={onCopy}
-                    size={13}
+                    size={sz(13)}
                   />
                 </View>
               </View>
@@ -288,7 +290,12 @@ export function TideStationCard({
                 <Text variant="bodyMedium" style={styles.num}>
                   {r.cell.text}
                 </Text>
-                <CopyValueButton text={r.cell.copy} label={r.cell.a11y} onCopy={onCopy} size={13} />
+                <CopyValueButton
+                  text={r.cell.copy}
+                  label={r.cell.a11y}
+                  onCopy={onCopy}
+                  size={sz(13)}
+                />
               </View>
             ))}
           </View>
@@ -307,7 +314,7 @@ export function TideStationCard({
                 <Text variant="bodyMedium" style={styles.flex} selectable>
                   = {v.text}
                 </Text>
-                <CopyValueButton text={v.copy} label={v.a11y} onCopy={onCopy} size={13} />
+                <CopyValueButton text={v.copy} label={v.a11y} onCopy={onCopy} size={sz(13)} />
               </View>
             ))}
             {model.cdBox.notes.map((n) => (

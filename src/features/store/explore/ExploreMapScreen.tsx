@@ -89,7 +89,7 @@ import { itemFacets } from './facetsAdapter';
 import { useCatalogDownloadFlow } from './useCatalogDownloadFlow';
 import { useLinkOutCollections } from './useLinkOutCollections';
 import { openExternalLink } from '@lib/openLink';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * Explore on a map (#447, board `MapView.dc.html`): the loaded catalog AND the
@@ -179,6 +179,8 @@ export function ExploreMapScreen({
   /** Pushed over a filtered list: back returns there, with this filter (#474). */
   fromList?: boolean;
 }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -681,8 +683,8 @@ export function ExploreMapScreen({
                   <MapPreview
                     thumbnailUrl={selected.item.thumbnailUrl}
                     seed={selected.item.id}
-                    width={64}
-                    height={64}
+                    width={sz(64)}
+                    height={sz(64)}
                   />
                 </View>
                 <View style={styles.rowText}>
@@ -796,8 +798,8 @@ export function ExploreMapScreen({
                       <MapPreview
                         thumbnailUrl={point.item.thumbnailUrl}
                         seed={point.item.id}
-                        width={48}
-                        height={48}
+                        width={sz(48)}
+                        height={sz(48)}
                       />
                     </View>
                   ) : (

@@ -34,7 +34,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { sourceFor, startSourceImport } from './importController';
 import { PillButton, SourceTile } from './importParts';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * Library › Import activities (#432/#435, board `ImportSheet`): pick a
@@ -77,6 +77,8 @@ function SourceRow({
   busy?: boolean;
   onPress: () => void;
 }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -104,7 +106,7 @@ function SourceRow({
       ) : (
         <Icon source="link-variant" size={22} color={t.inkMuted} />
       )}
-      <SourceTile kind={kind} size={32} />
+      <SourceTile kind={kind} size={sz(32)} />
       <View style={styles.sourceText}>
         <Text style={[styles.sourceTitle, { color: t.ink }]}>{title}</Text>
         <Text style={[styles.sourceSubtitle, { color: t.inkMuted }]}>{subtitle}</Text>

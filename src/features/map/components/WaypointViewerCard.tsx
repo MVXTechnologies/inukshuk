@@ -8,7 +8,7 @@ import { InukshukGlyph } from '@ui/components/InukshukGlyph';
 import { HoldButton } from './HoldButton';
 import { mciGlyph } from './waypointGlyph';
 import { useRealSafeAreaInsets } from '../infoStrip/InfoStripInsets';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 export interface ViewableWaypoint {
   label: string;
@@ -68,6 +68,8 @@ export function WaypointViewerCard({
   onClose,
   floating = false,
 }: Props) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const theme = useTheme();
@@ -108,7 +110,7 @@ export function WaypointViewerCard({
           />
         )}
         <HoldButton
-          size={40}
+          size={sz(40)}
           onConfirm={onDelete}
           accessibilityLabel="Delete waypoint"
           accessibilityHint="Press and hold to delete"
@@ -129,7 +131,7 @@ export function WaypointViewerCard({
           accessibilityLabel={`${waypointIconLabel(waypoint.icon)} icon`}
         >
           {glyph === null ? (
-            <InukshukGlyph size={22} frame="square" tone="mono" color={muted} />
+            <InukshukGlyph size={sz(22)} frame="square" tone="mono" color={muted} />
           ) : (
             <Icon source={glyph} size={22} color={muted} />
           )}

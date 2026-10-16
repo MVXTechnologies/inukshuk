@@ -10,7 +10,7 @@ import { photoFileUri } from '../../photos/photoUri';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Text, useTheme } from '@ui/paper';
 import { HoldButton } from '../components/HoldButton';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 export interface TimelineItem {
   event: TimelineEvent;
@@ -80,6 +80,8 @@ export function TimelineTab({
   onOpenPhoto,
   onAddPhotos,
 }: Props) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -246,7 +248,7 @@ export function TimelineTab({
                   style={styles.tight}
                 />
                 <HoldButton
-                  size={36}
+                  size={sz(36)}
                   onConfirm={() => onDeleteNote(event.noteId ?? '')}
                   accessibilityLabel={`Delete note ${event.noteNum ?? ''}`.trim()}
                   accessibilityHint="Press and hold to delete"

@@ -22,7 +22,7 @@ import {
   useSheetWidth,
 } from './mapSheet';
 import { StepSlider } from './StepSlider';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /** See-through white's slider stops: Off, 25 %, 50 %, 75 %, 100 %. */
 const WHITE_KEY_STOPS = WHITE_KEY_LEVELS.map(whiteKeyLabel);
@@ -57,6 +57,8 @@ function Print() {
  * default for every PDF map; a map overrides it from its Library ⋮ menu.
  */
 export function PdfMapsPanel({ onBack }: { onBack: () => void }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const tokens = useSchemeTokens();
@@ -120,7 +122,7 @@ export function PdfMapsPanel({ onBack }: { onBack: () => void }) {
               size={SAMPLE_H - 2}
               width={sampleW - 2}
               height={SAMPLE_H - 2}
-              radius={9}
+              radius={sz(9)}
             />
             {/* The white left on the paper at this stop. */}
             <View

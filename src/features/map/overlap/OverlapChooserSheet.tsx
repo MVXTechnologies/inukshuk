@@ -16,7 +16,7 @@ import { Icon, IconButton, Text } from '@ui/paper';
 import Svg, { Path } from 'react-native-svg';
 
 import { useOverlapChooser } from './overlapChooser';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 interface Props {
   onPickTrail: (trackId: string) => void;
@@ -168,11 +168,13 @@ export function OverlapChooserSheet({
 
 /** A trail's stroke or an area's outline, in the item's own colour. */
 function Swatch({ kind, color }: { kind: OverlapHit['kind']; color: string }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   return (
     <View style={styles.swatch} testID={`overlap-swatch-${kind}`}>
-      <Svg width={28} height={28} viewBox="0 0 28 28">
+      <Svg width={sz(28)} height={sz(28)} viewBox="0 0 28 28">
         {kind === 'trail' ? (
           <Path
             d="M3 22 C10 18 14 10 25 6"

@@ -9,7 +9,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * After a tip (#476, board `Thanks.dc.html`): the Inukshuk (the app icon's five stones), thanks, and the
@@ -17,6 +17,8 @@ import { useScaledStyles } from '@ui/displayScale';
  * Support screen, so Back from here returns to Settings, not to the jar.
  */
 export function SupportThanksScreen() {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const router = useRouter();
@@ -39,7 +41,7 @@ export function SupportThanksScreen() {
         { backgroundColor: t.background, paddingTop: insets.top, paddingBottom: insets.bottom },
       ]}
     >
-      <InukshukGlyph size={140} />
+      <InukshukGlyph size={sz(140)} />
       <Text accessibilityRole="header" style={[styles.title, { color: t.ink }]}>
         Thank you
       </Text>

@@ -3,7 +3,7 @@ import { Icon, Text, TouchableRipple } from '@ui/paper';
 import { weatherChrome as wc } from '../weather/weatherChrome';
 import { InukshukGlyph } from '@ui/components/InukshukGlyph';
 import { MapButton } from './MapButton';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * The map-actions entry point (wave A item 6): the old bottom-right "+"
@@ -62,6 +62,8 @@ export function MapActionsMenu({
   open: boolean;
   onToggle: (open: boolean) => void;
 }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const run = (action: (() => void) | undefined) => () => {
@@ -84,7 +86,7 @@ export function MapActionsMenu({
     >
       <View style={styles.rowInner}>
         {icon === null ? (
-          <InukshukGlyph size={20} frame="square" tone="mono" color={wc.ink} />
+          <InukshukGlyph size={sz(20)} frame="square" tone="mono" color={wc.ink} />
         ) : (
           <Icon source={icon} size={20} color={wc.ink} />
         )}

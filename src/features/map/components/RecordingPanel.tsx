@@ -35,7 +35,7 @@ import Svg, { Polyline } from 'react-native-svg';
 import { HoldButton } from './HoldButton';
 import { setStripRuntime, useStripRuntime } from '../infoStrip/stripRuntime';
 import { InukshukGlyph } from '@ui/components/InukshukGlyph';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 interface Props {
   status: 'recording' | 'paused';
@@ -82,6 +82,8 @@ function splitUnit(text: string): { value: string; unit: string } {
  * keep their labels (Stop now needs a hold: flows use longPressOn).
  */
 export function RecordingPanel(props: Props) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const {
@@ -504,7 +506,7 @@ export function RecordingPanel(props: Props) {
         {gloveLocked ? (
           <View style={styles.controls}>
             <HoldButton
-              size={56}
+              size={sz(56)}
               onConfirm={() => onGloveLockChange(false)}
               accessibilityLabel="Unlock controls"
               accessibilityHint="Press and hold to unlock"
@@ -618,7 +620,7 @@ export function RecordingPanel(props: Props) {
               </Pressable>
             )}
             <HoldButton
-              size={56}
+              size={sz(56)}
               onConfirm={onStop}
               accessibilityLabel="Stop recording"
               accessibilityHint="Press and hold to stop"
@@ -677,6 +679,8 @@ function ElevationSoFar({
   muted: string;
   line: string;
 }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const [width, setWidth] = useState(0);
@@ -700,7 +704,7 @@ function ElevationSoFar({
         importantForAccessibility="no-hide-descendants"
       >
         {points !== '' && (
-          <Svg width={width} height={40}>
+          <Svg width={width} height={sz(40)}>
             <Polyline points={points} fill="none" stroke={line} strokeWidth={2} />
           </Svg>
         )}
