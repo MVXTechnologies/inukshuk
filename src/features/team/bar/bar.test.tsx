@@ -32,7 +32,7 @@ import { usePendingAlert } from './pendingAlert';
 import { ALARM_MAX_MS, RESOUND_MS, SosAlarmBanner } from './SosAlarmBanner';
 import { RING_PAD, SosButton } from './SosButton';
 import { TeamPanel } from './TeamPanel';
-import { TeamStatusBar, useTeamBarLayout } from './TeamStatusBar';
+import { CHIP, CHIP_LABEL_MAX_SCALE, TeamStatusBar, useTeamBarLayout } from './TeamStatusBar';
 import { UNDO_SNACK_LIFT, UndoSnack } from './UndoSnack';
 
 const mockPush = jest.fn();
@@ -188,7 +188,7 @@ function crew(over: { soses?: TeamSos[]; rally?: TeamRally | null; solo?: boolea
 
 describe('the team status bar (#707)', () => {
   it.each(THEMES)(
-    'pill, faces and the chat’s unread; no chip row on the map; a tap opens the panel (dark: %s)',
+    'pill and faces; Chat (unread), Meet here and Draw as pills under it; a tap opens the panel (dark: %s)',
     async (dark) => {
       crew();
       await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />, dark));
@@ -198,10 +198,18 @@ describe('the team status bar (#707)', () => {
         ),
       ).toBeTruthy();
       expect(screen.getByTestId('team-bar-status')).toHaveTextContent('4/6 online ·');
-      expect(screen.getByTestId('team-bar-unread')).toBeTruthy();
+      // #757: the count rides the Chat chip, not the faces.
+      expect(screen.queryByTestId('team-bar-unread')).toBeNull();
+      expect(screen.getByLabelText('Chat, 3 unread')).toBeTruthy();
       expect(screen.getByText('3')).toBeTruthy();
-      // Chat, Rally here and Draw live in the panel now (#743).
-      expect(screen.queryByTestId(/^team-chip-/)).toBeNull();
+      const chips = screen
+        .queryAllByTestId(/^team-chip-(chat|rally|draw)$/)
+        .map((n) => n.props.testID as string)
+        .filter((id, k, all) => all.indexOf(id) === k);
+      expect(chips).toEqual(['team-chip-chat', 'team-chip-rally', 'team-chip-draw']);
+      expect(screen.getByTestId('team-chip-rally-label')).toHaveTextContent('Meet here');
+      await fireEvent.press(screen.getByTestId('team-chip-chat'));
+      expect(mockPush).toHaveBeenCalledWith('/team/chat');
       expect(screen.queryByTestId('team-bar-gather')).toBeNull();
       await fireEvent.press(screen.getByTestId('team-bar-pill'));
       expect(useTeamSheet.getState().sheet).toEqual({ kind: 'menu' });
@@ -232,7 +240,7 @@ describe('the team status bar (#707)', () => {
     crew({ solo: true });
     const r = await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />));
     expect(screen.getByTestId('team-bar-status')).toHaveTextContent('Only you ·');
-    expect(screen.queryByTestId(/^team-chip-/)).toBeNull();
+    expect(screen.getByTestId('team-chip-chat')).toBeTruthy();
     await r.unmount();
     crew();
     // Not syncing; the newest word from anyone is Sam's, 8 min ago.
@@ -355,9 +363,9 @@ describe('a gather: the pill’s "!" and the panel, no band on the map (#743)', 
       expect(rows).toHaveLength(6);
       expect(screen.getByLabelText('Alex Lavoie: 111 m, about 2 minutes')).toBeTruthy();
       expect(screen.getByLabelText('Sam Bouchard: position unknown')).toBeTruthy();
-      // Chat, Rally here and Draw are in the panel.
-      for (const id of ['chat', 'rally', 'draw', 'status'])
-        expect(screen.getByTestId(`team-panel-${id}`)).toBeTruthy();
+      // My status stays; Chat, Meet here and Draw are the chips under the pill (#757).
+      expect(screen.getByTestId('team-panel-status')).toBeTruthy();
+      expect(screen.queryByTestId('team-panel-chat')).toBeNull();
       await fireEvent.press(screen.getByTestId('team-panel-gather-go'));
       expect(nav).toHaveBeenCalledWith(46.81, -71.2);
       expect(useTeamSheet.getState().sheet).toBeNull();
@@ -428,19 +436,46 @@ describe('the team panel (#707)', () => {
 });
 
 describe('no clipped text at 360 dp (#756)', () => {
-  it('the panel’s actions stay one row: four equal columns, labels on up to two lines', async () => {
+  it('the chips stay on one row of the 268 dp column, at the 1.15× label cap (#757)', async () => {
+    crew();
+    await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />));
+    const row = StyleSheet.flatten(screen.getByTestId('team-chips').props.style);
+    expect(row).toMatchObject({ flexDirection: 'row', flexWrap: 'nowrap' });
+    const column = StyleSheet.flatten(screen.getByTestId('team-bar-column').props.style);
+    const room = 360 - Number(column.left) - Number(column.right);
+    expect(room).toBe(268);
+    // Each chip's width at the cap: padding, icon, gap, label (bold ≤ 0.62 em a
+    // character), and the count badge; never shrunk, never cut.
+    let total = 0;
+    for (const [id, label, badge] of [
+      ['chat', 'Chat', 16],
+      ['rally', 'Meet here', 0],
+      ['draw', 'Draw', 0],
+    ] as const) {
+      const chip = StyleSheet.flatten(screen.getByTestId(`team-chip-${id}`).props.style);
+      expect(chip.flexShrink).toBe(0);
+      const text = screen.getByTestId(`team-chip-${id}-label`);
+      expect(text.props.numberOfLines).toBe(1);
+      expect(text.props.maxFontSizeMultiplier).toBe(CHIP_LABEL_MAX_SCALE);
+      const labelW = label.length * 0.62 * CHIP.label * CHIP_LABEL_MAX_SCALE;
+      total +=
+        CHIP.padLeft +
+        CHIP.icon +
+        CHIP.gap +
+        labelW +
+        (badge ? CHIP.gap + badge : 0) +
+        CHIP.padRight;
+    }
+    total += 2 * CHIP.rowGap;
+    expect(total).toBeLessThanOrEqual(room);
+  });
+
+  it('the panel no longer repeats Chat, Meet here or Draw; its status takes the width', async () => {
     crew();
     await render(wrap(<TeamPanel top={0} here={HERE} />));
-    const row = StyleSheet.flatten(screen.getByTestId('team-panel-actions').props.style);
-    expect(row).toMatchObject({ flexDirection: 'row', flexWrap: 'nowrap' });
-    const acts = ['team-panel-chat', 'team-panel-rally', 'team-panel-draw', 'team-panel-status'];
-    for (const id of acts) {
-      expect(StyleSheet.flatten(screen.getByTestId(id).props.style)).toMatchObject({
-        flex: 1,
-        minWidth: 0,
-      });
-    }
-    expect(screen.getByText('Draw').props.numberOfLines).toBe(2);
+    for (const id of ['chat', 'rally', 'draw'])
+      expect(screen.queryByTestId(`team-panel-${id}`)).toBeNull();
+    expect(screen.getByTestId('team-panel-status')).toBeTruthy();
     // The sync line wraps rather than ending in "…with 2 ph…".
     expect(screen.getByTestId('team-panel-sync').props.numberOfLines).toBe(2);
   });
@@ -1057,12 +1092,8 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
     expect(usePendingAlert.getState().pending).toBeNull();
   });
 
-  it('Rally here (in the panel): one tap, 5 s undo, then the "!" and the gather; End in the panel', async () => {
+  it('Meet here (the chip under the pill): one tap, 5 s undo, then the "!" and the gather; End in the panel', async () => {
     await act(async () => useTeamStore.getState().refresh());
-    useTeamSheet.getState().open({ kind: 'menu' });
-    const panel = await render(wrap(<TeamPanel top={0} here={HERE} />));
-    await fireEvent.press(screen.getByTestId('team-panel-rally'));
-    await panel.unmount();
     await render(
       wrap(
         <>
@@ -1071,6 +1102,7 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
         </>,
       ),
     );
+    await fireEvent.press(screen.getByTestId('team-chip-rally'));
     expect(screen.getByText('Rally point at your position')).toBeTruthy();
     expect(app.active!.rally()).toBeNull();
     await act(async () => {

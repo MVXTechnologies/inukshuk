@@ -2,11 +2,13 @@
  * The team status bar (#707, design C): in team mode it takes the map's
  * search slot. The pill shows the three freshest faces, the team's name,
  * "4/6 online" and the sync glyph (or "Only you", "Offline · 12 min"), the
- * chat's unread count on the faces, and an amber "!" while a gather is
+ * chat's unread count in its label, and an amber "!" while a gather is
  * active (#743, owner's pick "pill only"); a tap opens the team panel, which
- * then opens on the gather. Chat, Rally here and Draw live in the panel: the
- * map keeps no chip row. Under the pill, the column holds an active SOS's
- * red band (#708); a gather has no band on the map.
+ * then opens on the gather. Under the pill (#757, owner: #743 option 1 "with
+ * chips"), three small separate pills on ONE row: Chat (unread), Meet here
+ * (a rally at my position, with its 5 s undo) and Draw; a guest gets Chat
+ * only. They are no longer repeated in the panel. Under them, the column
+ * holds an active SOS's red band (#708); a gather has no band on the map.
  *
  * The column's measured height is published (`useTeamBarLayout`) so the
  * map's top-centre chips (destination, marine notice, receiver) move below
@@ -18,6 +20,7 @@ import { teamBarSummary, type TeamBarSummary } from '@core/teamui/teamBar';
 import { selectChatUnread, useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
+import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
@@ -26,7 +29,9 @@ import { create } from 'zustand';
 import { useTeamSheet } from '../map/teamMode';
 import { openPeers } from '../syncLine';
 import { AlertBands, useActiveAlerts } from './AlertBands';
-import { FaceStack } from './parts';
+import { enterDrawing } from '../draw/TeamDrawMode';
+import { FaceStack, myPosition } from './parts';
+import { usePendingAlert } from './pendingAlert';
 
 /** The pill's height and the gap to the column under it. */
 export const PILL_H = 48;
@@ -38,6 +43,13 @@ export const PILL_H = 48;
 export const PILL_FACE = 22;
 export const PILL_FACE_OVERLAP = 0.5;
 export const PILL_NAME_MAX_SCALE = 1.15;
+/**
+ * The chips under the pill (#757): small enough that Chat (with a count),
+ * Meet here and Draw stay on one row of the 268 dp column at 360 dp, with
+ * their labels at the 1.15× cap.
+ */
+export const CHIP_LABEL_MAX_SCALE = 1.15;
+export const CHIP = { height: 32, padLeft: 6, padRight: 7, icon: 13, gap: 3, label: 12, rowGap: 5 };
 const COLUMN_GAP = 8;
 const CLOCK_MS = 30_000;
 
@@ -95,8 +107,43 @@ export function TeamStatusBar({
   const panelOpen = useTeamSheet((s) => s.sheet?.kind === 'menu');
   const open = useTeamSheet((s) => s.open);
   const setHeight = useTeamBarLayout((s) => s.set);
+  const router = useRouter();
+  const guest = useTeamStore((s) => s.view?.members.find((m) => m.isMe)?.role === 'guest');
+  const pendingRally = usePendingAlert((s) => s.pending?.kind === 'rally');
   useEffect(() => () => setHeight(0), [setHeight]);
   if (summary === null) return null;
+
+  const rallyHere = async () => {
+    const at = await myPosition(here);
+    if (at !== null) usePendingAlert.getState().start('rally', at);
+    else
+      usePendingAlert.getState().fail({
+        text: 'Your position is unknown: no rally point was set.',
+        retry: null,
+        sticky: false,
+      });
+  };
+  const chips: ChipSpec[] = [
+    {
+      id: 'chat',
+      icon: 'forum-outline',
+      label: 'Chat',
+      count: unread,
+      onPress: () => router.push('/team/chat' as never),
+    },
+    ...(guest
+      ? []
+      : [
+          {
+            id: 'rally',
+            icon: 'flag-variant',
+            label: 'Meet here',
+            pending: pendingRally,
+            onPress: () => void rallyHere(),
+          },
+          { id: 'draw', icon: 'draw', label: 'Draw', onPress: () => void enterDrawing() },
+        ]),
+  ];
 
   const glyph = summary.sync === 'off' ? 'access-point-off' : 'access-point';
   const glyphColor =
@@ -139,22 +186,7 @@ export function TeamStatusBar({
               ring={t.map.chrome}
             />
           )}
-          {unread > 0 && (
-            <View
-              style={[
-                styles.unread,
-                { backgroundColor: t.team.bubbleNew, borderColor: t.map.chrome },
-              ]}
-              testID="team-bar-unread"
-            >
-              <Text
-                style={[styles.unreadText, { color: t.team.bubbleNewInk }]}
-                allowFontScaling={false}
-              >
-                {unread > 9 ? '9+' : unread}
-              </Text>
-            </View>
-          )}
+          {/* The unread count rides the Chat chip under the pill (#757), not the faces. */}
           <View style={styles.flex}>
             <Text
               style={[styles.name, { color: t.map.chromeInk }]}
@@ -241,9 +273,59 @@ export function TeamStatusBar({
         onLayout={(e) => setHeight(PILL_H + COLUMN_GAP + e.nativeEvent.layout.height)}
         testID="team-bar-column"
       >
+        <View style={styles.chips} pointerEvents="box-none" testID="team-chips">
+          {chips.map((c) => (
+            <Chip key={c.id} spec={c} />
+          ))}
+        </View>
         <AlertBands here={here} onNavigate={onNavigate} scope="map" />
       </View>
     </View>
+  );
+}
+
+interface ChipSpec {
+  id: string;
+  icon: string;
+  label: string;
+  count?: number;
+  /** A rally is in its undo countdown: the chip shows it (amber). */
+  pending?: boolean;
+  onPress: () => void;
+}
+
+/** One small pill under the team pill: icon, a one-line label never cut, a count. */
+function Chip({ spec }: { spec: ChipSpec }) {
+  const t = useSchemeTokens();
+  const bg = spec.pending ? t.team.gather : t.map.chrome;
+  const ink = spec.pending ? t.team.gatherInk : t.map.chromeInk;
+  const count = spec.count ?? 0;
+  return (
+    <Pressable
+      onPress={spec.onPress}
+      style={[styles.chip, { backgroundColor: bg, shadowColor: palette.shadow }]}
+      accessibilityRole="button"
+      accessibilityLabel={count > 0 ? `${spec.label}, ${count} unread` : spec.label}
+      testID={`team-chip-${spec.id}`}
+      hitSlop={6}
+    >
+      <Icon source={spec.icon} size={CHIP.icon} color={ink} />
+      <Text
+        style={[styles.chipLabel, { color: ink }]}
+        numberOfLines={1}
+        maxFontSizeMultiplier={CHIP_LABEL_MAX_SCALE}
+        testID={`team-chip-${spec.id}-label`}
+      >
+        {spec.label}
+      </Text>
+      {count > 0 && (
+        <View style={[styles.count, { backgroundColor: t.team.bubbleNew }]}>
+          <Text style={[styles.countText, { color: t.team.bubbleNewInk }]} allowFontScaling={false}>
+            {count > 9 ? '9+' : count}
+          </Text>
+        </View>
+      )}
+    </Pressable>
   );
 }
 
@@ -272,19 +354,32 @@ const styles = StyleSheet.create({
   status: { fontSize: 12, lineHeight: 15, fontWeight: '700' },
   strong: { fontWeight: '800' },
   column: { position: 'absolute', left: 16, right: MAP_LANE_INSET, gap: 8 },
-  unread: {
-    position: 'absolute',
-    left: 22,
-    top: 4,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
+  // One row, never wrapping (#757): each chip keeps its natural width.
+  chips: { flexDirection: 'row', flexWrap: 'nowrap', gap: CHIP.rowGap, alignSelf: 'flex-start' },
+  chip: {
+    height: CHIP.height,
+    borderRadius: CHIP.height / 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: CHIP.gap,
+    paddingLeft: CHIP.padLeft,
+    paddingRight: CHIP.padRight,
+    flexShrink: 0,
+    shadowOpacity: 0.26,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  chipLabel: { fontSize: CHIP.label, fontWeight: '800' },
+  count: {
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     paddingHorizontal: 3,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  unreadText: { fontSize: 10, lineHeight: 12, fontWeight: '900' },
+  countText: { fontSize: 10, lineHeight: 12, fontWeight: '900' },
   bang: {
     position: 'absolute',
     // The pill's right edge less the overhang.

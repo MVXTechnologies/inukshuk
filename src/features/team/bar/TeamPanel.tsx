@@ -6,8 +6,8 @@
  *   called it, where it is from me, Go, End (its creator or an admin), and
  *   every member's distance and ETA (`GatherPanel`). The map has no gather
  *   band any more; the pill's amber "!" leads here.
- * - Actions: Chat (unread), Rally here, Draw, and my status (primary): the
- *   map keeps no chip row for them (#743).
+ * - My status (primary), full width. Chat, Meet here and Draw are not
+ *   repeated here (#757): they are the pills under the team pill.
  * - Members, live first and nearest first (`panelMembers`); each row opens
  *   that teammate's card on the map (Message, Navigate to, Centre), or their
  *   page when their position is unknown.
@@ -22,7 +22,7 @@ import { STATUS_LABEL } from '@core/teamui/system';
 import { distanceText, panelMembers } from '@core/teamui/teamBar';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 import { useSettingsStore } from '@state/settingsStore';
-import { selectChatUnread, useTeamStore } from '@state/teamStore';
+import { useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
@@ -30,7 +30,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { BackHandler, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
 
-import { enterDrawing } from '../draw/TeamDrawMode';
 import { useTeamMapFocus } from '../map/teamMapFocus';
 import { useTeamMapSelection } from '../map/TeamMapOverlay';
 import { useTeamSheet } from '../map/teamMode';
@@ -38,8 +37,7 @@ import { useTeamPick } from '../map/TeamPick';
 import { openPeers, teamSyncLine } from '../syncLine';
 import { useActiveAlerts } from './AlertBands';
 import { GatherPanel } from './GatherPanel';
-import { BandAvatar, FaceStack, myPosition } from './parts';
-import { usePendingAlert } from './pendingAlert';
+import { BandAvatar, FaceStack } from './parts';
 import { useTeamBarSummary } from './TeamStatusBar';
 
 export function TeamPanel({
@@ -66,7 +64,6 @@ export function TeamPanel({
   const peers = useTeamStore((s) => s.peers);
   const meshRunning = useTeamStore((s) => s.meshRunning);
   const statuses = useTeamStore((s) => s.statuses);
-  const unread = useTeamStore(selectChatUnread);
   const gather = useActiveAlerts().find((a) => a.kind === 'gather');
   const me = view?.me;
   const myOpenTasks = useTeamStore(
@@ -97,17 +94,6 @@ export function TeamPanel({
     close();
     router.push(href as never);
   };
-  const rallyHere = async () => {
-    close();
-    const at = await myPosition(here);
-    if (at !== null) usePendingAlert.getState().start('rally', at);
-    else
-      usePendingAlert.getState().fail({
-        text: 'Your position is unknown: no rally point was set.',
-        retry: null,
-        sticky: false,
-      });
-  };
   const openMember = (id: string) => {
     close();
     const pos = positions.find((p) => p.id === id);
@@ -116,24 +102,6 @@ export function TeamPanel({
       useTeamMapFocus.getState().focus(pos.lon, pos.lat, 16);
     } else router.push(`/team/member/${id}` as never);
   };
-
-  const actions: [string, string, () => void, string, number?][] = [
-    ['forum-outline', 'Chat', go('/team/chat'), 'team-panel-chat', unread],
-    ...(guest
-      ? []
-      : ([
-          ['flag-variant', 'Rally here', () => void rallyHere(), 'team-panel-rally'],
-          [
-            'draw',
-            'Draw',
-            () => {
-              close();
-              void enterDrawing();
-            },
-            'team-panel-draw',
-          ],
-        ] as [string, string, () => void, string][])),
-  ];
 
   return (
     // One elevation-free layer at the map's overlay order (as the 2.6.0 team
@@ -210,20 +178,19 @@ export function TeamPanel({
             }}
           />
         )}
-        <View
-          style={[styles.acts, { borderBottomColor: t.outlineVariant }]}
-          testID="team-panel-actions"
-        >
-          {actions.map(([icon, label, run, id, count]) => (
-            <Act key={id} icon={icon} label={label} onPress={run} testID={id} count={count} />
-          ))}
-          <Act
-            icon="check-circle"
-            label={myStatus ? `Status · ${STATUS_LABEL[myStatus]}` : 'My status'}
+        <View style={[styles.acts, { borderBottomColor: t.outlineVariant }]}>
+          <Pressable
             onPress={() => openSheet({ kind: 'status' })}
+            style={[styles.status, { backgroundColor: t.support.accent }]}
+            accessibilityRole="button"
+            accessibilityLabel={myStatus ? `Status, ${STATUS_LABEL[myStatus]}` : 'My status'}
             testID="team-panel-status"
-            primary
-          />
+          >
+            <Icon source="check-circle" size={20} color={t.support.onAccent} />
+            <Text style={[styles.statusText, { color: t.support.onAccent }]} numberOfLines={2}>
+              {myStatus ? `Status · ${STATUS_LABEL[myStatus]}` : 'My status'}
+            </Text>
+          </Pressable>
         </View>
 
         <ScrollView
@@ -363,51 +330,6 @@ export function TeamPanel({
   );
 }
 
-function Act({
-  icon,
-  label,
-  onPress,
-  testID,
-  count = 0,
-  primary = false,
-}: {
-  icon: string;
-  label: string;
-  onPress: () => void;
-  testID: string;
-  count?: number;
-  primary?: boolean;
-}) {
-  const t = useSchemeTokens();
-  return (
-    <Pressable
-      onPress={onPress}
-      style={styles.act}
-      accessibilityRole="button"
-      accessibilityLabel={count > 0 ? `${label}, ${count} unread` : label}
-      testID={testID}
-    >
-      <View
-        style={[styles.actIcon, { backgroundColor: primary ? t.support.accent : t.surfaceVariant }]}
-      >
-        <Icon source={icon} size={24} color={primary ? t.support.onAccent : t.ink} />
-        {count > 0 && (
-          <View
-            style={[styles.badge, { backgroundColor: t.team.bubbleNew, borderColor: t.surface }]}
-          >
-            <Text style={[styles.badgeText, { color: t.team.bubbleNewInk }]}>
-              {count > 9 ? '9+' : count}
-            </Text>
-          </View>
-        )}
-      </View>
-      <Text style={[styles.actLabel, { color: t.inkVariant }]} numberOfLines={2}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 function Row({
   icon,
   label,
@@ -470,37 +392,23 @@ const styles = StyleSheet.create({
   syncRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5 },
   sync: { fontSize: 12.5 },
   x: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  // One row by construction (#756): four equal columns, never wrapping; a long
-  // label takes a second line under its own icon.
-  acts: {
+  acts: { paddingHorizontal: 14, paddingBottom: 10, borderBottomWidth: 1 },
+  status: {
+    minHeight: 44,
+    borderRadius: 22,
     flexDirection: 'row',
-    flexWrap: 'nowrap',
-    paddingHorizontal: 10,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-  },
-  act: { flex: 1, minWidth: 0, alignItems: 'center', gap: 5 },
-  actIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
   },
-  actLabel: { fontSize: 12, lineHeight: 14, fontWeight: '700', textAlign: 'center' },
-  badge: {
-    position: 'absolute',
-    top: -5,
-    right: -6,
-    minWidth: 19,
-    height: 19,
-    borderRadius: 10,
-    borderWidth: 2,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
+  statusText: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+    flexShrink: 1,
   },
-  badgeText: { fontSize: 10.5, fontWeight: '900' },
   list: { maxHeight: 330 },
   /** The gather takes the top of the panel: the members' list gives way. */
   listUnderGather: { maxHeight: 168 },

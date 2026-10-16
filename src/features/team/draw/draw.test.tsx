@@ -33,6 +33,7 @@ import { Alert, BackHandler, StyleSheet, View } from 'react-native';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
 
 import { TeamPanel } from '../bar/TeamPanel';
+import { TeamStatusBar } from '../bar/TeamStatusBar';
 import { useTeamMapFocus } from '../map/teamMapFocus';
 import { DrawAlertSnack } from './DrawAlertSnack';
 import { TeamShapeCard } from './ShapeCard';
@@ -243,31 +244,25 @@ afterEach(async () => {
 const style = penStyle({ ...defaultPrefs(0), fadeMs: 30_000 });
 const arrow = (id: string): Stroke => ({ id, sh: 'arrow', pts: [QC, NEAR], style });
 
-describe('the team panel (the old team menu, #707)', () => {
-  it('has Draw right after Rally here, which opens drawing mode', async () => {
+describe('Draw, the chip under the team pill (#757)', () => {
+  it('opens drawing mode; the panel no longer repeats it', async () => {
+    await render(wrap(<TeamStatusBar top={8} here={null} onNavigate={jest.fn()} />));
+    await fireEvent.press(screen.getByTestId('team-chip-draw'));
+    await until(() => useTeamDrawStore.getState().active, 'drawing mode');
     await render(wrap(<TeamPanel top={0} here={null} />));
-    const ids = screen
-      .queryAllByTestId(/^team-panel-(chat|rally|draw|status)$/)
-      .map((n) => n.props.testID as string)
-      .filter((id, k, all) => all.indexOf(id) === k);
-    expect(ids).toEqual([
-      'team-panel-chat',
-      'team-panel-rally',
-      'team-panel-draw',
-      'team-panel-status',
-    ]);
-    await fireEvent.press(screen.getByTestId('team-panel-draw'));
-    expect(useTeamDrawStore.getState().active).toBe(true);
+    expect(screen.queryByTestId('team-panel-draw')).toBeNull();
   });
 
-  it('hides Draw and Rally for guests', async () => {
+  it('hides Draw and Meet here for guests', async () => {
     await stubView((v) => ({
       ...v,
       members: v.members.map((m) => ({ ...m, role: 'guest' as const })),
     }));
+    await render(wrap(<TeamStatusBar top={8} here={null} onNavigate={jest.fn()} />));
+    expect(screen.getByTestId('team-chip-chat')).toBeTruthy();
+    expect(screen.queryByTestId('team-chip-draw')).toBeNull();
+    expect(screen.queryByTestId('team-chip-rally')).toBeNull();
     await render(wrap(<TeamPanel top={0} here={null} />));
-    expect(screen.queryByTestId('team-panel-draw')).toBeNull();
-    expect(screen.queryByTestId('team-panel-rally')).toBeNull();
     expect(screen.queryByTestId('team-panel-rally-point')).toBeNull();
   });
 });

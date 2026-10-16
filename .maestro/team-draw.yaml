@@ -124,11 +124,9 @@ appId: com.inukshuk.app
     visible:
       id: 'team-bar-pill'
     timeout: 10000
-# The team panel (tap the team bar, #707): Draw, right after Rally here.
+# Draw: the chip under the team pill, after Chat and Meet here (#757).
 - tapOn:
-    id: 'team-bar-pill'
-- tapOn:
-    id: 'team-panel-draw'
+    id: 'team-chip-draw'
 - extendedWaitUntil:
     visible:
       id: 'team-draw-toolbar'
