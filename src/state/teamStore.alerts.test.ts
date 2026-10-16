@@ -9,7 +9,9 @@ import type { TeamRally, TeamSos } from '@core/teamui/field';
 const mockNotify = jest.fn();
 const mockDismiss = jest.fn();
 const mockInApp = jest.fn();
+const mockBuzz = jest.fn();
 jest.mock('@data/team/teamNotifications', () => ({
+  buzzRally: () => mockBuzz(),
   notifyTeam: (n: unknown) => mockNotify(n),
   dismissTeamNotification: (id: string) => mockDismiss(id),
   setInAppAlarm: (on: boolean) => mockInApp(on),
@@ -66,8 +68,9 @@ const mockService = {
 jest.mock('@data/team/appTeam', () => ({ appTeamService: () => mockService }));
 
 // Loaded after the fakes above exist (a static import would run first).
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { useTeamStore, wireTeamStore } = require('./teamStore') as typeof import('./teamStore');
+const { resetRallyBuzzForTests, useTeamStore, wireTeamStore } =
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('./teamStore') as typeof import('./teamStore');
 
 const sos = (owner: string, id: string, resolved = false): TeamSos => ({
   id,
@@ -97,6 +100,8 @@ beforeEach(() => {
   mockNotify.mockClear();
   mockDismiss.mockClear();
   mockInApp.mockClear();
+  mockBuzz.mockClear();
+  resetRallyBuzzForTests();
 });
 
 describe('team alerts in the store (#708)', () => {
@@ -210,5 +215,90 @@ describe('team alerts in the store (#708)', () => {
     });
     expect(mockNotify.mock.calls[0]![0].channel).toBeUndefined();
     expect(useTeamStore.getState().banner).toMatchObject({ text: '@Marc look' });
+  });
+});
+
+describe('the in-app rally buzz (#743)', () => {
+  const rallyPoint = (owner: string, id: string): TeamRally => ({
+    id,
+    owner,
+    lat: 46.8,
+    lng: -71.2,
+    text: '',
+    when: null,
+    radius: 60,
+    at: 1,
+  });
+  const rallyAlert = (owner: string, id: string): TeamAlert => ({
+    key: `rly:${owner}:${id}:op`,
+    author: owner,
+    level: 'alert',
+    kind: 'rally',
+    text: 'Gather at their position',
+    priority: 1,
+    url: `/team/rally/${owner}/${id}`,
+    entity: `rly:${owner}:${id}`,
+  });
+  const call = (owner: string, id: string) => {
+    state.rally = rallyPoint(owner, id);
+    useTeamStore.getState().refresh();
+    emit(rallyAlert(owner, id));
+  };
+  beforeEach(() => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
+    jest.setSystemTime(Date.UTC(2026, 9, 16, 14));
+    state.soses = [];
+  });
+  afterEach(() => {
+    state.rally = null;
+    useTeamStore.getState().refresh();
+    jest.useRealTimers();
+  });
+
+  it('a teammate’s rally buzzes this phone once, with its notification', () => {
+    call('noe', 'r1');
+    expect(mockBuzz).toHaveBeenCalledTimes(1);
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+    // A resync brings it again: no second buzz (once per rally point).
+    emit(rallyAlert('noe', 'r1'));
+    expect(mockBuzz).toHaveBeenCalledTimes(1);
+  });
+
+  it('one raiser: at most one buzz a minute; another raiser buzzes at once', () => {
+    call('noe', 'r1');
+    jest.advanceTimersByTime(20_000);
+    call('noe', 'r2');
+    expect(mockNotify).toHaveBeenCalledTimes(2);
+    expect(mockBuzz).toHaveBeenCalledTimes(1);
+    call('julie', 'r3');
+    expect(mockBuzz).toHaveBeenCalledTimes(2);
+    jest.advanceTimersByTime(40_000);
+    call('noe', 'r4');
+    expect(mockBuzz).toHaveBeenCalledTimes(3);
+  });
+
+  it('never my own; never over a sounding SOS alarm', () => {
+    call('me', 'mine');
+    expect(mockBuzz).not.toHaveBeenCalled();
+    state.soses = [
+      {
+        id: 's9',
+        owner: 'julie',
+        lat: 46.8,
+        lng: -71.2,
+        text: '',
+        at: 1,
+        resolved: false,
+        resolvedBy: null,
+      },
+    ];
+    useTeamStore.getState().refresh();
+    emit({ ...rallyAlert('julie', 's9'), kind: 'sos', entity: 'sos:julie:s9', key: 'sos:x' });
+    expect(useTeamStore.getState().sosAlarm).not.toBeNull();
+    call('noe', 'r5');
+    expect(mockNotify).toHaveBeenLastCalledWith(expect.objectContaining({ channel: 'rally' }));
+    expect(mockBuzz).not.toHaveBeenCalled();
+    useTeamStore.getState().acknowledgeAlarm();
+    state.soses = [];
   });
 });

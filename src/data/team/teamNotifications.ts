@@ -30,7 +30,7 @@
 import type { AlertChannel } from '@core/teamui/alertLedger';
 import { requireOptionalNativeModule } from 'expo';
 import type * as NotificationsModule from 'expo-notifications';
-import { Platform } from 'react-native';
+import { AppState, Platform, Vibration } from 'react-native';
 
 type Api = typeof NotificationsModule;
 
@@ -200,6 +200,21 @@ export async function dismissTeamNotification(identifier: string): Promise<void>
 /** The in-app SOS banner is up (its system banner then stays in the list only). */
 export function setInAppAlarm(on: boolean): void {
   inAppAlarm = on;
+}
+
+/**
+ * The in-app rally buzz (#743): the rally pattern, once, while the app is in
+ * front (in the background the "Team rally" notification vibrates). The
+ * caller gates it per raiser (`RallyBuzzGate`) and never over a sounding SOS
+ * alarm, whose repeating vibration this would replace. Never throws.
+ */
+export function buzzRally(): void {
+  if (AppState.currentState !== 'active') return;
+  try {
+    Vibration.vibrate(RALLY_VIBRATION);
+  } catch {
+    // No vibrator: the notification and the pill's "!" remain.
+  }
 }
 
 /** Call `open(url)` when the user taps a team notification (also the one that launched the app). */

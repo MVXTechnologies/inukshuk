@@ -1,7 +1,9 @@
 /**
  * The active SOS / gather band (#708, mockup a–d): a state everyone sees
  * until it is resolved or ended, on the Map (in the bar's column), the Team
- * screen and the strip area; never on other tabs.
+ * screen and the strip area; never on other tabs. On the map only an SOS
+ * has a band (`scope="map"`, #743): a gather is the team pill's amber "!"
+ * and the team panel's gather sub-panel.
  *
  * - Others' SOS (red): "SOS · Julie Tremblay" / "640 m NE · 2 min",
  *   Navigate and Centre (an admin: Resolve). A tap on the words centres.
@@ -24,6 +26,7 @@ import {
   bandModel,
   bandStack,
   gatherEtas,
+  mapBandAlerts,
   type ActiveAlert,
   type BandAction,
 } from '@core/teamui/alertBands';
@@ -47,6 +50,11 @@ export interface AlertBandsProps {
   onCentre?: (latitude: number, longitude: number) => void;
   /** `strip`: one compact line, no expansion (the strip area). */
   variant?: 'full' | 'strip';
+  /**
+   * `map`: SOS bands only (#743: a gather shows as the team pill's "!" and
+   * in the team panel, never as a band on the map). `all` (the Team hub).
+   */
+  scope?: 'all' | 'map';
   style?: StyleProp<ViewStyle>;
 }
 
@@ -69,9 +77,11 @@ export function AlertBands({
   onNavigate,
   onCentre,
   variant = 'full',
+  scope = 'all',
   style,
 }: AlertBandsProps) {
-  const alerts = useActiveAlerts();
+  const every = useActiveAlerts();
+  const alerts = useMemo(() => (scope === 'map' ? mapBandAlerts(every) : every), [every, scope]);
   const [expanded, setExpanded] = useState(false);
   // Ages move on every 30 s (one render of this leaf; none of the map).
   const [now, setNow] = useState(() => Date.now());

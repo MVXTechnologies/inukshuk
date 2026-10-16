@@ -6,7 +6,10 @@ import {
   alertBandPlace,
   bandModel,
   bandStack,
+  gatherBadge,
   gatherEtas,
+  gatherPanelModel,
+  mapBandAlerts,
   MAX_STACKED_BANDS,
   stripBandLayout,
 } from './alertBands';
@@ -275,5 +278,45 @@ describe('where the active band shows (QA 2.6.1, #708)', () => {
         sosButtonShown: false,
       }),
     ).toEqual({ bottom: 308, right: 16, overDraw: true });
+  });
+});
+
+describe('the gather leaves the map for the pill and the panel (#743)', () => {
+  const opts = { here: HERE, receipts: '3 of 5 received', isAdmin: false, units: METRIC };
+  const all = activeAlerts({
+    soses: [sos('julie', 's1')],
+    rally: rally('noe'),
+    me: 'me',
+    names,
+    positions: [],
+    coordinateFormat: 'dd',
+  });
+  const gather = all.find((a) => a.kind === 'gather')!;
+
+  it('the map keeps SOS bands only; the pill’s "!" follows the gather', () => {
+    expect(mapBandAlerts(all).map((a) => a.kind)).toEqual(['sos']);
+    expect(gatherBadge(all)).toBe(true);
+    expect(gatherBadge(mapBandAlerts(all))).toBe(false);
+    expect(gatherBadge([])).toBe(false);
+  });
+
+  it('the panel’s head: distance and direction, who called it; End for its creator or an admin', () => {
+    expect(gatherPanelModel(gather, opts)).toEqual({
+      title: 'Gather · Lac-Delage',
+      sub: '1.1 km N · by Noé',
+      a11y: 'Gather at Lac-Delage, 1.1 km N · by Noé',
+      canEnd: false,
+    });
+    expect(gatherPanelModel(gather, { ...opts, isAdmin: true }).canEnd).toBe(true);
+    expect(gatherPanelModel(gather, { ...opts, here: null }).sub).toBe('by Noé');
+    expect(gatherPanelModel(gather, { ...opts, units: IMPERIAL }).sub).toBe('0.7 mi N · by Noé');
+    expect(
+      gatherPanelModel({ ...gather, mine: true, named: false, place: '46.81, -71.2' }, opts),
+    ).toEqual({
+      title: 'Gather point',
+      sub: 'By you · 3 of 5 received',
+      a11y: 'Gather at 46.81, -71.2, By you · 3 of 5 received',
+      canEnd: true,
+    });
   });
 });

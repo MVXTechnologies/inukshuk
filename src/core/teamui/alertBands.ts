@@ -291,3 +291,56 @@ export function stripBandLayout(i: {
     overDraw: i.drawMode,
   };
 }
+
+/**
+ * Which alerts get a band ON THE MAP (#743, owner's pick "pill only"): an SOS
+ * keeps its full red band; a gather has none there. The team pill carries an
+ * amber "!" for it instead ({@link gatherBadge}), and its details live in the
+ * team panel ({@link gatherPanelModel}). The Team hub still shows every band.
+ */
+export function mapBandAlerts(alerts: readonly ActiveAlert[]): ActiveAlert[] {
+  return alerts.filter((a) => a.kind === 'sos');
+}
+
+/** Whether the team pill shows the amber "!": a gather is active. */
+export function gatherBadge(alerts: readonly ActiveAlert[]): boolean {
+  return alerts.some((a) => a.kind === 'gather');
+}
+
+export interface GatherPanelModel {
+  title: string;
+  /** "1.2 km NE · by Noé"; its creator: "By you · 3 of 5 received". */
+  sub: string;
+  a11y: string;
+  /** End (confirmed inline): its creator or an admin. */
+  canEnd: boolean;
+}
+
+/**
+ * The gather sub-panel's head (#743, mockup 5): who called it, the distance
+ * and the direction from me (the panel has the room the band lacked), and
+ * End for its creator or an admin.
+ */
+export function gatherPanelModel(
+  a: ActiveAlert,
+  o: {
+    here: { latitude: number; longitude: number } | null;
+    /** "3 of 5 received" / "Sent" (for my own gather). */
+    receipts: string;
+    isAdmin: boolean;
+    units: Units;
+  },
+): GatherPanelModel {
+  const title = a.named ? `Gather · ${a.place}` : 'Gather point';
+  const said = `Gather at ${a.place}`;
+  if (a.mine) {
+    const sub = `By you · ${o.receipts}`;
+    return { title, sub, a11y: `${said}, ${sub}`, canEnd: true };
+  }
+  const rb = o.here ? rangeAndBearing(o.here, { lat: a.lat, lon: a.lng }) : null;
+  const first = a.ownerName.split(' ')[0] ?? a.ownerName;
+  const sub = [rb ? `${distanceText(rb.meters, o.units)} ${rb.compass}` : null, `by ${first}`]
+    .filter(Boolean)
+    .join(' · ');
+  return { title, sub, a11y: `${said}, ${sub}`, canEnd: o.isAdmin };
+}

@@ -52,6 +52,7 @@ jest.mock('@data/storage', () => ({
 }));
 const mockNotify = jest.fn(async (_n: unknown) => undefined);
 jest.mock('@data/team/teamNotifications', () => ({
+  buzzRally: () => undefined,
   notifyTeam: (n: unknown) => mockNotify(n),
   onTeamNotificationTap: () => () => undefined,
   dismissTeamNotification: async () => undefined,
@@ -182,30 +183,32 @@ function crew(over: { soses?: TeamSos[]; rally?: TeamRally | null; solo?: boolea
 }
 
 describe('the team status bar (#707)', () => {
-  it.each(THEMES)('pill, faces and chips; a tap opens the panel (dark: %s)', async (dark) => {
-    crew();
-    await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />, dark));
-    expect(
-      screen.getByLabelText(/^Chic-Chocs crew: 4 of 6 online, looking for teammates/),
-    ).toBeTruthy();
-    expect(screen.getByTestId('team-bar-status').props.children).toBe('4/6');
-    expect(screen.getByLabelText('Chat, 3 unread')).toBeTruthy();
-    expect(screen.getByTestId('team-chip-rally')).toBeTruthy();
-    expect(screen.getByTestId('team-chip-draw')).toBeTruthy();
-    expect(screen.queryByTestId('team-chip-invite')).toBeNull();
-    await fireEvent.press(screen.getByTestId('team-chip-chat'));
-    expect(mockPush).toHaveBeenCalledWith('/team/chat');
-    await fireEvent.press(screen.getByTestId('team-bar-pill'));
-    expect(useTeamSheet.getState().sheet).toEqual({ kind: 'menu' });
-  });
+  it.each(THEMES)(
+    'pill, faces and the chat’s unread; no chip row on the map; a tap opens the panel (dark: %s)',
+    async (dark) => {
+      crew();
+      await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />, dark));
+      expect(
+        screen.getByLabelText(
+          /^Chic-Chocs crew: 4 of 6 online, looking for teammates.*, 3 unread in chat$/,
+        ),
+      ).toBeTruthy();
+      expect(screen.getByTestId('team-bar-status').props.children).toBe('4/6');
+      expect(screen.getByTestId('team-bar-unread')).toBeTruthy();
+      expect(screen.getByText('3')).toBeTruthy();
+      // Chat, Rally here and Draw live in the panel now (#743).
+      expect(screen.queryByTestId(/^team-chip-/)).toBeNull();
+      expect(screen.queryByTestId('team-bar-gather')).toBeNull();
+      await fireEvent.press(screen.getByTestId('team-bar-pill'));
+      expect(useTeamSheet.getState().sheet).toEqual({ kind: 'menu' });
+    },
+  );
 
-  it('solo: "Only you", Invite and Draw; offline reads "Offline"', async () => {
+  it('solo: "Only you"; offline reads "Offline"', async () => {
     crew({ solo: true });
     const r = await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />));
     expect(screen.getByTestId('team-bar-status').props.children).toBe('Only you');
-    await fireEvent.press(screen.getByTestId('team-chip-invite'));
-    expect(mockPush).toHaveBeenCalledWith('/team/invite');
-    expect(screen.queryByTestId('team-chip-chat')).toBeNull();
+    expect(screen.queryByTestId(/^team-chip-/)).toBeNull();
     await r.unmount();
     crew();
     // Not syncing; the newest word from anyone is Sam's, 8 min ago.
@@ -236,6 +239,116 @@ describe('the team status bar (#707)', () => {
     const column = screen.getByTestId('team-bar-column');
     await fireEvent(column, 'layout', { nativeEvent: { layout: { height: 44 } } });
     expect(useTeamBarLayout.getState().height).toBe(48 + 8 + 44);
+  });
+});
+
+describe('a gather: the pill’s "!" and the panel, no band on the map (#743)', () => {
+  const rally: TeamRally = {
+    id: 'r1',
+    owner: 'noe',
+    lat: 46.81,
+    lng: -71.2,
+    text: 'Lac-Delage',
+    when: null,
+    radius: 60,
+    at: Date.now(),
+  };
+  const sos: TeamSos = {
+    id: 's1',
+    owner: 'julie',
+    lat: 46.804,
+    lng: -71.195,
+    text: '',
+    at: Date.now() - 60_000,
+    resolved: false,
+    resolvedBy: null,
+  };
+
+  it.each(THEMES)(
+    'an amber "!" on the pill; no gather band; a tap opens the panel (dark: %s)',
+    async (dark) => {
+      crew({ rally });
+      await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />, dark));
+      expect(screen.getByTestId('team-bar-gather')).toBeTruthy();
+      expect(screen.getByText('!')).toBeTruthy();
+      expect(screen.getByLabelText(/, a gather is active, 3 unread in chat$/)).toBeTruthy();
+      expect(screen.queryByTestId('team-band-gather')).toBeNull();
+      expect(screen.queryByTestId('team-alert-bands')).toBeNull();
+      await fireEvent.press(screen.getByTestId('team-bar-pill'));
+      expect(useTeamSheet.getState().sheet).toEqual({ kind: 'menu' });
+    },
+  );
+
+  it('an SOS keeps its full red band under the pill, the gather its "!"', async () => {
+    crew({ rally, soses: [sos] });
+    await render(wrap(<TeamStatusBar top={8} here={HERE} onNavigate={jest.fn()} />));
+    expect(screen.getByTestId('team-band-sos')).toBeTruthy();
+    expect(screen.getByText('SOS · Julie Tremblay')).toBeTruthy();
+    // No "+1" folding the gather under it: the gather is not a map band.
+    expect(screen.queryByTestId('team-band-more')).toBeNull();
+    expect(screen.getByTestId('team-bar-gather')).toBeTruthy();
+  });
+
+  it('the strip band on the map: SOS only', async () => {
+    crew({ rally });
+    const r = await render(
+      wrap(<AlertBands here={HERE} onNavigate={jest.fn()} variant="strip" scope="map" />),
+    );
+    expect(screen.queryByTestId('team-alert-bands')).toBeNull();
+    await r.unmount();
+    crew({ rally, soses: [sos] });
+    await render(
+      wrap(<AlertBands here={HERE} onNavigate={jest.fn()} variant="strip" scope="map" />),
+    );
+    expect(screen.getByTestId('team-band-sos')).toBeTruthy();
+    expect(screen.queryByTestId('team-band-gather')).toBeNull();
+  });
+
+  it.each(THEMES)(
+    'the panel opens on the gather: who, where from me, Go, every member’s ETA (dark: %s)',
+    async (dark) => {
+      crew({ rally });
+      useTeamSheet.getState().open({ kind: 'menu' });
+      const nav = jest.fn();
+      await render(wrap(<TeamPanel top={0} here={HERE} onNavigate={nav} />, dark));
+      expect(screen.getByTestId('team-panel-gather')).toBeTruthy();
+      expect(screen.getByText('Gather · Lac-Delage')).toBeTruthy();
+      expect(screen.getByText('1.1 km N · by Noé')).toBeTruthy();
+      // A member: Go, no End.
+      expect(screen.queryByTestId('team-panel-gather-end')).toBeNull();
+      const rows = screen
+        .queryAllByTestId(/^team-gather-eta-/)
+        .map((n) => n.props.testID as string)
+        .filter((id, k, all) => all.indexOf(id) === k);
+      expect(rows[0]).toBe('team-gather-eta-Alex Lavoie');
+      expect(rows).toHaveLength(6);
+      expect(screen.getByLabelText('Alex Lavoie: 111 m, about 2 minutes')).toBeTruthy();
+      expect(screen.getByLabelText('Sam Bouchard: position unknown')).toBeTruthy();
+      // Chat, Rally here and Draw are in the panel.
+      for (const id of ['chat', 'rally', 'draw', 'status'])
+        expect(screen.getByTestId(`team-panel-${id}`)).toBeTruthy();
+      await fireEvent.press(screen.getByTestId('team-panel-gather-go'));
+      expect(nav).toHaveBeenCalledWith(46.81, -71.2);
+      expect(useTeamSheet.getState().sheet).toBeNull();
+    },
+  );
+
+  it('an admin may End it, confirmed inline; Cancel keeps it', async () => {
+    crew({ rally });
+    await act(async () =>
+      useTeamStore.setState((st) => ({ view: { ...st.view!, isAdmin: true } as TeamView })),
+    );
+    await render(wrap(<TeamPanel top={0} here={HERE} />));
+    await fireEvent.press(screen.getByTestId('team-panel-gather-end'));
+    expect(screen.getByText('End for everyone?')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('team-panel-gather-cancel'));
+    expect(screen.getByText('Gather · Lac-Delage')).toBeTruthy();
+  });
+
+  it('no gather: the panel has no gather part', async () => {
+    crew();
+    await render(wrap(<TeamPanel top={0} here={HERE} />));
+    expect(screen.queryByTestId('team-panel-gather')).toBeNull();
   });
 });
 
@@ -837,8 +950,12 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
     expect(usePendingAlert.getState().pending).toBeNull();
   });
 
-  it('Rally here: one tap, 5 s undo, then the rally point at my position', async () => {
+  it('Rally here (in the panel): one tap, 5 s undo, then the "!" and the gather; End in the panel', async () => {
     await act(async () => useTeamStore.getState().refresh());
+    useTeamSheet.getState().open({ kind: 'menu' });
+    const panel = await render(wrap(<TeamPanel top={0} here={HERE} />));
+    await fireEvent.press(screen.getByTestId('team-panel-rally'));
+    await panel.unmount();
     await render(
       wrap(
         <>
@@ -847,18 +964,24 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
         </>,
       ),
     );
-    await fireEvent.press(screen.getByTestId('team-chip-invite'));
-    expect(mockPush).toHaveBeenCalledWith('/team/invite');
-    // Solo teams have Invite instead of Rally; start one from the store as the panel would.
-    await act(async () => {
-      usePendingAlert.getState().start('rally', [HERE.longitude, HERE.latitude]);
-    });
     expect(screen.getByText('Rally point at your position')).toBeTruthy();
     expect(app.active!.rally()).toBeNull();
     await act(async () => {
       jest.advanceTimersByTime(5000);
     });
     expect(app.active!.rally()).toMatchObject({ lat: HERE.latitude, lng: HERE.longitude });
+    await act(async () => useTeamStore.getState().refresh());
+    expect(screen.getByTestId('team-bar-gather')).toBeTruthy();
+    expect(screen.queryByTestId('team-band-gather')).toBeNull();
+    // Its creator ends it from the panel, confirmed inline.
+    await fireEvent.press(screen.getByTestId('team-bar-pill'));
+    await render(wrap(<TeamPanel top={0} here={HERE} />));
+    expect(screen.getByText(/^By you · /)).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('team-panel-gather-end'));
+    await fireEvent.press(screen.getByTestId('team-panel-gather-confirm-yes'));
+    expect(app.active!.rally()).toBeNull();
+    expect(screen.queryByTestId('team-panel-gather')).toBeNull();
+    expect(screen.queryByTestId('team-bar-gather')).toBeNull();
   });
 
   it('"Resolve for everyone", then an SOS seconds later: it goes out (QA 2.6.1)', async () => {

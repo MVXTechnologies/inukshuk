@@ -40,6 +40,7 @@ jest.mock('@data/storage', () => ({
   deleteFileAt: jest.fn(),
 }));
 jest.mock('@data/team/teamNotifications', () => ({
+  buzzRally: () => undefined,
   notifyTeam: async () => undefined,
   onTeamNotificationTap: () => () => undefined,
   dismissTeamNotification: async () => undefined,
