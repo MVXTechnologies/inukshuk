@@ -941,11 +941,7 @@ export function useMapDrawing({
       {state !== null && state.kind === 'route' && routeSaveOpen && (
         <SaveRouteSheet
           initialName={editedTrack?.name ?? `Route ${tracks.filter((t) => t.plan).length + 1}`}
-          initialCategory={
-            editedTrack?.category && editedTrack.category !== 'navigation'
-              ? editedTrack.category
-              : null
-          }
+          initialCategory={editedTrack?.category}
           summary={`${compactDistance(distanceM, units)} · ${climb}`}
           estimateFor={estimateFor}
           saving={savingRoute}

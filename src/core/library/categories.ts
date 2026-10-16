@@ -36,6 +36,9 @@ export const CUSTOM_CATEGORY_ICON = 'tag';
 /** Default selection for the record-start picker before any is remembered. */
 export const DEFAULT_CATEGORY_ID = 'hike';
 
+/** "Navigation trail": a planned route or an untimed trace, no activity of its own. */
+export const NAVIGATION_CATEGORY_ID = 'navigation';
+
 /** Longest accepted custom category name (after trimming). */
 export const MAX_CATEGORY_NAME_LENGTH = 24;
 

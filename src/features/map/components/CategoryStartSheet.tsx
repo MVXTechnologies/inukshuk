@@ -1,16 +1,13 @@
-import {
-  allCategories,
-  CATEGORY_COLOR_PALETTE,
-  MAX_CATEGORY_NAME_LENGTH,
-  validateCategoryName,
-} from '@core/library/categories';
+import { allCategories } from '@core/library/categories';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Chip, Icon, Surface, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Chip, Icon, Surface, Text, useTheme } from 'react-native-paper';
 import { KeyboardLifted } from '@ui/components/KeyboardLifted';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { NewCategoryForm } from './NewCategoryForm';
 
 interface Props {
   visible: boolean;
@@ -18,12 +15,6 @@ interface Props {
   onStart: (categoryId: string) => void;
   onDismiss: () => void;
 }
-
-const NAME_ERROR: Record<'empty' | 'too-long' | 'duplicate', string> = {
-  empty: 'Give the category a name',
-  'too-long': `Keep it under ${MAX_CATEGORY_NAME_LENGTH} characters`,
-  duplicate: 'A category with this name already exists',
-};
 
 /**
  * Pre-record activity picker: shown when the user taps "Record track", BEFORE
@@ -48,15 +39,11 @@ function SheetContent({ onStart, onDismiss }: Omit<Props, 'visible'>) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const customCategories = useLibraryStore((s) => s.customCategories);
-  const addCustomCategory = useLibraryStore((s) => s.addCustomCategory);
   const lastCategory = useSettingsStore((s) => s.lastActivityCategory);
   const setSetting = useSettingsStore((s) => s.set);
 
   const [selected, setSelected] = useState(lastCategory);
   const [adding, setAdding] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newColor, setNewColor] = useState(CATEGORY_COLOR_PALETTE[0]!);
-  const [nameError, setNameError] = useState<string | null>(null);
 
   const categories = allCategories(customCategories);
   // A dangling remembered id (should not happen — customs can't be deleted yet)
@@ -64,19 +51,6 @@ function SheetContent({ onStart, onDismiss }: Omit<Props, 'visible'>) {
   const selectedId = categories.some((c) => c.id === selected)
     ? selected
     : (categories[0]?.id ?? selected);
-
-  const commitNewCategory = () => {
-    const result = validateCategoryName(newName, customCategories);
-    if (!result.ok) {
-      setNameError(NAME_ERROR[result.reason]);
-      return;
-    }
-    const id = addCustomCategory(result.name, newColor);
-    setSelected(id);
-    setAdding(false);
-    setNewName('');
-    setNameError(null);
-  };
 
   const startWith = (id: string) => {
     setSetting('lastActivityCategory', id);
@@ -146,52 +120,13 @@ function SheetContent({ onStart, onDismiss }: Omit<Props, 'visible'>) {
           </ScrollView>
 
           {adding && (
-            <View style={styles.addForm}>
-              <TextInput
-                label="Category name"
-                value={newName}
-                onChangeText={(text) => {
-                  setNewName(text);
-                  setNameError(null);
-                }}
-                dense
-                autoFocus
-                maxLength={MAX_CATEGORY_NAME_LENGTH + 8}
-                // #235 — Return dismisses the keyboard and adds the category.
-                returnKeyType="done"
-                blurOnSubmit
-                onSubmitEditing={commitNewCategory}
-                error={nameError !== null}
-              />
-              {nameError !== null && (
-                <Text variant="bodySmall" style={{ color: theme.colors.error }}>
-                  {nameError}
-                </Text>
-              )}
-              <View style={styles.swatchRow}>
-                {CATEGORY_COLOR_PALETTE.map((color) => (
-                  <Pressable
-                    key={color}
-                    onPress={() => setNewColor(color)}
-                    accessibilityLabel={`Color ${color}`}
-                    style={[
-                      styles.swatch,
-                      { backgroundColor: color },
-                      color === newColor && {
-                        borderWidth: 3,
-                        borderColor: theme.colors.onSurface,
-                      },
-                    ]}
-                  />
-                ))}
-              </View>
-              <View style={styles.addActions}>
-                <Button onPress={() => setAdding(false)}>Cancel</Button>
-                <Button mode="contained-tonal" onPress={commitNewCategory}>
-                  Add
-                </Button>
-              </View>
-            </View>
+            <NewCategoryForm
+              onAdded={(id) => {
+                setSelected(id);
+                setAdding(false);
+              }}
+              onCancel={() => setAdding(false)}
+            />
           )}
 
           <View style={styles.actions}>
@@ -238,10 +173,6 @@ const styles = StyleSheet.create({
   chipScroll: { maxHeight: 240 },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderRadius: 20 },
-  addForm: { marginTop: 12, gap: 8 },
-  swatchRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
-  swatch: { width: 32, height: 32, borderRadius: 16 },
-  addActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
   actions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
