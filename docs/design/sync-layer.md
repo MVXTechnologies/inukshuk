@@ -147,6 +147,12 @@ export interface Carrier {
 - `RtcCarrier` wraps `react-native-webrtc`. It has one `RTCPeerConnection` per remote device, an ordered reliable channel `s` (sync), an ordered reliable channel `b` (blobs; a separate SCTP stream, so no head-of-line blocking between them), and later an unordered channel `p` for positions (R-RTC-4).
 - The **room** (L0) is a carrier with a 16 KiB frame cap, used only to authenticate and to carry `rtc` frames. Per the review (§2.9 and §7), the Durable Object is **not** used as a data relay in 2.7.0.
 
+_As built (G6):_
+
+- `CarrierConn` gained an optional `inFlight()`: the bytes handed to `send` and not yet on the wire (§4.4). The mesh reports the queue size its last `send` returned within the same turn, else asks the transport's stats; WebRTC reports the channel's `bufferedAmount`.
+- `RtcCarrier` (`src/data/sync/carriers/rtcCarrier.ts`) holds one `RTCPeerConnection` per **attempt** (a direct try, a relay try, an ICE restart toward direct are separate connections), each with the ordered, reliable channel `s` only. `b` (blobs) comes with G11, `p` (positions) later. `react-native-webrtc` is reached only through `loadRtcModule()` (`carriers/rtcModule.ts`, a lazy `require`): without it the phone is nearby-only.
+- The room is **not** a `Carrier`. `RoomClient` (`src/data/sync/roomClient.ts`) is one socket of one room; the path manager runs a signal-only `SyncSession` per peer over it (below). Nothing but handshakes and `rtc` frames can cross a room.
+
 ### 2.3 Rendezvous (L0) on the separate free Cloudflare account
 
 This follows the security review §2.4 exactly; nothing is re-designed:
@@ -165,6 +171,14 @@ This follows the security review §2.4 exactly; nothing is re-designed:
 - each room is one WebSocket.
 
 Groups that share a **parent** (a folder shared with a team) do **not** open their own room: their channels ride the parent's links (§3.4). That keeps sockets about equal to the number of teams, not the number of folders.
+
+_As built (G6):_
+
+- **The switch.** `internetOn(data)` (`@core/group/meta`): the admins' `net` record (`inet: 1`), or `net: 1` on the group's `gmeta` (G1 defined both; either turns it on). Off by default, so internet stays off until G7's switch writes it.
+- **In use only.** `GroupHost.setInternetOnline(on)` opens rooms only while the app is in use (G7 wires it to foreground or recording); off closes every room and internet path.
+- **R-META-4.** A room connects after a random 0–30 s (reconnects too, with a doubling backoff from 2 s to 5 min); a socket alone in its room closes after 10 min and comes back 5 min later. Blobs are dated with the server's clock (`chal.now`/`ok.now`), so a phone with a wrong clock still meets its group.
+- **TURN** is asked through the room socket of the member's signalling session, one request at a time, 10 s deadline; credentials are cached until a minute before they expire.
+- The relay host is a `GroupHost` dependency (`internet: { host, ws }`); `appTeam` does not pass one yet, so a shipped build is nearby-only until G7 configures the owner's relay.
 
 ### 2.4 Link establishment over the internet
 
@@ -189,6 +203,15 @@ sequenceDiagram
   A->>B: ch-open G · SyncSession v1 again · peer id must equal L0 peer id
   A->>B: ch-open F (tag match) · SyncSession v1 for folder group F
 ```
+
+_As built (G6):_
+
+- **Room payloads.** Inside each room blob, one byte says `hello` (a session's `hi1`: the receiver drops any session it had with that handle) or `frame` (the next frame of it). `src/core/group/roomProto.ts` also parses the server's frames totally and strictly.
+- **The L0 session** is a `SyncSession` with `signalOnly: true` and `rtc: true` under the relay's budgets: no vector, no `want`/`ops`, no push (a peer that sends one is struck), so the relay is never a data relay. A joining session in a group room, or a banned member, is closed at open (joiners use invite rooms, G7).
+- **Who dials.** The lower **handle** starts the L0 session (one handshake per pair per room); the lower **member id** makes the WebRTC offer (on a day boundary a pair can meet in two rooms, with handles in either order). A crossing offer from the higher id is ignored.
+- **The answering side** uses STUN only, unless "Always use the relay" is on, or this is the second offer from that member within 2 min (its first, direct, try failed): then it mints TURN before answering. Candidates that arrive meanwhile wait.
+- **R-RTC-2** is checked when the channel opens (`sdpFingerprintBinding` on the authenticated SDP), before the connection is announced; the link then binds to the member L0 authenticated (`LinkHost.attachCarrier`), and its first channel session must authenticate the same member (G5).
+- **R-RTC-3.** `allowCandidate`/`filterSdpCandidates` (`@core/group/sdp`): no `host` candidate in an SDP, trickled or accepted from the peer; relay attempts keep TURN candidates only. The path a connection really uses is read from the selected candidate pair (`selectedPathKind`), not assumed.
 
 ### 2.5 Per-peer path selection and failover
 
@@ -223,6 +246,17 @@ stateDiagram-v2
 ```
 
 `PathManager` (`src/data/sync/pathManager.ts`) is thin platform code. The **decision function** is pure: `choosePath(state: PeerPaths, policy, now) → PathDecision` in `src/core/group/path.ts`, unit-tested and simulated.
+
+_As built (G6):_
+
+- Both phones run `choosePath` per member every 2 s and on every link change; only the dialling side (lower member id) dials, both close what the decision drops. Nearby comes from the link host (a LAN link to that member with an open channel); direct and relay from the WebRTC attempts.
+- **Duplicates are per path.** `LinkHost` deduplicates two links to one phone only on the same path; a nearby and an internet link coexist until `choosePath` drops one (G5 risk 1).
+- **The tick** of the link host runs while the LAN runs **or** another carrier is attached, so an internet-only link keeps its vectors and keepalives (G5 risk 2).
+- A direct attempt that **succeeded** clears "tried recently": when that path later goes, direct is tried first again (otherwise `choosePath` would go straight to the relay for 5 min).
+- A relay attempt that failed is not retried for 30 s; refused credentials (off, busy, budget) for 5 min. No loop: without credentials and with direct blocked, one direct try per 5 min.
+- **Limits** (PM decision after G2): `DIRECT_LIMITS` 256 KiB/s and `TURN_LIMITS` 128 KiB/s per peer, paced at half; strikes, bans and op budgets are the relay's (R-RL-4). Room sessions use `RELAY_LIMITS` with frames that fit one blob.
+- **Bans** are by member id in the link host's `MemberBans`, shared by links and room sessions: a banned member's room session is closed at open, it gets no ICE and its attempts close.
+- `GroupHost.internetStatus()` gives per peer the primary path, each path's state and whether signalling is up (G7's Connection sheet); `setAlwaysRelay(on)` is the per-phone setting.
 
 ### 2.6 Multiplexing many groups over one connection
 
@@ -345,6 +379,8 @@ There is one compat hazard. A 2.6.x phone that scans a _folder_ invite would joi
 - **The active team remains a UI concept** (which team the map shows and whose position I share). It is no longer a transport concept.
 - **Background (honest):** in 2.7.0, background sync covers what does today (the active team while recording or sharing position). Other groups sync while the app is in the foreground. More is open question Q3.
 
+_As built (G6, owner decision 2026-10-16):_ an SOS from **any** of the phone's teams rings the full alarm, not only from the team on screen: its raise, reopen and resolve reach `TeamService.onAlert` with their team id (the store's `sosAlarm.teamId`, so the screens can switch to it), the phone writes its receipt for it, and the alarm ends with that team's resolve (#752 holds per team). Every other kind from a team not on screen stays silent, and a team not on screen owes no rally receipt.
+
 _As built (G5):_ `GroupHost` keeps one `TeamSession` per group (the replica behind its write-ahead store, plus the team domain), all opened at launch, and the links live in `LinkHost` (`src/data/sync/linkHost.ts`) over `MeshCarrier` (`src/data/sync/carriers/meshCarrier.ts`). `TeamService` is a façade: the active team is the one whose alerts, drawing alerts and receipts reach the screens and whose tag the LAN advertises; other groups replicate silently (no alert, no receipt) until shown. The `Carrier` types live in `@core/group/link` (G2), not a `carrier.ts`. The record gains no `app`/`parent` yet: `groups()` reads `gmeta.app` from the replica.
 
 ### 3.4 A folder shared with a team: sub-group or own group?
@@ -463,6 +499,12 @@ Wire bytes and ordering semantics are unchanged; only _which_ plaintext goes nex
 **Shallow native queues.** Carriers are fed at most ~64 KiB ahead: the mesh `send` queue, and WebRTC `bufferedAmountLowThreshold`. Otherwise lane 0 would wait behind megabytes already handed to native code.
 
 **Every path.** A lane-0 op is pushed on **every** live link to **every** peer, nearby and internet, and is retried at every new link-open until some peer's vector covers it. The mockup's "Waiting to send" band reads `deliveredTo(opId)`: a set of peers whose vector covers the op's seq, which `SyncSession` already tracks (`peerVv`).
+
+_As built (G6):_
+
+- `LinkMux.nextOut(now)` returns `{frame, lane}` (control frames are lane 0); the link host no longer infers the lane from counters (G5 risk 4).
+- `LinkHost` keeps at most `IN_FLIGHT_BUDGET` (64 KiB) in a carrier's queue (`CarrierConn.inFlight`); past it, it stops pulling and the rest waits unsealed in the lanes. It resumes on `writable` or polls every 25 ms (the mesh reports its queue only when asked). Proof (`linkHost.test.ts`): with a 4 MiB catch-up backlog the carrier holds at most the budget plus one frame, and after an SOS the next frame handed over is lane 0 (G5 risk 5).
+- Pull-mode sessions remember what they asked each peer until that peer has served it: a range completed first through a faster path no longer makes the slower peer's answer look unsolicited (over-rate strikes, found by the simulator once the internet profiles sped paths up).
 
 ### 4.5 Blob transfer (PDFs, photos, big GPX)
 
@@ -671,7 +713,8 @@ export interface GroupHandle {
   - These are announced by **capability fields** on the existing `cap` record. `validCapFields` already accepts any non-negative integers. 2.7 writes `{pen:1, v:1, x, lnk:1, rtc:1, blob:1}`, where each value is that feature's protocol version.
   - `capExpiry` is generalised to read a per-capability version (today it hard-codes `v == PEN_PROTOCOL`), keeping the pen semantics.
     - _As built (G1):_ `CAP_SPECS` (`src/core/teamdraw/caps.ts`) names each capability's spoken versions, where its version lives (`pen` keeps `pen: 1` + `v`; every later one writes its version as the flag's value) and whether the claim is also bounded by the flag's own stamp (the rollback rule; true for `rc`, `lnk`, `rtc`, `blob`). A name not in the table is never held. `lnk`/`rtc`/`blob` are read, not advertised (`capBody` is unchanged until G5).
-    - _As built (G5):_ a 2.7 phone writes `advertisedCapBody` = the 2.6 body plus `lnk: 1`, renewed at once over a 2.6 claim (`needsAdvertisedCap`). `capBody` stays the 2.6 body (fixtures and golden logs model older phones with it). `rtc` waits for G6, `blob` for G11.
+    - _As built (G5):_ a 2.7 phone writes `advertisedCapBody` = the 2.6 body plus `lnk: 1`, renewed at once over a 2.6 claim (`needsAdvertisedCap`). `capBody` stays the 2.6 body (fixtures and golden logs model older phones with it). `blob` waits for G11.
+    - _As built (G6):_ `advertisedCapBody` adds `rtc: 1`; a G5 claim (`lnk` without `rtc`) renews at once. Link hellos offer `lnk` and `rtc`.
   - The rollback rule stays: claims expire after 7 days and are renewed on open.
 - **Link version:** `lk1.ver` = 1, with caps listed in the hello. A link with an unknown higher version falls back to the highest common version, or closes without a strike, as the mesh preamble does.
 - **Room protocol:** `/v1/` in the path.
