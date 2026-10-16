@@ -1133,6 +1133,17 @@ JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeArm
   (*handle(h))->engine->armActivation();
 }
 
+JNIEXPORT jdoubleArray JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeUnproject(JNIEnv* env, jclass,
+                                                                                              jlong h, jdouble x,
+                                                                                              jdouble y) {
+  const auto m = (*handle(h))->engine->unproject(x, y);
+  if (!m) return nullptr;
+  jdoubleArray out = env->NewDoubleArray(2);
+  const jdouble v[2] = {(*m)[0], (*m)[1]};
+  env->SetDoubleArrayRegion(out, 0, 2, v);
+  return out;
+}
+
 JNIEXPORT jlong JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeSampleFingerprint(JNIEnv* env, jclass,
                                                                                                jintArray samples) {
   if (!samples) return 0;

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <iterator>
 
 #include "png_decode.hpp"
 
@@ -319,11 +320,37 @@ void Engine::setLabels(std::vector<LabelData> labels, bool keepMissing) {
 void Engine::setPolyline(int id, std::vector<Pt> mercPoints, const LineStyle& style) {
   std::lock_guard<std::mutex> lock(sceneMutex_);
   auto& p = polylines_[id];
+  // #735: overlays are re-sent per group (a live stroke re-sends its whole
+  // group): an unchanged line keeps its lifted vertices and GPU buffer.
+  const auto sameStyle = [](const LineStyle& a, const LineStyle& b) {
+    return std::equal(std::begin(a.color), std::end(a.color), std::begin(b.color)) &&
+           std::equal(std::begin(a.halo), std::end(a.halo), std::begin(b.halo)) && a.width == b.width &&
+           a.haloWidth == b.haloWidth && a.order == b.order;
+  };
+  if (p.vertices && p.points == mercPoints && sameStyle(p.style, style)) return;
   p.points = std::move(mercPoints);
   p.style = style;
   p.liftedDemGen = UINT32_MAX;  // re-lift
   p.liftedAt = -1e300;
   if (repaint_) repaint_();
+}
+
+std::optional<Pt> Engine::unproject(double screenX, double screenY) const {
+  DrawnView v;
+  {
+    std::lock_guard<std::mutex> lock(viewMutex_);
+    if (!drawnView_) return std::nullopt;
+    v = *drawnView_;
+  }
+  if (v.width <= 0 || v.height <= 0 || v.worldSize <= 0) return std::nullopt;
+  const double ndcX = screenX / v.width * 2 - 1, ndcY = 1 - screenY / v.height * 2;
+  const auto hit = rayTerrainHit(v.invP, ndcX, ndcY, [&](double x, double y) -> std::optional<double> {
+    const auto h = heightAt(x / v.worldSize, y / v.worldSize, kDemMaxZoom);
+    if (!h) return std::nullopt;
+    return (*h - v.hRef) * v.heightScale;
+  });
+  if (!hit) return std::nullopt;
+  return Pt{hit->first / v.worldSize, hit->second / v.worldSize};
 }
 
 void Engine::removePolyline(int id) {
@@ -720,6 +747,10 @@ FrameOutput Engine::frame(const FrameInput& in) {
       // Back to 2D: nothing wants a drape now — the platform drops what it has queued.
       std::lock_guard<std::mutex> lock(imgMutex_);
       if (!fifoDrapes) imgRank_.clear();
+    }
+    {
+      std::lock_guard<std::mutex> lock(viewMutex_);
+      drawnView_.reset();
     }
     wasActive_ = false;
     return out;
@@ -1322,6 +1353,10 @@ FrameOutput Engine::frame(const FrameInput& in) {
   }
   if (!drawing) {
     // Armed (#720): the requests are out; the 2D map still shows.
+    {
+      std::lock_guard<std::mutex> lock(viewMutex_);
+      drawnView_.reset();
+    }
     FrameOutput idle;
     idle.look = out.look;
     stats_.tilesDrawn = 0;
@@ -1363,6 +1398,7 @@ FrameOutput Engine::frame(const FrameInput& in) {
 
   // 3D pin labels.
   bool labelsFading = false;
+  bool linesSettling = false;  // #735: a line waits for its turn to follow the drawn surface
   {
     std::lock_guard<std::mutex> lock(sceneMutex_);
     std::vector<LabelInput> inputs;
@@ -1448,19 +1484,60 @@ FrameOutput Engine::frame(const FrameInput& in) {
     }
     stats_.labelsShown = static_cast<int>(out.labels.size());
 
-    // Trails / recording / routes, lifted onto the terrain.
-    for (auto& [id, pl] : polylines_) {
+    // Trails / recording / routes / drawings, lifted onto the terrain.
+    //
+    // #735: onto the surface actually drawn — the mesh of the tile drawn at
+    // each point — not the finest DEM. A far tile's mesh is coarse (64 cells
+    // over kilometres), and a line following the finer DEM ran under it in
+    // every hollow: trails vanished in all but close-up views. The lines are
+    // lifted again when the drawn surfaces change (LOD, bakes, morph targets),
+    // at most every kLineReliftMs and kLiftPointsPerFrame points a frame.
+    std::unordered_map<uint64_t, const std::vector<float>*> drawnSurface;
+    uint64_t surfaceSig = 1469598103934665603ull;
+    int maxDrawnZ = 0;
+    for (const auto& t : draw) {
+      auto m = meshes_.find(meshKeyOf(t));
+      if (m == meshes_.end() || m->second.hTo.size() != static_cast<size_t>((meshGrid_ + 1) * (meshGrid_ + 1)))
+        continue;
+      if (drawnSurface.emplace(m->first, &m->second.hTo).second) {
+        surfaceSig += (m->first * 1099511628211ull) ^ (m->second.version * 2654435761ull);
+        maxDrawnZ = std::max(maxDrawnZ, t.z);
+      }
+    }
+    auto surfaceHeight = [&](double mx, double my) -> double {
+      const double wx = mx - std::floor(mx);  // the world copy does not matter for heights
+      for (int z = maxDrawnZ; z >= 0 && !drawnSurface.empty(); z--) {
+        const double n = std::ldexp(1.0, z);
+        const int x = std::clamp(static_cast<int>(wx * n), 0, static_cast<int>(n) - 1);
+        const int y = std::clamp(static_cast<int>(my * n), 0, static_cast<int>(n) - 1);
+        auto it = drawnSurface.find(meshKey(z, x, y));
+        if (it != drawnSurface.end()) return surfaceAt(meshGrid_, *it->second, wx * n - x, my * n - y);
+      }
+      return heightAt(mx, my, kDemMaxZoom).value_or(0.0);
+    };
+    std::vector<int> lineIds;
+    lineIds.reserve(polylines_.size());
+    for (const auto& [id, pl] : polylines_) lineIds.push_back(id);
+    std::sort(lineIds.begin(), lineIds.end());  // the same order on every standard library
+    size_t liftedPoints = 0;
+    for (int id : lineIds) {
+      auto& pl = polylines_[id];
       if (pl.points.size() < 2) continue;
-      const bool needLift = !pl.vertices || (pl.liftedDemGen != demGen && now - pl.liftedAt > 400);
+      const bool stale = pl.liftedDemGen != demGen || pl.liftedSurface != surfaceSig;
+      const bool needLift =
+          !pl.vertices || (stale && now - pl.liftedAt > kLineReliftMs && liftedPoints < kLiftPointsPerFrame);
+      if (stale && pl.vertices && !needLift) linesSettling = true;
       if (needLift) {
         pl.originX = pl.points[0][0];
         pl.originY = pl.points[0][1];
         const double latc = mercYToLat(pl.originY);
         const double step = 15.0 / (kEarthCircumferenceM * std::cos(latc * kPi / 180));
         const auto dense = densify(pl.points, step);
+        liftedPoints += dense.size();
         std::vector<float> hs(dense.size());
         for (size_t k = 0; k < dense.size(); k++)
-          hs[k] = static_cast<float>(heightAt(dense[k][0], dense[k][1], kDemMaxZoom).value_or(0.0));
+          hs[k] = static_cast<float>(surfaceHeight(dense[k][0], dense[k][1]));
+        pl.liftedSurface = surfaceSig;
         auto verts = std::make_shared<std::vector<float>>();
         verts->reserve((dense.size() - 1) * 6 * 8);
         const float sides[6] = {-1, 1, 1, -1, 1, -1};
@@ -1490,8 +1567,9 @@ FrameOutput Engine::frame(const FrameInput& in) {
       for (int i = 0; i < 16; i++) ld.matrix[i] = static_cast<float>(m[i]);
       out.lines.push_back(std::move(ld));
     }
-    std::stable_sort(out.lines.begin(), out.lines.end(),
-                     [](const LineDraw& a, const LineDraw& b) { return a.style.order < b.style.order; });
+    std::stable_sort(out.lines.begin(), out.lines.end(), [](const LineDraw& a, const LineDraw& b) {
+      return a.style.order != b.style.order ? a.style.order < b.style.order : a.id < b.id;
+    });
 
     // The location marker.
     if (puckVisible_) {
@@ -1506,7 +1584,7 @@ FrameOutput Engine::frame(const FrameInput& in) {
     }
   }
 
-  out.needsRepaint = morphing || bakesPending || hRefSettling || labelsFading || imageryFading ||
+  out.needsRepaint = morphing || bakesPending || hRefSettling || labelsFading || linesSettling || imageryFading ||
                      !out.imageryUploads.empty();
   stats_.tilesDrawn = static_cast<int>(out.tiles.size());
   stats_.flatTiles = flat;
@@ -1515,6 +1593,10 @@ FrameOutput Engine::frame(const FrameInput& in) {
   {
     std::lock_guard<std::mutex> lock(imgMutex_);
     stats_.imagerySlots = imgSlotCount_ - static_cast<int>(freeImgSlots_.size());
+  }
+  if (invP) {
+    std::lock_guard<std::mutex> lock(viewMutex_);
+    drawnView_ = DrawnView{*invP, in.width, in.height, ws, hRef, heightScale};
   }
   stats_.hRef = hRef;
   stats_.imageryUploads += static_cast<int>(out.imageryUploads.size());

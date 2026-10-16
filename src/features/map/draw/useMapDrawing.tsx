@@ -1,4 +1,5 @@
 import { canSave, canUndo, drawHelp, drawHint, exitNeedsConfirm } from '@core/draw/editor';
+import { terrainLngLat } from '../hooks/useTerrainLines';
 import {
   boundsOfVertices,
   isSelfIntersecting,
@@ -101,6 +102,8 @@ const DISCARD_CONFIRM_MS = 3500;
 
 export interface MapDrawingOptions {
   mapRef: RefObject<MapRef | null>;
+  /** The 3D terrain's view while it draws (null in 2D): points land on the relief (#735). */
+  terrainView?: number | null;
   showSnack: (message: string) => void;
   units: Units;
   /** Top inset of the screen (status bar), for the chips/hint lane. */
@@ -142,6 +145,7 @@ export interface MapDrawing {
 
 export function useMapDrawing({
   mapRef,
+  terrainView = null,
   showSnack,
   units,
   topInset,
@@ -472,6 +476,8 @@ export function useMapDrawing({
 
   const unproject = useCallback(
     async (x: number, y: number): Promise<LngLat | null> => {
+      const onRelief = terrainLngLat(terrainView, x, y);
+      if (onRelief !== null) return onRelief;
       try {
         const ll = await mapRef.current?.unproject([x, y]);
         return ll ? [ll[0], ll[1]] : null;
@@ -479,7 +485,7 @@ export function useMapDrawing({
         return null;
       }
     },
-    [mapRef],
+    [mapRef, terrainView],
   );
   const lastMoveAt = useRef(0);
   const onGripMove = (x: number, y: number) => {

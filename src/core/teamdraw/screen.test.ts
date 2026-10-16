@@ -102,6 +102,27 @@ describe('what a gesture becomes', () => {
     [200, 300],
   ];
 
+  it('lands on the 3D relief when the view has one, the flat map off it (#735)', () => {
+    // A relief that shifts every point 0.001° east, and has nothing above y 305 (the sky).
+    const toGeo = (s: ScreenPt): Pt | null => {
+      if (s[1] < 305) return null;
+      const g = unproject(s, VIEW);
+      return [g[0] + 0.001, g[1]];
+    };
+    const relief: Viewport = { ...VIEW, toGeo };
+    const s = buildStroke('free', line, relief, 'a', style);
+    const flat = buildStroke('free', line, VIEW, 'a', style);
+    expect(s && flat).toBeTruthy();
+    if (!s || !flat) return;
+    expect(close(s.pts[0]!, [flat.pts[0]![0] + 0.001, flat.pts[0]![1]])).toBe(true);
+    expect(close(s.pts[3]!, flat.pts[3]!)).toBe(true); // in the "sky": the flat map's point
+    // The move-by-move builder too, each point once.
+    const b = new StrokeBuilder('free', 'a');
+    const built = b.stroke(line, relief, style, 1);
+    expect(built?.pts).toEqual(s.pts);
+    expect(b.unprojected).toBe(line.length);
+  });
+
   it('measures the pencil along its path, the others end to end', () => {
     expect(gestureLengthDp('free', [])).toBe(0);
     expect(gestureLengthDp('free', line)).toBeCloseTo(

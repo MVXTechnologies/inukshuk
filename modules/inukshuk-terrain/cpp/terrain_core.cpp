@@ -129,6 +129,37 @@ std::optional<std::pair<double, double>> groundAtNdc(const Mat4& invP, double nd
                         (*nearP)[1] + ((*farP)[1] - (*nearP)[1]) * s);
 }
 
+std::optional<std::pair<double, double>> rayTerrainHit(
+    const Mat4& invP, double ndcX, double ndcY,
+    const std::function<std::optional<double>(double, double)>& surfaceZ, int steps,
+    double farFactor) {
+  auto nearP = dehomogenize(transform(invP, {ndcX, ndcY, -1, 1}));
+  auto farP = dehomogenize(transform(invP, {ndcX, ndcY, 1, 1}));
+  if (!nearP || !farP || steps < 1) return std::nullopt;
+  const Vec3 a = *nearP;
+  const Vec3 d{(*farP)[0] - a[0], (*farP)[1] - a[1], (*farP)[2] - a[2]};
+  auto above = [&](double s) {
+    const double x = a[0] + d[0] * s, y = a[1] + d[1] * s, z = a[2] + d[2] * s;
+    return z - surfaceZ(x, y).value_or(0.0);
+  };
+  double prevS = 0;
+  if (above(0) <= 0) return std::nullopt;  // the near plane is already under the surface
+  for (int i = 1; i <= steps; i++) {
+    const double s = farFactor * i / steps;
+    const double v = above(s);
+    if (v <= 0) {
+      double lo = prevS, hi = s;
+      for (int k = 0; k < 40; k++) {
+        const double mid = 0.5 * (lo + hi);
+        (above(mid) > 0 ? lo : hi) = mid;
+      }
+      return std::make_pair(a[0] + d[0] * hi, a[1] + d[1] * hi);
+    }
+    prevS = s;
+  }
+  return std::nullopt;
+}
+
 // ---- frustum -----------------------------------------------------------------
 
 namespace {

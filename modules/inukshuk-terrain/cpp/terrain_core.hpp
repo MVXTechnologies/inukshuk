@@ -51,6 +51,19 @@ std::optional<Vec3> eyeFromProjection(const Mat4& P);
 std::optional<std::pair<double, double>> groundAtNdc(const Mat4& invP, double ndcX, double ndcY,
                                                      double groundZ = 0.0);
 
+/**
+ * #735: where the ray through an NDC point first meets the drawn terrain
+ * (world px x, y). `surfaceZ(x, y)` gives the displayed height there in P's z
+ * units ((h − hRef) × heightScale; nullopt = unknown, taken as 0). Marches
+ * from the near plane to `farFactor` × the far plane (the terrain reaches past
+ * MapLibre's flat-map far plane), then bisects the first crossing. Nullopt
+ * when the ray never meets it (the sky).
+ */
+std::optional<std::pair<double, double>> rayTerrainHit(
+    const Mat4& invP, double ndcX, double ndcY,
+    const std::function<std::optional<double>(double, double)>& surfaceZ, int steps = 512,
+    double farFactor = 4.0);
+
 // ---- frustum -----------------------------------------------------------------
 struct Aabb {
   double minX, minY, minZ, maxX, maxY, maxZ;

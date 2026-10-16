@@ -107,6 +107,22 @@ again (once) when it repeats its snapshotter's previous block
 (`acceptDrapeSnapshot`); the drape disk cache moved to a new folder (v2) and
 the old one is dropped, since it may hold such images.
 
+Lines and drawing in 3D (#735, 2026-10-16): the terrain is drawn over the
+whole 2D map, so every line overlay must also reach the scene. Only the
+Library's trails, the focused trail and the recording did; now each overlay
+hands its own group (`@core/terrain3d/lineGroups`, `useTerrainLineGroup`,
+native `setLineGroup`): the long trail and its stage, the followed trail and
+its guide, the pointing line and ticks, the route or area being drawn (live),
+the Library's area outlines, teammates' tracks and team drawings (fading,
+selected halo). A change re-sends one group, and the engine keeps an
+unchanged line's lifted vertices. Lines are lifted onto the surface actually
+drawn there (the drawn tile's mesh), not the finest DEM: far tiles' coarse
+meshes had swallowed them in every hollow. Taps, long presses, the route pen
+and the team pen land on the relief through `unproject` (a ray marched
+against the drawn terrain, synchronous on the JS thread); the team pen keeps
+the tilt instead of flattening the map. Not drawn in 3D (2D only): fills,
+dashes, circles (vertex handles, end dots) and symbols.
+
 Open: pin density vs Outmap, contour legibility at very steep slopes,
 drape throughput on low-end GPUs (~350 ms per snapshot on the emulator).
 

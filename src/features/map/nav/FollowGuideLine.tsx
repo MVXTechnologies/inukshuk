@@ -1,9 +1,11 @@
 import { liveLayerAnchor } from '@core/map/liveLayerOrder';
+import { groupLines } from '@core/terrain3d/lineGroups';
 import type { LatLng } from '@core/models';
 import type { LineLayerSpecification } from '@maplibre/maplibre-gl-style-spec';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useMemo } from 'react';
+import { useTerrainLineGroup, useTerrainView } from '../hooks/useTerrainLines';
 
 type LineLayout = NonNullable<LineLayerSpecification['layout']>;
 type LinePaint = NonNullable<LineLayerSpecification['paint']>;
@@ -39,6 +41,23 @@ export function FollowGuideLine({ from, to }: { from: LatLng; to: LatLng }) {
     }),
     [from.latitude, from.longitude, to.latitude, to.longitude],
   );
+  // #735: the same guide on the 3D terrain (solid there: the scene draws no dashes).
+  const view = useTerrainView();
+  const terrainLines = useMemo(
+    () =>
+      view === null
+        ? null
+        : groupLines('followGuide', [{ geometry: data.geometry }], {
+            color,
+            halo: color,
+            haloOpacity: 0,
+            width: 2,
+            haloAdd: 0,
+            order: 0,
+          }),
+    [view, data, color],
+  );
+  useTerrainLineGroup('followGuide', terrainLines);
   return (
     <GeoJSONSource id="follow-guide" data={data}>
       <Layer

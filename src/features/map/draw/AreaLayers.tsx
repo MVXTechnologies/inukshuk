@@ -1,7 +1,9 @@
 import { TRAILS_ANCHOR } from '@core/geo/mapLayerStack';
 import type { Area } from '@core/models';
+import { groupLines, ringAsLine } from '@core/terrain3d/lineGroups';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useMemo } from 'react';
+import { useTerrainLineGroup, useTerrainView } from '../hooks/useTerrainLines';
 
 /**
  * The library's drawn areas on the main map (#503): a translucent fill in
@@ -41,6 +43,25 @@ export function AreaLayers({
   selectedId: string | null;
 }) {
   const data = useMemo(() => JSON.stringify(areasFeatureCollection(areas)), [areas]);
+  // #735: the outlines on the 3D terrain (the scene draws lines, not fills).
+  const view = useTerrainView();
+  const terrainLines = useMemo(
+    () =>
+      view === null
+        ? null
+        : groupLines(
+            'areas',
+            areas.map((a) => ({
+              geometry: ringAsLine(a.ring),
+              color: a.color,
+              width: a.id === selectedId ? 4 : 2.5,
+            })),
+            // Every outline takes its area's colour; no halo.
+            { color: '', halo: '', haloOpacity: 0, width: 2.5, haloAdd: 0, order: 0 },
+          ),
+    [view, areas, selectedId],
+  );
+  useTerrainLineGroup('areas', terrainLines);
   if (areas.length === 0) return null;
   const sel = selectedId ?? '';
   return (

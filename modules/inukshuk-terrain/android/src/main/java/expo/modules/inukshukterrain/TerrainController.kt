@@ -65,7 +65,7 @@ class TerrainController(
     override fun setMasks(waterXY: DoubleArray, waterCounts: IntArray, iceXY: DoubleArray, iceCounts: IntArray) =
       lock.read { if (!destroyed.get()) TerrainNative.nativeSetMasks(handle, waterXY, waterCounts, iceXY, iceCounts) }
   })
-  private val lineIds = HashSet<Int>()
+  private val lineGroups = HashMap<Int, HashSet<Int>>()
   private var lastSceneCamera = ""
   private var watchTicks = 0
   private var ticksSinceScene = 0
@@ -136,17 +136,29 @@ class TerrainController(
     scene.refresh()
   }
 
-  /** Trails/routes lifted onto the terrain; replaces the whole set. */
-  fun setLines(lines: List<LineSpec>) = lock.read {
+  /**
+   * Trails/routes/drawings lifted onto the terrain (#735): replaces one
+   * overlay's set (`group`), leaving the other overlays' lines untouched.
+   */
+  fun setLineGroup(group: Int, lines: List<LineSpec>) = lock.read {
     if (destroyed.get()) return@read
     val keep = HashSet<Int>()
     for (l in lines) {
       keep.add(l.id)
       TerrainNative.nativeSetPolyline(handle, l.id, l.merc, l.style)
     }
-    for (id in lineIds) if (id !in keep) TerrainNative.nativeRemovePolyline(handle, id)
-    lineIds.clear()
-    lineIds.addAll(keep)
+    lineGroups[group]?.let { old -> for (id in old) if (id !in keep) TerrainNative.nativeRemovePolyline(handle, id) }
+    lineGroups[group] = keep
+  }
+
+  /** #735: lng, lat of the drawn terrain under a view point (dp); null off the terrain. */
+  fun unproject(x: Double, y: Double): DoubleArray? = lock.read {
+    if (destroyed.get()) return@read null
+    val m = TerrainNative.nativeUnproject(handle, x, y) ?: return@read null
+    doubleArrayOf(
+      m[0] * 360.0 - 180.0,
+      Math.toDegrees(Math.atan(Math.sinh(Math.PI * (1 - 2 * m[1])))),
+    )
   }
 
   /**

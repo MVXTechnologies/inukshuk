@@ -1676,6 +1676,168 @@ static void testDrapeSnapshotGuard() {
   CHECK(rgbaFingerprint(nullptr, 64, 32, 64 * 4) == 0);
 }
 
+// ---- lines and drawing in 3D (#735) ---------------------------------------------------
+static void testTerrainUnproject() {
+  g_cases++;
+  const double lng = 7.7491, lat = 46.0207, zoom = 13.5, w = 412, h = 892;
+  const Mat4 P = refProjection(lng, lat, zoom, 60, 20, w, h);
+  const auto invP = invert(P);
+  CHECK(invP.has_value());
+  if (!invP) return;
+  // Flat relief: the same point as the ground plane.
+  for (const auto& ndc : {std::array<double, 2>{0, 0}, std::array<double, 2>{0.4, -0.6}}) {
+    const auto flat = rayTerrainHit(*invP, ndc[0], ndc[1], [](double, double) { return std::optional<double>(0); });
+    const auto ground = groundAtNdc(*invP, ndc[0], ndc[1]);
+    CHECK(flat.has_value() && ground.has_value());
+    if (flat && ground) {
+      CHECK_NEAR(flat->first, ground->first, 0.05);
+      CHECK_NEAR(flat->second, ground->second, 0.05);
+    }
+  }
+  // Raised relief (a 300 m plateau) is met before the flat ground: nearer the eye.
+  const auto eye = eyeFromProjection(P);
+  const auto ground = groundAtNdc(*invP, 0, 0);
+  const auto plateau =
+      rayTerrainHit(*invP, 0, 0, [](double, double) { return std::optional<double>(300); });
+  CHECK(eye.has_value() && ground.has_value() && plateau.has_value());
+  if (eye && ground && plateau)
+    CHECK(std::hypot(plateau->first - (*eye)[0], plateau->second - (*eye)[1]) <
+          std::hypot(ground->first - (*eye)[0], ground->second - (*eye)[1]) - 10);
+  // The sky: steeply tilted, the top of the screen looks above the horizon and meets nothing.
+  const auto invSteep = invert(refProjection(lng, lat, zoom, 85, 20, w, h));
+  CHECK(invSteep.has_value());
+  if (invSteep)
+    CHECK(!rayTerrainHit(*invSteep, 0, 0.999, [](double, double) { return std::optional<double>(0); })
+               .has_value());
+
+  // The engine: a point projected from the drawn relief comes back from unproject.
+  std::vector<DemId> req;
+  Engine eng([&](int z, int x, int y) { req.push_back({z, x, y}); }, nullptr, [] {});
+  CHECK(!eng.unproject(w / 2, h / 2).has_value());  // nothing drawn yet
+  auto relief = [](const DemId& d) {
+    std::vector<float> hs(kDemSize * kDemSize);
+    for (int j = 0; j < kDemSize; j++)
+      for (int i = 0; i < kDemSize; i++) {
+        const double mx = (d.x + (i + 0.5) / kDemSize) / std::pow(2.0, d.z);
+        const double my = (d.y + (j + 0.5) / kDemSize) / std::pow(2.0, d.z);
+        hs[j * kDemSize + i] = static_cast<float>(1600 + 900 * std::sin(mx * 9000) * std::cos(my * 7000));
+      }
+    return hs;
+  };
+  FrameInput in;
+  in.P = P;
+  in.width = w;
+  in.height = h;
+  in.zoom = zoom;
+  in.lat = lat;
+  in.lng = lng;
+  in.bearingDeg = 20;
+  in.pitchDeg = 60;
+  in.timeMs = 1000;
+  FrameOutput out;
+  for (int round = 0; round < 60; round++) {
+    for (const auto& d : req) eng.onDemHeights(d.z, d.x, d.y, relief(d));
+    req.clear();
+    eng.drainBakes();
+    in.timeMs += 16;
+    out = eng.frame(in);
+  }
+  CHECK(out.active);
+  const double ws = worldSize(zoom);
+  int checked = 0;
+  for (const auto& sp : {std::array<double, 2>{w / 2, h / 2}, std::array<double, 2>{w * 0.3, h * 0.7},
+                         std::array<double, 2>{w * 0.8, h * 0.55}}) {
+    const auto m = eng.unproject(sp[0], sp[1]);
+    CHECK(m.has_value());
+    if (!m) continue;
+    // Re-project the hit at its displayed height: the same screen point.
+    const auto hh = eng.heightAt((*m)[0], (*m)[1], kDemMaxZoom);
+    CHECK(hh.has_value());
+    if (!hh) continue;
+    const Vec4 c = transform(P, {(*m)[0] * ws, (*m)[1] * ws, (*hh - out.hRef) * out.exaggeration * out.ramp, 1});
+    CHECK(c[3] > 0);
+    CHECK_NEAR((c[0] / c[3] * 0.5 + 0.5) * w, sp[0], 1.0);
+    CHECK_NEAR((0.5 - c[1] / c[3] * 0.5) * h, sp[1], 1.0);
+    // ...and it differs from MapLibre's flat-ground answer (the bug of drawing on a flat map).
+    const auto flat = groundAtNdc(*invP, sp[0] / w * 2 - 1, 1 - sp[1] / h * 2);
+    if (flat && std::abs(*hh - out.hRef) > 50)
+      CHECK(std::hypot(flat->first - (*m)[0] * ws, flat->second - (*m)[1] * ws) > 1);
+    checked++;
+  }
+  CHECK(checked == 3);
+
+  // Lines: the same points and style again keep the lifted line (no re-lift, same version).
+  std::vector<Pt> pts{{lngToMercX(lng - 0.01), latToMercY(lat)}, {lngToMercX(lng + 0.01), latToMercY(lat)}};
+  LineStyle st;
+  eng.setPolyline(7, pts, st);
+  in.timeMs += 16;
+  out = eng.frame(in);
+  CHECK(out.lines.size() == 1);
+  const uint32_t v1 = out.lines.empty() ? 0 : out.lines[0].version;
+  eng.setPolyline(7, pts, st);
+  in.timeMs += 500;
+  out = eng.frame(in);
+  CHECK(!out.lines.empty() && out.lines[0].version == v1);
+  st.width = 6;  // a new style re-lifts
+  eng.setPolyline(7, pts, st);
+  in.timeMs += 500;
+  out = eng.frame(in);
+  CHECK(!out.lines.empty() && out.lines[0].version != v1);
+
+  // The line lies on the surface drawn there (the mesh of the drawn tile), not
+  // on the finer DEM: a far tile's coarse mesh no longer swallows it.
+  std::vector<Pt> across;
+  for (int i = 0; i <= 40; i++) {
+    const double t = i / 40.0;
+    across.push_back({lngToMercX(lng - 0.05 + 0.1 * t), latToMercY(lat + 0.02 + 0.04 * t)});
+  }
+  eng.setPolyline(8, across, LineStyle{});
+  for (int i = 0; i < 4; i++) {
+    in.timeMs += 300;
+    eng.drainBakes();
+    out = eng.frame(in);
+  }
+  const LineDraw* drawn = nullptr;
+  for (const auto& l : out.lines)
+    if (l.id == 8) drawn = &l;
+  CHECK(drawn != nullptr);
+  int onSurface = 0, sampled = 0;
+  double worst = 0;
+  if (drawn) {
+    const auto& v = *drawn->vertices;
+    for (size_t k = 0; k + 8 <= v.size(); k += 8 * 6) {
+      const double mx = across[0][0] + v[k], my = across[0][1] + v[k + 1];
+      // The finest drawn tile with a mesh at this point.
+      const DrawTile* tile = nullptr;
+      int tz = -1;
+      for (const auto& d : out.tiles) {
+        if (!d.attributes) continue;
+        const int z = static_cast<int>(d.key >> 58);
+        const int x = static_cast<int>((d.key >> 29) & ((1u << 29) - 1));
+        const int y = static_cast<int>(d.key & ((1u << 29) - 1));
+        const double n = std::ldexp(1.0, z);
+        if (static_cast<int>(mx * n) == x && static_cast<int>(my * n) == y && z > tz) {
+          tile = &d;
+          tz = z;
+        }
+      }
+      if (!tile) continue;
+      const int N = eng.meshGrid();
+      std::vector<float> hTo(static_cast<size_t>((N + 1) * (N + 1)));
+      for (size_t g = 0; g < hTo.size(); g++) hTo[g] = (*tile->attributes)[g * kAttributesPerVertex + 1];
+      const double n = std::ldexp(1.0, tz);
+      const int x = static_cast<int>(mx * n), y = static_cast<int>(my * n);
+      const double expected = surfaceAt(N, hTo, mx * n - x, my * n - y);
+      worst = std::max(worst, std::abs(v[k + 2] - expected));
+      onSurface += std::abs(v[k + 2] - expected) < 0.05;
+      sampled++;
+    }
+  }
+  CHECK(sampled > 20);
+  CHECK(onSurface == sampled);
+  if (onSurface != sampled) std::printf("line off the drawn surface by up to %.2f m\n", worst);
+}
+
 int main(int argc, char** argv) {
   const std::string path = argc > 1 ? argv[1] : "fixtures/parity.json";
   std::ifstream f(path);
@@ -1697,6 +1859,7 @@ int main(int argc, char** argv) {
   testDrapeArming();
   testDrapeSnapshotGuard();
   testDrapeSlotsUnderInterleavings();
+  testTerrainUnproject();
   std::printf("terrain C++ tests: %d cases, %d checks, %d failures\n", g_cases, g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;
 }

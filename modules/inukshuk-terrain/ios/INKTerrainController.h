@@ -31,6 +31,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setLabelInsetsTop:(double)top bottom:(double)bottom;
 /** Replaces every line: dictionaries {id, coords: [lng, lat, …], style: [11 floats]}. */
 - (void)setLines:(NSArray<NSDictionary *> *)lines;
+- (void)setLines:(NSArray<NSDictionary *> *)lines group:(int)group;
+- (nullable NSArray<NSNumber *> *)unprojectX:(double)x y:(double)y;
 - (void)setPuckVisible:(BOOL)visible lng:(double)lng lat:(double)lat;
 /** The style JSON draped per terrain tile ('' = none: the shaded relief model). */
 - (void)setDrapeStyle:(NSString *)json;

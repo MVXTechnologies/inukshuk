@@ -57,9 +57,22 @@ class BenchStep : Record {
  * a React tag of); everything per-frame then runs natively.
  */
 class InukshukTerrainModule : Module() {
-  private val controllers = HashMap<Int, TerrainController>()
+  // Concurrent (#735): unproject reads it on the JS thread.
+  private val controllers = java.util.concurrent.ConcurrentHashMap<Int, TerrainController>()
   private val main = android.os.Handler(android.os.Looper.getMainLooper())
   private var memoryCallbacks: ComponentCallbacks2? = null
+
+  /** lng, lat pairs → mercator, and the packed style (sceneInput.ts packLineStyle). */
+  private fun lineSpecs(lines: List<TerrainLine>): List<LineSpec> = lines.map { l ->
+    val merc = DoubleArray(l.coords.size - l.coords.size % 2)
+    var i = 0
+    while (i + 1 < l.coords.size) {
+      merc[i] = TerrainController.mercX(l.coords[i])
+      merc[i + 1] = TerrainController.mercY(l.coords[i + 1])
+      i += 2
+    }
+    LineSpec(l.id, merc, FloatArray(11) { k -> (l.style.getOrNull(k) ?: 0.0).toFloat() })
+  }
 
   override fun definition() = ModuleDefinition {
     Name("InukshukTerrain")
@@ -121,18 +134,22 @@ class InukshukTerrainModule : Module() {
     }
 
     Function("setLines") { viewTag: Int, lines: List<TerrainLine> ->
-      val specs = lines.map { l ->
-        val merc = DoubleArray(l.coords.size - l.coords.size % 2)
-        var i = 0
-        while (i + 1 < l.coords.size) {
-          merc[i] = TerrainController.mercX(l.coords[i])
-          merc[i + 1] = TerrainController.mercY(l.coords[i + 1])
-          i += 2
-        }
-        LineSpec(l.id, merc, FloatArray(11) { k -> (l.style.getOrNull(k) ?: 0.0).toFloat() })
-      }
-      main.post { controllers[viewTag]?.setLines(specs) }
+      val specs = lineSpecs(lines)
+      main.post { controllers[viewTag]?.setLineGroup(0, specs) }
       Unit
+    }
+
+    // #735: one overlay's lines (a group), the others untouched.
+    Function("setLineGroup") { viewTag: Int, group: Int, lines: List<TerrainLine> ->
+      val specs = lineSpecs(lines)
+      main.post { controllers[viewTag]?.setLineGroup(group, specs) }
+      Unit
+    }
+
+    // #735: lng, lat of the drawn 3D terrain under a view point (dp); null off the terrain.
+    // Synchronous, on the JS thread: the pen unprojects each new touch point.
+    Function("unproject") { viewTag: Int, x: Double, y: Double ->
+      controllers[viewTag]?.unproject(x, y)?.toList()
     }
 
     Function("setDrapeStyle") { viewTag: Int, json: String ->

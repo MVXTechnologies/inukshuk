@@ -642,7 +642,7 @@ double mercY(double lat) {
   uint64_t _lastLabelHash, _lastMaskHash;  // scene queue only
   NSString *_lastSceneCamera;
   int _watchTicks, _ticksSinceScene;
-  std::unordered_set<int> _lineIds;
+  std::unordered_map<int, std::unordered_set<int>> _lineGroups;  // #735: group -> line ids
   UIFont *_regular, *_bold;
   // recording
   std::mutex _timesMutex;
@@ -976,6 +976,11 @@ static LookParams lookFrom(NSArray<NSNumber *> *a) {
 }
 
 - (void)setLines:(NSArray<NSDictionary *> *)lines {
+  [self setLines:lines group:0];
+}
+
+/** #735: replaces one overlay's lines (group), leaving the other overlays' untouched. */
+- (void)setLines:(NSArray<NSDictionary *> *)lines group:(int)group {
   if (_detached.load()) return;
   std::unordered_set<int> keep;
   for (NSDictionary *l in lines) {
@@ -1000,9 +1005,17 @@ static LookParams lookFrom(NSArray<NSNumber *> *a) {
     keep.insert(lid);
     _engine->setPolyline(lid, std::move(pts), ls);
   }
-  for (int lid : _lineIds)
+  for (int lid : _lineGroups[group])
     if (!keep.count(lid)) _engine->removePolyline(lid);
-  _lineIds = keep;
+  _lineGroups[group] = keep;
+}
+
+/** #735: lng, lat of the drawn terrain under a view point (pt); nil off the terrain. */
+- (nullable NSArray<NSNumber *> *)unprojectX:(double)x y:(double)y {
+  if (_detached.load()) return nil;
+  const auto m = _engine->unproject(x, y);
+  if (!m) return nil;
+  return @[ @(mercXToLng((*m)[0])), @(mercYToLat((*m)[1])) ];
 }
 
 - (void)setPuckVisible:(BOOL)visible lng:(double)lng lat:(double)lat {

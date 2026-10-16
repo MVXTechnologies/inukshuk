@@ -266,10 +266,12 @@ import {
   VECTOR_CONTOURS_SOURCE,
 } from './mapStyle';
 import { useNativeTerrain, useNativeTerrainScene } from './hooks/useNativeTerrain';
+import { terrainLngLat, useTerrainLineGroup } from './hooks/useTerrainLines';
+import { useTerrainViewStore } from '@state/terrainViewStore';
 import { useViewToggle } from './hooks/useViewToggle';
 import type { DrapeStyleInput } from '@core/terrain3d/drapeStyle';
 
-import { sceneLines, type TerrainLineSpec } from '@core/terrain3d/sceneInput';
+import { groupLines } from '@core/terrain3d/lineGroups';
 import { useTerrainQa } from './hooks/useTerrainQa';
 import { usePdfBench } from './hooks/usePdfBench';
 import { PDF_BENCH } from '@lib/pdfBenchProbe';
@@ -335,7 +337,6 @@ const MAP_TOP_CHROME_PX = 60;
 const NO_IDS: readonly string[] = [];
 
 /** Stable empty line set for the 3D scene (2D, or nothing to draw). */
-const NO_TERRAIN_LINES: readonly TerrainLineSpec[] = [];
 
 const TRAIL_REBUILD_MS = 1000;
 const TRAIL_REBUILD_POINTS = 5;
@@ -1109,6 +1110,14 @@ export function MapScreen() {
     // The satellite basemap's raster source ('osm' in buildOsmStyle).
     imagerySourceId: basemap === 'satellite' ? 'osm' : undefined,
   });
+  // The 3D terrain's view while it draws (null in 2D): its lines, taps and pen (#735).
+  const terrainView = terrain3d.active ? terrain3d.viewTag : null;
+  const terrainViewRef = useRef(terrainView);
+  useEffect(() => {
+    terrainViewRef.current = terrainView;
+    useTerrainViewStore.getState().setViewTag(terrainView);
+  }, [terrainView]);
+  useEffect(() => () => useTerrainViewStore.getState().setViewTag(null), []);
   useEffect(() => {
     terrainTagRef.current = terrain3d.viewTag;
   }, [terrain3d.viewTag]);
@@ -1776,6 +1785,7 @@ export function MapScreen() {
   }, [inspect]);
   const drawing = useMapDrawing({
     mapRef,
+    terrainView,
     showSnack,
     units,
     topInset: insets.top,
@@ -2098,7 +2108,9 @@ export function MapScreen() {
   // to `lngLat` — reading the event there killed every coordinate route while
   // the bubble or any pin was on screen (2026-09-28).
   const handleMapPress = useCallback(
-    async ({ point, lngLat: lngLatArr }: MapPress) => {
+    async ({ point, lngLat: flatLngLat }: MapPress) => {
+      // In 3D the tap lands on the relief, not on MapLibre's flat ground (#735).
+      const lngLatArr = terrainLngLat(terrainViewRef.current, point[0], point[1]) ?? flatLngLat;
       // A photo circle under this tap (#587) handed its action over just
       // before this press bubbled here; taken now so a later tap never runs it.
       const photoTap = photoTapRef.current;
@@ -2624,62 +2636,62 @@ export function MapScreen() {
     [focusedTrackId, trackHeat],
   );
 
-  // The 3D scene's own trails (lifted onto the relief): the shown trails (or
-  // only the focused one, as in 2D), and the live recording on top.
-  const terrainLines = useMemo(() => {
-    if (!terrain3d.active) return NO_TERRAIN_LINES;
+  // The 3D scene's own trails (lifted onto the relief, #735: one group each):
+  // the shown trails (or only the focused one, as in 2D), the live recording
+  // on top. The other line overlays hand theirs in themselves.
+  const lineBase = useMemo(() => {
     const outline = LINE_OUTLINE[lineOutline];
-    const base = {
+    return {
       color: mapColors.trail,
       halo: outline.color,
       haloOpacity: outline.opacity,
       haloAdd: outline.widthAdd,
     };
-    const shown =
-      showTrackOverlays && trackHeat.lines && !hasSelection
-        ? sceneLines(
+  }, [lineOutline]);
+  const terrainTrails = useMemo(
+    () =>
+      terrainView !== null && showTrackOverlays && trackHeat.lines && !hasSelection
+        ? groupLines(
+            'trails',
             trackHeat.lines.features.map((f) => ({
               geometry: f.geometry,
               color: f.properties.color,
             })),
-            { ...base, width: 3, order: 0 },
-            0,
+            { ...lineBase, width: 3, order: 0 },
           )
-        : [];
-    const focus = focusLine
-      ? sceneLines(
-          [{ geometry: focusLine.geometry, color: focusLine.properties.color }],
-          { ...base, width: 4, order: 1 },
-          1_000_000,
-        )
-      : [];
-    const live = trailFeature
-      ? sceneLines(
-          [{ geometry: trailFeature.geometry }],
-          {
+        : null,
+    [terrainView, showTrackOverlays, trackHeat.lines, hasSelection, lineBase],
+  );
+  const terrainFocus = useMemo(
+    () =>
+      terrainView !== null && focusLine
+        ? groupLines(
+            'focusedTrail',
+            [{ geometry: focusLine.geometry, color: focusLine.properties.color }],
+            { ...lineBase, width: 4, order: 0 },
+          )
+        : null,
+    [terrainView, focusLine, lineBase],
+  );
+  const terrainRecording = useMemo(
+    () =>
+      terrainView !== null && trailFeature
+        ? groupLines('recording', [{ geometry: trailFeature.geometry }], {
             color: mapColors.trail,
             halo: mapColors.trailCasing,
             haloOpacity: 1,
             width: 5,
             haloAdd: 4,
-            order: 2,
-          },
-          2_000_000,
-        )
-      : [];
-    return [...shown, ...focus, ...live];
-  }, [
-    terrain3d.active,
-    lineOutline,
-    showTrackOverlays,
-    trackHeat.lines,
-    hasSelection,
-    focusLine,
-    trailFeature,
-  ]);
+            order: 0,
+          })
+        : null,
+    [terrainView, trailFeature],
+  );
+  useTerrainLineGroup('trails', terrainTrails);
+  useTerrainLineGroup('focusedTrail', terrainFocus);
+  useTerrainLineGroup('recording', terrainRecording);
   useNativeTerrainScene(
-    terrain3d.active ? terrain3d.viewTag : null,
-    terrainLines,
+    terrainView,
     location ? { lng: location.longitude, lat: location.latitude } : null,
   );
 
@@ -2931,7 +2943,11 @@ export function MapScreen() {
                 void drawingRef.current.onMapLongPress(e.nativeEvent?.point ?? null);
                 return;
               }
-              const lngLat = e.nativeEvent?.lngLat;
+              const pt = e.nativeEvent?.point;
+              // In 3D the press lands on the relief, not on MapLibre's flat ground (#735).
+              const lngLat =
+                (pt ? terrainLngLat(terrainViewRef.current, pt[0], pt[1]) : null) ??
+                e.nativeEvent?.lngLat;
               if (!lngLat) return;
               const at = { longitude: lngLat[0], latitude: lngLat[1] };
               // Move mode (#676): the map is being panned under the pin.
@@ -3326,7 +3342,10 @@ export function MapScreen() {
                 id="inspect-marker"
                 data={{
                   type: 'Feature',
-                  geometry: { type: 'Point', coordinates: [markerAt.longitude, markerAt.latitude] },
+                  geometry: {
+                    type: 'Point',
+                    coordinates: [markerAt.longitude, markerAt.latitude],
+                  },
                   properties: {},
                 }}
               >
@@ -4092,7 +4111,10 @@ export function MapScreen() {
             fabBottom={teamFabBottom(bottomColumnLift + stripLift, bottomColumnH)}
             panelTop={insets.top + 4}
             snackStyle={liftedSnackbarStyle(bottomColumnLift + stripLift, bottomColumnH)}
-            bandPlace={alertBandPlace({ teamMode: searchSlot === 'team', barShown: teamBarShown })}
+            bandPlace={alertBandPlace({
+              teamMode: searchSlot === 'team',
+              barShown: teamBarShown,
+            })}
             drawChromeTop={drawCreditsSheetBottom(
               insets.bottom,
               recordingPanelUp ? panelHeight : 0,

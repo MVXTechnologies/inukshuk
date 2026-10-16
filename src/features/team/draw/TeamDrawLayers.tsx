@@ -13,9 +13,18 @@
 import { liveLayerAnchor } from '@core/map/liveLayerOrder';
 import { drawFeatures, frameKey } from '@core/teamdraw/features';
 import { nextChangeAt, tickDelayMs } from '@core/teamdraw/fade';
-import { DRAW_LAYERS, DRAW_SOURCE, drawLayerStyles } from '@core/teamdraw/mapStyle';
+import {
+  CASING_DP,
+  DRAW_LAYERS,
+  DRAW_SOURCE,
+  drawLayerStyles,
+  LINE_DP,
+  SELECTED_CASING_DP,
+} from '@core/teamdraw/mapStyle';
+import { groupLines, type GroupFeature } from '@core/terrain3d/lineGroups';
 import { smoothShapes } from '@core/teamdraw/smooth';
 import { useExtensionPrefs } from '@features/extensions/prefs';
+import { useTerrainLineGroup, useTerrainView } from '@features/map/hooks/useTerrainLines';
 import { teamLabelFont } from '@features/team/map/TeamMapLayers';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useTeamDrawStore } from '@state/teamDrawStore';
@@ -122,6 +131,38 @@ export const TeamDrawLayers = memo(function TeamDrawLayers({
       ...(fonts.length > 0 ? [layer('sym', 'symbol')] : []),
     ];
   }, [t, dark, selected, fontKey]);
+
+  // #735: the strokes on the 3D terrain too, live strokes included (solid
+  // there: the scene draws no dashes; heads, notes and fills stay 2D-only).
+  const terrainView = useTerrainView();
+  const shown = installedAt !== 0 && show && view !== null;
+  const terrainLines = useMemo(() => {
+    if (terrainView === null || !shown) return null;
+    const c = drawMapColors(t, dark);
+    const strokes: GroupFeature[] = [];
+    for (const f of data.features) {
+      if (f.properties.k !== 'line' || f.geometry.type !== 'LineString') continue;
+      const isSelected = selected !== null && f.properties.drw === selected;
+      const w = f.properties.w;
+      strokes.push({
+        geometry: { type: 'LineString', coordinates: f.geometry.coordinates },
+        color: f.properties.c,
+        width: w === 1 ? LINE_DP[1] : w === 2 ? LINE_DP[2] : LINE_DP[3],
+        opacity: f.properties.op,
+        halo: isSelected ? c.selection : c.halo,
+        haloAdd: isSelected ? SELECTED_CASING_DP : CASING_DP,
+      });
+    }
+    return groupLines('teamDrawings', strokes, {
+      color: c.ink,
+      halo: c.halo,
+      haloOpacity: 1,
+      width: LINE_DP[2],
+      haloAdd: CASING_DP,
+      order: 0,
+    });
+  }, [terrainView, shown, data, selected, t, dark]);
+  useTerrainLineGroup('teamDrawings', terrainLines);
 
   if (installedAt === 0 || !show || view === null || data.features.length === 0) return null;
   // Its sprites (arrowheads, pointers, badge pills) are on the map's one

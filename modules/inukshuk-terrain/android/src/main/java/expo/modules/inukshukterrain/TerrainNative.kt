@@ -61,6 +61,9 @@ object TerrainNative {
   /** #720: a queued drape render dropped before it started (it may be asked for again). */
   @JvmStatic external fun nativeOnDrapeCancelled(handle: Long, z: Int, x: Int, y: Int, generation: Int)
 
+  /** #735: mercator x, y of the drawn terrain under a view point (dp); null off the terrain. */
+  @JvmStatic external fun nativeUnproject(handle: Long, x: Double, y: Double): DoubleArray?
+
   /** #732: sampleFingerprint over a snapshot's sampled pixels (DrapeRenderer.fingerprint). */
   @JvmStatic external fun nativeSampleFingerprint(samples: IntArray): Long
 
