@@ -1,6 +1,7 @@
 import { LANE_URGENT, LANES, laneOfStored, type Lane } from '@core/group/lanes';
 import {
   channelLimits,
+  IN_FLIGHT_BUDGET,
   limitsForPath,
   LinkMux,
   MemberBans,
@@ -18,6 +19,7 @@ import type { SignedOp } from '@core/team/envelope';
 import { lanDiscoveryTag } from '@core/mesh/tag';
 import {
   LINK_CAP,
+  RTC_CAP,
   SyncSession,
   type SessionEvent,
   type SessionOptions,
@@ -81,7 +83,7 @@ export interface Timers {
   clearInterval(handle: unknown): void;
 }
 
-const globalTimers: Timers = {
+export const globalTimers: Timers = {
   setTimeout: (fn, ms) => setTimeout(fn, ms),
   clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
   setInterval: (fn, ms) => setInterval(fn, ms),
@@ -102,6 +104,8 @@ export interface LinkHostOptions {
   timers?: Timers;
   /** The mesh's frame cap when the transport was configured below the default. */
   meshFrameBytes?: number;
+  /** Bytes a link keeps in its carrier's queue (default {@link IN_FLIGHT_BUDGET}). */
+  inFlightBudget?: number;
   /** Link state changed (peers, mesh status). */
   onChange(): void;
   /** Diagnostics: kinds and reasons, never ids or addresses. */
@@ -111,8 +115,15 @@ export interface LinkHostOptions {
 /** The member id another layer (the rendezvous, G6) authenticated for a connection. */
 export type IdentityOf = (conn: CarrierConn) => string | undefined;
 
-/** Capabilities a 2.7.0 link offers in its hello (`rtc` comes with G6). */
-export const LINK_HELLO_CAPS: readonly string[] = [LINK_CAP];
+/** Capabilities a 2.7.0 link offers in its hello. */
+export const LINK_HELLO_CAPS: readonly string[] = [LINK_CAP, RTC_CAP];
+
+/**
+ * While a carrier holds {@link IN_FLIGHT_BUDGET} or more and has not said
+ * `writable`, look again this often (the mesh reports its queue only when
+ * asked).
+ */
+export const DRAIN_POLL_MS = 25;
 
 interface ChannelSession {
   session: SyncSession;
@@ -141,6 +152,8 @@ interface HostLink {
   pumping: boolean;
   again: boolean;
   paceTimer: unknown;
+  /** The carrier held a full budget at the last pump: poll it until it drains. */
+  full: boolean;
 }
 
 /** A link as diagnostics and tests see it. */
@@ -155,6 +168,9 @@ export interface LinkSnapshot {
   groups: string[];
   /** Carrier frames handed out per lane (0 urgent … 3 bulk). */
   sentByLane: number[];
+  /** When the link's carrier connection came up, and when it last heard a frame. */
+  connectedAt: number;
+  lastHeard: number;
 }
 
 /** A group's session on a connection (the team screen's per-peer status). */
@@ -176,10 +192,59 @@ export class LinkHost {
   private unsubscribe: (() => void) | null = null;
   private interval: unknown = null;
   private group: string | null = null;
+  /** Other carriers attached (internet paths): the tick runs while any is, LAN or not. */
+  private attached = 0;
+  private readonly listeners = new Set<() => void>();
 
   constructor(private readonly o: LinkHostOptions) {
     this.carrier = new MeshCarrier(o.transport, o.meshFrameBytes);
     this.timers = o.timers ?? globalTimers;
+  }
+
+  private get budget(): number {
+    return this.o.inFlightBudget ?? IN_FLIGHT_BUDGET;
+  }
+
+  /** Internet bans by member id (R-RL-4), shared with the rendezvous (G6). */
+  get memberBans(): MemberBans {
+    return this.bans;
+  }
+
+  /** Listen to link changes (the path manager re-decides on each). */
+  onLinks(fn: () => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private changed(): void {
+    this.o.onChange();
+    for (const fn of [...this.listeners]) {
+      try {
+        fn();
+      } catch {
+        // A listener's failure must not break the links.
+      }
+    }
+  }
+
+  /**
+   * The re-sync tick runs while the LAN runs OR another carrier is attached:
+   * an internet-only link needs its vectors and keepalives too (G6).
+   */
+  private syncTicking(): void {
+    const want = this.mesh !== null || this.attached > 0;
+    const tickMs = this.o.tickMs ?? 20_000;
+    if (want && this.interval === null && tickMs > 0) {
+      this.interval = this.timers.setInterval(() => this.tick(), tickMs);
+    } else if (!want && this.interval !== null) {
+      this.timers.clearInterval(this.interval);
+      this.interval = null;
+    }
+  }
+
+  /** Whether the periodic tick is running (tests). */
+  get ticking(): boolean {
+    return this.interval !== null;
   }
 
   private now(): number {
@@ -210,8 +275,6 @@ export class LinkHost {
     if (this.mesh !== null) await this.stop();
     this.group = groupId;
     this.unsubscribe = this.carrier.subscribe((e) => this.onCarrier(e));
-    const tickMs = this.o.tickMs ?? 20_000;
-    if (tickMs > 0) this.interval = this.timers.setInterval(() => this.tick(), tickMs);
     const mesh = new MeshLink(this.o.transport, {
       tag: lanDiscoveryTag(groupId, (d) => this.o.c.sha256(d)),
       advertise: true,
@@ -219,8 +282,9 @@ export class LinkHost {
       onDiag: (event) => this.diag(event),
     });
     this.mesh = mesh;
+    this.syncTicking();
     await mesh.start();
-    this.o.onChange();
+    this.changed();
   }
 
   /** Say bye on every link, then stop the transport (backgrounded, team switched). */
@@ -231,14 +295,15 @@ export class LinkHost {
     for (const link of [...this.links.values()]) {
       if (link.source === 'mesh') this.closeLink(link, 'bye');
     }
-    for (const link of [...this.draining.values()]) this.forgetDrained(link);
-    if (this.interval !== null) this.timers.clearInterval(this.interval);
-    this.interval = null;
+    for (const link of [...this.draining.values()]) {
+      if (link.source === 'mesh') this.forgetDrained(link);
+    }
+    this.syncTicking();
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.group = null;
     await mesh.stop();
-    this.o.onChange();
+    this.changed();
   }
 
   status(): MeshLinkStatus | null {
@@ -359,7 +424,15 @@ export class LinkHost {
           .map(([g]) => g)
           .sort(),
         sentByLane: [...l.mux.sentByLane],
+        connectedAt: l.connectedAt,
+        lastHeard: l.mux.lastHeard,
       }));
+  }
+
+  /** Close one link (the path manager dropping a path it no longer needs). */
+  closeConn(connId: string, why: string): void {
+    const link = this.links.get(connId);
+    if (link !== undefined && !link.ended) this.closeLink(link, why);
   }
 
   /**
@@ -369,11 +442,18 @@ export class LinkHost {
    */
   attachCarrier(carrier: Carrier, identityOf: IdentityOf): () => void {
     const off = carrier.subscribe((e) => this.onCarrier(e, identityOf, carrier));
+    this.attached++;
+    this.syncTicking();
+    let detached = false;
     return () => {
-      off();
+      if (detached) return;
+      detached = true;
       for (const link of [...this.links.values()]) {
         if (link.source === 'other' && link.carrier === carrier) this.closeLink(link, 'bye');
       }
+      off();
+      this.attached--;
+      this.syncTicking();
     };
   }
 
@@ -407,7 +487,7 @@ export class LinkHost {
         return;
       }
       case 'state':
-        this.o.onChange();
+        this.changed();
         return;
       default:
         return;
@@ -448,6 +528,7 @@ export class LinkHost {
       pumping: false,
       again: false,
       paceTimer: null,
+      full: false,
     };
     const common: Omit<LinkOptions, 'legacy' | 'identity'> = {
       side,
@@ -477,7 +558,7 @@ export class LinkHost {
     this.links.set(conn.connId, link);
     this.handle(link, link.mux.takeEvents());
     this.pump(link);
-    this.o.onChange();
+    this.changed();
   }
 
   private newSession(
@@ -570,7 +651,10 @@ export class LinkHost {
     } catch {
       // A group's handler failing must not break the link's plumbing.
     }
-    if (event.type === 'open') this.dropDuplicates(link);
+    if (event.type === 'open') {
+      this.dropDuplicates(link);
+      this.changed();
+    }
   }
 
   /** The member at the other end, once a session (or the rendezvous) authenticated it. */
@@ -588,16 +672,23 @@ export class LinkHost {
   }
 
   /**
-   * Two phones that discover each other both dial: keep one link per pair.
-   * Both prefer the link the lower member id dialled, so they agree; then the
-   * oldest. A joiner's link is never deduplicated (closing it mid-admission
-   * would only slow the join).
+   * Two phones that discover each other both dial: keep one link per pair
+   * and per path. Both prefer the link the lower member id dialled, so they
+   * agree; then the oldest. A nearby link and an internet link to one phone
+   * are not duplicates: which paths stay up is the path manager's call
+   * (design §2.5). A joiner's link is never deduplicated (closing it
+   * mid-admission would only slow the join).
    */
   private dropDuplicates(link: HostLink): void {
     const other = this.identityOf(link);
     if (other === undefined || link.joining) return;
     const twins = [...this.links.values()].filter(
-      (l) => !l.ended && !l.joining && this.identityOf(l) === other && this.isUp(l),
+      (l) =>
+        !l.ended &&
+        !l.joining &&
+        l.conn.path === link.conn.path &&
+        this.identityOf(l) === other &&
+        this.isUp(l),
     );
     if (twins.length < 2) return;
     const lowerIsMe = this.o.me() < other;
@@ -660,15 +751,19 @@ export class LinkHost {
         if (link.ended) break;
         this.maybeUpgrade(link);
         const now = this.now();
+        link.full = false;
         for (;;) {
-          const before = [...link.mux.sentByLane];
-          const frame = link.mux.next(now);
-          if (frame === undefined) break;
-          const lane = (LANES.find((l) => link.mux.sentByLane[l] !== before[l]) ??
-            LANE_URGENT) as Lane;
-          const r = link.conn.send(frame, lane);
+          // Shallow native queue (design §4.4): past the budget the rest waits,
+          // unsealed, in the lanes, where an SOS can still overtake it.
+          if (this.inFlight(link) >= this.budget) {
+            link.full = link.mux.hasPending();
+            break;
+          }
+          const out = link.mux.nextOut(now);
+          if (out === undefined) break;
+          const r = link.conn.send(out.frame, out.lane);
           if (r === 'backpressure') {
-            link.held.push({ frame, lane });
+            link.held.push(out);
             break;
           }
           if (r === 'closed') break;
@@ -701,10 +796,23 @@ export class LinkHost {
     return true;
   }
 
-  /** A link paced by its peer's limits comes back when it may send again (one timer per link). */
+  /** What the carrier holds of this link's frames (0 when it cannot say). */
+  private inFlight(link: HostLink): number {
+    try {
+      return link.conn.inFlight?.() ?? 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * A link paced by its peer's limits comes back when it may send again; one
+   * whose carrier holds a full budget, once it may have drained (one timer
+   * per link; a `writable` event comes back sooner).
+   */
   private pace(link: HostLink): void {
     if (link.ended || link.held.length > 0 || link.paceTimer !== null) return;
-    const delay = link.mux.nextSendDelay(this.now());
+    const delay = link.full ? DRAIN_POLL_MS : link.mux.nextSendDelay(this.now());
     if (delay === undefined || delay <= 0) return;
     link.paceTimer = this.timers.setTimeout(() => {
       link.paceTimer = null;
@@ -744,6 +852,7 @@ export class LinkHost {
     if (link.paceTimer !== null) this.timers.clearTimeout(link.paceTimer);
     link.paceTimer = null;
     if (this.links.get(link.conn.connId) === link) this.links.delete(link.conn.connId);
+    link.full = false;
     if (hangUp) {
       if (why === 'banned' && link.conn.ban !== undefined) {
         link.conn.ban(this.banMs(link));
@@ -753,7 +862,7 @@ export class LinkHost {
         link.conn.close(why);
       }
     }
-    this.o.onChange();
+    this.changed();
   }
 
   private banMs(link: HostLink): number {

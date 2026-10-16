@@ -44,8 +44,19 @@ export class Rig {
   readonly hub: LoopbackMeshHub;
   readonly now = (): number => this.t;
 
-  constructor(options: { maxQueuedBytes?: number; maxFrameBytes?: number } = {}) {
-    this.hub = new LoopbackMeshHub({ ...options, schedule: (fn) => this.queue.push(fn) });
+  /**
+   * `settle()` moves the clock only for one-shot timers due within this long
+   * (link pacing, drain polls); longer ones (deadlines, backoffs, idle
+   * closes) wait for an explicit `advance()`. Default: every one-shot timer.
+   */
+  readonly pacingHorizonMs: number;
+
+  constructor(
+    options: { maxQueuedBytes?: number; maxFrameBytes?: number; pacingHorizonMs?: number } = {},
+  ) {
+    const { pacingHorizonMs, ...hub } = options;
+    this.pacingHorizonMs = pacingHorizonMs ?? Infinity;
+    this.hub = new LoopbackMeshHub({ ...hub, schedule: (fn) => this.queue.push(fn) });
   }
 
   readonly timers: Timers = {
@@ -114,7 +125,9 @@ export class Rig {
         continue;
       }
       if (this.fireDue()) continue;
-      const pacing = this.timerList.some((x) => x.every === null);
+      const pacing = this.timerList.some(
+        (x) => x.every === null && x.at - this.t < this.pacingHorizonMs,
+      );
       if (pacing) {
         this.advance(5);
         continue;

@@ -16,7 +16,9 @@
  * stop meanwhile), and every team action (`TeamSession`).
  */
 import type { Carrier } from '@core/group/link';
-import { groupMeta } from '@core/group/meta';
+import { groupMeta, internetOn } from '@core/group/meta';
+import type { PathPolicy } from '@core/group/path';
+import type { IceServer } from '@core/group/roomProto';
 import type { MeshNetworkInfo } from '@core/mesh/hotspot';
 import { createTeam } from '@core/team/actions';
 import { fromB64uLen, toB64u } from '@core/team/bytes';
@@ -41,7 +43,35 @@ import {
   type SessionNet,
 } from '@data/team/teamSession';
 
-import { LinkHost, type IdentityOf, type LinkSnapshot, type Timers } from './linkHost';
+import { loadRtcModule, type RtcModuleLike } from './carriers/rtcModule';
+import {
+  globalTimers,
+  LinkHost,
+  type IdentityOf,
+  type LinkSnapshot,
+  type Timers,
+} from './linkHost';
+import { PathManager, type PathGroup, type PeerPathStatus } from './pathManager';
+import type { WebSocketFactory } from './roomClient';
+
+/**
+ * Internet paths (G6): the relay's host and how to reach it. Absent, the
+ * phone is nearby-only, as 2.6 (and so is a binary without WebRTC).
+ */
+export interface InternetDeps {
+  /** The `inukshuk-rtc` host (the owner's relay account). */
+  host: string;
+  ws: WebSocketFactory;
+  /** `react-native-webrtc` (default: loaded lazily; null keeps the phone nearby-only). */
+  rtc?: RtcModuleLike | null;
+  stun?: IceServer[];
+  /** Room connect jitter (R-META-4; tests: 0). */
+  jitterMs?: number;
+  /** Decision tick (ms; 0: tests tick by hand). */
+  evalMs?: number;
+  policy?: Partial<PathPolicy>;
+  random?: () => number;
+}
 
 export interface HostDeps {
   c: TeamCrypto;
@@ -54,6 +84,8 @@ export interface HostDeps {
   timers?: Timers;
   /** The mesh's frame cap when the transport was configured below the default. */
   meshFrameBytes?: number;
+  /** Internet paths (G6); absent: nearby only. */
+  internet?: InternetDeps;
 }
 
 /** What the host reports up, per group (the team façade filters by the active team). */
@@ -86,6 +118,7 @@ export class GroupHost implements SessionNet {
   private joinName = '';
   private loaded: Promise<void> | null = null;
   private readonly linkHost: LinkHost | null;
+  private readonly paths: PathManager | null = null;
   readonly now: () => number;
 
   constructor(
@@ -110,6 +143,77 @@ export class GroupHost implements SessionNet {
             onChange: () => this.hooks.onChange(),
             onDiag: (event) => addBreadcrumb(`team link: ${event}`),
           });
+    const internet = deps.internet;
+    const rtc =
+      internet === undefined ? null : internet.rtc === undefined ? loadRtcModule() : internet.rtc;
+    if (this.linkHost !== null && internet !== undefined && rtc !== null) {
+      this.paths = new PathManager({
+        c: deps.c,
+        host: internet.host,
+        links: this.linkHost,
+        groups: () => this.pathGroups(),
+        me: () => (this.keys !== null ? memberIdOf(this.keys.signPublic) : ''),
+        ws: internet.ws,
+        rtc,
+        now: this.now,
+        timers: deps.timers ?? globalTimers,
+        ...(internet.random ? { random: internet.random } : {}),
+        ...(internet.jitterMs !== undefined ? { jitterMs: internet.jitterMs } : {}),
+        ...(internet.policy ? { policy: internet.policy } : {}),
+        ...(internet.stun ? { stun: internet.stun } : {}),
+        ...(internet.evalMs !== undefined ? { evalMs: internet.evalMs } : {}),
+        onChange: () => this.hooks.onChange(),
+        onDiag: (event) => addBreadcrumb(`team net: ${event}`),
+      });
+    }
+  }
+
+  // ── Internet paths (G6) ──────────────────────────────────────────────────
+
+  /** Every group as the path manager sees it: its `net` switch, parent and epoch key. */
+  private pathGroups(): PathGroup[] {
+    const now = this.now();
+    const out: PathGroup[] = [];
+    for (const [groupId, s] of this.sessions) {
+      const data = s.replica.data(now);
+      const meta = groupMeta(data);
+      out.push({
+        groupId,
+        store: s.store,
+        net: internetOn(data),
+        ...(meta.parent !== undefined ? { parent: meta.parent } : {}),
+        epochKey: s.replica.sendKey()?.key,
+      });
+    }
+    return out;
+  }
+
+  /** Whether this build can use internet paths at all (relay configured, WebRTC present). */
+  get internetCapable(): boolean {
+    return this.paths !== null;
+  }
+
+  /**
+   * The app is in use (foreground, or recording): rooms open for every group
+   * whose internet switch is on (R-META-4). Off: every room and internet path closes.
+   */
+  setInternetOnline(on: boolean): void {
+    this.paths?.setOnline(on);
+  }
+
+  /** "Always use the relay" (per phone, R-RTC-6). */
+  setAlwaysRelay(on: boolean): void {
+    this.paths?.setAlwaysRelay(on);
+  }
+
+  /** Per peer: which path carries sync, and what each path is doing (G7's Connection sheet). */
+  internetStatus(): PeerPathStatus[] {
+    return this.paths?.status() ?? [];
+  }
+
+  /** Run the path decisions now (tests; the manager ticks by itself otherwise). */
+  tickPaths(): void {
+    this.paths?.tick();
   }
 
   // ── Groups ───────────────────────────────────────────────────────────────
@@ -159,6 +263,11 @@ export class GroupHost implements SessionNet {
     return this.linkHost?.snapshot() ?? [];
   }
 
+  /** The link layer itself (the path manager and tests); null without a mesh. */
+  get linkLayer(): LinkHost | null {
+    return this.linkHost;
+  }
+
   /**
    * Carry links over another carrier (G6's internet paths): mux from the
    * first frame, bound to the member the rendezvous authenticated. Without a
@@ -186,6 +295,7 @@ export class GroupHost implements SessionNet {
         session.onRecordChange = (r) => this.putRecord(r);
         this.sessions.set(groupId, session);
         this.linkHost?.groupsChanged();
+        this.paths?.refresh();
         return session;
       } catch (e) {
         reportError(e, 'team-open');
@@ -234,6 +344,7 @@ export class GroupHost implements SessionNet {
     await this.stop(groupId);
     this.sessions.delete(groupId);
     this.linkHost?.dropGroup(groupId, 'left');
+    this.paths?.refresh();
     this.deps.disk.deleteTeam(groupId);
     this.records = this.records.filter((r) => r.teamId !== groupId);
     this.saveRecords();

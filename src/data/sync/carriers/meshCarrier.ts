@@ -14,6 +14,9 @@ import type { MeshEvent, MeshPeer, MeshTransport } from '@data/team/meshTranspor
  *   `too-large` mean the connection is unusable (`closed`; an oversize frame
  *   also hangs up, as the 2.6 session host did);
  * - `ban` is the transport's IP ban: on the LAN the address is the peer;
+ * - `inFlight` is the native send queue of that connection: the queue size the
+ *   last `send` reported while still in the same turn (exact then), else the
+ *   transport's stats (asked only when the link owner polls a full queue);
  * - a dial that failed before any connection (`disconnected` with no peer)
  *   is the discovery layer's business (`MeshLink`), not a carrier event.
  *
@@ -92,6 +95,9 @@ export class MeshCarrier implements Carrier {
 
   private wrap(peer: MeshPeer): MeshConn {
     const transport = this.transport;
+    /** The queue size the last send reported, and whether it is from this turn. */
+    let queued = 0;
+    let fresh = false;
     return {
       connId: peer.peerId,
       path: 'nearby',
@@ -104,7 +110,16 @@ export class MeshCarrier implements Carrier {
         } catch {
           return 'closed';
         }
-        if (r.ok) return 'ok';
+        if (r.ok) {
+          queued = r.queuedBytes;
+          if (!fresh) {
+            fresh = true;
+            queueMicrotask(() => {
+              fresh = false;
+            });
+          }
+          return 'ok';
+        }
         if (r.reason === 'backpressure') return 'backpressure';
         // A frame the mesh refuses as too large would leave a hole in the
         // session's counter stream: hang up rather than skip it.
@@ -116,6 +131,16 @@ export class MeshCarrier implements Carrier {
       },
       ban(ms: number): void {
         transport.ban(peer.peerId, ms);
+      },
+      inFlight(): number {
+        if (fresh || queued === 0) return queued;
+        try {
+          const s = transport.stats().peers.find((p) => p.peerId === peer.peerId);
+          queued = s?.queuedBytes ?? 0;
+        } catch {
+          queued = 0;
+        }
+        return queued;
       },
     };
   }
