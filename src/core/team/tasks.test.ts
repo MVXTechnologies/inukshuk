@@ -5,11 +5,16 @@ import { resolveTeam } from './membership';
 import {
   canCompleteTask,
   canEditTask,
+  cleanTaskNotes,
   entityToTask,
+  MAX_TASK_NOTES,
   statusFields,
+  taskEditWrites,
   taskFields,
+  taskNotesFields,
   teamTasks,
   validTaskFields,
+  type TeamTask,
 } from './tasks';
 import { addMember, c, device, exchange, joinReplica, MIN, newWorld, T0 } from './testing/fixtures';
 import { forAll, int, mulberry32, pick, shuffle } from './testing/prop';
@@ -317,6 +322,7 @@ describe('task authorization (adversarial)', () => {
       id: 't',
       owner: other,
       title: 'x',
+      notes: '',
       assignee: me,
       due: null,
       anchor: null,
@@ -536,5 +542,136 @@ describe('property: tasks converge and stay authorized under any order', () => {
         }
       },
     );
+  });
+});
+
+describe('notes and edits (#746)', () => {
+  const me = device().id;
+  const other = device().id;
+  const base: TeamTask = {
+    id: 't',
+    owner: me,
+    title: 'Check the bridge at km 4',
+    notes: '',
+    assignee: other,
+    due: null,
+    anchor: { kind: 'point', lat: 47, lng: -70.9 },
+    source: null,
+    done: false,
+    doneBy: null,
+    doneAt: null,
+    createdAt: T0,
+    updatedAt: T0,
+    doneBeforeReassignment: false,
+  };
+  const edit = (over: Partial<Parameters<typeof taskEditWrites>[1]> = {}) => ({
+    title: base.title,
+    notes: base.notes,
+    assignee: base.assignee,
+    due: base.due,
+    anchor: base.anchor,
+    ...over,
+  });
+
+  it('notes: any text up to the cap; never control or bidi characters', () => {
+    expect(validTaskFields({ notes: 'Rotten plank on the left side.\nBring the saw.' }, me)).toBe(
+      true,
+    );
+    expect(validTaskFields({ notes: '' }, me)).toBe(true);
+    expect(validTaskFields({ notes: 'x'.repeat(MAX_TASK_NOTES) }, me)).toBe(true);
+    expect(validTaskFields({ notes: 'x'.repeat(MAX_TASK_NOTES + 1) }, me)).toBe(false);
+    expect(validTaskFields({ notes: 3 }, me)).toBe(false);
+    expect(validTaskFields({ notes: null }, me)).toBe(false);
+    for (const bad of ['a\u0000b', 'tab\there', 'a\u202eb', 'zero\u200bwidth', 'a\u2066b', 'cr\r'])
+      expect(validTaskFields({ notes: bad }, me)).toBe(false);
+  });
+
+  it('cleanTaskNotes: what the screen writes always validates', () => {
+    expect(cleanTaskNotes('  Rotten plank\r\nbring\tthe saw\u202e  ')).toBe(
+      'Rotten plank\nbringthe saw',
+    );
+    expect(cleanTaskNotes('a\n\n\n\n\n\nb')).toBe('a\n\n\nb');
+    expect(cleanTaskNotes('x'.repeat(MAX_TASK_NOTES + 50))).toHaveLength(MAX_TASK_NOTES);
+    expect(cleanTaskNotes(' \u200b \n ')).toBe('');
+    for (const raw of ['a\u0007b\u2028c', '\r\r\r', `${'y'.repeat(999)} \u2069z`])
+      expect(validTaskFields(taskNotesFields(raw), me)).toBe(true);
+  });
+
+  it('a new task never carries its notes in its first write', () => {
+    const f = taskFields({ title: 'x', assignee: other, notes: 'later' });
+    expect(f).not.toHaveProperty('notes');
+    expect(validTaskFields(f, me)).toBe(true);
+  });
+
+  it('"no place" is ak: null, valid on its own', () => {
+    expect(validTaskFields({ ak: null }, me)).toBe(true);
+    expect(validTaskFields({ ak: 'somewhere' }, me)).toBe(false);
+  });
+
+  it('an edit writes only what changed, the old fields first, notes and "no place" apart', () => {
+    expect(taskEditWrites(base, edit())).toEqual([]);
+    expect(taskEditWrites(base, edit({ title: '  Check the bridge  ' }))).toEqual([
+      { title: 'Check the bridge' },
+    ]);
+    // Same assignee: never written again (it would alert them as a new task).
+    expect(taskEditWrites(base, edit({ due: T0 + 60 * MIN }))).toEqual([{ due: T0 + 60 * MIN }]);
+    expect(taskEditWrites({ ...base, due: T0 }, edit({ due: null }))).toEqual([{ due: null }]);
+    expect(taskEditWrites(base, edit({ assignee: me }))).toEqual([{ assignee: me }]);
+    expect(taskEditWrites(base, edit({ anchor: { kind: 'pin', owner: other, id: 'p1' } }))).toEqual(
+      [{ ak: 'pin', ao: other, ai: 'p1' }],
+    );
+    expect(taskEditWrites(base, edit({ anchor: { kind: 'point', lat: 47, lng: -70.9 } }))).toEqual(
+      [],
+    );
+    expect(taskEditWrites(base, edit({ anchor: null }))).toEqual([{ ak: null }]);
+    expect(taskEditWrites(base, edit({ notes: ' Bring the saw ' }))).toEqual([
+      { notes: 'Bring the saw' },
+    ]);
+    expect(taskEditWrites({ ...base, notes: 'Saw' }, edit({ notes: '' }))).toEqual([{ notes: '' }]);
+    const all = taskEditWrites(
+      { ...base, notes: 'Saw' },
+      edit({ title: 'Fix it', anchor: null, notes: 'Saw and nails', assignee: me }),
+    );
+    expect(all).toEqual([
+      { title: 'Fix it', assignee: me },
+      { ak: null },
+      { notes: 'Saw and nails' },
+    ]);
+    for (const f of all) expect(validTaskFields(f, me)).toBe(true);
+  });
+
+  it('the fold: notes and "no place" from the creator or an admin, never the assignee', () => {
+    const { w, bob, alex, rb, ra, sync } = crew();
+    rb.write(T0 + MIN, 'e.set', {
+      k: 'task',
+      id: 't1',
+      f: taskFields({ title: 'Flag the detour', assignee: alex.id, anchor: base.anchor }),
+    });
+    rb.write(T0 + MIN + 1, 'e.set', { k: 'task', id: 't1', f: taskNotesFields('Ribbons') });
+    sync(T0 + 2 * MIN);
+    expect(entityToTask(task(ra, bob.id, 't1')!)).toMatchObject({
+      notes: 'Ribbons',
+      anchor: { kind: 'point' },
+    });
+    // The assignee may only tick it done.
+    const alexNotes = ra.write(T0 + 3 * MIN, 'e.set', {
+      k: 'task',
+      id: 't1',
+      o: bob.id,
+      f: { notes: 'Mine now' },
+    })!;
+    // An admin edits any task: no place any more, new notes.
+    w.root.write(T0 + 3 * MIN, 'e.set', { k: 'task', id: 't1', o: bob.id, f: { ak: null } });
+    w.root.write(T0 + 3 * MIN + 1, 'e.set', {
+      k: 'task',
+      id: 't1',
+      o: bob.id,
+      f: { notes: 'Admin' },
+    });
+    sync(T0 + 4 * MIN);
+    for (const r of [rb, ra, w.root]) {
+      expect(entityToTask(task(r, bob.id, 't1')!)).toMatchObject({ notes: 'Admin', anchor: null });
+      expect(r.data().skipped).toContainEqual({ id: alexNotes.id, why: 'forbidden' });
+    }
   });
 });

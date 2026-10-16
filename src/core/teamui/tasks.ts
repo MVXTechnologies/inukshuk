@@ -184,3 +184,86 @@ export function anchorInfo(
     }
   }
 }
+
+const MIN_MS = 60_000;
+const HOUR_MS = 60 * MIN_MS;
+const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+const MONTH = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+] as const;
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const dayStart = (ms: number) => {
+  const d = new Date(ms);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+};
+/** Whole local days from `now`'s day to `ms`'s (DST-proof: calendar days, not 24 h). */
+const daysApart = (ms: number, now: number) => {
+  const a = new Date(dayStart(now));
+  const b = new Date(dayStart(ms));
+  return Math.round(
+    (Date.UTC(b.getFullYear(), b.getMonth(), b.getDate()) -
+      Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())) /
+      (24 * HOUR_MS),
+  );
+};
+
+/**
+ * A task's due time on screen (#746), in local time: "Today 16:00",
+ * "Tomorrow 08:30", "Yesterday 18:00", a weekday within the coming week
+ * ("Sat 09:00"), else the date ("Oct 30 16:00").
+ */
+export function dueLabel(due: number, now: number): string {
+  const d = new Date(due);
+  const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const days = daysApart(due, now);
+  if (days === 0) return `Today ${time}`;
+  if (days === 1) return `Tomorrow ${time}`;
+  if (days === -1) return `Yesterday ${time}`;
+  if (days > 1 && days < 7) return `${WEEKDAY[d.getDay()]} ${time}`;
+  return `${MONTH[d.getMonth()]} ${d.getDate()} ${time}`;
+}
+
+/** "In 1 h": an hour from now, to the minute. */
+export function inOneHour(now: number): number {
+  return Math.round((now + HOUR_MS) / MIN_MS) * MIN_MS;
+}
+
+/** Where "Pick…" starts: the due time already set, else the next full hour after an hour from now. */
+export function pickStart(due: number | null, now: number): number {
+  if (due !== null) return due;
+  return Math.ceil((now + HOUR_MS) / HOUR_MS) * HOUR_MS;
+}
+
+/** The step of the time stepper in "Pick…". */
+export const DUE_STEP_MIN = 15;
+
+/**
+ * Move a due time by whole local days (same clock time, across DST) or by
+ * minutes (snapped to {@link DUE_STEP_MIN}). Never before now.
+ */
+export function shiftDue(
+  due: number,
+  by: { days?: number; minutes?: number },
+  now: number,
+): number {
+  const d = new Date(due);
+  if (by.days) d.setDate(d.getDate() + by.days);
+  let out = d.getTime();
+  if (by.minutes) {
+    const step = DUE_STEP_MIN * MIN_MS;
+    out = Math.round((out + by.minutes * MIN_MS) / step) * step;
+  }
+  return out < now ? due : out;
+}

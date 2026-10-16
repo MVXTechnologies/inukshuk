@@ -33,10 +33,15 @@ import { editors, editText, SYS_EDIT, teamTrails, type TeamTrailView } from '@co
 import { pinThread, resolvedMessages, teamPins, type TeamPin } from '@core/teamui/pins';
 import {
   statusFields,
+  canEditTask,
+  cleanTaskNotes,
+  taskEditWrites,
   taskFields,
+  taskNotesFields,
   teamTasks,
   validTaskFields,
   type NewTask,
+  type TaskEdit,
   type TeamTask,
 } from '@core/team/tasks';
 import {
@@ -1173,10 +1178,40 @@ export class TeamSession {
     if (!this.canEditShared()) return 'not-allowed';
     const f = taskFields(t);
     if (!validTaskFields(f, this.me)) return 'invalid';
-    const op = this.run(() =>
-      this.replica.write(this.deps.now(), 'e.set', { k: 'task', id: this.deps.newId(), f }),
+    const notes = cleanTaskNotes(t.notes ?? '');
+    const id = this.deps.newId();
+    const op = this.run(() => this.replica.write(this.deps.now(), 'e.set', { k: 'task', id, f }));
+    if (op === undefined) return 'rotation-pending';
+    // The notes in their own write: a 2.6.x phone skips it and still shows the task.
+    if (notes === '') return null;
+    const n = this.run(() =>
+      this.replica.write(this.deps.now(), 'e.set', { k: 'task', id, f: taskNotesFields(notes) }),
     );
-    return op === undefined ? 'rotation-pending' : null;
+    return n === undefined ? 'rotation-pending' : null;
+  }
+
+  /**
+   * Edit a task (#746): its creator or an admin. Only what changed is
+   * written, in the writes `taskEditWrites` lays out (what every version
+   * reads first, then "no place" and the notes, each on its own).
+   */
+  updateTask(owner: string, id: string, edit: TaskEdit): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const task = this.tasks().find((x) => x.owner === owner && x.id === id);
+    if (task === undefined) return 'invalid';
+    if (!canEditTask(task, this.me, this.myRole)) return 'not-allowed';
+    const writes = taskEditWrites(task, edit);
+    if (writes.length === 0) return null;
+    if (!writes.every((f) => validTaskFields(f, this.me))) return 'invalid';
+    for (const f of writes) {
+      const body: Record<string, Json> = { k: 'task', id, f };
+      if (owner !== this.me) body['o'] = owner;
+      const op = this.run(() => this.replica.write(this.deps.now(), 'e.set', body));
+      if (op === undefined) return 'rotation-pending';
+      if (!this.applied(op.id)) return 'not-allowed';
+    }
+    return null;
   }
 
   /** Mark a task done (or open again): its creator, its assignee or an admin. */

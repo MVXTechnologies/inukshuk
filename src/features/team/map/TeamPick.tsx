@@ -30,6 +30,10 @@ export interface Picked {
 export interface TaskDraft {
   title: string;
   assignee: string | null;
+  notes?: string;
+  due?: number | null;
+  /** The task being edited (#746), when it is not a new one. */
+  edit?: { owner: string; id: string } | null;
 }
 
 export const useTeamPick = create<{
@@ -61,7 +65,7 @@ const WHAT: Record<PickPurpose, string> = {
 export function usePickDone(): (p: Picked | null) => void {
   const router = useRouter();
   return (p) => {
-    const { purpose } = useTeamPick.getState();
+    const { purpose, draft } = useTeamPick.getState();
     useTeamPick.setState({ purpose: null, picked: null });
     if (purpose === 'task') {
       const a = p?.anchor;
@@ -71,7 +75,8 @@ export function usePickDone(): (p: Picked | null) => void {
           : a.kind === 'point'
             ? `ak=point&la=${a.lat}&lo=${a.lng}`
             : `ak=${a.kind}&ao=${a.owner}&ai=${a.id}`;
-      router.push(`/team/task-new?${q}&resume=1` as never);
+      const edit = draft?.edit ? `&eo=${draft.edit.owner}&ei=${draft.edit.id}` : '';
+      router.push(`/team/task-new?${q}${edit}&resume=1` as never);
     } else if (purpose === 'notify') {
       useTeamSheet.getState().open({ kind: 'notify', at: p ? p.at : null });
     } else if (purpose === 'pin' && p) {

@@ -184,10 +184,13 @@ export function UndoBar({
   message,
   onUndo,
   bottom,
+  testIDPrefix = 'library',
 }: {
   message: string | null;
   onUndo: () => void;
   bottom: number;
+  /** `<prefix>-undo-bar` and `<prefix>-undo` (the team's task list reuses it). */
+  testIDPrefix?: string;
 }) {
   const theme = useTheme();
   const night = useDisplayCondition() === 'night';
@@ -202,14 +205,14 @@ export function UndoBar({
     <View
       style={[styles.snack, { backgroundColor: theme.colors.inverseSurface, bottom }]}
       accessibilityLiveRegion="polite"
-      testID="library-undo-bar"
+      testID={`${testIDPrefix}-undo-bar`}
     >
       <Text style={[styles.snackText, { color: theme.colors.inverseOnSurface }]}>{message}</Text>
       <Pressable
         onPress={onUndo}
         accessibilityRole="button"
         accessibilityLabel="Undo"
-        testID="library-undo"
+        testID={`${testIDPrefix}-undo`}
         style={({ pressed }) => [styles.undo, pressed && styles.pressed]}
       >
         <Text style={[styles.undoLabel, { color: undoInk }]}>Undo</Text>
