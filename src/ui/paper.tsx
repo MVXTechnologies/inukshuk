@@ -12,7 +12,7 @@
  * at 100 % on the axis that matters (List rows and menu items keep 48 dp,
  * buttons 40 dp, icon buttons a 48 dp box); the visuals inside shrink.
  */
-import { MIN_TOUCH, scaleFontSize, scaleSize } from '@core/display/displayScale';
+import { MIN_TOUCH, scaleFontSize, scaleSize, scaleSpacing } from '@core/display/displayScale';
 import { forwardRef, type ComponentProps, type ComponentRef } from 'react';
 import { type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import {
@@ -77,9 +77,9 @@ const ICON_MARGIN = 6;
  * icon until it reaches 48.
  */
 export function iconButtonBox(size: number, factor: number): { box: number; margin: number } {
-  const visual = scaleSize(size + 2 * ICON_PAD, factor);
+  const visual = scaleSize(size, factor) + 2 * scaleSpacing(ICON_PAD, factor);
   const box = Math.max(MIN_TOUCH, visual);
-  const margin = Math.max(0, (visual + 2 * scaleSize(ICON_MARGIN, factor) - box) / 2);
+  const margin = Math.max(0, (visual + 2 * scaleSpacing(ICON_MARGIN, factor) - box) / 2);
   return { box, margin };
 }
 
@@ -112,8 +112,8 @@ export const Button = forwardRef<
   if (k === 1) return <PaperButton ref={ref} {...props} />;
   const text = props.mode === undefined || props.mode === 'text';
   const label: TextStyle = {
-    marginVertical: scaleSize(10, k),
-    marginHorizontal: scaleSize(text ? 12 : 24, k),
+    marginVertical: scaleSpacing(10, k),
+    marginHorizontal: scaleSpacing(text ? 12 : 24, k),
   };
   const content: ViewStyle = { minHeight: 40 };
   return (
@@ -136,7 +136,7 @@ export function Chip(props: ComponentProps<typeof PaperChip>) {
     <PaperChip
       {...props}
       icon={scaledIconSource(props.icon, k)}
-      textStyle={[{ marginVertical: scaleSize(6, k) }, props.textStyle]}
+      textStyle={[{ marginVertical: scaleSpacing(6, k) }, props.textStyle]}
     />
   );
 }
@@ -152,7 +152,7 @@ export function SegmentedButtons(props: SegmentedProps) {
     icon: scaledIconSource(b.icon, k),
     // Paper pads the content 9 dp; the label's own margin takes up the rest.
     labelStyle: [
-      { marginVertical: scaleSize(9, k) - 9 } satisfies TextStyle,
+      { marginVertical: scaleSpacing(9, k) - 9 } satisfies TextStyle,
       b.labelStyle,
     ] as StyleProp<TextStyle>,
   }));
@@ -173,14 +173,14 @@ const ListItem = forwardRef<ComponentRef<typeof PaperList.Item>, ItemProps>(
         {...props}
         style={[
           {
-            paddingVertical: scaleSize(8, k),
-            paddingRight: scaleSize(24, k),
+            paddingVertical: scaleSpacing(8, k),
+            paddingRight: scaleSpacing(24, k),
             ...(pressable ? { minHeight: MIN_TOUCH } : null),
           },
           props.style,
         ]}
-        containerStyle={[{ marginVertical: scaleSize(6, k) }, props.containerStyle]}
-        contentStyle={[{ paddingLeft: scaleSize(16, k) }, props.contentStyle]}
+        containerStyle={[{ marginVertical: scaleSpacing(6, k) }, props.containerStyle]}
+        contentStyle={[{ paddingLeft: scaleSpacing(16, k) }, props.contentStyle]}
         titleStyle={[{ fontSize: scaleFontSize(16, k) }, props.titleStyle]}
         descriptionStyle={[{ fontSize: scaleFontSize(14, k) }, props.descriptionStyle]}
       />
@@ -201,7 +201,11 @@ function ListAccordion(props: ComponentProps<typeof PaperList.Accordion>) {
     <PaperList.Accordion
       {...props}
       style={[
-        { paddingVertical: scaleSize(8, k), paddingRight: scaleSize(24, k), minHeight: MIN_TOUCH },
+        {
+          paddingVertical: scaleSpacing(8, k),
+          paddingRight: scaleSpacing(24, k),
+          minHeight: MIN_TOUCH,
+        },
         props.style,
       ]}
       titleStyle={[{ fontSize: scaleFontSize(16, k) }, props.titleStyle]}
@@ -217,7 +221,7 @@ function ListSubheader(props: ComponentProps<typeof PaperList.Subheader>) {
     <PaperList.Subheader
       {...props}
       style={[
-        { paddingHorizontal: scaleSize(16, k), paddingVertical: scaleSize(13, k) },
+        { paddingHorizontal: scaleSpacing(16, k), paddingVertical: scaleSpacing(13, k) },
         props.style,
       ]}
     />

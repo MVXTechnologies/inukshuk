@@ -84,6 +84,31 @@ export function scaleSize(n: number, factor: number): number {
   return Math.round(n * factor * 2) / 2;
 }
 
+/**
+ * Spacing shrinks and grows faster than content (owner 2026-10-16: "as
+ * everything gets smaller it should get more compact also, not just shrink in
+ * place"): paddings, margins, gaps and edge offsets scale by factor^1.5
+ * (Small 0.784, Large 1.233) while text, icons and boxes scale by the factor.
+ *
+ * Why 1.5: at 2 the 4 dp step would drop under 3 dp at Small (2.9) and the
+ * 16 dp edge inset would pass 21 at Large, past the HIG's 20 pt margin; at 1
+ * nothing gets denser. 1.5 keeps every grid step distinct (4 → 3, 8 → 6.5,
+ * 12 → 9.5, 16 → 12.5) and makes a 72 dp list row 61 dp at Small instead of
+ * 61 + slack, about one more row per screen.
+ */
+export const SPACING_EXPONENT = 1.5;
+
+/** The spacing multiplier for a content factor (0.85 → 0.784, 1.15 → 1.233). */
+export function spacingFactor(factor: number): number {
+  return factor === 1 ? 1 : Math.pow(factor, SPACING_EXPONENT);
+}
+
+/** A gap, padding, margin or edge offset at `factor`, half-dp rounded. */
+export function scaleSpacing(n: number, factor: number): number {
+  if (factor === 1) return n;
+  return scaleSize(n, spacingFactor(factor));
+}
+
 /** A touchable box's side: scaled, but never below {@link MIN_TOUCH}. */
 export function touchSize(n: number, factor: number, min: number = MIN_TOUCH): number {
   return Math.max(min, scaleSize(n, factor));
@@ -112,6 +137,16 @@ const SCALED_KEYS: ReadonlySet<string> = new Set([
   'minHeight',
   'maxWidth',
   'maxHeight',
+  'borderRadius',
+  'borderTopLeftRadius',
+  'borderTopRightRadius',
+  'borderBottomLeftRadius',
+  'borderBottomRightRadius',
+  'shadowRadius',
+]);
+
+/** Keys that are spacing: they scale by {@link spacingFactor}. */
+const SPACING_KEYS: ReadonlySet<string> = new Set([
   'top',
   'right',
   'bottom',
@@ -139,12 +174,6 @@ const SCALED_KEYS: ReadonlySet<string> = new Set([
   'paddingVertical',
   'paddingStart',
   'paddingEnd',
-  'borderRadius',
-  'borderTopLeftRadius',
-  'borderTopRightRadius',
-  'borderBottomLeftRadius',
-  'borderBottomRightRadius',
-  'shadowRadius',
 ]);
 
 /**
@@ -168,7 +197,8 @@ function touchFloored(key: string, value: number): boolean {
 export type StyleRecord = Record<string, unknown>;
 
 /**
- * One style object at `factor`: every size key scaled (see SCALED_KEYS),
+ * One style object at `factor`: sizes by the factor (SCALED_KEYS), spacing
+ * by its 1.5 power (SPACING_KEYS),
  * touch sizes floored at 48 (see `touchFloored`), text held at the floor,
  * `shadowOffset` scaled, everything else left alone. The same object at 1.
  */
@@ -193,6 +223,8 @@ export function scaleStyle<T extends object>(style: T, factor: number): T {
     } else if (typeof value === 'number' && key === 'borderRadius' && roundBox(style, value)) {
       // A circle on a touch box the floor kept at 48 stays a circle.
       out[key] = value;
+    } else if (typeof value === 'number' && SPACING_KEYS.has(key)) {
+      out[key] = scaleSpacing(value, factor);
     } else if (typeof value === 'number' && SCALED_KEYS.has(key)) {
       const scaled = scaleSize(value, factor);
       out[key] = touchFloored(key, value) ? Math.max(MIN_TOUCH, scaled) : scaled;

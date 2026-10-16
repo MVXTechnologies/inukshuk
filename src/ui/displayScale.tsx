@@ -3,6 +3,7 @@ import {
   hitSlopFor,
   scaleSheet,
   scaleSize,
+  scaleSpacing,
   touchSize,
 } from '@core/display/displayScale';
 import { useSettingsStore } from '@state/settingsStore';
@@ -36,8 +37,10 @@ export function DisplayScaleProvider({
 export interface DisplayScaleApi {
   /** The multiplier: 0.6 … 1.5, 1 at 100 %. */
   factor: number;
-  /** A design size in dp at the current scale (`sz(16)` → 9.5 at 60 %). */
+  /** A content size (text, icon, box) in dp at the current scale (`sz(40)` → 34 at Small). */
   sz: (n: number) => number;
+  /** A padding, margin, gap or edge offset: denser than content (`sp(16)` → 12.5 at Small). */
+  sp: (n: number) => number;
   /** A touchable box's side: scaled, never below 48. */
   touch: (n: number) => number;
   /** The hitSlop that grows a scaled `n`-dp visual to a 48 dp target. */
@@ -60,6 +63,7 @@ export function useDisplayScale(): DisplayScaleApi {
     () => ({
       factor,
       sz: (n: number) => scaleSize(n, factor),
+      sp: (n: number) => scaleSpacing(n, factor),
       touch: (n: number) => touchSize(n, factor),
       slop: (n: number) => hitSlopFor(scaleSize(n, factor)),
     }),

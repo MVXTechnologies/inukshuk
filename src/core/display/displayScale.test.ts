@@ -14,6 +14,9 @@ import {
   scaleFontSize,
   scaleSheet,
   scaleSize,
+  scaleSpacing,
+  spacingFactor,
+  SPACING_EXPONENT,
   scaleStyle,
   touchSize,
 } from './displayScale';
@@ -66,6 +69,29 @@ describe('scaleSize', () => {
     expect(scaleSize(13, 0.85)).toBe(11);
     expect(scaleSize(-6, 0.85)).toBe(-5);
     expect(scaleSize(22, 1.15)).toBe(25.5);
+  });
+});
+
+describe('spacing gets denser faster than content', () => {
+  it('scales by the factor to the 1.5', () => {
+    expect(SPACING_EXPONENT).toBe(1.5);
+    expect(spacingFactor(1)).toBe(1);
+    expect(spacingFactor(0.85)).toBeCloseTo(0.784, 3);
+    expect(spacingFactor(1.15)).toBeCloseTo(1.233, 3);
+  });
+
+  it('keeps every grid step distinct at Small, and the edge inset under 20 at Large', () => {
+    expect([4, 8, 12, 16, 24].map((n) => scaleSpacing(n, 0.85))).toEqual([3, 6.5, 9.5, 12.5, 19]);
+    expect([4, 8, 12, 16, 24].map((n) => scaleSpacing(n, 1.15))).toEqual([5, 10, 15, 19.5, 29.5]);
+    expect(scaleSpacing(16, 1)).toBe(16);
+  });
+
+  it('a padded row gets shorter than its content alone would make it', () => {
+    // A 72 dp list row: 56 of content, 8 + 8 of padding.
+    const row = (k: number) => scaleSize(56, k) + 2 * scaleSpacing(8, k);
+    expect(row(0.85)).toBe(60.5);
+    expect(row(0.85)).toBeLessThan(scaleSize(72, 0.85));
+    expect(row(1.15)).toBeGreaterThan(scaleSize(72, 1.15));
   });
 });
 
@@ -124,9 +150,9 @@ describe('scaleStyle', () => {
       fontSize: 23,
       lineHeight: 30,
       letterSpacing: 1.15,
-      paddingHorizontal: 18.5,
-      marginTop: -4.5,
-      gap: 9,
+      paddingHorizontal: 19.5,
+      marginTop: -5,
+      gap: 10,
       width: 64.5,
       height: '100%',
       borderRadius: 14,
@@ -138,7 +164,7 @@ describe('scaleStyle', () => {
       fontWeight: '700',
       color: '#123456',
       shadowOffset: { width: 0, height: 2.5 },
-      top: 11.5,
+      top: 12.5,
     });
   });
 
@@ -206,10 +232,10 @@ describe('scaleSheet', () => {
 
   it('scales every entry and memoises per factor', () => {
     const small = scaleSheet(sheet, 0.85);
-    expect(small).toEqual({ a: { padding: 8.5 }, b: { fontSize: 17, color: 'red' } });
+    expect(small).toEqual({ a: { padding: 8 }, b: { fontSize: 17, color: 'red' } });
     expect(scaleSheet(sheet, 0.85)).toBe(small);
     expect(scaleSheet(sheet, 1.15)).not.toBe(small);
-    expect(scaleSheet(sheet, 1.15).a).toEqual({ padding: 11.5 });
+    expect(scaleSheet(sheet, 1.15).a).toEqual({ padding: 12.5 });
   });
 });
 

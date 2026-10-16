@@ -14,7 +14,7 @@ const sheet = StyleSheet.create({
 
 function Probe() {
   const styles = useScaledStyles(sheet);
-  const { factor, sz, touch, slop } = useDisplayScale();
+  const { factor, sz, sp, touch, slop } = useDisplayScale();
   return (
     <Text testID="probe">
       {JSON.stringify({
@@ -22,6 +22,7 @@ function Probe() {
         row: styles.row,
         label: styles.label,
         sz: sz(48),
+        sp: sp(16),
         touch: touch(48),
         slop: slop(48),
         same: styles === sheet,
@@ -37,7 +38,7 @@ afterEach(() => useSettingsStore.getState().reset());
 describe('useScaledStyles / useDisplayScale', () => {
   it('at 100 % hands back the very same sheet', async () => {
     await render(<Probe />);
-    expect(read()).toMatchObject({ factor: 1, same: true, sz: 48, touch: 48, slop: 0 });
+    expect(read()).toMatchObject({ factor: 1, same: true, sz: 48, sp: 16, touch: 48, slop: 0 });
   });
 
   it('follows the saved setting without a provider', async () => {
@@ -46,9 +47,10 @@ describe('useScaledStyles / useDisplayScale', () => {
     expect(read()).toEqual({
       factor: 0.85,
       // The tap row keeps its 48 dp; padding shrinks; the hairline doesn't.
-      row: { minHeight: 48, paddingHorizontal: 13.5, borderWidth: 1 },
+      row: { minHeight: 48, paddingHorizontal: 12.5, borderWidth: 1 },
       label: { fontSize: 13.5, lineHeight: 18.5 },
       sz: 41,
+      sp: 12.5,
       touch: 48,
       slop: 4,
       same: false,
@@ -64,8 +66,9 @@ describe('useScaledStyles / useDisplayScale', () => {
     );
     expect(read()).toMatchObject({
       factor: 1.15,
-      row: { minHeight: 55, paddingHorizontal: 18.5, borderWidth: 1 },
+      row: { minHeight: 55, paddingHorizontal: 19.5, borderWidth: 1 },
       label: { fontSize: 18.5, lineHeight: 25.5 },
+      sp: 19.5,
       touch: 55,
       slop: 0,
     });
