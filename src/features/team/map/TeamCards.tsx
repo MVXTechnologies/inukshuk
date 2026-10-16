@@ -380,8 +380,8 @@ function SpotCard({
     >
       <View style={styles.roundRow}>
         <Round
-          icon="comment-text-outline"
-          label="Comment"
+          icon="note-text-outline"
+          label="Note"
           testID="team-spot-comment"
           onPress={() => {
             onClose();
@@ -484,9 +484,11 @@ function PressCard({
           },
         ]),
     {
-      icon: 'map-marker-account-outline',
-      label: 'Pin',
-      testID: 'team-press-pin',
+      // A note is a pin that shows its text (#706, G8).
+      icon: 'note-text-outline',
+      label: 'Note here',
+      testID: 'team-press-note',
+      tag: 'NEW',
       run: () => {
         onClose();
         usePinDraft.getState().open(at[0], at[1]);

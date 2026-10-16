@@ -17,6 +17,8 @@ import {
   LINK_PROTOCOL,
   needsAdvertisedCap,
   needsCap,
+  NOTE_CAP,
+  NOTE_PROTOCOL,
   PEN_CAP,
   RTC_CAP,
   RTC_PROTOCOL,
@@ -218,13 +220,15 @@ describe('per-capability versions (2.7.0 sync groups)', () => {
 describe('what a 2.7.0 phone advertises (G5)', () => {
   const at = (n: number) => T0 + n * MIN;
 
-  it('claims lnk and rtc on top of the 2.6 record, which stays byte-for-byte what older phones write', () => {
+  it('claims lnk, rtc and nt on top of the 2.6 record, which stays byte-for-byte what older phones write', () => {
     const body = advertisedCapBody('m', at(1));
     expect(body.f).toEqual({
       ...capBody('m', at(1)).f,
       [LINK_CAP]: LINK_PROTOCOL,
       [RTC_CAP]: RTC_PROTOCOL,
+      [NOTE_CAP]: NOTE_PROTOCOL,
     });
+    expect(capBody('m', at(1)).f[NOTE_CAP]).toBeUndefined();
     expect(capBody('m', at(1)).f[LINK_CAP]).toBeUndefined();
     expect(capBody('m', at(1)).f[RTC_CAP]).toBeUndefined();
     expect(validCapFields(body.f)).toBe(true);

@@ -6,9 +6,11 @@
 import { DEFAULT_INVITE } from '@core/teamui/invites';
 import {
   addBadgeThreads,
+  addSimulatedNote,
   addSimulatedTeammate,
   BADGE_THREADS,
   simulatedAlert,
+  SIM_NOTE_TEXT,
   simulatedTeamToJoin,
 } from '@data/team/simulatedTeammates';
 import { teamService, useTeamStore } from '@state/teamStore';
@@ -35,6 +37,10 @@ export function SimulatedTeammates() {
       const photo = s.photos.find((p) => p.caption === caption);
       return photo !== undefined && (s.photoThreads.get(photo.id)?.length ?? 0) >= comments;
     }),
+  );
+  // The teammate's note (#706) as THIS phone holds it.
+  const noteHere = useTeamStore((s) =>
+    s.pins.some((p) => p.note !== null && p.note.text === SIM_NOTE_TEXT),
   );
   const add = async () => {
     const session = teamService()?.active;
@@ -96,6 +102,18 @@ export function SimulatedTeammates() {
           They raise an SOS
         </Button>
       </View>
+      <Button
+        mode="outlined"
+        onPress={() => void addSimulatedNote(center())}
+        testID="team-sim-note"
+      >
+        A teammate posts a note
+      </Button>
+      {noteHere && (
+        <Text variant="bodySmall" testID="team-sim-note-done">
+          The teammate’s note is on this phone
+        </Text>
+      )}
       {badgesHere && (
         <Text variant="bodySmall" testID="team-sim-badges-done">
           Badge threads synced to this phone

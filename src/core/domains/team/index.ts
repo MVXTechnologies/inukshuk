@@ -28,6 +28,7 @@ import {
 } from '@core/group/registry';
 
 import { TEAM_V27, TEAM_V27_KINDS } from './groupKinds';
+import { authorizeNote, NOTE_KINDS, noteLane, reindexNote, validNoteWrite } from './notes';
 
 /**
  * The team domain (plug-in #1 of the sync-group seam, 2.7.0 PR G1;
@@ -43,6 +44,9 @@ import { TEAM_V27, TEAM_V27_KINDS } from './groupKinds';
  * `gref` (a child group announced in the team). Validators only: no phone
  * writes it before G10. `gmeta`, `irdv` and `net` belong to every group
  * (`@core/group/meta`), registered next to this plug-in by {@link teamRegistry}.
+ *
+ * 2.7.0 PR G8 adds the notes' two (`notes.ts`, #706): `pnm` (a pin shown as a
+ * note: colour, fade, edits) and `pnr` (a "seen" receipt), both owned.
  */
 export const TEAM_DOMAIN = 'team';
 
@@ -53,6 +57,7 @@ export const TEAM_KINDS_V26: readonly string[] = ENTITY_KINDS;
 const INDEXED: readonly string[] = ['trl', 'tve', 'sos', 'drw'];
 
 const isTeamKind = (k: string): k is EntityKind => (ENTITY_KINDS as readonly string[]).includes(k);
+const isNoteKind = (k: string): boolean => NOTE_KINDS.includes(k);
 
 /** Alerts go first on every link (§4.4); the rest is live traffic. */
 const URGENT: readonly string[] = ['sos', 'rly'];
@@ -121,19 +126,22 @@ function authorizeDelete(
 
 export const teamPlugin: DomainPlugin<TeamData> = {
   id: TEAM_DOMAIN,
-  kinds: [...ENTITY_KINDS, ...TEAM_V27_KINDS],
+  kinds: [...ENTITY_KINDS, ...TEAM_V27_KINDS, ...NOTE_KINDS],
   threads: ['team', 'dm', 'g', 'photo', 'task', 'pin', 'trail'],
   ephemeral: ['pos', 'pen'],
   needsCaps: ['pen'],
-  owned: (kind) => (isTeamKind(kind) ? OWNED_KINDS.includes(kind) : TEAM_V27.owned(kind)),
+  owned: (kind) =>
+    isTeamKind(kind) ? OWNED_KINDS.includes(kind) : isNoteKind(kind) || TEAM_V27.owned(kind),
   validate(w) {
     if (TEAM_V27.has(w.kind)) return TEAM_V27.validate(w);
+    if (isNoteKind(w.kind)) return validNoteWrite(w);
     // A message is a `msg` op, never an `e.set`; only some kinds name another's record.
     if (w.op === 'del') return true;
     return w.kind !== 'msg' && (w.o === undefined || OWNER_REF_KINDS.includes(w.kind));
   },
   authorize(w, role, view) {
     if (TEAM_V27.has(w.kind)) return TEAM_V27.authorize(w, role, view);
+    if (isNoteKind(w.kind)) return authorizeNote(w, role, view);
     // Registered kinds only reach here: the team's own.
     const kind = w.kind as EntityKind;
     return w.op === 'set'
@@ -142,8 +150,9 @@ export const teamPlugin: DomainPlugin<TeamData> = {
   },
   merged(view, rec, before) {
     if (INDEXED.includes(rec.kind)) reindex(view.index, rec, before);
+    else if (isNoteKind(rec.kind)) reindexNote(view, rec);
   },
-  lane: (kind): Lane => (URGENT.includes(kind) ? 0 : 1),
+  lane: (kind): Lane => (URGENT.includes(kind) ? 0 : isNoteKind(kind) ? noteLane(kind) : 1),
 };
 
 let shared: DomainRegistry | undefined;

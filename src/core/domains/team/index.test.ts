@@ -7,7 +7,9 @@
  *    three arrival orders, to exactly the canonical view recorded then:
  *    entities, stamps, positions, skip reasons, record index, membership.
  *    The one intended difference: a newer app's kind (`pnm` in the log) is
- *    skipped as `unknown` instead of `invalid` (design §5.1).
+ *    skipped as `unknown` instead of `invalid` (design §5.1). The gate runs
+ *    under the G1 registry (the team plug-in without the notes G8 added,
+ *    which registered `pnm`); a separate test pins how G8 folds those ops.
  * 2. **Oracle.** The same, against the frozen 2.6.1 fold (`legacyFold26`) on
  *    the same folded state.
  * 3. **Property.** Seeded random workloads over every kind (valid, invalid,
@@ -37,13 +39,15 @@ import type { RecordedLog } from '@core/team/testing/golden/teamLog26';
 import { legacyApplyDataOp } from '@core/team/testing/legacyFold26';
 import { int, mulberry32, pick, type Rng } from '@core/team/testing/prop';
 import { seededCrypto } from '@core/team/testing/seeded';
-import { MIN, T0 } from '@core/team/testing/fixtures';
+import { c, MIN, T0 } from '@core/team/testing/fixtures';
 import { capBody } from '@core/teamdraw/caps';
 import { arrowFields } from '@core/teamdraw/testUtils';
 import { encodePolyline } from '@core/trails/polyline';
 import { GMETA, groupPlugin, IRDV, NET } from '@core/group/meta';
+import { DomainRegistry } from '@core/group/registry';
 
 import { TEAM_V27_KINDS } from './groupKinds';
+import { NOTE_KINDS, PNM } from './notes';
 import { TEAM_DOMAIN, TEAM_KINDS_V26, teamPlugin, teamRegistry } from './index';
 
 const LOG = require('@core/team/testing/golden/teamLog26.json') as RecordedLog;
@@ -59,14 +63,26 @@ function legacyReduce(state: TeamState, decode: (op: SignedOp) => Json | undefin
   return out;
 }
 
+/**
+ * The registry as the seam (G1) shipped it: the team plug-in without the
+ * note kinds G8 registered. The golden log was recorded with `pnm` as its
+ * "newer app's kind", so the seam's gate replays it under this registry.
+ */
+const G1_REGISTRY = new DomainRegistry([
+  groupPlugin,
+  { ...teamPlugin, kinds: teamPlugin.kinds.filter((k) => !NOTE_KINDS.includes(k)) },
+]).freeze();
+const g1Replica = (keys: DeviceKeys) =>
+  new GroupReplica(c, LOG.teamId, keys, undefined, { registry: G1_REGISTRY });
+
 /** Record writes whose kind no domain registers (a newer app's), by op id. */
-function unknownKindOps(r: TeamReplica): Set<string> {
+function unknownKindOps(r: TeamReplica, registry: DomainRegistry = G1_REGISTRY): Set<string> {
   const out = new Set<string>();
   for (const op of r.state.data) {
     if (op.env.t !== 'e.set' && op.env.t !== 'e.del') continue;
     // A well-formed write (else it stays `invalid`, before and after the seam).
     const b = parseKindWrite(op.env.t, r.decode(op));
-    if (b !== undefined && teamRegistry().forKind(b.k) === undefined) out.add(op.id);
+    if (b !== undefined && registry.forKind(b.k) === undefined) out.add(op.id);
   }
   return out;
 }
@@ -93,7 +109,7 @@ describe('golden refold: a recorded 2.6.1 team log folds exactly as before the s
       it(`${v}, ${how}: identical canonical view (only change: a newer app's kind says unknown)`, () => {
         const seeds = how === 'shuffled' ? [1, 2, 3] : [1];
         for (const seed of seeds) {
-          const r = replay(LOG, v, how, seed);
+          const r = replay(LOG, v, how, seed, g1Replica);
           // Reading the view folds anything a coalesced refold deferred.
           const text = viewText(r, LOG.now);
           const unknown = unknownKindOps(r);
@@ -107,7 +123,7 @@ describe('golden refold: a recorded 2.6.1 team log folds exactly as before the s
 
   it('the frozen 2.6.1 fold of the same state gives the same view (the oracle)', () => {
     for (const v of VIEWERS) {
-      const r = replay(LOG, v, 'batch');
+      const r = replay(LOG, v, 'batch', 1, g1Replica);
       const data = r.data(LOG.now);
       const legacy = legacyReduce(r.state, (op) => r.decode(op));
       legacy.positions = data.positions;
@@ -115,11 +131,44 @@ describe('golden refold: a recorded 2.6.1 team log folds exactly as before the s
         relabel(canonicalText(r.state, legacy), unknownKindOps(r)),
       );
       // And reduceData (the replica-free fold) agrees with the replica's view.
-      const fresh = reduceData(r.state, (op) => r.decode(op), teamRegistry());
+      const fresh = reduceData(r.state, (op) => r.decode(op), G1_REGISTRY);
       fresh.positions = data.positions;
       expect(canonicalText(r.state, fresh)).toBe(canonicalText(r.state, data));
     }
   });
+});
+
+describe('golden log under the notes (G8): only its two pnm ops change', () => {
+  for (const v of VIEWERS) {
+    it(`${v}: a note without colour or fade is invalid, its delete a tombstone`, () => {
+      const seam = replay(LOG, v, 'batch', 1, g1Replica);
+      const full = replay(LOG, v, 'batch');
+      // Reading the views first folds what a refold deferred (and fills the decode cache).
+      const before = seam.data(LOG.now);
+      const after = full.data(LOG.now);
+      const [set, del] = [...unknownKindOps(seam)];
+      expect(set).toBeDefined();
+      expect(unknownKindOps(full, teamRegistry()).size).toBe(0);
+      const reason = (d: TeamData, id: string | undefined) =>
+        d.skipped.find((s) => s.id === id)?.why;
+      expect([reason(before, set), reason(before, del)]).toEqual(['unknown', 'unknown']);
+      expect([reason(after, set), reason(after, del)]).toEqual(['invalid', undefined]);
+      // The delete leaves a tombstone of Bob's pnm; nothing else differs.
+      const added = [...after.entities.keys()].filter((k) => !before.entities.has(k));
+      expect(added).toHaveLength(1);
+      expect(added[0]?.startsWith(`${PNM}:`)).toBe(true);
+      expect(after.entities.get(added[0]!)?.state.deleted).toBeDefined();
+      const strip = (d: TeamData) => {
+        const out = emptyData();
+        for (const [k, rec] of d.entities) if (rec.kind !== PNM) out.entities.set(k, rec);
+        out.positions = d.positions;
+        out.skipped = d.skipped.filter((s) => s.id !== set && s.id !== del);
+        out.index = d.index;
+        return canonicalText(full.state, out);
+      };
+      expect(strip(after)).toBe(strip(before));
+    });
+  }
 });
 
 // ── Property: random workloads, seeded end to end ───────────────────────────
@@ -389,7 +438,7 @@ describe('property: the seam folds every 2.6 kind exactly as the 2.6.1 fold', ()
 describe('the team plug-in', () => {
   it('owns the 2.6 kinds and gref; the registry adds the group kinds (gmeta, irdv, net) and is frozen', () => {
     expect(teamPlugin.id).toBe(TEAM_DOMAIN);
-    expect(teamPlugin.kinds).toEqual([...ENTITY_KINDS, 'gref']);
+    expect(teamPlugin.kinds).toEqual([...ENTITY_KINDS, 'gref', 'pnm', 'pnr']);
     const reg = teamRegistry();
     expect(reg).toBe(teamRegistry());
     expect(reg.isFrozen).toBe(true);
@@ -398,7 +447,8 @@ describe('the team plug-in', () => {
     expect(reg.forKind(GMETA)?.id).toBe('group');
     expect(reg.forKind('irdv')?.id).toBe('group');
     expect(reg.forKind('net')?.id).toBe('group');
-    expect(reg.forKind('pnm')).toBeUndefined();
+    expect(reg.forKind('pnm')).toBe(teamPlugin);
+    expect(reg.forKind('zzz')).toBeUndefined();
     expect(reg.forThread(`pin:x:y`)).toBe(teamPlugin);
     expect(reg.forThread('trail:t1')).toBe(teamPlugin);
   });

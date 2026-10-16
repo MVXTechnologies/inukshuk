@@ -17,6 +17,7 @@ export function GridItem({
   onPress,
   testID,
   accent,
+  tag,
 }: {
   icon: string;
   label: string;
@@ -24,6 +25,8 @@ export function GridItem({
   testID: string;
   /** The disc's own fill and ink (Meet here's gather amber). */
   accent?: { bg: string; ink: string };
+  /** A small "NEW" on the disc's corner (a feature just added, #706). */
+  tag?: string;
 }) {
   const t = useSchemeTokens();
   return (
@@ -45,6 +48,13 @@ export function GridItem({
         ]}
       >
         <Icon source={icon} size={22} color={accent ? accent.ink : t.ink} />
+        {tag !== undefined && (
+          <View style={[styles.tag, { backgroundColor: t.team.bubbleNew }]} pointerEvents="none">
+            <Text style={[styles.tagText, { color: t.team.bubbleNewInk }]} allowFontScaling={false}>
+              {tag}
+            </Text>
+          </View>
+        )}
       </View>
       <Text
         variant="labelSmall"
@@ -66,6 +76,7 @@ export interface GridCell {
   testID: string;
   run: () => void;
   accent?: { bg: string; ink: string };
+  tag?: string;
 }
 
 /** The wrapping grid (#744 option 2): five a row, every action one tap away. */
@@ -80,6 +91,7 @@ export function PressGrid({ cells, testID }: { cells: readonly GridCell[]; testI
           onPress={c.run}
           testID={c.testID}
           {...(c.accent ? { accent: c.accent } : {})}
+          {...(c.tag !== undefined ? { tag: c.tag } : {})}
         />
       ))}
     </View>
@@ -99,4 +111,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   gridLabel: { textAlign: 'center' },
+  tag: {
+    position: 'absolute',
+    top: -6,
+    right: -12,
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  tagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
 });

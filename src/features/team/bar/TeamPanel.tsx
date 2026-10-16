@@ -11,15 +11,16 @@
  * - Members, live first and nearest first (`panelMembers`); each row opens
  *   that teammate's card on the map (Message, Navigate to, Centre), or their
  *   page when their position is unknown.
- * - From the old team button's menu, at the bottom: Tasks, Rally at a
- *   point…, Manage team. SOS is deliberately not here: only the hold button
- *   sends it.
+ * - Notes (#706) with its "2 new"; then, from the old team button's menu,
+ *   at the bottom: Tasks, Rally at a point…, Manage team. SOS is
+ *   deliberately not here: only the hold button sends it.
  *
  * A plain themed View over a scrim (no Paper Portal: paper-portal-touch-swallow);
  * Back and a tap on the scrim close it.
  */
 import { STATUS_LABEL } from '@core/teamui/system';
 import { distanceText, panelMembers } from '@core/teamui/teamBar';
+import { noteSections } from '@core/teamui/notes';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 import { useSettingsStore } from '@state/settingsStore';
 import { useTeamStore } from '@state/teamStore';
@@ -89,6 +90,11 @@ export function TeamPanel({
     net === null ? 0 : [...net.links.values()].filter((l) => l === 'nearby').length;
   const gather = useActiveAlerts().find((a) => a.kind === 'gather');
   const me = view?.me;
+  const newNotes = useTeamStore(
+    (s) =>
+      noteSections(s.pins, s.view?.me ?? '', (th) => s.record?.seen?.[th] ?? 0, Date.now(), 'new')
+        .counts.new,
+  );
   const myOpenTasks = useTeamStore(
     (s) => s.tasks.filter((x) => !x.done && x.assignee === me).length,
   );
@@ -366,6 +372,14 @@ export function TeamPanel({
         </ScrollView>
 
         <Row
+          icon="note-text-outline"
+          label="Notes"
+          chip={newNotes > 0 ? `${newNotes} new` : undefined}
+          fresh
+          onPress={go('/team/notes')}
+          testID="team-panel-notes"
+        />
+        <Row
           icon="checkbox-marked-circle-outline"
           label="Tasks"
           chip={myOpenTasks > 0 ? `${myOpenTasks} open` : undefined}
@@ -398,12 +412,15 @@ function Row({
   icon,
   label,
   chip,
+  fresh = false,
   onPress,
   testID,
 }: {
   icon: string;
   label: string;
   chip?: string;
+  /** The chip says something new (the orange "2 new"). */
+  fresh?: boolean;
   onPress: () => void;
   testID: string;
 }) {
@@ -419,8 +436,18 @@ function Row({
       <Icon source={icon} size={22} color={t.inkVariant} />
       <Text style={[styles.footLabel, styles.flex, { color: t.ink }]}>{label}</Text>
       {chip && (
-        <View style={[styles.schip, { backgroundColor: t.surfaceVariant }]}>
-          <Text style={[styles.schipText, { color: t.inkVariant }]}>{chip}</Text>
+        <View
+          style={[styles.schip, { backgroundColor: fresh ? t.team.bubbleNew : t.surfaceVariant }]}
+        >
+          <Text
+            style={[
+              styles.schipText,
+              { color: fresh ? t.team.bubbleNewInk : t.inkVariant },
+              fresh && styles.freshText,
+            ]}
+          >
+            {chip}
+          </Text>
         </View>
       )}
       <Icon source="chevron-right" size={22} color={t.inkMuted} />
@@ -521,6 +548,7 @@ const styles = StyleSheet.create({
   lastPos: { fontSize: 11.5, fontWeight: '700' },
   schip: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 1, flexShrink: 0 },
   schipText: { fontSize: 11, fontWeight: '800' },
+  freshText: { fontWeight: '900' },
   foot: {
     flexDirection: 'row',
     alignItems: 'center',

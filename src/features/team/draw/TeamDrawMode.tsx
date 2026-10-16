@@ -3,8 +3,8 @@
  * the main map.
  *
  * - A top bar (a live dot, "Drawing / Team sees it live"; Clear mine, with a
- *   5 s UNDO; Done) and a bottom tool bar of five labelled buttons (#756):
- *   Freehand · Arrow · Shape · Time · Undo. A tap on the selected Freehand or
+ *   5 s UNDO; Done) and a bottom tool bar of labelled buttons (#756):
+ *   Freehand · Arrow · Shape · Text (#706) · Time · Undo. A tap on the selected Freehand or
  *   Arrow opens its options; Shape opens the shape picker; Time the fade
  *   time (`DrawToolPanel`). The tab bar, the search (the team bar), the +
  *   menu and the SOS button step aside; Android Back closes a panel, then Done.
@@ -18,6 +18,9 @@
  *   Under 12 dp it is dropped; a second finger cancels it.
  * - A tap on my shape selects it; a long-press opens its menu (note, delete).
  *   An admin may do both on anyone's shape.
+ * - The Text tool (#706) places a note: one tap on the map leaves drawing
+ *   mode and opens the note composer there, in the drawing's colour and its
+ *   Time fade (`noteFadeForDrawing`).
  */
 import type { Units } from '@core/format';
 import { DrawGesture, type GestureAction, type Touch } from '@core/teamdraw/gesture';
@@ -63,6 +66,10 @@ import { Icon, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path, Polygon } from 'react-native-svg';
 
+import { noteFadeForDrawing } from '@core/domains/team/notes';
+import { unproject } from '@core/teamdraw/screen';
+
+import { usePinDraft } from '../map/TeamPinComposer';
 import {
   DrawToolPanel,
   fadeBadge,
@@ -236,6 +243,8 @@ function DrawModeBody({
   const [pts, setPts] = useState<readonly ScreenPt[]>([]);
   const [chip, setChip] = useState<string | null>(null);
   const [drawn, setDrawn] = useState<string[]>([]);
+  /** The Text tool (#706): the next tap places a note. Not remembered between entries. */
+  const [textTool, setTextTool] = useState(false);
 
   const gesture = useRef(new DrawGesture());
   const view = useRef<Viewport | null>(null);
@@ -253,9 +262,9 @@ function DrawModeBody({
   const throttle = useRef(new PenThrottle());
   const dueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const live = useRef({ tool, prefs, units, styleOpen, locked });
+  const live = useRef({ tool, prefs, units, styleOpen, locked, textTool });
   useEffect(() => {
-    live.current = { tool, prefs, units, styleOpen, locked };
+    live.current = { tool, prefs, units, styleOpen, locked, textTool };
   });
 
   const done = useCallback(() => {
@@ -384,6 +393,8 @@ function DrawModeBody({
       switch (a.type) {
         case 'begin':
           setStyleOpen(false);
+          // The Text tool draws nothing: only its tap counts.
+          if (live.current.textTool) break;
           stroke.current = new StrokeBuilder(
             live.current.tool,
             session()?.newId() ?? String(Date.now()),
@@ -396,6 +407,7 @@ function DrawModeBody({
           void syncView();
           break;
         case 'update': {
+          if (live.current.textTool) break;
           latest.current = a.pts;
           setPts([...a.pts]);
           const b = stroke.current;
@@ -431,6 +443,16 @@ function DrawModeBody({
         case 'long-press': {
           if (live.current.styleOpen) {
             setStyleOpen(false);
+            break;
+          }
+          if (live.current.textTool && a.type === 'tap') {
+            if (vp === null) break;
+            const [lng, lat] = unproject(a.at, vp);
+            const p = live.current.prefs;
+            done();
+            usePinDraft
+              .getState()
+              .open(lng, lat, { col: p.colour, fade: noteFadeForDrawing(p.fadeMs) });
             break;
           }
           const map = mapRef.current;
@@ -626,6 +648,15 @@ function DrawModeBody({
           <Icon source={TOOL_ICON[tool]} size={17} color={color} />
           <Text style={[styles.chipText, { color: drawChrome.chipInk }]}>{chip}</Text>
         </View>
+      ) : textTool ? (
+        <View
+          style={[styles.hint, { top: insets.top + 70, backgroundColor: t.map.chip }]}
+          pointerEvents="none"
+          testID="team-draw-text-hint"
+        >
+          <Icon source="gesture-tap" size={18} color={t.map.chipInk} />
+          <Text style={[styles.hintText, { color: t.map.chipInk }]}>Tap where the note goes</Text>
+        </View>
       ) : hint ? (
         <View
           style={[styles.hint, { top: insets.top + 70, backgroundColor: t.map.chip }]}
@@ -646,6 +677,7 @@ function DrawModeBody({
           own={own}
           shape={shape}
           onShape={(k) => {
+            setTextTool(false);
             setShape(k);
             useTeamDrawStore.getState().setTool(k);
             setPanel(null);
@@ -676,7 +708,7 @@ function DrawModeBody({
 
       <View style={[styles.bar, { bottom: barBottom }]} testID="team-draw-toolbar">
         {TOOLS.map(({ k, icon, label }) => {
-          const on = k === tool;
+          const on = k === tool && !textTool;
           return (
             <ToolButton
               key={k}
@@ -688,6 +720,7 @@ function DrawModeBody({
               onPress={() => {
                 if (on) setPanel((p) => (p === k ? null : k));
                 else {
+                  setTextTool(false);
                   useTeamDrawStore.getState().setTool(k);
                   setPanel(null);
                 }
@@ -701,12 +734,26 @@ function DrawModeBody({
         <ToolButton
           icon={SHAPE_CHOICES.find((c) => c.k === shape)?.icon ?? 'circle-outline'}
           label="Shape"
-          on={isShape(tool)}
+          on={isShape(tool) && !textTool}
           open={panel === 'shape'}
           onPress={() => setPanel((p) => (p === 'shape' ? null : 'shape'))}
           caret
           a11y={`Shape, ${SHAPE_CHOICES.find((c) => c.k === shape)?.label ?? 'Circle'}`}
           testID="team-draw-tool-shape"
+        />
+        {/* The Text tool (#706): the next tap places a note in this colour and fade. */}
+        <ToolButton
+          icon="format-text"
+          label="Text"
+          on={textTool}
+          open={false}
+          fresh
+          onPress={() => {
+            setPanel(null);
+            setTextTool((on) => !on);
+          }}
+          a11y="Text note"
+          testID="team-draw-tool-text"
         />
         <ToolButton
           icon="timer-sand"
@@ -748,6 +795,7 @@ function ToolButton({
   badge,
   disabled = false,
   divided = false,
+  fresh = false,
 }: {
   icon: string;
   label: string;
@@ -765,7 +813,10 @@ function ToolButton({
   disabled?: boolean;
   /** A hairline before it (Undo). */
   divided?: boolean;
+  /** A NEW tag on its corner (the Text tool, #706). */
+  fresh?: boolean;
 }) {
+  const t = useSchemeTokens();
   const ink = on ? drawChrome.onActive : open ? drawChrome.openInk : drawChrome.barInk;
   return (
     <Pressable
@@ -796,6 +847,19 @@ function ToolButton({
           </Text>
         </View>
       )}
+      {fresh && (
+        <View
+          style={[tagStyles.newTag, { backgroundColor: t.team.bubbleNew }]}
+          pointerEvents="none"
+        >
+          <Text
+            style={[tagStyles.newTagText, { color: t.team.bubbleNewInk }]}
+            allowFontScaling={false}
+          >
+            NEW
+          </Text>
+        </View>
+      )}
       <Text
         style={[styles.toolLabel, { color: ink }]}
         numberOfLines={1}
@@ -809,6 +873,17 @@ function ToolButton({
 }
 
 const BAR_H = 66;
+const tagStyles = StyleSheet.create({
+  newTag: {
+    position: 'absolute',
+    top: 2,
+    right: 4,
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  newTagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.4 },
+});
 /** The shape menu's height, about (its note field and buttons). */
 const MENU_H = 260;
 const CREDITS_GAP = 10;
@@ -890,8 +965,10 @@ const styles = StyleSheet.create({
     zIndex: 6,
   },
   hintText: { fontSize: 13, fontWeight: '700' },
-  // Five equal labelled buttons (#756): 6 dp from the edges, so at 360 dp
-  // each is 68 dp and "Freehand" fits at the 1.2× label cap.
+  // Six labelled buttons (#756 + the Text tool, #706), 6 dp from the edges.
+  // Each takes its label's width plus an equal share of the rest: six equal
+  // shares (55 dp at 360 dp) would cut "Freehand" (59 dp at the 1.2× cap);
+  // the labels' sum (231 dp) leaves each about 16 dp to spare.
   bar: {
     position: 'absolute',
     left: 6,
@@ -911,7 +988,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
   },
   tool: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
     minWidth: 0,
     minHeight: 56,
     borderRadius: 16,

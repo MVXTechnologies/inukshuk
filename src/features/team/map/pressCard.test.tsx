@@ -65,7 +65,7 @@ const rowIds = () =>
     .children.map((c) => (typeof c === 'string' ? c : (c.props.testID as string)));
 const ALL = [
   'team-press-rally',
-  'team-press-pin',
+  'team-press-note',
   'team-press-photo',
   'team-press-task',
   'team-press-notify',
@@ -92,10 +92,13 @@ describe('the team long-press card (#757: the wrapping grid)', () => {
       await render(card(dark));
       expect(rowIds()).toEqual(ALL);
       expect(screen.queryByTestId('team-press-more')).toBeNull();
-      for (const label of ['Meet here', 'Pin', 'Photo', 'Task', 'Notify', 'Waypoint']) {
+      for (const label of ['Meet here', 'Note here', 'Photo', 'Task', 'Notify', 'Waypoint']) {
         expect(screen.getByText(label).props.numberOfLines).toBe(2);
         expect(screen.getByText(label).props.maxFontSizeMultiplier).toBe(1.15);
       }
+      // A note is a pin that shows its text (#706): its cell says NEW, the others nothing.
+      expect(screen.getAllByText('NEW')).toHaveLength(1);
+      expect(screen.getByTestId('team-press-note')).toHaveTextContent(/NEW/);
       await fireEvent.press(screen.getByTestId('team-press-coordinates'));
       expect(onPointActions).toHaveBeenCalledWith(AT, 'coordinates');
     },
@@ -187,7 +190,7 @@ describe('the team long-press card (#757: the wrapping grid)', () => {
     });
   });
 
-  it('Meet here sets the rally point; Pin opens the composer', async () => {
+  it('Meet here sets the rally point; Note here opens the composer', async () => {
     team('member');
     const r = await render(card());
     await fireEvent.press(screen.getByTestId('team-press-rally'));
@@ -195,7 +198,7 @@ describe('the team long-press card (#757: the wrapping grid)', () => {
     await r.unmount();
     useTeamSheet.getState().open({ kind: 'press', at: AT });
     await render(card());
-    await fireEvent.press(screen.getByTestId('team-press-pin'));
+    await fireEvent.press(screen.getByTestId('team-press-note'));
     expect(usePinDraft.getState().at).toEqual(AT);
   });
 
@@ -203,7 +206,7 @@ describe('the team long-press card (#757: the wrapping grid)', () => {
     team('guest');
     await render(card());
     expect(rowIds()).toEqual([
-      'team-press-pin',
+      'team-press-note',
       'team-press-photo',
       'team-press-notify',
       'team-press-navigate',
