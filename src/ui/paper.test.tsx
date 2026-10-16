@@ -9,7 +9,9 @@ import {
   IconButton,
   List,
   Menu,
+  SegmentedButtons,
   buttonHeight,
+  segmentHeight,
   buttonHitSlop,
   iconButtonBox,
   scaledIconSource,
@@ -115,6 +117,25 @@ describe('wrappers at Small', () => {
     expect(buttonHeight(1.15)).toBe(48);
     expect(buttonHitSlop(1)).toEqual({ top: 4, bottom: 4 });
   });
+
+  it.each(DISPLAY_SCALES.map((k) => [k]))(
+    'SegmentedButtons: drawn height + hitSlop reaches 48 dp at %p',
+    async (k) => {
+      await renderAt(
+        k,
+        <SegmentedButtons
+          value="a"
+          onValueChange={() => {}}
+          buttons={[
+            { value: 'a', label: 'A', testID: 'seg-a' },
+            { value: 'b', label: 'B', testID: 'seg-b' },
+          ]}
+        />,
+      );
+      const slop = screen.getByTestId('seg-a').props.hitSlop as { top: number; bottom: number };
+      expect(segmentHeight(k) + slop.top + slop.bottom).toBeGreaterThanOrEqual(MIN_TOUCH);
+    },
+  );
 
   it('Menu.Item renders through the wrapper', async () => {
     await renderAt(0.85, <Menu.Item title="Rename" onPress={() => {}} testID="mi" />);

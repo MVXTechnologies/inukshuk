@@ -188,7 +188,7 @@ describe('2.5.2 × 2.6.0: team drawing and the cluster sheet in the one order', 
 
   it('the team button and the EDIT / UNDO bar clear the strip as well as the column', () => {
     expect(map).toMatch(
-      /fabBottom=\{teamFabBottom\(bottomColumnLift \+ stripLift, bottomColumnH\)\}/,
+      /fabBottom=\{teamFabBottom\(bottomColumnLift \+ stripLift, bottomColumnH, displayFactor\)\}/,
     );
     expect(map).toMatch(/liftedSnackbarStyle\(bottomColumnLift \+ stripLift, bottomColumnH\)/);
   });
@@ -198,13 +198,14 @@ describe('2.5.2 × 2.6.0: team drawing and the cluster sheet in the one order', 
     // No card dock in MapScreen forgets the strip.
     const docks = map.match(/waypointCardDockStyle\([^)]*\)/g) ?? [];
     expect(docks.length).toBeGreaterThanOrEqual(7);
-    for (const d of docks) expect(d).toMatch(/, stripLift\)$/);
+    // #760: gaps at the Display size (prettier may break the call over lines).
+    for (const d of docks) expect(d).toMatch(/,\s*stripLift,\s*displayFactor,?\s*\)$/);
     // The cluster sheet sits in that dock, after the strip, and only while the
     // bottom-card slot is free (drawing modes, an edit, an inspection, a move).
     const cluster = map.indexOf('<WaypointClusterSheet');
     const dock = map.lastIndexOf('waypointCardDockStyle(', cluster);
     expect(map.slice(dock, cluster)).toMatch(
-      /^waypointCardDockStyle\(recordingPanelUp, panelHeight, stripLift\)/,
+      /^waypointCardDockStyle\(recordingPanelUp, panelHeight, stripLift, displayFactor\)/,
     );
     expect(map.slice(map.lastIndexOf('{cardSlotFree', cluster), cluster)).toMatch(
       /^\{cardSlotFree && movingWp === null && \(/,

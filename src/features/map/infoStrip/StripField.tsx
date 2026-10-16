@@ -10,7 +10,8 @@ import { Icon, Text } from '@ui/paper';
 import { CursorGlyph } from '../components/CenterCursor';
 import { WaypointPinView } from '../waypoints/WaypointPinView';
 import { glyphIcon } from './glyphs';
-import { useScaledStyles } from '@ui/displayScale';
+import { useDisplayFactor, useScaledStyles } from '@ui/displayScale';
+import { scaleFontSize } from '@core/display/displayScale';
 
 export interface StripFieldProps {
   value: StripValue;
@@ -59,6 +60,9 @@ export const StripField = memo(function StripField({
   textTestID,
 }: StripFieldProps) {
   const styles = useScaledStyles(stylesSheet);
+  // #760: the cell fits its text at the Display size (text grows with it, as
+  // with the OS font scale), and draws a fitted size at that size too.
+  const displayFactor = useDisplayFactor();
 
   const t = useSchemeTokens();
   // The cell's width, once laid out (one extra render, then only on resize).
@@ -72,9 +76,9 @@ export const StripField = memo(function StripField({
   const fitted = useMemo(
     () =>
       fit && width !== null
-        ? fitCell(given, width, PixelRatio.getFontScale(), caption)
+        ? fitCell(given, width, PixelRatio.getFontScale() * displayFactor, caption)
         : unfittedCell(given),
-    [fit, width, given, caption],
+    [fit, width, given, caption, displayFactor],
   );
   const value = fitted.value;
   const subject = given.subject;
@@ -117,7 +121,7 @@ export const StripField = memo(function StripField({
         style={[
           styles.value,
           { color: ink },
-          fitted.valueSp !== VALUE_SP && { fontSize: fitted.valueSp },
+          fitted.valueSp !== VALUE_SP && { fontSize: scaleFontSize(fitted.valueSp, displayFactor) },
           muted && styles.muted,
           // Beside a caption, the caption gives way: only a name is ever cut.
           captioned && styles.whole,

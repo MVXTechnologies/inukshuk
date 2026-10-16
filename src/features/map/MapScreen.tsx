@@ -442,7 +442,7 @@ export function MapScreen() {
   const styles = useScaledStyles(stylesSheet);
   // #760: the chrome's insets, lane and top gap at the Display size.
   const mapChrome = useMapChrome();
-  const { sp, factor: displayFactor } = useDisplayScale();
+  const { sz, sp, factor: displayFactor } = useDisplayScale();
   const topGap = sp(8);
   const lane = { left: mapChrome.laneInset, right: mapChrome.laneInset };
 
@@ -2956,6 +2956,25 @@ export function MapScreen() {
     onMapChip: onMapChip !== null,
   });
   const topChipOffset = topChips.lane;
+  // #760: at Large the top slot runs from the left edge inset to the rail
+  // (owner 2026-10-16), and the compass drops below whatever holds the slot.
+  const slotSpansLeft = teamPillSpansLeft(displayFactor);
+  const searchPillUp =
+    makeMapState === null &&
+    heatSelection === null &&
+    !selecting &&
+    !drawing.active &&
+    !teamDrawing &&
+    movingWp === null &&
+    (shownTrail !== null || (!searchOpen && searchSlot === 'search'));
+  const searchLane = slotSpansLeft ? { ...lane, left: mapChrome.edgeInset } : lane;
+  const compassDrop = !slotSpansLeft
+    ? 0
+    : teamBarShown
+      ? teamBarHeight + topGap
+      : searchPillUp
+        ? sz(48) + topGap
+        : 0;
   // The settled camera (see the notes inline). Programmatic settles that
   // the compass streams in heading-up are thinned (useSettleThrottle); the
   // gesture-pause controller still sees every one (see onRegionDidChange).
@@ -3698,12 +3717,9 @@ export function MapScreen() {
             styles.topLeft,
             {
               left: mapChrome.edgeInset,
-              // At Large the team pill spans over this corner (#760): the
-              // compass sits just below the team bar instead.
-              top:
-                teamBarShown && teamPillSpansLeft(displayFactor)
-                  ? insets.top + topGap + teamBarHeight + topGap
-                  : insets.top + topGap,
+              // At Large the top slot (team bar or search pill) spans over
+              // this corner (#760): the compass sits just below it instead.
+              top: insets.top + topGap + compassDrop,
             },
           ]}
           pointerEvents="box-none"
@@ -3758,7 +3774,7 @@ export function MapScreen() {
           !teamDrawing &&
           movingWp === null && (
             <View
-              style={[styles.searchPill, lane, { top: insets.top + topGap }]}
+              style={[styles.searchPill, searchLane, { top: insets.top + topGap }]}
               pointerEvents="box-none"
             >
               {/* A shown long-distance trail takes the pill's place (#467). */}
@@ -4229,7 +4245,7 @@ export function MapScreen() {
         )}
         {recordingPanelUp && recordingPhoto.toast && (
           <View
-            style={waypointCardDockStyle(true, panelHeight, stripLift)}
+            style={waypointCardDockStyle(true, panelHeight, stripLift, displayFactor)}
             pointerEvents="box-none"
           >
             <CapturedPhotoToast toast={recordingPhoto.toast} onUndo={recordingPhoto.undo} />
@@ -4248,7 +4264,7 @@ export function MapScreen() {
           a tapped teammate's or shared waypoint's card. */}
         {makeMapState === null && (
           <TeamMapOverlay
-            fabBottom={teamFabBottom(bottomColumnLift + stripLift, bottomColumnH)}
+            fabBottom={teamFabBottom(bottomColumnLift + stripLift, bottomColumnH, displayFactor)}
             panelTop={insets.top + 4}
             snackStyle={liftedSnackbarStyle(bottomColumnLift + stripLift, bottomColumnH)}
             bandPlace={alertBandPlace({
@@ -4273,7 +4289,12 @@ export function MapScreen() {
             }}
             here={location}
             cardSlotFree={cardSlotFree && viewWaypoint === null && extensionHit === null}
-            cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+            cardStyle={waypointCardDockStyle(
+              recordingPanelUp,
+              panelHeight,
+              stripLift,
+              displayFactor,
+            )}
             cardFloating={recordingPanelUp}
             onNavigate={(latitude, longitude) => setDestination({ latitude, longitude })}
             screenFocused={isFocused}
@@ -4290,11 +4311,11 @@ export function MapScreen() {
         />
         <TeamPickOverlay
           top={insets.top + topGap}
-          cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+          cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift, displayFactor)}
         />
         {/* A tapped photo's bottom card (app-wide, owner 2026-10-07). */}
         <PhotoBottomCard
-          dockStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+          dockStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift, displayFactor)}
         />
 
         {/* Right-edge activity carousel: opened by tapping a "hot" heat spot
@@ -4407,7 +4428,7 @@ export function MapScreen() {
 
         {cardSlotFree && movingWp === null && viewWaypoint !== null && (
           <View
-            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift, displayFactor)}
             pointerEvents="box-none"
             testID="waypoint-card-dock"
           >
@@ -4463,7 +4484,7 @@ export function MapScreen() {
           pointAt !== null &&
           pointAsCard && (
             <View
-              style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+              style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift, displayFactor)}
               pointerEvents="box-none"
               testID="point-card-dock"
             >
@@ -4493,7 +4514,7 @@ export function MapScreen() {
         {/* A cluster's pins at the camera's cap (#685): pick one to open its card. */}
         {cardSlotFree && movingWp === null && (
           <View
-            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift, displayFactor)}
             pointerEvents="box-none"
           >
             <WaypointClusterSheet
@@ -4508,7 +4529,7 @@ export function MapScreen() {
         {/* Several trails / areas under one tap (#745): pick one. */}
         {cardSlotFree && movingWp === null && (
           <View
-            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift, displayFactor)}
             pointerEvents="box-none"
           >
             <OverlapChooserSheet
@@ -4533,7 +4554,7 @@ export function MapScreen() {
             <ExtensionCardDock
               key={extensionHit.key}
               hit={extensionHit}
-              style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+              style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift, displayFactor)}
               dockRef={extensionDockRef}
               onLayout={() => {
                 // The dock's own y is relative to its container, not the map:

@@ -1,3 +1,4 @@
+import { scaleSpacing } from '@core/display/displayScale';
 import { MAP_STACK_GAP } from '@core/map/mapChrome';
 import type { ViewStyle } from 'react-native';
 
@@ -49,7 +50,10 @@ export function waypointCardDockStyle(
   recordingPanelUp: boolean,
   panelHeight: number,
   stripLift = 0,
+  /** The Display size (#760): the floating gap is spacing. */
+  factor = 1,
 ): ViewStyle {
+  const gap = scaleSpacing(FLOATING_CARD_GAP, factor);
   const base: ViewStyle = {
     position: 'absolute',
     left: 0,
@@ -60,9 +64,9 @@ export function waypointCardDockStyle(
   if (!recordingPanelUp) return base;
   return {
     ...base,
-    left: FLOATING_CARD_GAP,
-    right: FLOATING_CARD_GAP,
-    bottom: panelHeight + stripLift + FLOATING_CARD_GAP,
+    left: gap,
+    right: gap,
+    bottom: panelHeight + stripLift + gap,
   };
 }
 
@@ -127,6 +131,11 @@ export const TEAM_FAB_GAP = MAP_STACK_GAP;
  * once the tape pushed the row up (2.5.2 QA). Before the column's first
  * layout, as before: 56 dp of column.
  */
-export function teamFabBottom(columnBottom: number, columnHeight: number | null): number {
-  return columnBottom + (columnHeight ?? 56) + TEAM_FAB_GAP;
+export function teamFabBottom(
+  columnBottom: number,
+  columnHeight: number | null,
+  /** The Display size (#760): the gap is the rail's stack gap, as spacing. */
+  factor = 1,
+): number {
+  return columnBottom + (columnHeight ?? 56) + scaleSpacing(TEAM_FAB_GAP, factor);
 }

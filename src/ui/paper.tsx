@@ -187,17 +187,33 @@ export function Chip(props: ComponentProps<typeof PaperChip>) {
 // ---------------------------------------------------------------- SegmentedButtons
 
 type SegmentedProps = ComponentProps<typeof PaperSegmentedButtons>;
+/** A segment's drawn height at `factor`: Paper's 9 dp padding (as spacing) around a 20 dp line. */
+export function segmentHeight(factor: number): number {
+  return scaleSize(20, factor) + 2 * scaleSpacing(9, factor);
+}
+
 export function SegmentedButtons(props: SegmentedProps) {
   const k = useDisplayFactor();
-  if (k === 1) return <PaperSegmentedButtons {...props} />;
-  const buttons = props.buttons.map((b) => ({
+  // Drawn 38 dp tall at 100 % (less at Small): a vertical hitSlop takes each
+  // segment's touch area to 48 dp at every size (#760). A caller's wins.
+  const slop = hitSlopFor(segmentHeight(k));
+  // Paper spreads each button's props onto its SegmentedButtonItem, which takes
+  // hitSlop and labelMaxFontSizeMultiplier; the button type just omits them.
+  type Extra = { hitSlop?: unknown; labelMaxFontSizeMultiplier?: number };
+  const buttons = props.buttons.map((b: SegmentedProps['buttons'][number] & Extra) => ({
     ...b,
-    icon: scaledIconSource(b.icon, k),
-    // Paper pads the content 9 dp; the label's own margin takes up the rest.
-    labelStyle: [
-      { marginVertical: scaleSpacing(9, k) - 9 } satisfies TextStyle,
-      b.labelStyle,
-    ] as StyleProp<TextStyle>,
+    hitSlop: b.hitSlop ?? { top: slop, bottom: slop },
+    ...(k === 1
+      ? null
+      : {
+          icon: scaledIconSource(b.icon, k),
+          // Paper pads the content 9 dp; the label's own margin takes up the rest.
+          labelStyle: [
+            { marginVertical: scaleSpacing(9, k) - 9 } satisfies TextStyle,
+            b.labelStyle,
+          ] as StyleProp<TextStyle>,
+          labelMaxFontSizeMultiplier: osFontCap(k, b.labelMaxFontSizeMultiplier),
+        }),
   }));
   return <PaperSegmentedButtons {...({ ...props, buttons } as SegmentedProps)} />;
 }
