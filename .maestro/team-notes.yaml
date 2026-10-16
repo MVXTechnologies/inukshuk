@@ -246,7 +246,7 @@ appId: com.inukshuk.app
       id: 'team-note-card'
     timeout: 5000
 - tapOn: 'Close'
-# Draw's Text tool: one tap places a note (the composer opens there). Draw is
+# Draw's Text: one tap places a note (the composer opens there). Draw is
 # the chip under the team pill (#757), no longer in the panel.
 - tapOn:
     id: 'team-chip-draw'
@@ -254,8 +254,15 @@ appId: com.inukshuk.app
     visible:
       id: 'team-draw-toolbar'
     timeout: 5000
+# Text is Shape's third choice (Circle · Rectangle · Text, owner 2026-10-16).
 - tapOn:
-    id: 'team-draw-tool-text'
+    id: 'team-draw-tool-shape'
+- extendedWaitUntil:
+    visible:
+      id: 'team-draw-shape-text'
+    timeout: 3000
+- tapOn:
+    id: 'team-draw-shape-text'
 - extendedWaitUntil:
     visible:
       id: 'team-draw-text-hint'

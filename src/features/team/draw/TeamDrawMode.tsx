@@ -3,8 +3,8 @@
  * the main map.
  *
  * - A top bar (a live dot, "Drawing / Team sees it live"; Clear mine, with a
- *   5 s UNDO; Done) and a bottom tool bar of labelled buttons (#756):
- *   Freehand · Arrow · Shape · Text (#706) · Time · Undo. A tap on the selected Freehand or
+ *   5 s UNDO; Done) and a bottom tool bar of five labelled buttons (#756):
+ *   Freehand · Arrow · Shape · Time · Undo. A tap on the selected Freehand or
  *   Arrow opens its options; Shape opens the shape picker; Time the fade
  *   time (`DrawToolPanel`). The tab bar, the search (the team bar), the +
  *   menu and the SOS button step aside; Android Back closes a panel, then Done.
@@ -18,9 +18,11 @@
  *   Under 12 dp it is dropped; a second finger cancels it.
  * - A tap on my shape selects it; a long-press opens its menu (note, delete).
  *   An admin may do both on anyone's shape.
- * - The Text tool (#706) places a note: one tap on the map leaves drawing
- *   mode and opens the note composer there, in the drawing's colour and its
- *   Time fade (`noteFadeForDrawing`).
+ * - Text (#706), a choice of Shape's panel (Circle · Rectangle · Text; owner
+ *   2026-10-16), places a note: one tap on the map leaves drawing mode and
+ *   opens the note composer there, in the drawing's colour and its Time fade
+ *   (`noteFadeForDrawing`). While it is the choice, the Shape button shows
+ *   the Text glyph and label; Freehand, Arrow or a shape turns it off.
  */
 import type { Units } from '@core/format';
 import { DrawGesture, type GestureAction, type Touch } from '@core/teamdraw/gesture';
@@ -88,7 +90,7 @@ export const TOOLS: readonly { k: 'free' | 'arrow'; icon: string; label: string 
 ];
 /** The tool bar's labels grow with the font scale up to this (owner's cap, #756). */
 export const TOOL_LABEL_MAX_SCALE = 1.2;
-const isShape = (k: ShapeKind) => k === 'circle' || k === 'rect';
+const isShape = (k: ShapeKind): k is 'circle' | 'rect' => k === 'circle' || k === 'rect';
 const TOOL_ICON: Record<ShapeKind, string> = {
   free: 'draw',
   arrow: 'arrow-top-right',
@@ -238,13 +240,16 @@ function DrawModeBody({
     if (!open) setPanel(null);
   };
   // The Shape button's shape: the last one picked (the current tool when it is one).
-  const [shape, setShape] = useState<ShapeKind>(() => (isShape(tool) ? tool : 'circle'));
+  const [shape, setShape] = useState<'circle' | 'rect'>(() => (isShape(tool) ? tool : 'circle'));
   const [hint, setHint] = useState(hintNow);
   const [pts, setPts] = useState<readonly ScreenPt[]>([]);
   const [chip, setChip] = useState<string | null>(null);
   const [drawn, setDrawn] = useState<string[]>([]);
   /** The Text tool (#706): the next tap places a note. Not remembered between entries. */
   const [textTool, setTextTool] = useState(false);
+  // What the Shape button shows: Text while it is the choice, else the shape.
+  const shapeChoice =
+    SHAPE_CHOICES.find((c) => c.k === (textTool ? 'text' : shape)) ?? SHAPE_CHOICES[0]!;
 
   const gesture = useRef(new DrawGesture());
   const view = useRef<Viewport | null>(null);
@@ -675,12 +680,16 @@ function DrawModeBody({
           kind={panel}
           prefs={prefs}
           own={own}
-          shape={shape}
+          shape={textTool ? 'text' : shape}
           onShape={(k) => {
+            setPanel(null);
+            if (k === 'text') {
+              setTextTool(true);
+              return;
+            }
             setTextTool(false);
             setShape(k);
             useTeamDrawStore.getState().setTool(k);
-            setPanel(null);
           }}
           bottom={barBottom + BAR_H + 8}
           onChange={(next) => useTeamDrawStore.getState().setPrefs(next)}
@@ -732,28 +741,15 @@ function DrawModeBody({
           );
         })}
         <ToolButton
-          icon={SHAPE_CHOICES.find((c) => c.k === shape)?.icon ?? 'circle-outline'}
-          label="Shape"
-          on={isShape(tool) && !textTool}
+          icon={shapeChoice.icon}
+          // Text (#706) names itself on the button while it is the choice.
+          label={textTool ? shapeChoice.label : 'Shape'}
+          on={isShape(tool) || textTool}
           open={panel === 'shape'}
           onPress={() => setPanel((p) => (p === 'shape' ? null : 'shape'))}
           caret
-          a11y={`Shape, ${SHAPE_CHOICES.find((c) => c.k === shape)?.label ?? 'Circle'}`}
+          a11y={`Shape, ${shapeChoice.label}`}
           testID="team-draw-tool-shape"
-        />
-        {/* The Text tool (#706): the next tap places a note in this colour and fade. */}
-        <ToolButton
-          icon="format-text"
-          label="Text"
-          on={textTool}
-          open={false}
-          fresh
-          onPress={() => {
-            setPanel(null);
-            setTextTool((on) => !on);
-          }}
-          a11y="Text note"
-          testID="team-draw-tool-text"
         />
         <ToolButton
           icon="timer-sand"
@@ -795,7 +791,6 @@ function ToolButton({
   badge,
   disabled = false,
   divided = false,
-  fresh = false,
 }: {
   icon: string;
   label: string;
@@ -813,10 +808,7 @@ function ToolButton({
   disabled?: boolean;
   /** A hairline before it (Undo). */
   divided?: boolean;
-  /** A NEW tag on its corner (the Text tool, #706). */
-  fresh?: boolean;
 }) {
-  const t = useSchemeTokens();
   const ink = on ? drawChrome.onActive : open ? drawChrome.openInk : drawChrome.barInk;
   return (
     <Pressable
@@ -847,19 +839,6 @@ function ToolButton({
           </Text>
         </View>
       )}
-      {fresh && (
-        <View
-          style={[tagStyles.newTag, { backgroundColor: t.team.bubbleNew }]}
-          pointerEvents="none"
-        >
-          <Text
-            style={[tagStyles.newTagText, { color: t.team.bubbleNewInk }]}
-            allowFontScaling={false}
-          >
-            NEW
-          </Text>
-        </View>
-      )}
       <Text
         style={[styles.toolLabel, { color: ink }]}
         numberOfLines={1}
@@ -873,17 +852,6 @@ function ToolButton({
 }
 
 const BAR_H = 66;
-const tagStyles = StyleSheet.create({
-  newTag: {
-    position: 'absolute',
-    top: 2,
-    right: 4,
-    borderRadius: 6,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-  },
-  newTagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.4 },
-});
 /** The shape menu's height, about (its note field and buttons). */
 const MENU_H = 260;
 const CREDITS_GAP = 10;
@@ -965,10 +933,8 @@ const styles = StyleSheet.create({
     zIndex: 6,
   },
   hintText: { fontSize: 13, fontWeight: '700' },
-  // Six labelled buttons (#756 + the Text tool, #706), 6 dp from the edges.
-  // Each takes its label's width plus an equal share of the rest: six equal
-  // shares (55 dp at 360 dp) would cut "Freehand" (59 dp at the 1.2× cap);
-  // the labels' sum (231 dp) leaves each about 16 dp to spare.
+  // Five equal labelled buttons (#756): 6 dp from the edges, so at 360 dp
+  // each is 68 dp and "Freehand" fits at the 1.2× label cap.
   bar: {
     position: 'absolute',
     left: 6,
@@ -988,9 +954,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
   },
   tool: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: 'auto',
+    flex: 1,
     minWidth: 0,
     minHeight: 56,
     borderRadius: 16,

@@ -5,7 +5,8 @@
  *
  * - Freehand: colour, width, solid or dashed;
  * - Arrow: colour, width, the head and its size;
- * - Shape: the shape picker (Circle, Rectangle), then colour, width, dash;
+ * - Shape: the shape picker (Circle, Rectangle, and Text: a note, #706),
+ *   then colour, width, dash;
  * - Time: how long the next shapes stay (a 4 × 2 grid at full size, not
  *   seven options squeezed into one row).
  *
@@ -47,10 +48,19 @@ export function fadeBadge(ms: number | null): string {
 
 /** The panels: one per tool button that has options. */
 export type ToolPanel = 'free' | 'arrow' | 'shape' | 'time';
-/** The shapes the Shape button picks between. */
-export const SHAPE_CHOICES: readonly { k: ShapeKind; icon: string; label: string }[] = [
+/** What Shape's panel picks: a shape, or Text (a note on the map, #706). */
+export type ShapeChoice = Extract<ShapeKind, 'circle' | 'rect'> | 'text';
+/** The choices the Shape button picks between (owner 2026-10-16: Text is the third). */
+export const SHAPE_CHOICES: readonly {
+  k: ShapeChoice;
+  icon: string;
+  label: string;
+  /** A small "NEW" on its corner (a feature just added). */
+  tag?: string;
+}[] = [
   { k: 'circle', icon: 'circle-outline', label: 'Circle' },
   { k: 'rect', icon: 'square-outline', label: 'Rectangle' },
+  { k: 'text', icon: 'format-text', label: 'Text', tag: 'NEW' },
 ];
 const PANEL_TITLE: Record<ToolPanel, string> = {
   free: 'Freehand',
@@ -160,9 +170,9 @@ export function DrawToolPanel({
   prefs: DrawPrefs;
   /** My member colour's index ("yours"). */
   own: number;
-  /** The Shape button's current shape (the picker's selection). */
-  shape: ShapeKind;
-  onShape: (k: ShapeKind) => void;
+  /** The Shape button's current choice (the picker's selection). */
+  shape: ShapeChoice;
+  onShape: (k: ShapeChoice) => void;
   onChange: (p: DrawPrefs) => void;
   onClose: () => void;
   bottom: number;
@@ -311,7 +321,7 @@ export function DrawToolPanel({
         </View>
         {kind === 'shape' && (
           <View style={styles.shapes} accessibilityRole="radiogroup" accessibilityLabel="Shape">
-            {SHAPE_CHOICES.map(({ k, icon, label }) => {
+            {SHAPE_CHOICES.map(({ k, icon, label, tag }) => {
               const on = k === shape;
               return (
                 <Pressable
@@ -327,6 +337,19 @@ export function DrawToolPanel({
                   testID={`team-draw-shape-${k}`}
                 >
                   <Icon source={icon} size={26} color={ink(on)} />
+                  {tag !== undefined && (
+                    <View
+                      style={[styles.tag, { backgroundColor: t.team.bubbleNew }]}
+                      pointerEvents="none"
+                    >
+                      <Text
+                        style={[styles.tagText, { color: t.team.bubbleNewInk }]}
+                        allowFontScaling={false}
+                      >
+                        {tag}
+                      </Text>
+                    </View>
+                  )}
                   <Text
                     variant="labelLarge"
                     style={{ color: ink(on), fontWeight: '800' }}
@@ -469,6 +492,15 @@ const styles = StyleSheet.create({
     gap: 3,
     paddingHorizontal: 4,
   },
+  tag: {
+    position: 'absolute',
+    top: 4,
+    right: 6,
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  tagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.4 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   // Four a row (the 4 × 2 grid of mockup 756): a quarter less the gaps.
   cell: {

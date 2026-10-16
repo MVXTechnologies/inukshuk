@@ -300,7 +300,7 @@ describe('drawing mode', () => {
     return { ...m, r, canvas };
   }
 
-  it('shows its bars in both themes: six labelled tools, one row, and nothing when closed', async () => {
+  it('shows its bars in both themes: five labelled tools, one row, and nothing when closed', async () => {
     const closed = await render(
       wrap(<TeamDrawMode mapRef={{ current: null }} cameraRef={{ current: null }} focused />),
     );
@@ -310,14 +310,12 @@ describe('drawing mode', () => {
       const { r } = await open(dark);
       expect(screen.getByTestId('team-draw-done')).toBeTruthy();
       expect(screen.getByTestId('team-draw-clear')).toBeTruthy();
-      // #756 + #706: Freehand · Arrow · Shape · Text · Time · Undo on one row, each
-      // labelled. Six equal shares would cut "Freehand" at 360 dp (59 dp at the
-      // 1.2× cap in 55): each takes its label's width plus an equal share of the rest.
+      // #756: Freehand · Arrow · Shape · Time · Undo, equal shares of one row, each
+      // labelled (Text, #706, is a choice in Shape's panel: owner 2026-10-16).
       const ids = [
         'team-draw-tool-free',
         'team-draw-tool-arrow',
         'team-draw-tool-shape',
-        'team-draw-tool-text',
         'team-draw-time',
         'team-draw-undo',
       ];
@@ -328,7 +326,7 @@ describe('drawing mode', () => {
       const labels: string[] = [];
       for (const id of ids) {
         const flat = StyleSheet.flatten(screen.getByTestId(id).props.style);
-        expect(flat).toMatchObject({ flexGrow: 1, flexShrink: 1, flexBasis: 'auto', minWidth: 0 });
+        expect(flat).toMatchObject({ flex: 1, minWidth: 0 });
         expect(flat.minHeight).toBeGreaterThanOrEqual(48);
         const label = screen.getByTestId(`${id}-label`);
         // One line, never cut: grows with the font up to the owner's 1.2× cap.
@@ -337,7 +335,8 @@ describe('drawing mode', () => {
         expect(label.props.adjustsFontSizeToFit).toBeUndefined();
         labels.push(String(label.props.children));
       }
-      expect(labels).toEqual(['Freehand', 'Arrow', 'Shape', 'Text', 'Time', 'Undo']);
+      expect(labels).toEqual(['Freehand', 'Arrow', 'Shape', 'Time', 'Undo']);
+      expect(screen.queryByTestId('team-draw-tool-text')).toBeNull();
       // No Style button any more: its options live in each tool's panel.
       expect(screen.queryByTestId('team-draw-style-button')).toBeNull();
       // The top bar's title has the width (no pencil icon), its subtitle may wrap.
@@ -400,24 +399,44 @@ describe('drawing mode', () => {
     expect(useTeamDrawStore.getState().active).toBe(false);
   });
 
-  it('Text (#706) is a tool of the bar: a tap places a note in the drawing’s colour and fade', async () => {
+  it('Text (#706) is Shape’s third choice: a tap places a note in the drawing’s colour and fade', async () => {
     usePinDraft.getState().close();
     const { canvas } = await open();
-    // Picking it closes an open panel and takes the selection from Freehand.
-    await fireEvent.press(screen.getByTestId('team-draw-tool-free'));
-    expect(screen.getByTestId('team-draw-panel')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('team-draw-tool-text'));
+    const shapeBtn = () => screen.getByTestId('team-draw-tool-shape');
+    // Circle · Rectangle · Text, Text marked NEW.
+    await fireEvent.press(shapeBtn());
+    expect(screen.getByTestId('team-draw-panel-shape')).toBeTruthy();
+    expect(screen.getByTestId('team-draw-shape-circle')).toBeTruthy();
+    expect(screen.getByTestId('team-draw-shape-rect')).toBeTruthy();
+    expect(screen.getByTestId('team-draw-shape-text')).toHaveTextContent(/NEW/);
+    // Picking Text closes the panel; the Shape button shows the Text glyph and label.
+    await fireEvent.press(screen.getByTestId('team-draw-shape-text'));
     expect(screen.queryByTestId('team-draw-panel')).toBeNull();
-    expect(screen.getByTestId('team-draw-tool-text').props.accessibilityState.selected).toBe(true);
+    expect(shapeBtn().props.accessibilityState.selected).toBe(true);
     expect(screen.getByTestId('team-draw-tool-free').props.accessibilityState.selected).toBe(false);
-    expect(screen.getByTestId('team-draw-tool-text')).toHaveTextContent(/NEW/);
+    expect(screen.getByTestId('team-draw-tool-shape-label')).toHaveTextContent('Text');
+    expect(screen.getByLabelText('Shape, Text')).toBeTruthy();
     expect(screen.getByTestId('team-draw-text-hint')).toBeTruthy();
-    // A stroke tool takes the selection back.
+    // Reopened, the panel shows Text as the choice.
+    await fireEvent.press(shapeBtn());
+    expect(screen.getByTestId('team-draw-shape-text').props.accessibilityState.selected).toBe(true);
+    await fireEvent.press(screen.getByTestId('team-draw-panel-close'));
+    // A stroke tool turns it off; the button is Shape again, with the last shape.
     await fireEvent.press(screen.getByTestId('team-draw-tool-arrow'));
-    expect(screen.getByTestId('team-draw-tool-text').props.accessibilityState.selected).toBe(false);
+    expect(screen.getByTestId('team-draw-tool-shape-label')).toHaveTextContent('Shape');
+    expect(screen.getByLabelText('Shape, Circle')).toBeTruthy();
+    expect(screen.queryByTestId('team-draw-text-hint')).toBeNull();
+    // So does a shape.
+    await fireEvent.press(shapeBtn());
+    await fireEvent.press(screen.getByTestId('team-draw-shape-text'));
+    await fireEvent.press(shapeBtn());
+    await fireEvent.press(screen.getByTestId('team-draw-shape-rect'));
+    expect(useTeamDrawStore.getState().tool).toBe('rect');
+    expect(screen.getByTestId('team-draw-tool-shape-label')).toHaveTextContent('Shape');
     expect(screen.queryByTestId('team-draw-text-hint')).toBeNull();
     // Text again, then one tap on the map: drawing mode ends, the composer opens there.
-    await fireEvent.press(screen.getByTestId('team-draw-tool-text'));
+    await fireEvent.press(shapeBtn());
+    await fireEvent.press(screen.getByTestId('team-draw-shape-text'));
     await fireEvent(canvas, 'responderGrant', ev(touch(1, 200, 400)));
     await fireEvent(canvas, 'responderRelease', ev());
     await until(() => usePinDraft.getState().at !== null, 'the note composer');
