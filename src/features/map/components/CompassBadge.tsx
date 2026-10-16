@@ -116,7 +116,7 @@ export function CompassBadge({ onPress, mapBearing, followHeading = false }: Com
         pointerEvents="none"
         style={[styles.needle, { transform: [{ rotate: northRotate }] }]}
       >
-        <Svg width={NEEDLE_BOX} height={NEEDLE_BOX} viewBox="0 0 24 24">
+        <Svg width="100%" height="100%" viewBox="0 0 24 24">
           <Path d="M12 2.5 16.2 12H7.8Z" fill={tokens.map.compassNorth} />
           <Path d="M12 21.5 7.8 12h8.4Z" fill={tokens.map.compassSouth} />
         </Svg>

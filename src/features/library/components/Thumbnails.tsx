@@ -51,7 +51,7 @@ export const TrailThumbnail = memo(function TrailThumbnail({
           { backgroundColor: t.library.thumb, borderColor: t.library.thumbEdge },
         ]}
       >
-        <Svg width={THUMB_SIZE} height={THUMB_SIZE} viewBox="0 0 56 56">
+        <Svg width="100%" height="100%" viewBox="0 0 56 56">
           <Path d={contour} fill="none" stroke={t.library.thumbContour} strokeWidth={1} />
           {thumb ? (
             <>
@@ -106,7 +106,7 @@ export function MapThumbnail({ uri }: { uri: string | null | undefined }) {
         // `resize` makes Android decode at display size: the raster is 2048 px.
         <Image source={{ uri }} style={styles.raster} resizeMode="cover" resizeMethod="resize" />
       ) : (
-        <Svg width={THUMB_SIZE} height={THUMB_SIZE} viewBox="0 0 56 56">
+        <Svg width="100%" height="100%" viewBox="0 0 56 56">
           <Rect
             x={11}
             y={5}

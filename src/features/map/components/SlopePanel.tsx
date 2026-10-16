@@ -178,6 +178,12 @@ function wedge(c: number, r0: number, r1: number, a0: number, a1: number): strin
  */
 export function AspectRose({ mask, onChange }: { mask: number; onChange: (mask: number) => void }) {
   const styles = useScaledStyles(stylesSheet);
+  // #760: the rose is drawn in its 196-unit viewBox at the Display size; the
+  // touch targets are placed in the same scaled box.
+  const { sz } = useDisplayScale();
+  const f = sz(ROSE) / ROSE;
+  const petal = sz(44) / 2;
+  const hub = sz(52) / 2;
 
   const tokens = useSchemeTokens();
   const { accent, onAccent } = useSheetAccent();
@@ -188,7 +194,7 @@ export function AspectRose({ mask, onChange }: { mask: number; onChange: (mask: 
   const all = (mask & 0xff) === 0xff;
   return (
     <View style={styles.roseBox} accessibilityRole="none" accessibilityLabel="Aspect">
-      <Svg width={ROSE} height={ROSE}>
+      <Svg width="100%" height="100%" viewBox={`0 0 ${ROSE} ${ROSE}`}>
         {Array.from({ length: 72 }, (_, i) => {
           const a = (i / 72) * TAU;
           const big = i % 9 === 0;
@@ -261,7 +267,10 @@ export function AspectRose({ mask, onChange }: { mask: number; onChange: (mask: 
             accessibilityState={{ checked: on }}
             style={[
               styles.petalHit,
-              { left: C + LABEL_R * Math.sin(am) - 22, top: C - LABEL_R * Math.cos(am) - 22 },
+              {
+                left: (C + LABEL_R * Math.sin(am)) * f - petal,
+                top: (C - LABEL_R * Math.cos(am)) * f - petal,
+              },
             ]}
           />
         );
@@ -272,7 +281,7 @@ export function AspectRose({ mask, onChange }: { mask: number; onChange: (mask: 
         accessibilityRole="togglebutton"
         accessibilityLabel="All aspects"
         accessibilityState={{ checked: all }}
-        style={[styles.hubHit, { left: C - 26, top: C - 26 }]}
+        style={[styles.hubHit, { left: C * f - hub, top: C * f - hub }]}
       />
     </View>
   );
