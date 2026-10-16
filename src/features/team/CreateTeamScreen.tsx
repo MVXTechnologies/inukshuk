@@ -18,11 +18,14 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, HelperText, Icon, Switch, Text, TextInput } from 'react-native-paper';
+import { Button, HelperText, Icon, Switch, Text, TextInput } from '@ui/paper';
 
 import { ChoiceRow, SectionLabel, TeamScreenFrame } from './components';
+import { useScaledStyles } from '@ui/displayScale';
 
 export function CreateTeamScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const lastName = useTeamStore((s) => s.teams.find((x) => x.myName)?.myName ?? '');
@@ -153,7 +156,7 @@ export function CreateTeamScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   helper: { marginTop: -8, paddingHorizontal: 0 },
   flex: { flex: 1, minWidth: 0 },
   title: { fontWeight: '600' },

@@ -3,8 +3,9 @@ import { radius, space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { Icon, IconButton, Text, useTheme } from 'react-native-paper';
+import { Icon, IconButton, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScaledStyles } from '@ui/displayScale';
 
 export type PickerTab = 'coords' | 'heights';
 
@@ -36,6 +37,8 @@ export function SystemPicker({
   onPick,
   onClose,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const insets = useSafeAreaInsets();
@@ -170,6 +173,8 @@ function Row({
   onPress: () => void;
   testID: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   return (
@@ -199,7 +204,7 @@ function Row({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   scrim: { backgroundColor: 'rgba(20,24,28,0.45)' },
   sheet: {
     position: 'absolute',

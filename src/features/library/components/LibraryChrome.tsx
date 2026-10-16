@@ -6,9 +6,10 @@ import { palette, space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { ReactNode, Ref } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text, useTheme } from '@ui/paper';
 
 import { SelectCheck } from './LibraryRows';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The Library's chrome (revamp §5, boards `After-Library.html` and
@@ -38,6 +39,8 @@ function Chip({
   on: boolean;
   onPress: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -91,6 +94,8 @@ export function TypeFilterChips({
   extraValue?: string | null;
   onExtraChange?: (id: string) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   return (
     <View style={styles.chipBar}>
       <ScrollView
@@ -162,6 +167,8 @@ export function SectionHeader({
   /** A sub-folder's depth (#712): indented under its parent. */
   depth?: number;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   const lineColor =
@@ -267,6 +274,8 @@ export function LibraryEmptyState({
   onBrowseMaps: () => void;
   busy: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={styles.emptyWrap}>
@@ -326,7 +335,7 @@ export function LibraryEmptyState({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   chipBar: { flexDirection: 'row', alignItems: 'center', paddingRight: space.xs },
   chipScroll: { flexGrow: 1, flexShrink: 1 },
   chipRow: { paddingLeft: space.lg, paddingRight: space.sm, gap: space.sm, alignItems: 'center' },

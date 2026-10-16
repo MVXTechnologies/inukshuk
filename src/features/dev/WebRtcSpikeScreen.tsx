@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, ScrollView, StyleSheet } from 'react-native';
-import { Button, Text, useTheme } from 'react-native-paper';
+import { Button, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -9,6 +9,7 @@ import {
   type SpikeStep,
   type WebRtcModuleLike,
 } from './webrtcLoopback';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * react-native-webrtc, loaded on demand: importing it constructs the native
@@ -29,6 +30,8 @@ function loadWebRtc(): WebRtcModuleLike | null {
  * `RESULT: PASS` or `RESULT: FAIL`; the same text goes to the JS log.
  */
 export function WebRtcSpikeScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const [steps, setSteps] = useState<SpikeStep[]>([]);
@@ -112,6 +115,6 @@ export function WebRtcSpikeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   content: { padding: 16, gap: 12 },
 });

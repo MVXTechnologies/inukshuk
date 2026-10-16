@@ -6,7 +6,7 @@
  */
 import { teamService, useTeamStore } from '@state/teamStore';
 import { useRouter, type Href } from 'expo-router';
-import { List } from 'react-native-paper';
+import { List } from '@ui/paper';
 
 import { NavRow } from '../map/components/mapSheet';
 

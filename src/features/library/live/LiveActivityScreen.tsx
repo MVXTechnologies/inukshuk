@@ -6,10 +6,11 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, Snackbar, Text, useTheme } from 'react-native-paper';
+import { Icon, Snackbar, Text, useTheme } from '@ui/paper';
 
 import { LibrarySheet } from '../selection/LibrarySheet';
 import { liveService, refreshLive, useLiveFolders } from './useLive';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * A shared folder's Activity (#712, G10 mockup 7): what needs a look pinned
@@ -18,6 +19,8 @@ import { liveService, refreshLive, useLiveFolders } from './useLive';
  * mass-delete card (Restore all / Remove).
  */
 export function LiveActivityScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const { id } = useLocalSearchParams<{ id: string }>();
   const groupId = typeof id === 'string' ? id : '';
   const t = useSchemeTokens();
@@ -153,6 +156,8 @@ function Pill({
   primary?: boolean;
   onPress: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   return (
@@ -173,6 +178,8 @@ function Pill({
 }
 
 function Initials({ name }: { name: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const ini =
     name === 'You'
@@ -200,6 +207,8 @@ function Line({
   onAction?: () => void;
   who: (id: string) => string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const amber = t.status.pausedInk;
   return (
@@ -263,6 +272,8 @@ export function ConflictSheet({
   onClose: () => void;
   onUsed: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   const live = liveService();
@@ -353,7 +364,7 @@ export function ConflictSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   chips: { flexGrow: 0, marginBottom: space.sm },
   chip: {
     minHeight: 36,

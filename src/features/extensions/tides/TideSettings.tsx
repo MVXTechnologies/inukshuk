@@ -9,7 +9,7 @@
  */
 import { tideCoverageSummary } from '@core/tides/coverage';
 import { useState } from 'react';
-import { List, useTheme } from 'react-native-paper';
+import { List, useTheme } from '@ui/paper';
 
 import { TideLegend } from '../../map/components/TideLegend';
 import { tideImage } from '../../map/tideImages';

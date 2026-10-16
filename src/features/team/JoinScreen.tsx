@@ -28,11 +28,12 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Platform, StyleSheet, View } from 'react-native';
-import { Button, HelperText, Icon, Text, TextInput } from 'react-native-paper';
+import { Button, HelperText, Icon, Text, TextInput } from '@ui/paper';
 
 import { ActionBanner, Note, SectionLabel, TeamScreenFrame, useNow } from './components';
 import { JOIN_FAILURE } from './messages';
 import { loadQrScanner } from './QrScanner';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** The camera scanner, or null on a binary without the camera module. */
 const Scanner = loadQrScanner();
@@ -46,6 +47,8 @@ const SimulatedTeamToJoin: ComponentType<{ onLink: (link: string) => void }> | n
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 export function JoinScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const params = useLocalSearchParams<{ t?: string }>();
@@ -446,6 +449,8 @@ function Step({
   line?: string;
   testID?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={styles.step} testID={testID} accessibilityState={{ busy: state === 'busy' }}>
@@ -470,7 +475,7 @@ function Step({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   steps: { gap: 2, paddingVertical: space.sm },
   step: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 48 },

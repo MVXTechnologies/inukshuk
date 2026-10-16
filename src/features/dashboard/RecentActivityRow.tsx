@@ -7,9 +7,10 @@ import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 import { TrailThumbnail } from '../library/components/Thumbnails';
 import { useRouteThumbnail } from '../library/useRouteThumbnail';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * One Logbook "Recent" row (revamp `After-Logbook.html`, spec §5 trail row):
@@ -30,6 +31,8 @@ export const RecentActivityRow = memo(function RecentActivityRow({
   customCategories: readonly CustomCategory[];
   onPress: (id: string) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const category = findCategory(track.category, customCategories);
   const thumb = useRouteThumbnail(track);
@@ -57,7 +60,7 @@ export const RecentActivityRow = memo(function RecentActivityRow({
   );
 });
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   row: {
     minHeight: 76,
     paddingHorizontal: space.lg,

@@ -10,7 +10,8 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo, useCallback, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The trail page's route map (#467, board `Detail.dc.html`): the app's own
@@ -29,6 +30,8 @@ export const TrailRouteMap = memo(function TrailRouteMap({
   /** Room kept clear at the top (status bar + back button). */
   topInset: number;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   const tileUrl = useSettingsStore((s) => s.tileUrl);
@@ -137,4 +140,4 @@ export const TrailRouteMap = memo(function TrailRouteMap({
   );
 });
 
-const styles = StyleSheet.create({ fill: { flex: 1 } });
+const stylesSheet = StyleSheet.create({ fill: { flex: 1 } });

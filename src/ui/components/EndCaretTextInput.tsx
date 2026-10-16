@@ -1,5 +1,5 @@
 import { useState, type ComponentProps } from 'react';
-import { TextInput } from 'react-native-paper';
+import { TextInput } from '@ui/paper';
 
 type Props = ComponentProps<typeof TextInput> & { value: string };
 

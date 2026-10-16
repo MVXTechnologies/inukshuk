@@ -2,12 +2,13 @@ import type { MapBasemap } from '@state/mapStore';
 import { schemeTokens } from '@ui/tokens';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { FAB, Icon, type MD3Theme, Menu, useTheme } from 'react-native-paper';
+import { FAB, Icon, type MD3Theme, Menu, useTheme } from '@ui/paper';
 import {
   DisclaimerSnackbar,
   TerrainOverlayMenuRows,
   useSlopeDisclaimer,
 } from './components/terrainOverlayControls';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Right-edge control rail for the focused trail viewer: a layers FAB opening
@@ -45,6 +46,8 @@ interface Props {
 }
 
 export function TrailViewerRail({ top, basemap, onSelectBasemap }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   return (
     <View style={[styles.rail, { top }]} pointerEvents="box-none">
       {/* No 2D↔3D toggle any more (#480, owner call): the focused view is the
@@ -63,6 +66,8 @@ function TrailLayersMenu({
   basemap: MapBasemap;
   onSelect: (bm: MapBasemap) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const [open, setOpen] = useState(false);
 
@@ -105,6 +110,8 @@ function TrailLayersMenu({
  * be flipped in one visit.
  */
 function TrailOverlaysMenu() {
+  const styles = useScaledStyles(stylesSheet);
+
   const [open, setOpen] = useState(false);
   const { snackbar, onSlopeEnabled } = useSlopeDisclaimer();
 
@@ -131,7 +138,7 @@ function TrailOverlaysMenu() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   rail: { position: 'absolute', right: 12, gap: 10, alignItems: 'flex-end' },
   controlFab: { borderRadius: 24 },
 });

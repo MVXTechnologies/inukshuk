@@ -9,7 +9,8 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { Icon, IconButton, Switch, Text, TouchableRipple, useTheme } from 'react-native-paper';
+import { Icon, IconButton, Switch, Text, TouchableRipple, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The visual language of the map's rail sheets (#484): the "Map type" panel
@@ -51,6 +52,8 @@ export function MapSheet({
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const width = useSheetWidth();
   return (
@@ -77,6 +80,8 @@ export function SheetHeader({
   closeLabel: string;
   onClose: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <View style={styles.header}>
@@ -100,6 +105,8 @@ export function SheetHeader({
 }
 
 export function SectionTitle({ children }: { children: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <Text style={[styles.section, { color: tokens.inkMuted }]} accessibilityRole="header">
@@ -110,6 +117,8 @@ export function SectionTitle({ children }: { children: string }) {
 
 /** The icon + label + hint block every row starts with. */
 function RowText({ icon, label, hint }: { icon: string; label: string; hint?: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <>
@@ -159,6 +168,8 @@ export function SwitchRow({
   /** A control of its own before the switch (e.g. a filter button); takes its own taps. */
   accessory?: ReactNode;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const { accent } = useSheetAccent();
   // Where the switch starts in the row (measured: platform switches differ in
   // width), so the accessory can sit just before it.
@@ -237,6 +248,8 @@ export function SubPanelButton({
   badge?: number;
   testID?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent, onAccent } = useSheetAccent();
   return (
@@ -276,6 +289,8 @@ export function SubPanelHeader({
   onBack: () => void;
   right?: ReactNode;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <View style={styles.subHeader}>
@@ -304,6 +319,8 @@ export function SubPanelHeader({
 
 /** A quiet note at the end of a sub-panel: an icon and a line or two of text. */
 export function SheetNote({ icon, children }: { icon: string; children: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <View style={[styles.note, { backgroundColor: tokens.surfaceVariant }]}>
@@ -329,6 +346,8 @@ export function NavRow({
   disabled?: boolean;
   accessibilityLabel?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <TouchableRipple
@@ -392,6 +411,8 @@ export function ControlRow({
   disabled?: boolean;
   children: ReactNode;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   return (
     <View>
       <View style={[styles.row, styles.rowStatic, disabled && styles.dimmed]}>
@@ -418,6 +439,8 @@ export function Segmented<V extends string | number>({
   onSelect: (value: V) => void;
   disabled?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent, onAccent } = useSheetAccent();
   return (
@@ -458,7 +481,7 @@ export function Segmented<V extends string | number>({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   sheet: {
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,

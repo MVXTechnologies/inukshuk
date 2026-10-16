@@ -18,12 +18,15 @@ import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
-import { Button, Icon, Switch, Text, TextInput } from 'react-native-paper';
+import { Button, Icon, Switch, Text, TextInput } from '@ui/paper';
 
 import { LinkChip, MemberAvatar, SectionLabel, TeamScreenFrame } from './components';
 import { actionMessage } from './messages';
+import { useScaledStyles } from '@ui/displayScale';
 
 export function ConnectionScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const view = useTeamStore((s) => s.view);
   const net = useTeamStore((s) => s.net);
@@ -191,6 +194,8 @@ function Row({
   onPress?: () => void;
   testID?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const body = (
     <>
@@ -233,7 +238,7 @@ export function myAddressLine(port: number): string {
   return addr ? `this phone: ${addr}${port === MESH_DEFAULT_PORT ? '' : `:${port}`}` : '';
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   title: { fontWeight: '600' },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 52 },

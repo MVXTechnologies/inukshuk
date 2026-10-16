@@ -13,8 +13,9 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, HelperText, Text, TextInput } from 'react-native-paper';
+import { ActivityIndicator, HelperText, Text, TextInput } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * "I already donated" (#476, round 3). Honour system: an emailed code only
@@ -31,6 +32,8 @@ const START_FAILURE = {
 } as const;
 
 export function DonorVerifyScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const t = useSchemeTokens();
@@ -192,6 +195,8 @@ function PrimaryButton({
   busy: boolean;
   onPress: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -214,7 +219,7 @@ function PrimaryButton({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   header: {
     minHeight: 52,

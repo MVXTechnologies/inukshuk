@@ -8,11 +8,14 @@ import { canResolve } from '@core/teamui/pins';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { StyleSheet, View } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import { Button, Text } from '@ui/paper';
 
 import { MemberAvatar, SectionLabel } from './components';
+import { useScaledStyles } from '@ui/displayScale';
 
 export function ResolvedItems() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const view = useTeamStore((s) => s.view);
   const pins = useTeamStore((s) => s.pins);
@@ -86,7 +89,7 @@ export function ResolvedItems() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1, gap: 2 },
   group: { gap: 8 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 12 },

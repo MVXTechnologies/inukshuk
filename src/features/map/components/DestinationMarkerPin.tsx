@@ -1,6 +1,7 @@
 import { StyleSheet, View } from 'react-native';
-import { Icon } from 'react-native-paper';
+import { Icon } from '@ui/paper';
 import { weatherChrome as wc } from '../weather/weatherChrome';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The dropped destination pin (#97): a flag badge whose pointer tip sits on
@@ -16,6 +17,8 @@ import { weatherChrome as wc } from '../weather/weatherChrome';
  * hit-tests them itself (as it does the waypoint pins' symbol layer, #675).
  */
 export function DestinationMarkerPin() {
+  const styles = useScaledStyles(stylesSheet);
+
   return (
     <View style={styles.wrap} pointerEvents="none" accessible accessibilityLabel="Destination pin">
       <View style={styles.badge}>
@@ -27,7 +30,7 @@ export function DestinationMarkerPin() {
 }
 
 const BADGE = 32;
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   wrap: { alignItems: 'center' },
   badge: {
     width: BADGE,

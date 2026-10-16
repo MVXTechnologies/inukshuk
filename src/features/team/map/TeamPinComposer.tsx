@@ -10,10 +10,11 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Keyboard, StyleSheet, View } from 'react-native';
-import { Button, Text, TextInput } from 'react-native-paper';
+import { Button, Text, TextInput } from '@ui/paper';
 import { create } from 'zustand';
 
 import { sendTeamComment } from '../taskSend';
+import { useScaledStyles } from '@ui/displayScale';
 
 export const usePinDraft = create<{
   at: [number, number] | null;
@@ -26,6 +27,8 @@ export const usePinDraft = create<{
 }));
 
 export function TeamPinComposer({ onPinned }: { onPinned: (owner: string, id: string) => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const at = usePinDraft((s) => s.at);
   const close = usePinDraft((s) => s.close);
@@ -116,7 +119,7 @@ export function TeamPinComposer({ onPinned }: { onPinned: (owner: string, id: st
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: {
     borderRadius: 16,
     padding: 14,

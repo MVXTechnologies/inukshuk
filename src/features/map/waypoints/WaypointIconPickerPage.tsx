@@ -7,9 +7,10 @@ import type { WaypointIcon } from '@core/models';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { Icon, IconButton, Text } from 'react-native-paper';
+import { Icon, IconButton, Text } from '@ui/paper';
 
 import { ICON_TILE_HEIGHT, IconTile } from './IconTile';
+import { useScaledStyles } from '@ui/displayScale';
 
 const COLUMNS = 5;
 const HEADER_H = 34;
@@ -74,6 +75,8 @@ export function WaypointIconPickerPage({
   onBack,
   width,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const [query, setQuery] = useState('');
   const list = useRef<FlatList<Row>>(null);
@@ -148,7 +151,7 @@ export function WaypointIconPickerPage({
           ))}
         </View>
       ),
-    [tokens.inkMuted, value, tileW, onPick, favSet, onToggleFavorite],
+    [styles, tokens.inkMuted, value, tileW, onPick, favSet, onToggleFavorite],
   );
 
   return (
@@ -261,7 +264,7 @@ export function WaypointIconPickerPage({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   page: { flex: 1 },
   back: {
     flexDirection: 'row',

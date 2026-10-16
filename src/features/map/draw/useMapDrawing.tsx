@@ -55,7 +55,7 @@ import {
   type RefObject,
 } from 'react';
 import { BackHandler, Pressable, StyleSheet, View } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { useTheme } from '@ui/paper';
 
 import { AreaCard } from './AreaCard';
 import { AreaEditorSheet, type AreaDraft } from './AreaEditorSheet';
@@ -83,6 +83,7 @@ import { isLoopTipRetired, useDrawSession, type DrawTarget } from './useDrawSess
 import { useLegRouting } from './useLegRouting';
 import { ProfileStrip } from '../../common/components/ProfileStrip';
 import { computeRouteElevation, shownElevation, useRouteElevation } from './useRouteElevation';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The map's drawing tools, wired (#502 routes, #503 areas): the session, the
@@ -155,6 +156,8 @@ export function useMapDrawing({
   topInset,
   onBeforeStart,
 }: MapDrawingOptions): MapDrawing {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const draw = useDrawSession();
@@ -1014,7 +1017,7 @@ export function useMapDrawing({
   };
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 9 },
   cardDock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 7 },
 });

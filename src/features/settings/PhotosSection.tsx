@@ -17,7 +17,8 @@ import {
   Switch,
   Text,
   useTheme,
-} from 'react-native-paper';
+} from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Settings › Photos (#587, mockup 06): where trail photos show, the copies
@@ -25,6 +26,8 @@ import {
  * privacy promise leads: nothing is ever uploaded.
  */
 export function PhotosSection({ showSnack }: { showSnack: (message: string) => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const onMainMap = useSettingsStore((s) => s.photosOnMainMap);
   const appear = useSettingsStore((s) => s.photoCirclesAppear);
@@ -183,7 +186,7 @@ export function PhotosSection({ showSnack }: { showSnack: (message: string) => v
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   privacy: {
     flexDirection: 'row',
     alignItems: 'flex-start',

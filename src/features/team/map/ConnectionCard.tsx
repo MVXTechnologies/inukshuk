@@ -10,10 +10,11 @@ import { useTeamStore } from '@state/teamStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { LinkChip, MemberAvatar, useNow } from '../components';
 import { Card } from './TeamCards';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** This phone's internet line, from the team's room state. */
 export function internetLine(
@@ -28,6 +29,8 @@ export function internetLine(
 }
 
 export function ConnectionCard({ onClose }: { onClose: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const now = useNow(30_000);
@@ -138,6 +141,8 @@ function Row({
   tone: string;
   testID?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={styles.row} testID={testID}>
@@ -154,7 +159,7 @@ function Row({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   label: {
     fontSize: 11,

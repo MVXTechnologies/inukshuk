@@ -11,9 +11,10 @@ import {
   View,
   type GestureResponderHandlers,
 } from 'react-native';
-import { IconButton, Text } from 'react-native-paper';
+import { IconButton, Text } from '@ui/paper';
 
 import { TrailChart } from './TrailChart';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The trail view's pull-down sheet (#740, mockup 262 screen 1, option 1):
@@ -58,6 +59,8 @@ export function SheetGrabber({
   onFold: () => void;
   handlers: GestureResponderHandlers;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View {...handlers} style={[styles.grabRow, { backgroundColor: t.surface }]}>
@@ -104,6 +107,8 @@ export function TrailPeek({
   bottom,
   color,
 }: PeekProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Animated.View
@@ -170,7 +175,7 @@ export function TrailPeek({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   grabRow: { alignItems: 'center' },
   grabHit: { paddingVertical: 7, paddingHorizontal: 24 },
   grab: { width: 36, height: 4, borderRadius: 2 },

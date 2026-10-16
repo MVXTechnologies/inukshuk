@@ -20,7 +20,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { Icon, ProgressBar, Text } from 'react-native-paper';
+import { Icon, ProgressBar, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CoverageMap, coverageText } from './CoverageMap';
@@ -29,6 +29,7 @@ import { itemFacets, itemScaleDenominator } from './facetsAdapter';
 import { useCatalogDownloadFlow } from './useCatalogDownloadFlow';
 import { openExternalLink } from '@lib/openLink';
 import { useCreditLanguage } from '../useCreditLanguage';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * One map's detail page (#447, board `Detail.dc.html`): preview (the
@@ -55,6 +56,8 @@ function formatLabel(item: CatalogItem): string {
 }
 
 export function CatalogDetailScreen({ id }: { id: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -309,7 +312,7 @@ export function CatalogDetailScreen({ id }: { id: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   center: { textAlign: 'center' },
   missing: { alignItems: 'center', paddingTop: 64, paddingHorizontal: 24 },

@@ -6,7 +6,8 @@ import {
 } from '@core/convert/coordinateDisplay';
 import { useSettingsStore } from '@state/settingsStore';
 import { StyleSheet, View } from 'react-native';
-import { List, SegmentedButtons } from 'react-native-paper';
+import { List, SegmentedButtons } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** DD, DMS, DDM, UTM, MGRS: short labels that fit five segments at 360 dp. */
 const OPTIONS = COORDINATE_FORMATS.map((f) => ({
@@ -32,6 +33,8 @@ export function coordinateFormatDescription(fmt: CoordinateFormat): string {
  * degrees by default. The description shows a sample in the chosen format.
  */
 export function CoordinateFormatSetting() {
+  const styles = useScaledStyles(stylesSheet);
+
   const fmt = useSettingsStore((s) => s.coordinateFormat);
   const set = useSettingsStore((s) => s.set);
   return (
@@ -50,7 +53,7 @@ export function CoordinateFormatSetting() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // Same inset as the Units and Theme segments above and below it.
   segment: { paddingHorizontal: 16, paddingBottom: 8 },
 });

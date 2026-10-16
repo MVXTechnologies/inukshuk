@@ -5,8 +5,9 @@ import {
   type WeatherModelId,
 } from '@core/weather/weatherModels';
 import { StyleSheet, View } from 'react-native';
-import { Icon, Text, TouchableRipple } from 'react-native-paper';
+import { Icon, Text, TouchableRipple } from '@ui/paper';
 import { weatherChrome as wc } from './weatherChrome';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Forecast-model picker (weather UX M2, the Windy source-row idiom): a
@@ -45,6 +46,8 @@ export function WeatherModelSheet({
   onSelect: (id: WeatherModelId) => void;
   onCompare: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const resolved = effective ?? selected;
   const fallback = resolved !== selected;
   return (
@@ -96,7 +99,7 @@ export function WeatherModelSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   sheet: {
     alignSelf: 'flex-end',
     minWidth: 292,

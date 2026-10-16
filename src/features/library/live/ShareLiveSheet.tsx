@@ -8,10 +8,11 @@ import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text, TextInput, useTheme } from 'react-native-paper';
+import { Icon, Text, TextInput, useTheme } from '@ui/paper';
 import { cleanName } from '@core/teamui/system';
 
-import { LibrarySheet, SheetRow, sheetStyles } from '../selection/LibrarySheet';
+import { LibrarySheet, SheetRow, sheetStylesSheet } from '../selection/LibrarySheet';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** What Share live starts with: who the invite makes, and how long and for how many it works. */
 export interface ShareLiveChoice {
@@ -56,6 +57,10 @@ export function ShareLiveSheet({
   onStart: (choice: ShareLiveChoice) => void;
   onClose: () => void;
 }) {
+  const sheetStyles = useScaledStyles(sheetStylesSheet);
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   const [choice, setChoice] = useState<ShareLiveChoice>(DEFAULT_SHARE);
@@ -179,6 +184,8 @@ export function Chips<T extends string | number>({
   onChange: (v: T) => void;
   testIDPrefix: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   return (
@@ -209,7 +216,7 @@ export function Chips<T extends string | number>({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   label: {
     fontSize: 11,
     lineHeight: 14,

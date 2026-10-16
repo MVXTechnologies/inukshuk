@@ -7,11 +7,14 @@ import { onMapCount } from '@core/teamdraw/fade';
 import { useTeamStore, teamService } from '@state/teamStore';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet } from 'react-native';
-import { Button, List } from 'react-native-paper';
+import { Button, List } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 const drawNow = () => teamService()?.active?.draw.clock() ?? Date.now();
 
 export function TeamDrawingsRow() {
+  const styles = useScaledStyles(stylesSheet);
+
   const shapes = useTeamStore((s) => s.drawings);
   // The drawing clock (the replica's HLC), read again on new drawings and
   // when the next one fades out.
@@ -57,4 +60,4 @@ export function TeamDrawingsRow() {
   );
 }
 
-const styles = StyleSheet.create({ item: { paddingHorizontal: 0, marginHorizontal: -8 } });
+const stylesSheet = StyleSheet.create({ item: { paddingHorizontal: 0, marginHorizontal: -8 } });

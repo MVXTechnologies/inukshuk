@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { useTheme } from '@ui/paper';
 import Svg, { ClipPath, Defs, G, Path } from 'react-native-svg';
 
 import { useDisplayCondition } from '../displayCondition';

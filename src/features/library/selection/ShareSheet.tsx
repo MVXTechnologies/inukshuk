@@ -8,9 +8,10 @@ import {
 import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
-import { LibrarySheet, SheetRow, sheetStyles } from './LibrarySheet';
+import { LibrarySheet, SheetRow, sheetStylesSheet } from './LibrarySheet';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The Share sheet (#711): one choice in 2.6.1, "Send a copy", which says
@@ -62,6 +63,10 @@ export function ShareSheet({
   /** "Share live" (#712), for a folder or a single item. */
   live?: { label: string; detail: string; onPress: () => void };
 }) {
+  const sheetStyles = useScaledStyles(sheetStylesSheet);
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   if (plan === null) return null;
   const [what, meta] = sendCopyLines(plan, bytes);
@@ -145,7 +150,7 @@ export function ShareSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   files: { marginLeft: 82, marginRight: 20, gap: 2 },
   fileLine: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 18 },
   fileLabel: { flexShrink: 1, fontSize: 12.5, lineHeight: 18, fontWeight: '600' },

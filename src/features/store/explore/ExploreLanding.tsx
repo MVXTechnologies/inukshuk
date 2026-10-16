@@ -31,7 +31,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { ActivityIndicator, Text } from 'react-native-paper';
+import { ActivityIndicator, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -55,6 +55,7 @@ import { OrganisationMapsCta } from './OrganisationMapsCta';
 import { useLinkOutCollections } from './useLinkOutCollections';
 import { useCreditLanguage } from '../useCreditLanguage';
 import { openExternalLink } from '@lib/openLink';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The Explore tab's Discover landing (#447, board `Main.dc.html`):
@@ -162,6 +163,8 @@ export function ExploreLanding({
   index: CatalogIndex;
   items: readonly CatalogItem[];
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -402,7 +405,7 @@ export function ExploreLanding({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   carousel: { paddingHorizontal: space.lg, gap: space.md },
   popularStatus: {
     flexDirection: 'row',

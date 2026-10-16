@@ -2,10 +2,11 @@ import { LANE_CIRCLE, type LaneCircle } from '@core/photos/lane';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 
 import { photoLabel } from '../../photos/photoText';
 import { photoFileUri } from '../../photos/photoUri';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** The lane's height: room for the caught circle and its badge. */
 export const LANE_H = 46;
@@ -27,6 +28,8 @@ export function PhotoLane({
   caughtId: string | null;
   onOpen: (photoId: string) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={styles.lane} testID="photo-lane">
@@ -78,7 +81,7 @@ export function PhotoLane({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   lane: { height: LANE_H, marginBottom: 2 },
   circle: {
     position: 'absolute',

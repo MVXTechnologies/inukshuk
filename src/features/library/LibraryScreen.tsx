@@ -41,7 +41,7 @@ import {
   Snackbar,
   Text,
   useTheme,
-} from 'react-native-paper';
+} from '@ui/paper';
 import { countBySource, sourceLabel } from '@core/import/origin';
 import type { ActivitySourceId } from '@core/import/sources';
 import { countActiveFilters, filterTracks, type TrackFilter } from '@core/library/filterTracks';
@@ -101,6 +101,7 @@ import { useDragToFolder, type DragItem } from './useDragToFolder';
 import { SetCategoryDialog } from './SetCategoryDialog';
 import { TrackFilterDialog } from './TrackFilterDialog';
 import { useTrackElevationPreview } from './useTrackElevationPreview';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** Quiet time after a keystroke before the list re-filters. */
 const SEARCH_DEBOUNCE_MS = 200;
@@ -158,6 +159,8 @@ const DELETE_COPY: Record<DeleteTarget['kind'], { title: string; body: (name: st
  * over the list.
  */
 export function LibraryScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const isFocused = useIsFocused();
@@ -1695,7 +1698,7 @@ export function LibraryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   showMore: { alignSelf: 'center', marginVertical: space.md },
   title: { flex: 1, fontSize: 28, lineHeight: 34, fontWeight: '800', letterSpacing: -0.3 },

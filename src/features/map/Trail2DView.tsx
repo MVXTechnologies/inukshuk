@@ -23,7 +23,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { VECTOR_BASEMAP_ENABLED } from '@core/features/flags';
 import { vectorBasemapOption } from '@data/basemapTiles';
-import { useTheme } from 'react-native-paper';
+import { useTheme } from '@ui/paper';
 import { buildOsmStyle } from './mapStyle';
 import { toLngLatBounds } from './geojson';
 import { NoteNumberBadge } from './components/NoteNumberBadge';
@@ -37,6 +37,7 @@ import {
   notePinHitRadius,
   notePinKind,
 } from '@core/photos/notePins';
+import { useScaledStyles } from '@ui/displayScale';
 
 export function Trail2DView({
   points,
@@ -72,6 +73,8 @@ export function Trail2DView({
    */
   focus?: { latitude: number; longitude: number } | null;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tileUrl = useSettingsStore((s) => s.tileUrl);
   // Same platform-defaulted switch the main map obeys (#230) — a setting the
   // user turned off must not come back on the trail viewer's own 2D map.
@@ -376,4 +379,4 @@ export function Trail2DView({
 const TRAIL_LINES_ANCHOR = overlayAnchor('trailLines');
 const MARKERS_ANCHOR = overlayAnchor('markers');
 
-const styles = StyleSheet.create({ fill: { flex: 1 } });
+const stylesSheet = StyleSheet.create({ fill: { flex: 1 } });

@@ -34,13 +34,16 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { Button, Switch, Text } from 'react-native-paper';
+import { Button, Switch, Text } from '@ui/paper';
 
 import { ChoiceRow, Note, SectionLabel, TeamScreenFrame } from './components';
 import { actionMessage } from './messages';
 import { QrCode } from './QrCode';
+import { useScaledStyles } from '@ui/displayScale';
 
 export function InviteScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -209,7 +212,7 @@ export function InviteScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   center: { textAlign: 'center' },

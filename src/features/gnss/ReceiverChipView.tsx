@@ -2,7 +2,8 @@ import type { ChipIcon, ChipTone, ReceiverChip } from '@core/gnss/chip';
 import type { SchemeTokens } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 const ICONS: Record<ChipIcon, string> = {
   receiver: 'satellite-variant',
@@ -58,6 +59,8 @@ interface Props {
  * sheet.
  */
 export function ReceiverChipView({ chip, variant, onPress, testID }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const a11y = onPress ? `${chip.a11y}. Show receiver details` : chip.a11y;
   if (variant === 'surface') {
@@ -112,7 +115,7 @@ export function ReceiverChipView({ chip, variant, onPress, testID }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // The recording panel's chip metrics (RecordingPanel `chip`).
   surfaceChip: {
     height: 28,

@@ -2,9 +2,10 @@ import { itemCount, type MoveOption } from '@core/library/selection';
 import { tabularNums } from '@ui/fonts';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { StyleSheet, Text as RNText } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
-import { LibrarySheet, SheetDivider, SheetRow, sheetStyles } from './LibrarySheet';
+import { LibrarySheet, SheetDivider, SheetRow, sheetStylesSheet } from './LibrarySheet';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * "Move 5 items to…" (#711): New folder… first (it names a folder, then the
@@ -39,6 +40,10 @@ export function MoveToFolderSheet({
   onMove: (folderId: string | null) => void;
   onClose: () => void;
 }) {
+  const sheetStyles = useScaledStyles(sheetStylesSheet);
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <LibrarySheet
@@ -90,6 +95,6 @@ export function MoveToFolderSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   count: { fontSize: 13, lineHeight: 17, fontWeight: '700', ...tabularNums },
 });

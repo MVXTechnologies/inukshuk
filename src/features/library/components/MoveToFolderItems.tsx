@@ -1,5 +1,5 @@
 import type { Folder } from '@core/models';
-import { Divider, Menu } from 'react-native-paper';
+import { Divider, Menu } from '@ui/paper';
 
 /**
  * The "Move to folder" block shared by every ⋮ menu. It only appears once a

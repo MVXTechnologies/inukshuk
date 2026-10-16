@@ -2,7 +2,8 @@ import type { CalendarDayEntry } from '@core/dashboard/aggregate';
 import { findCategory, type CustomCategory } from '@core/library/categories';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Badge, Icon, IconButton, Text, useTheme } from 'react-native-paper';
+import { Badge, Icon, IconButton, Text, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The dashboard's month calendar: Monday-first grid where every day with an
@@ -37,6 +38,8 @@ export function MonthCalendar({
   canNext: boolean;
   onDayPress: (entry: CalendarDayEntry) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const byDay = useMemo(() => new Map(entries.map((e) => [e.day, e])), [entries]);
 
@@ -145,7 +148,7 @@ export function MonthCalendar({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: { borderRadius: 10, paddingBottom: 8, paddingTop: 2 },
   header: {
     flexDirection: 'row',

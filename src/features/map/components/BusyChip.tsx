@@ -13,9 +13,10 @@ import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from '@ui/paper';
 import { useBusyTasks } from '@state/busyTasksStore';
 import { useSheetAccent } from './mapSheet';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The tasks the chip may show now: each one only after it has run
@@ -38,6 +39,8 @@ export function useVisibleBusyTasks(): BusyTask[] {
 
 /** The small spinner of the chip and its rows (mockup: 14 px). */
 function Spinner() {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   return (
     <ActivityIndicator
@@ -61,6 +64,8 @@ function BusyPopover({
   anchor: { x: number; y: number } | null;
   onClose: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent } = useSheetAccent();
   // Placed from the TOP, its own measured height above the chip. Chip and
@@ -175,6 +180,8 @@ function BusyPopover({
  * collapse their flex columns on iOS.
  */
 export function BusyChip() {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const outline = useChromeOutline();
   const { accent, onAccent } = useSheetAccent();
@@ -227,7 +234,7 @@ export function BusyChip() {
 /** Popover's gap above the chip (room for its arrow). */
 const POP_GAP = 10;
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',

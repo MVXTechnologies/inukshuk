@@ -15,17 +15,20 @@ import { useOfflineStore } from '@state/offlineStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useState } from 'react';
 import { Linking, View } from 'react-native';
-import { List, Switch, Text, TouchableRipple, useTheme } from 'react-native-paper';
+import { List, Switch, Text, TouchableRipple, useTheme } from '@ui/paper';
 
 import { GeodeticLegend } from '../../map/components/GeodeticLegend';
 import { setExtensionOffline } from '../actions';
 import { refreshCompanions } from '../companions';
 import { ExtensionSettingsShell } from '../ExtensionSettingsShell';
-import { extensionRowStyles as styles } from '../rowStyles';
+import { extensionRowStylesSheet as stylesSheet } from '../rowStyles';
 import { useExtensionPrefs } from '../prefs';
 import { GEODETIC_ICON } from './icon';
+import { useScaledStyles } from '@ui/displayScale';
 
 export function GeodeticSettings() {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const theme = useTheme();
   const { offline } = useExtensionPrefs('geodetic');

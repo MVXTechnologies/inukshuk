@@ -14,10 +14,11 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Animated, Pressable, StyleSheet, View, type AccessibilityActionEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { StripField } from '../StripField';
 import { previewCaptions, previewValue } from './preview';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** How long a field is held before it lifts to be dragged, ms (a tap opens its settings). */
 export const DRAG_HOLD_MS = 300;
@@ -58,6 +59,8 @@ const ROW_ACTIONS = [
  * reader action (move left/right, to the row above/below, row up/down).
  */
 export function RowsEditor({ rows, data, ctx, onChange, onOpenField, onAdd }: RowsEditorProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const captions = previewCaptions(rows, data, ctx);
   // The measured views and their window rects: read only in gesture
@@ -255,7 +258,7 @@ export function RowsEditor({ rows, data, ctx, onChange, onOpenField, onAdd }: Ro
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',

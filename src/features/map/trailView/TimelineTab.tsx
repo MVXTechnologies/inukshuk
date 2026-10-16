@@ -8,8 +8,9 @@ import { formatDistance } from '@state/formatters';
 import { useMemo } from 'react';
 import { photoFileUri } from '../../photos/photoUri';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { Button, Icon, IconButton, Text, useTheme } from 'react-native-paper';
+import { Button, Icon, IconButton, Text, useTheme } from '@ui/paper';
 import { HoldButton } from '../components/HoldButton';
+import { useScaledStyles } from '@ui/displayScale';
 
 export interface TimelineItem {
   event: TimelineEvent;
@@ -79,6 +80,8 @@ export function TimelineTab({
   onOpenPhoto,
   onAddPhotos,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   // The outing's events and its photos (#587), merged in trail order.
@@ -263,7 +266,7 @@ export function TimelineTab({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   pad: { padding: 16 },
   addRow: { paddingHorizontal: 16, paddingBottom: 12, gap: 4, alignItems: 'flex-start' },
   addButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

@@ -3,8 +3,9 @@ import type { GeodeticMark } from '@core/geodetic/record';
 import { geodeticColors } from '@core/map/geodeticStyle';
 import { useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, IconButton, Surface, Text, useTheme } from 'react-native-paper';
+import { Button, IconButton, Surface, Text, useTheme } from '@ui/paper';
 import { geodeticImage } from '../geodeticImages';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   mark: GeodeticMark | null;
@@ -38,6 +39,8 @@ export function GeodeticPointCard({
   offline = false,
   floating = false,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const model = useMemo(() => (mark ? buildGeodeticCard(mark) : null), [mark]);
   // The line whose copy button shows a check (briefly, after a copy).
@@ -193,7 +196,7 @@ export function GeodeticPointCard({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: {
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,

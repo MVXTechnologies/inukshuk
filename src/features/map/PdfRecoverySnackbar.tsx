@@ -1,6 +1,6 @@
 import { useLibraryStore } from '@state/libraryStore';
 import { useRouter } from 'expo-router';
-import { Snackbar } from 'react-native-paper';
+import { Snackbar } from '@ui/paper';
 
 /** A recovered page is paused, never deleted; retry stays an explicit library action. */
 export function PdfRecoverySnackbar() {

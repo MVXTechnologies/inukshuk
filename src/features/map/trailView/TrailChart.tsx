@@ -3,8 +3,9 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Fragment, useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 import Svg, { Circle, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
+import { useScaledStyles } from '@ui/displayScale';
 
 export interface ChartBand {
   from: number;
@@ -100,6 +101,8 @@ export function TrailChart({
   bare = false,
   onWidth,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const [width, setWidth] = useState(0);
   const onLayout = (e: LayoutChangeEvent) => {
@@ -309,7 +312,7 @@ export function TrailChart({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: { borderRadius: 14, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 10, gap: 4 },
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   title: { fontSize: 13, fontWeight: '800' },

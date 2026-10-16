@@ -3,9 +3,10 @@ import { DEPTH_BAND_BREAKS_M, DEPTH_BANDS } from '@core/geo/depthChart';
 import { marineSourceCaption, type MarineSource } from '@core/geo/marineSources';
 import { useSettingsStore } from '@state/settingsStore';
 import { StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 
 import { weatherChrome as wc } from '../weather/weatherChrome';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Depth legend for marine chart mode (marine wave D §D2, source line added
@@ -30,6 +31,8 @@ export function MarineLegend({
   source: MarineSource | null;
   offline?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   // Depths are heights below the datum: they follow the elevation unit (#702).
   const units = useSettingsStore((s) => s.units);
   const unit = units.elevation;
@@ -71,7 +74,7 @@ export function MarineLegend({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   slab: {
     backgroundColor: wc.panel,
     borderRadius: 12,

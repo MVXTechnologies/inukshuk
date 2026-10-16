@@ -27,7 +27,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -43,6 +43,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The tip button, bottom-right of the Map only (#476). Opens Support
@@ -102,6 +103,8 @@ export function TipButton({
   hideRecheckMs?: number;
   clock?: () => number;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const router = useRouter();
   const t = useSchemeTokens();
   const enabled = useSettingsStore((s) => s.showTipJar);
@@ -327,6 +330,8 @@ function JarCoin({ t, p }: GlyphProps) {
 
 /** 2 · A gold coin drops onto three stones (p: 0 → 0.7 lands → 1 fades). */
 function CairnCoin({ t, p }: GlyphProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const coin = useAnimatedStyle(() => ({
     opacity: interpolate(p.value, [0, 0.05, 0.85, 1], [0, 1, 1, 0]),
     transform: [{ translateY: interpolate(p.value, [0, 0.7, 1], [-14, 3, 3]) }],
@@ -371,6 +376,8 @@ function StoneHeart({ t, p }: GlyphProps) {
  * eyes appear, blink, then close into happy arcs with a small smile.
  */
 function CoffeeSteam({ t, p, f, faceOn }: GlyphProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const ink = t.support.onAccent;
   return (
     <View style={styles.glyphBox}>
@@ -415,6 +422,8 @@ function SmokePuff({
   index: number;
   ink: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const [from, to] = window;
   const side = index === 0 ? -1 : 1;
   const style = useAnimatedStyle(() => {
@@ -446,6 +455,8 @@ function SmokePuff({
 
 /** The heart that rises out of the mug after the puffs, then fades. */
 function RisingHeart({ p, ink }: { p: SharedValue<number>; ink: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const [from, to] = COFFEE_PHASES.heart;
   const style = useAnimatedStyle(() => {
     const c = p.value;
@@ -480,6 +491,8 @@ function RisingHeart({ p, ink }: { p: SharedValue<number>; ink: string }) {
 
 /** The mascot face on the mug: eyes in, one blink, then happy arcs and a smile. */
 function MugFace({ f, on, ink }: { f: SharedValue<number>; on: SharedValue<number>; ink: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const { eyesIn, blink, happy } = MASCOT_FACE_PHASES;
   const eyes = useAnimatedStyle(() => ({
     opacity:
@@ -530,6 +543,8 @@ function MugFace({ f, on, ink }: { f: SharedValue<number>; on: SharedValue<numbe
 
 /** 5 · The inukshuk with a heart; a soft ring pulses out (p: 0 → 1). */
 function InukshukHeart({ t, p }: GlyphProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const ring = useAnimatedStyle(() => ({
     opacity: interpolate(p.value, [0, 0.01, 1], [0, 0.55, 0]),
     transform: [{ scale: interpolate(p.value, [0, 1], [1, 1.6]) }],
@@ -567,7 +582,7 @@ const LOOKS: Record<
   inukshukHeart: { background: (t) => t.surface, Glyph: InukshukHeart },
 };
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   button: {
     width: target.min,

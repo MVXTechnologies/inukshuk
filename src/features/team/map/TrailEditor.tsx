@@ -15,10 +15,11 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { Icon, IconButton, Text, TextInput } from 'react-native-paper';
+import { Icon, IconButton, Text, TextInput } from '@ui/paper';
 import { create } from 'zustand';
 
 import { actionMessage } from '../messages';
+import { useScaledStyles } from '@ui/displayScale';
 
 type Ref = { owner: string; id: string };
 type Undo =
@@ -145,6 +146,8 @@ function undoLast(): void {
 
 /** The editing toolbar (compact, bottom). */
 export function TrailEditBar({ style }: { style: StyleProp<ViewStyle> }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const st = useTrailEdit();
   const trails = useTeamStore((s) => s.teamTrails);
@@ -258,7 +261,7 @@ export function TrailEditBar({ style }: { style: StyleProp<ViewStyle> }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   card: {

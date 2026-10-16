@@ -11,10 +11,11 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useCallback, useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ProfileStrip } from '../../common/components/ProfileStrip';
 import { StatTiles } from '../trailView/StatTiles';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   track: TrackSummary;
@@ -56,6 +57,8 @@ export function TrailInspectPanel({
   onFollow,
   onLayout,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const insets = useSafeAreaInsets();
   const t = useSchemeTokens();
 
@@ -139,6 +142,8 @@ function HeaderButton({
   label: string;
   onPress: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -153,7 +158,7 @@ function HeaderButton({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // The drawing panel's sheet (DrawPanels `panel`): same radius, padding, shadow.
   panel: {
     position: 'absolute',

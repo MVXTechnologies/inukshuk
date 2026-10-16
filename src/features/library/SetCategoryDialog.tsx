@@ -1,7 +1,7 @@
 import { allCategories } from '@core/library/categories';
 import { useLibraryStore } from '@state/libraryStore';
 import { ScrollView } from 'react-native';
-import { Dialog, List, Portal, useTheme } from 'react-native-paper';
+import { Dialog, List, Portal, useTheme } from '@ui/paper';
 
 interface Props {
   /** Id of the trail being categorized, or null when closed. */

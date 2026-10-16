@@ -20,13 +20,14 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, SectionList, StyleSheet, View } from 'react-native';
-import { Button, Menu, Text } from 'react-native-paper';
+import { Button, Menu, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FilterChip } from '../explore/ExploreParts';
 import { exploreTrailHref } from '../explore/exploreRoutes';
 import { LongTrailRow } from './LongTrailParts';
 import { useRankedTrails } from './useLongTrails';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Every long-distance trail (#467, board `List.dc.html`): activity chips
@@ -40,6 +41,8 @@ type Section = TrailGroup & { data: RankedTrail[] };
 const keyExtractor = (r: RankedTrail) => r.trail.id;
 
 export function LongTrailsListScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -83,7 +86,7 @@ export function LongTrailsListScreen() {
         {section.title}
       </Text>
     ),
-    [t],
+    [styles, t],
   );
 
   const header = (
@@ -183,7 +186,7 @@ export function LongTrailsListScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   center: { textAlign: 'center' },
   empty: { alignItems: 'center', gap: 12, paddingTop: 64, paddingHorizontal: 24 },

@@ -4,7 +4,8 @@ import { tabularNums } from '@ui/fonts';
 import { space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, ScrollView, StyleSheet } from 'react-native';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * "Activities by type" (revamp `After-Logbook.html`): Hike · Run · Ski · Bike
@@ -23,6 +24,8 @@ export function ActivityTypeChips({
   selectedId: string | null;
   onSelect: (categoryId: string | null) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   return (
@@ -68,7 +71,7 @@ export function ActivityTypeChips({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   scroller: { marginHorizontal: -space.lg, flexGrow: 0 },
   row: { paddingHorizontal: space.lg, paddingVertical: target.compactHitSlop, gap: 6 },
   chip: {

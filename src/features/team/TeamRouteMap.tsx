@@ -15,8 +15,9 @@ import * as storage from '@data/storage';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useMemo, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { useTheme } from '@ui/paper';
 import Svg, { Circle, Polyline } from 'react-native-svg';
+import { useScaledStyles } from '@ui/displayScale';
 
 const TOPO =
   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}';
@@ -37,6 +38,8 @@ export function TeamRouteMap({
   width: number;
   height: number;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const dark = useTheme().dark;
   // Laid out at twice the size and drawn at half: crisp 256 px tiles on 2–3× screens.
@@ -163,7 +166,7 @@ export function TeamRouteMap({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   box: { borderRadius: 14, overflow: 'hidden' },
   tile: { position: 'absolute', width: 256, height: 256 },
 });

@@ -18,12 +18,13 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { IconButton, Text, TextInput } from 'react-native-paper';
+import { IconButton, Text, TextInput } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChatThreads } from './ChatThreads';
 import { MemberAvatar } from './components';
 import { sendTeamComment } from './taskSend';
+import { useScaledStyles } from '@ui/displayScale';
 
 function time(at: number): string {
   const d = new Date(at);
@@ -43,6 +44,8 @@ function Bubble({
   initials: string;
   onResolve?: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const tag = m.priority === 2 ? 'URGENT' : m.priority === 1 ? 'IMPORTANT' : null;
   return (
@@ -89,6 +92,8 @@ function Bubble({
 }
 
 export function ChatScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -320,7 +325,7 @@ export function ChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   header: {
     minHeight: 52,

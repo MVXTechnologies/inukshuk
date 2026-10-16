@@ -6,10 +6,11 @@ import { formatDistance } from '@state/formatters';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from '@ui/paper';
 import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg';
 
 import { StatsCard } from './StatsControls';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The Statistics bar chart, following the period: day by day (Week), week by
@@ -53,6 +54,8 @@ export function StatsBarChart({
   period: StatsPeriod;
   units: Units;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const [width, setWidth] = useState(0);
@@ -156,7 +159,7 @@ export function StatsBarChart({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   title: { fontSize: 15, lineHeight: 20, fontWeight: '800' },
   plot: { height: CHART_H },
   unit: { fontSize: 11, lineHeight: 14, textAlign: 'right' },

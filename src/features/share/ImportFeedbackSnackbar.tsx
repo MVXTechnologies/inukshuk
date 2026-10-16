@@ -1,5 +1,5 @@
 import { useImportFeedbackStore } from '@state/importFeedbackStore';
-import { Snackbar } from 'react-native-paper';
+import { Snackbar } from '@ui/paper';
 
 /** Root-level snackbar for "Imported X" feedback from the OS open-with flow. */
 export function ImportFeedbackSnackbar() {

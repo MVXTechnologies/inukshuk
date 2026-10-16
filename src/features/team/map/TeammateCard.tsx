@@ -16,10 +16,11 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, IconButton, Text } from 'react-native-paper';
+import { Icon, IconButton, Text } from '@ui/paper';
 
 import { BandAvatar } from '../bar/parts';
 import { useTeamMapFocus } from './teamMapFocus';
+import { useScaledStyles } from '@ui/displayScale';
 
 export function TeammateCard({
   member,
@@ -34,6 +35,8 @@ export function TeammateCard({
   onNavigate: (latitude: number, longitude: number) => void;
   onClose: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const units = useSettingsStore((s) => s.units);
   const router = useRouter();
@@ -187,6 +190,8 @@ export function TeammateCard({
 }
 
 function Fact({ label, value, divider }: { label: string; value: string; divider?: boolean }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View
@@ -213,6 +218,8 @@ function Act({
   testID: string;
   primary?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const bg = primary ? t.support.accent : t.surfaceVariant;
   const ink = primary ? t.support.onAccent : t.ink;
@@ -230,7 +237,7 @@ function Act({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   card: {
     borderRadius: 24,

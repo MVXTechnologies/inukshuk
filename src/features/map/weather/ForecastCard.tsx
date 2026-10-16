@@ -6,9 +6,10 @@ import { TIDE_MARINE_MAX_M, TIDE_NEARBY_MAX_M } from '@core/weather/tides';
 import { formatDistance, formatTimestamp } from '@state/formatters';
 import { useSettingsStore } from '@state/settingsStore';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { IconButton, Surface, Text } from 'react-native-paper';
+import { IconButton, Surface, Text } from '@ui/paper';
 import { useForecast } from './useForecast';
 import { useTides } from './useTides';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Forecast tap-card (meteo M1): long-pressing the map with a weather layer
@@ -38,6 +39,8 @@ export function ForecastCard({
   /** M2: opens the model-comparison table for this point (forecast layers). */
   onCompareModels?: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const { status, forecast, layerValue } = useForecast(at, layer);
   const tides = useTides(at, marineActive ? TIDE_MARINE_MAX_M : TIDE_NEARBY_MAX_M);
   const units = useSettingsStore((s) => s.units);
@@ -166,7 +169,7 @@ export function ForecastCard({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: {
     position: 'absolute',
     left: 0,

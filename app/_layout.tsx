@@ -36,7 +36,7 @@ import { useEffect } from 'react';
 import { AppState, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
-import { PaperProvider } from 'react-native-paper';
+import { PaperProvider } from '@ui/paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { installTileHostAlias } from '@data/tileHostAlias';
 import { clearPhotoInbox } from '@data/photos/inbox';

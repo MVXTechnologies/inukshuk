@@ -2,7 +2,8 @@ import { palette, target } from '@ui/tokens';
 import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { Icon } from 'react-native-paper';
+import { Icon } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * A map-chrome button (revamp `Main.html`): 48 dp — the glove-sized minimum
@@ -27,6 +28,8 @@ export function MapButton({
   shape?: 'round' | 'square';
   style?: StyleProp<ViewStyle>;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const outline = useChromeOutline();
   const fill = selected ? tokens.map.chromeActive : tokens.map.chrome;
@@ -56,7 +59,7 @@ export function MapButton({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   button: {
     width: target.min,
     height: target.min,

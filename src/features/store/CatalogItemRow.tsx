@@ -7,11 +7,12 @@ import { tabularNums } from '@ui/fonts';
 import { radius, space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Button, Icon, IconButton, ProgressBar, Text, useTheme } from 'react-native-paper';
+import { Button, Icon, IconButton, ProgressBar, Text, useTheme } from '@ui/paper';
 
 import { LocatorThumb } from './LocatorThumb';
 import { openExternalLink } from '@lib/openLink';
 import { useCreditLanguage } from './useCreditLanguage';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * One Maps-tab row (revamp `After-Maps.html`): a 56 dp locator thumbnail,
@@ -72,6 +73,8 @@ export function CatalogItemRow({
   onOpen,
   onCancel,
 }: CatalogItemRowProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const muted = tokens.inkMuted;
@@ -226,7 +229,7 @@ export function CatalogItemRow({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   row: {
     minHeight: 76,
     paddingHorizontal: space.lg,

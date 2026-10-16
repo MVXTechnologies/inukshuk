@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 
 import { StripField } from './StripField';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** The long-press that opens the editor, ms (a tap keeps a field's own action). */
 export const EDIT_HOLD_MS = 450;
@@ -72,6 +73,8 @@ export const InfoStripView = memo(function InfoStripView({
   onOpenTarget,
   onLayout,
 }: InfoStripViewProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const top = dock === 'top';
   // Each target named once in the strip (`@core/infoStrip/subject`).
@@ -182,7 +185,7 @@ export const InfoStripView = memo(function InfoStripView({
   );
 });
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   strip: { paddingHorizontal: 12 },
   // The hairline on top, 3 dp in, 3 dp under the last row: STRIP_PAD_DP in all.
   bottom: {

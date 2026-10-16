@@ -5,11 +5,12 @@ import type { StripSubject, StripValue } from '@core/infoStrip/types';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo, useMemo, useState } from 'react';
 import { PixelRatio, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { CursorGlyph } from '../components/CenterCursor';
 import { WaypointPinView } from '../waypoints/WaypointPinView';
 import { glyphIcon } from './glyphs';
+import { useScaledStyles } from '@ui/displayScale';
 
 export interface StripFieldProps {
   value: StripValue;
@@ -57,6 +58,8 @@ export const StripField = memo(function StripField({
   testID,
   textTestID,
 }: StripFieldProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   // The cell's width, once laid out (one extra render, then only on resize).
   const [width, setWidth] = useState<number | null>(null);
@@ -141,6 +144,8 @@ export const StripField = memo(function StripField({
  * Decorative: the cell's label names it.
  */
 function SubjectIcon({ subject, color }: { subject: StripSubject; color: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const kind =
     subject.cursor !== undefined ? 'cursor' : subject.pin !== undefined ? 'pin' : 'glyph';
   return (
@@ -182,7 +187,7 @@ function propsEqual(a: StripFieldProps, b: StripFieldProps): boolean {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   field: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 0, flexShrink: 1 },
   tag: { fontSize: 10.5, fontWeight: '700', letterSpacing: 0.3 },
   value: {

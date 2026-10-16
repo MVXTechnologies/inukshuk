@@ -40,11 +40,12 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Icon, ProgressBar, Text, useTheme } from 'react-native-paper';
+import { Icon, ProgressBar, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PillButton } from '../import/importParts';
 import { photoResizer } from './photoResizer';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The Add-photos sheet (#587, mockup 4b, DESIGN §4.2). Opening it opens the
@@ -100,6 +101,8 @@ function AddPhotosSession({
   onClose,
   onDone,
 }: AddPhotosSheetProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const t = useSchemeTokens();
   const insets = useSafeAreaInsets();
@@ -298,6 +301,8 @@ function Review({
   onCancel: () => void;
   onAdd: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   const { plan, index } = prepared;
@@ -510,6 +515,8 @@ function StepButton({
   onPress: () => void;
   disabled: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -531,7 +538,7 @@ function StepButton({
 const THUMB = 52;
 const THUMB_GAP = 6;
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     borderTopLeftRadius: 22,

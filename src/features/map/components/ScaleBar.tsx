@@ -1,9 +1,10 @@
 import { scaleBar } from '@core/geo/scaleBar';
 import { useSettingsStore } from '@state/settingsStore';
 import { StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The map scale bar, bottom-left (owner call, 2026-09-08; #97 had originally
@@ -32,6 +33,8 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 const MAX_BAR_PX = 104;
 
 export function ScaleBar({ zoom, latitude }: { zoom: number; latitude: number }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const outline = useChromeOutline();
   // Subscribed, not read per call: the bar must re-label the moment the unit
@@ -54,7 +57,7 @@ export function ScaleBar({ zoom, latitude }: { zoom: number; latitude: number })
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   pill: {
     borderRadius: 8,
     paddingHorizontal: 8,

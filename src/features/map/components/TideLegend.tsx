@@ -1,7 +1,8 @@
 import { Image, StyleSheet, View } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from '@ui/paper';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { tideImage } from '../tideImages';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Under the overlays menu's "Tide stations" switch: the two station symbols
@@ -10,6 +11,8 @@ import { tideImage } from '../tideImages';
  * decision: CHS stays live-only).
  */
 export function TideLegend({ disabled = false }: { disabled?: boolean }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const theme = useTheme().dark ? 'dark' : 'light';
   const color = disabled ? tokens.inkMuted : tokens.ink;
@@ -41,7 +44,7 @@ export function TideLegend({ disabled = false }: { disabled?: boolean }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   wrap: { gap: 2 },
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 12, rowGap: 4 },
   entry: { flexDirection: 'row', alignItems: 'center', gap: 3 },

@@ -4,9 +4,10 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import { RegionPreviewThumb } from '../RegionPreviewThumb';
 import { SubPanelButton, useSheetAccent, useSheetWidth } from './mapSheet';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The base-map choices (#484, owner's option A). Relief was retired as a base
@@ -57,6 +58,8 @@ export function usePreviewBbox(): BoundingBox | null {
  * (never a bare 'Map', which the tab bar's Map tab already owns).
  */
 export function BaseMapCards({ onOpenSatellite }: { onOpenSatellite: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent, onAccent } = useSheetAccent();
   const basemap = useMapStore((s) => s.basemap);
@@ -119,7 +122,7 @@ export function BaseMapCards({ onOpenSatellite }: { onOpenSatellite: () => void 
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   cards: {
     flexDirection: 'row',
     gap: CARD_GAP,

@@ -2,10 +2,11 @@ import { palette, space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { IconButton, Text, useTheme } from 'react-native-paper';
+import { IconButton, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useScreenSheet } from '../../common/useScreenSheet';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The Library's bottom sheets (#711: Move to…, Share): a plain themed View
@@ -31,6 +32,8 @@ export function LibrarySheet({
   testID?: string;
   children: ReactNode;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   useScreenSheet(visible && focused, onClose);
   const t = useSchemeTokens();
   const theme = useTheme();
@@ -110,6 +113,8 @@ export function SheetRow({
   accessibilityLabel?: string;
   testID?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   return (
@@ -148,6 +153,8 @@ export function SheetRow({
 }
 
 export function SheetDivider() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return <View style={[styles.divider, { backgroundColor: t.outlineVariant }]} />;
 }
@@ -155,11 +162,11 @@ export function SheetDivider() {
 const SCRIM_LIGHT = 'rgba(20,24,28,0.40)';
 const SCRIM_DARK = 'rgba(0,0,0,0.55)';
 
-export const sheetStyles = StyleSheet.create({
+export const sheetStylesSheet = StyleSheet.create({
   detail: { fontSize: 12.5, lineHeight: 17, fontWeight: '600' },
 });
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   scrim: { ...StyleSheet.absoluteFill },
   sheet: {
     position: 'absolute',

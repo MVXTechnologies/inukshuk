@@ -1,7 +1,8 @@
 import { TRAIL_VIEW_TAB_LABELS, type TrailViewTab } from '@core/library/trailViewTabs';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   tabs: readonly TrailViewTab[];
@@ -11,6 +12,8 @@ interface Props {
 
 /** Overview · Timeline · Splits · Notes — an underlined tab row (board C). */
 export function TrailTabBar({ tabs, active, onChange }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View
@@ -40,7 +43,7 @@ export function TrailTabBar({ tabs, active, onChange }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   row: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth },
   tab: {
     flex: 1,

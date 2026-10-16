@@ -16,15 +16,18 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
-import { Button, IconButton, List, Text } from 'react-native-paper';
+import { Button, IconButton, List, Text } from '@ui/paper';
 
 import { ChoiceRow, Note, SectionLabel, TeamScreenFrame } from './components';
 import { actionMessage } from './messages';
 import { shareTrailPhotos } from './shareTrailPhotos';
+import { useScaledStyles } from '@ui/displayScale';
 
 const km = (m: number) => formatDistance(m, { style: 'tenths' });
 
 export function ShareScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const formatCoords = useCoordinateFormatter();
   const view = useTeamStore((s) => s.view);
@@ -213,7 +216,7 @@ export function ShareScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   item: { paddingHorizontal: 0 },

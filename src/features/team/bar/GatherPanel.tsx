@@ -15,10 +15,11 @@ import { useSettingsStore } from '@state/settingsStore';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 
 import { MemberAvatar } from '../components';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** The ETA list scrolls past this height (a big team), dp. */
 const ETAS_MAX_H = 188;
@@ -33,6 +34,8 @@ export function GatherPanel({
   /** Go: navigate to the gather (the panel closes). */
   onGo: (latitude: number, longitude: number) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const units = useSettingsStore((s) => s.units);
   const isAdmin = useTeamStore((s) => s.view?.isAdmin === true);
@@ -158,7 +161,7 @@ export function GatherPanel({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   box: { marginHorizontal: 12, marginBottom: 10, borderRadius: 16, padding: 10, paddingBottom: 4 },
   head: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 40 },

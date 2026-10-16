@@ -41,6 +41,7 @@ import Svg, {
 } from 'react-native-svg';
 import { subscribeHeadingMotion } from '../headingMotion';
 import { weatherChrome } from '../weather/weatherChrome';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** The tape's height (owner 2026-10-13: a linear compass, ~44 dp). */
 export const NAV_COMPASS_H = 44;
@@ -109,6 +110,8 @@ export const NavCompass = memo(function NavCompass({
   detail,
   status,
 }: NavCompassProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const [width, setWidth] = useState(0);
   const [compassDeg, setCompassDeg] = useState<number | null>(null);
@@ -415,7 +418,7 @@ function TrailBar({ x, testID }: { x: number; testID: string | undefined }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   slab: {
     height: NAV_COMPASS_H,
     borderRadius: NAV_COMPASS_H / 2,

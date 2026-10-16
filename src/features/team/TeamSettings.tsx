@@ -10,7 +10,7 @@ import { selectChatUnread, useTeamStore } from '@state/teamStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
-import { List, Text } from 'react-native-paper';
+import { List, Text } from '@ui/paper';
 
 import { Note } from './components';
 import {
@@ -20,8 +20,11 @@ import {
   TeamYourTeamsOption,
 } from './options';
 import { openPeers, teamSyncLine } from './syncLine';
+import { useScaledStyles } from '@ui/displayScale';
 
 export function TeamSettings() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const { installedAt } = useExtensionPrefs('team');
@@ -83,6 +86,6 @@ export function TeamSettings() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   note: { marginHorizontal: 16, marginVertical: 8 },
 });

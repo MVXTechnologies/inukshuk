@@ -5,6 +5,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, { Circle, G, Line } from 'react-native-svg';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** 2.5.1's dot at size S: its diameter and its ring's width, in dp (mockup #677: 7 dp, 1.5 dp ring). */
 export const CURSOR_DOT = 7;
@@ -40,6 +41,8 @@ const PAD = 3;
  * readable, and a tap goes through it (`pointerEvents="none"`).
  */
 export const CenterCursor = memo(function CenterCursor({ suppressed }: { suppressed: boolean }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const cursor = useSettingsStore((s) => s.infoStrip.current.aids.cursor);
   const following = useMapStore((s) => s.followUser);
   if (!cursor.enabled || (following && cursor.hideWhileFollowing) || suppressed) return null;
@@ -66,6 +69,8 @@ export function CursorGlyph({
   px?: number;
   testIDPrefix?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   if (cursor.kind === 'dot') {
     const d = px === undefined ? DOT_DP[cursor.size] : Math.round(px * 0.6);
@@ -180,7 +185,7 @@ function shape(
   }
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   center: {
     position: 'absolute',
     top: 0,

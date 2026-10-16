@@ -13,8 +13,9 @@ import { radius, space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from '@ui/paper';
 import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * "Distance per week" (revamp `After-Logbook.html`): stone bars for the last
@@ -74,6 +75,8 @@ export function DistanceChart({
   onGranularityChange: (g: ChartGranularity) => void;
   units: Units;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const [width, setWidth] = useState(0);
@@ -270,7 +273,7 @@ export function DistanceChart({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: {
     borderRadius: radius.lg,
     borderWidth: 1,

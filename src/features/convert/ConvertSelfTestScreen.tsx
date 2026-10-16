@@ -5,9 +5,10 @@ import { initNativeProj, nativeProjInfo, nativeSuiteEngine } from '@lib/nativePr
 import { Directory, File } from 'expo-file-system';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { keepAlive } from '@data/keepAlive';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The on-device regression gate (CONVERT §5.5 step 3), reached only by
@@ -17,6 +18,8 @@ import { keepAlive } from '@data/keepAlive';
  * Without those files this screen does nothing (it ships in the app, inert).
  */
 export function ConvertSelfTestScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const [text, setText] = useState('Convert self-test: starting…');
@@ -101,6 +104,6 @@ export function ConvertSelfTestScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   content: { padding: 16 },
 });

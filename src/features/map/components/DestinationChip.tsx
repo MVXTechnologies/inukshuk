@@ -3,9 +3,10 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useNavigationStore } from '@state/navigationStore';
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Icon, Text, TouchableRipple } from 'react-native-paper';
+import { Icon, Text, TouchableRipple } from '@ui/paper';
 
 import { weatherChrome as wc } from '../weather/weatherChrome';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The destination chip (#97; slimmed in 2.6.0, #673): what you are
@@ -19,6 +20,8 @@ import { weatherChrome as wc } from '../weather/weatherChrome';
  * 'Clear destination'.
  */
 export function DestinationChip({ onClear }: { onClear: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const destination = useNavigationStore((s) => s.destination);
   const waypoints = useLibraryStore((s) => s.waypoints);
   const name = useMemo(
@@ -45,7 +48,7 @@ export function DestinationChip({ onClear }: { onClear: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',

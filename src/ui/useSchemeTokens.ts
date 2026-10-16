@@ -1,4 +1,4 @@
-import { useTheme } from 'react-native-paper';
+import { useTheme } from '@ui/paper';
 
 import { useDisplayCondition } from './displayCondition';
 import { nightScheme, schemeTokens, sunlightScheme, type SchemeTokens } from './tokens';

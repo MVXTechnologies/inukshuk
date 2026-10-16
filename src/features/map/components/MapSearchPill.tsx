@@ -2,7 +2,8 @@ import { palette, target } from '@ui/tokens';
 import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, StyleSheet } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * "Search places" (revamp `Main.html`): the stone pill between the compass and
@@ -11,6 +12,8 @@ import { Icon, Text } from 'react-native-paper';
  * coordinate.
  */
 export function MapSearchPill({ onPress }: { onPress: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const outline = useChromeOutline();
   return (
@@ -34,7 +37,7 @@ export function MapSearchPill({ onPress }: { onPress: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   pill: {
     height: target.min,
     borderRadius: target.min / 2,

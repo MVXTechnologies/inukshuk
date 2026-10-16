@@ -9,13 +9,14 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useMemo } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Icon, Text } from 'react-native-paper';
+import { Button, Icon, Text } from '@ui/paper';
 import { NoteNumberBadge } from '../components/NoteNumberBadge';
 import { photoLabel } from '../../photos/photoText';
 import { photoFileUri } from '../../photos/photoUri';
 import { JumpChips, type JumpMark } from './JumpChips';
 import { StatTiles } from './StatTiles';
 import { TrailChart } from './TrailChart';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   tiles: readonly StatTile[];
@@ -63,6 +64,8 @@ export function OverviewTab({
   onAddPhotos,
   photoNotice,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const own = useMemo(() => photos.filter((p) => !isNotePhoto(p.photo)), [photos]);
   const items = useMemo((): StripItem[] => {
@@ -220,7 +223,7 @@ export function OverviewTab({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   grid: { paddingHorizontal: 16, paddingTop: 14 },
   block: { paddingHorizontal: 16, paddingTop: 14, gap: 10 },
   headingRow: {

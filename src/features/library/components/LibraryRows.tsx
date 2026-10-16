@@ -7,11 +7,12 @@ import { space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text, useTheme } from '@ui/paper';
 import { useMapThumbnail } from '../useMapThumbnail';
 import { useRouteThumbnail } from '../useRouteThumbnail';
 import { SourceMark } from '../../import/importParts';
 import { MapThumbnail, THUMB_SIZE, TrailThumbnail } from './Thumbnails';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Library rows (revamp §5, `After-Library.html`): 76 dp, a 56 dp thumbnail,
@@ -26,6 +27,8 @@ const ROW_HEIGHT = 76;
 
 /** 1 dp hairline between rows, indented past the thumbnail (84 = 16 + 56 + 12). */
 export function RowDivider() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return <View style={[styles.divider, { backgroundColor: t.divider }]} />;
 }
@@ -44,6 +47,8 @@ export interface RowSelection {
 
 /** The trailing circle check of a row in select mode. */
 export function SelectCheck({ selected }: { selected: boolean }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   return (
@@ -80,6 +85,8 @@ function RowFrame({
   children?: ReactNode;
   main: ReactNode;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const fill = selected
     ? theme.colors.secondaryContainer
@@ -100,6 +107,8 @@ function RowFrame({
 
 /** A row's caption line, with an optional small icon before it (Share live's clock). */
 function CaptionLine({ caption, icon }: { caption: string; icon: string | undefined }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   if (icon === undefined)
     return (
@@ -154,6 +163,8 @@ export function TrailRow({
   trailing?: ReactNode;
   children?: ReactNode;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const thumb = useRouteThumbnail(track);
   return (
@@ -203,6 +214,8 @@ export function OnMapChip({
   name: string;
   onToggle: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -273,6 +286,8 @@ export function MapRow({
   trailing?: ReactNode;
   children?: ReactNode;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const thumbnail = useMapThumbnail(map, rendering);
   const caption =
     notice ??
@@ -383,6 +398,8 @@ export function WaypointRow({
   leading?: ReactNode;
   trailing?: ReactNode;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <RowFrame
@@ -465,6 +482,8 @@ export function AreaRow({
   onLongPress: () => void;
   trailing?: ReactNode;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <RowFrame
@@ -512,7 +531,7 @@ export function AreaRow({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   areaSwatch: {
     width: 32,
     height: 28,

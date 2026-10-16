@@ -15,10 +15,11 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Animated, ScrollView, StyleSheet, View } from 'react-native';
-import { IconButton, Text } from 'react-native-paper';
+import { IconButton, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCompareMatrix } from './useCompareMatrix';
 import { weatherChrome as wc } from './weatherChrome';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Model-comparison table (weather UX M2, the Windy "Compare forecasts"
@@ -35,6 +36,8 @@ import { weatherChrome as wc } from './weatherChrome';
  * weather surface (weatherChrome.ts).
  */
 export function WeatherCompareScreen({ at, layer }: { at: LatLng; layer: WeatherLayerId | null }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const units = useSettingsStore((s) => s.units);
@@ -134,6 +137,8 @@ function ModelCard({
   runLabel: string | null;
   shimmer: Animated.Value;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   // Row order: the active variable first, temperature beneath (Windy's
   // stacked-card row order); a temp layer shows the single temp row.
   const rows: { infoLayer: string; unit: string; rowVariable: ModelVariable }[] =
@@ -222,7 +227,7 @@ function ModelCard({
 const CELL_W = 42;
 const CELL_H = 26;
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#101418' },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 6 },
   backButton: { margin: 0 },

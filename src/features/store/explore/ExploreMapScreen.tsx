@@ -78,7 +78,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { ActivityIndicator, Icon, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Icon, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ExploreFilterBar } from './ExploreFilterBar';
@@ -89,6 +89,7 @@ import { itemFacets } from './facetsAdapter';
 import { useCatalogDownloadFlow } from './useCatalogDownloadFlow';
 import { useLinkOutCollections } from './useLinkOutCollections';
 import { openExternalLink } from '@lib/openLink';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Explore on a map (#447, board `MapView.dc.html`): the loaded catalog AND the
@@ -160,6 +161,8 @@ function itemMeta(item: CatalogItem, source: CatalogSource | undefined): string 
 
 /** The "Available free at …" line a source's terms require (#680); nothing otherwise. */
 function FreeLine({ line, color }: { line: string | undefined; color: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   if (line === undefined) return null;
   return (
     <Text numberOfLines={1} style={[styles.rowMeta, { color }]} testID="explore-map-free-line">
@@ -176,6 +179,8 @@ export function ExploreMapScreen({
   /** Pushed over a filtered list: back returns there, with this filter (#474). */
   fromList?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -854,7 +859,7 @@ const shadow = {
   elevation: 4,
 };
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   top: { position: 'absolute', left: 0, right: 0, gap: space.xs },
   topRow: { flexDirection: 'row', gap: space.sm, paddingHorizontal: space.lg },

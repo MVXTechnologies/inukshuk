@@ -13,6 +13,7 @@ import { palette } from '@ui/tokens';
 import { StyleSheet, View } from 'react-native';
 
 import { mciGlyph } from '../components/waypointGlyph';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   icon?: StoredWaypointIcon;
@@ -33,6 +34,8 @@ interface Props {
  * Decorative: the caller names it for screen readers.
  */
 export function WaypointPinView({ icon, color, size, diameter }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const d = diameter ?? WAYPOINT_PIN_DIAMETER[waypointSize(size)];
   const { width, height } = pinGeometry(d);
   const ink = waypointInk(color);
@@ -68,7 +71,7 @@ export function WaypointPinView({ icon, color, size, diameter }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // A square with three round corners, turned so the sharp one points down:
   // its centre sits d·√2/2 above the tip, which is the view's bottom edge.
   head: {

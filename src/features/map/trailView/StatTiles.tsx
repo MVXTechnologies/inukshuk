@@ -1,7 +1,8 @@
 import type { StatTile } from '@core/library/trailViewText';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   tiles: readonly StatTile[];
@@ -15,6 +16,8 @@ interface Props {
  * and the map's tap-a-trail sheet, so both read the same.
  */
 export function StatTiles({ tiles, style, testID }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={[styles.grid, style]} testID={testID}>
@@ -42,7 +45,7 @@ export function StatTiles({ tiles, style, testID }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 14 },
   tile: { width: '33.33%', paddingRight: 8 },
   value: { fontSize: 18, fontWeight: '800' },

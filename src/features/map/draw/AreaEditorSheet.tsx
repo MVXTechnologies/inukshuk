@@ -13,10 +13,11 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Button, Icon, IconButton, Surface, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Icon, IconButton, Surface, Text, TextInput, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { discardPhotos, pickAreaPhoto } from './areaPhotos';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** What the editor hands back on Save. */
 export interface AreaDraft {
@@ -63,6 +64,8 @@ export function AreaEditorSheet({
   onEditShape,
   onError,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const keyboardHeight = useIosKeyboardHeight();
@@ -313,7 +316,7 @@ export function AreaEditorSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   scrim: {
     position: 'absolute',
     top: 0,

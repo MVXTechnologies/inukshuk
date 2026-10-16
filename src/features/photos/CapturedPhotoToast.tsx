@@ -1,9 +1,10 @@
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Image, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from '@ui/paper';
 
 import type { CaptureToast } from './useRecordingPhoto';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * "Photo 7 added to this recording · 2.40 km · 732 m · 10:10 · UNDO" (mockup
@@ -20,6 +21,8 @@ export function CapturedPhotoToast({
   onUndo: () => void;
   style?: ViewStyle;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const t = useSchemeTokens();
   return (
@@ -60,7 +63,7 @@ export function CapturedPhotoToast({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',

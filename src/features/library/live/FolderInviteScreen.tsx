@@ -30,12 +30,13 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
-import { sheetStyles } from '../selection/LibrarySheet';
+import { sheetStylesSheet } from '../selection/LibrarySheet';
 import { Chips, inviteLine } from './ShareLiveSheet';
 import { useLiveFolders } from './useLive';
 import { appLibraryBridge } from '@data/sync/libraryPort';
+import { useScaledStyles } from '@ui/displayScale';
 
 const EXPIRY_IDS = INVITE_EXPIRY_PRESETS.map((p) => p.id) as readonly string[];
 
@@ -49,6 +50,8 @@ function choiceFrom(params: Record<string, string | undefined>): InviteChoice {
 }
 
 export function FolderInviteScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const params = useLocalSearchParams<{
     id: string;
     role?: string;
@@ -203,6 +206,8 @@ function Button({
   onPress: () => void;
   testID: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -238,6 +243,10 @@ function Row({
   onPress: () => void;
   testID: string;
 }) {
+  const sheetStyles = useScaledStyles(sheetStylesSheet);
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -259,7 +268,7 @@ function Row({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   center: { textAlign: 'center' },
   qr: { alignItems: 'center', gap: space.sm, paddingVertical: space.sm },
   caption: { textAlign: 'center', fontSize: 13, lineHeight: 18, fontWeight: '700' },

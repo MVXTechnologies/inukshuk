@@ -5,7 +5,8 @@ import { useConvertStore } from '@state/convertStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Icon, ProgressBar, Text } from 'react-native-paper';
+import { Button, Icon, ProgressBar, Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** A grid's readable name ("CGG2013a (CGVD2013)"), else its file name. */
 export function gridLabel(file: string): string {
@@ -87,6 +88,8 @@ export function GridDownload({
   lat: number;
   testID?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { state, download } = useGridDownload(grids, lon, lat);
   const names = grids.map(gridLabel).join(', ');
@@ -140,7 +143,7 @@ export function GridDownload({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   box: { gap: 6, marginTop: 2 },
   row: { flexDirection: 'row', gap: 6, alignItems: 'flex-start' },
   text: { fontSize: 15, flex: 1 },

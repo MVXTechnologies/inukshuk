@@ -95,6 +95,7 @@ import type {
   WebViewErrorEvent,
   WebViewHttpErrorEvent,
 } from 'react-native-webview/lib/WebViewTypes';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Per-request timeout. Generous enough to cover the worker watchdog (12s) plus a
@@ -1157,6 +1158,8 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
  * as the rendering engine and exposes the rasterize function via context.
  */
 export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const styles = useScaledStyles(stylesSheet);
+
   const webviewRef = useRef<WebView>(null);
   const [engine, setEngine] = useState<Engine | null>(null);
   const [ready, setReady] = useState(false);
@@ -2316,7 +2319,7 @@ export function usePdfRasterizerServer(): ServerOriginFn {
   return useRasterizerContext().serverOrigin;
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // Keep the WebView mounted (so JS runs) but visually absent and 1x1 so it
   // never affects layout or paints onto the screen.
   hidden: {

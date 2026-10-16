@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CatalogItemRow } from '../CatalogItemRow';
 import { exploreItemHref } from './exploreRoutes';
 import type { CatalogDownloadFlow } from './useCatalogDownloadFlow';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** Module-scope so the list's props don't churn on every render. */
 const keyExtractor = (item: CatalogItem) => item.id;
@@ -120,10 +121,12 @@ export function CatalogResultsList({
 
 /** Hairline between rows, inset past the thumbnail (board: 84 dp). */
 function RowDivider() {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return <View style={[styles.divider, { backgroundColor: tokens.divider }]} />;
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   divider: { height: 1, marginLeft: 84 },
 });

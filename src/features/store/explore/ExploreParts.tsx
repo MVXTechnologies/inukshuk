@@ -7,10 +7,11 @@ import { palette, radius, space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo, type ReactNode } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import Svg, { Path } from 'react-native-svg';
 
 import { FootprintThumb } from './FootprintThumb';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Building blocks of the map explorer (#447, boards `Main.dc.html` et al.):
@@ -29,6 +30,8 @@ export function SectionHeading({
   title: string;
   action?: { label: string; onPress: () => void; accessibilityLabel?: string };
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={styles.heading}>
@@ -147,6 +150,8 @@ export const MapCard = memo(function MapCard({
   external?: boolean;
   onPress: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -214,6 +219,8 @@ export function FilterChip({
   icon?: string;
   accessibilityLabel?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const ink = on ? t.library.chipOnInk : t.library.chipInk;
   return (
@@ -256,6 +263,8 @@ export function BrowseOnMapButton({
   accessibilityLabel?: string;
   floating?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -277,6 +286,8 @@ export function BrowseOnMapButton({
 
 /** A horizontal, non-scrolling-parent-friendly row of chips. */
 export function ChipRow({ children }: { children: ReactNode }) {
+  const styles = useScaledStyles(stylesSheet);
+
   return <View style={styles.chipRowWrap}>{children}</View>;
 }
 
@@ -294,6 +305,8 @@ export function ActivityTile({
   width: number;
   onPress: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -326,6 +339,8 @@ export function TerrainTile({
   ground: string;
   onPress: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -364,6 +379,8 @@ export function CollectionRow({
   external?: boolean;
   accessibilityHint?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const ground =
     badge.kind === 'park'
@@ -414,6 +431,8 @@ export function CollectionRow({
 
 /** A labelled stat tile (scale / size / distance) on the detail screen. */
 export function ExploreStat({ value, label }: { value: string; label: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View
@@ -435,6 +454,8 @@ export function ExploreStat({ value, label }: { value: string; label: string }) 
 
 /** A small tag chip (kind, activity, terrain) on the detail screen. */
 export function TagChip({ label, strong = false }: { label: string; strong?: boolean }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={[styles.tag, { backgroundColor: strong ? t.library.onMap : t.surfaceVariant }]}>
@@ -445,7 +466,7 @@ export function TagChip({ label, strong = false }: { label: string; strong?: boo
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   pressed: { opacity: 0.85 },
   heading: {
     marginTop: 26,

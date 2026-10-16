@@ -17,11 +17,12 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SectionLabel, Segmented, StatsCard } from './StatsControls';
 import { useTrailStats } from './useTrailStats';
+import { useScaledStyles } from '@ui/displayScale';
 
 const FAMILIES: { value: RecordFamily; label: string }[] = [
   { value: 'run', label: 'Run' },
@@ -51,6 +52,8 @@ function dateLabel(ms: number): string {
  * the trail.
  */
 export function RecordsScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const router = useRouter();
@@ -154,7 +157,7 @@ export function RecordsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   content: { paddingHorizontal: space.lg, paddingTop: 2, gap: 10 },
   list: { paddingVertical: 4, gap: 0 },

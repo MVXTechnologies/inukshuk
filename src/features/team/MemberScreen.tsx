@@ -15,7 +15,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
-import { Button, Switch, Text } from 'react-native-paper';
+import { Button, Switch, Text } from '@ui/paper';
 
 import {
   ChoiceRow,
@@ -29,6 +29,7 @@ import {
 } from './components';
 import { actionMessage } from './messages';
 import { memberSyncLine } from './syncLine';
+import { useScaledStyles } from '@ui/displayScale';
 
 const VIA: Record<string, string> = {
   genesis: 'Started the team',
@@ -37,6 +38,8 @@ const VIA: Record<string, string> = {
 };
 
 export function MemberScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -198,7 +201,7 @@ export function MemberScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   head: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },

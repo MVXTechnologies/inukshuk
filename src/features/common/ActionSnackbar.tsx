@@ -1,8 +1,9 @@
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from '@ui/paper';
 import { palette } from '@ui/tokens';
 
 import type { ActionSnack } from './useActionSnackbar';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The view half of `useActionSnackbar`: a Material snackbar (inverse surface,
@@ -18,6 +19,8 @@ export function ActionSnackbar({
   /** Placement, e.g. `snackbarWrapperStyle(...)` to clear the recording panel. */
   style?: StyleProp<ViewStyle>;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   if (snack === null) return null;
   return (
@@ -52,7 +55,7 @@ export function ActionSnackbar({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   wrap: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 8 },
   bar: {
     minHeight: 48,

@@ -5,9 +5,10 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { Linking, Platform, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Icon, Text } from 'react-native-paper';
+import { ActivityIndicator, Button, Icon, Text } from '@ui/paper';
 
 import { GnssScreenFrame, SectionLabel } from './GnssScreenFrame';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** Signal strength in four bars (RSSI dBm). */
 export function signalBars(rssi: number | null): number {
@@ -19,6 +20,8 @@ export function signalBars(rssi: number | null): number {
 }
 
 function Bars({ rssi }: { rssi: number | null }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const n = signalBars(rssi);
   if (rssi === null) return null;
@@ -44,6 +47,8 @@ const TRANSPORT: Record<LinkDevice['transport'], string> = {
 };
 
 function DeviceRow({ d, onConnect }: { d: LinkDevice; onConnect: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const name = d.name ?? 'Unnamed receiver';
   return (
@@ -78,6 +83,8 @@ function DeviceRow({ d, onConnect }: { d: LinkDevice; onConnect: () => void }) {
  * the simulated receiver in debug / E2E builds.
  */
 export function GnssPairScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const scanning = useGnssStore((s) => s.scanning);
@@ -194,7 +201,7 @@ export function GnssPairScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   current: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 16 },
   scanRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 40 },

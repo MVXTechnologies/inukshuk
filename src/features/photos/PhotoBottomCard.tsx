@@ -36,12 +36,13 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { Icon, IconButton, Text, TextInput } from 'react-native-paper';
+import { Icon, IconButton, Text, TextInput } from '@ui/paper';
 import { create } from 'zustand';
 
 import { formatPhotoWhen } from './photoText';
 import { photoFileUri } from './photoUri';
 import { shareablePhotoUri, UnshareablePhotoError, type ShareablePhoto } from './sharePhoto';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Whose photo the card shows: one of my trails' (its own photos, and its
@@ -74,6 +75,8 @@ const SWIPE = 40;
  * accessibility tree (E2E run 37814960809).
  */
 export function PhotoBottomCard({ dockStyle }: { dockStyle?: StyleProp<ViewStyle> }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { height: windowH } = useWindowDimensions();
   const target = usePhotoCard((s) => s.target);
@@ -255,6 +258,8 @@ function OwnPhotoActions({
   photo: TrackPhoto;
   editable: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const trackName = useLibraryStore((s) => s.tracks.find((x) => x.id === trackId)?.name);
   const recording = trackId === null;
@@ -405,7 +410,7 @@ function OwnPhotoActions({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1, gap: 2 },
   card: {
     borderTopLeftRadius: 20,

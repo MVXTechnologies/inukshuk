@@ -21,7 +21,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Text } from 'react-native-paper';
+import { ActivityIndicator, Button, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CatalogResultsList } from './CatalogResultsList';
@@ -31,6 +31,7 @@ import { exploreMapHref } from './exploreRoutes';
 import { itemFacets } from './facetsAdapter';
 import { OrganisationMapsCta } from './OrganisationMapsCta';
 import { useCatalogDownloadFlow } from './useCatalogDownloadFlow';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * A filtered explorer list (#447): what tapping an activity, a terrain, a
@@ -62,6 +63,8 @@ export function exploreFilterTitle(
 }
 
 export function ExploreListScreen({ initialFilter }: { initialFilter: ExploreFilter }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -239,7 +242,7 @@ export function ExploreListScreen({ initialFilter }: { initialFilter: ExploreFil
 /** Room under the last row so the floating map pill never hides it. */
 const FLOATING_CLEARANCE = 72;
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   floating: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   cacheNote: { paddingHorizontal: space.lg, paddingBottom: space.xs },

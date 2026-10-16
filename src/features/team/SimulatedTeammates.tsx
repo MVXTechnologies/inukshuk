@@ -16,7 +16,8 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import { Button, Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 const NAMES = ['Julie Tremblay', 'Simon Gagnon', 'Ana Ruiz', 'Luc Bouchard'];
 const QUEBEC = { latitude: 46.8139, longitude: -71.208 };
@@ -26,6 +27,8 @@ function center() {
 }
 
 export function SimulatedTeammates() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const [busy, setBusy] = useState(false);
   const count = useTeamStore((s) => s.view?.activeCount ?? 0);
@@ -126,7 +129,7 @@ export function SimulatedTeamToJoin({ onLink }: { onLink: (link: string) => void
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   box: { borderWidth: 1, borderStyle: 'dashed', borderRadius: 12, padding: 12, gap: 8 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });

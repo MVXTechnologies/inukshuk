@@ -16,14 +16,17 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { usePathname, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTeamSheet } from './map/teamMode';
+import { useScaledStyles } from '@ui/displayScale';
 
 const SHOW_MS = 6_000;
 
 export function TeamAlertBanner() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -91,7 +94,7 @@ export function TeamAlertBanner() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   wrap: { position: 'absolute', left: 12, right: 12 },
   banner: {

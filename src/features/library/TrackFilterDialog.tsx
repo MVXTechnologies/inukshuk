@@ -6,7 +6,8 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useState } from 'react';
 import { Keyboard, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Chip, Dialog, Icon, Portal, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Chip, Dialog, Icon, Portal, Text, TextInput, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   visible: boolean;
@@ -59,6 +60,8 @@ function range(minRaw: string, maxRaw: string, scale: number): NumericRange | un
  * User-initiated, so a Portal Dialog is fine.
  */
 export function TrackFilterDialog({ visible, onDismiss, sortKey, onApply }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const units = useSettingsStore((s) => s.units);
   const customCategories = useLibraryStore((s) => s.customCategories);
@@ -296,7 +299,7 @@ export function TrackFilterDialog({ visible, onDismiss, sortKey, onApply }: Prop
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   dialog: { maxHeight: '85%' },
   scrollArea: { paddingHorizontal: 0 },
   content: { paddingHorizontal: 24, paddingVertical: 8, gap: 16 },

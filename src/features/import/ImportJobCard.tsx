@@ -14,10 +14,11 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { dismissImportJob, resumeSourceImport, stopSourceImport } from './importController';
 import { Card, CountTile, PillButton, ProgressBar, SourceTile } from './importParts';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The import job's card at the top of the Library (#432/#435, boards
@@ -58,6 +59,8 @@ function pausedText(job: ImportJob): string {
 }
 
 function Notice({ text, bold }: { text: string; bold?: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={[styles.notice, { backgroundColor: t.connect.notice }]}>
@@ -72,6 +75,8 @@ function Notice({ text, bold }: { text: string; bold?: string }) {
 }
 
 export function ImportJobCard() {
+  const styles = useScaledStyles(stylesSheet);
+
   const job = useImportStore((s) => s.job);
   const t = useSchemeTokens();
   const router = useRouter();
@@ -241,7 +246,7 @@ function ShowOnHeatmap({ job }: { job: ImportJob }) {
   return <PillButton primary label="Show on personal heatmap" onPress={onPress} />;
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: { marginHorizontal: space.lg, marginTop: space.sm, marginBottom: space.sm },
   body: { padding: space.lg, gap: space.md },
   doneBody: { gap: 14 },

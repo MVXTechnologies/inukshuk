@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { PanResponder, StyleSheet, View, type AccessibilityActionEvent } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 const A11Y_ACTIONS = [{ name: 'increment' }, { name: 'decrement' }];
 
@@ -60,6 +61,8 @@ export function RangeSlider({
   formatValue,
   testID,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const accent = accentColor ?? theme.colors.primary;
   const track = trackColor ?? theme.colors.surfaceVariant;
@@ -193,7 +196,7 @@ export function RangeSlider({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   trackBox: { height: 36, justifyContent: 'center' },
   track: { position: 'absolute', left: 0, right: 0, height: 3, borderRadius: 1.5 },

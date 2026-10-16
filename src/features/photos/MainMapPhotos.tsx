@@ -7,9 +7,10 @@ import { useTrailPhotosStore } from '@state/trailPhotosStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { TrailPhotoLayers } from './TrailPhotoLayers';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Trail photos on the main map (#587, owner Q1/Q2): the photos of the trails
@@ -164,6 +165,8 @@ export function MainMapPhotoChip({
   hidden: boolean;
   onToggle: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const ink = hidden ? t.map.chipInkMuted : t.map.chipInk;
   return (
@@ -189,7 +192,7 @@ export function MainMapPhotoChip({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   row: { flexDirection: 'row' },
   chip: {
     flexDirection: 'row',

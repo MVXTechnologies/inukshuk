@@ -6,9 +6,12 @@
 import { BETA_FEATURES, BETA_FEATURES_NOTE } from '@core/settings/betaFeatures';
 import { useSettingsStore } from '@state/settingsStore';
 import { StyleSheet, View } from 'react-native';
-import { List, Switch, Text } from 'react-native-paper';
+import { List, Switch, Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 export function BetaFeaturesSection() {
+  const styles = useScaledStyles(stylesSheet);
+
   const values = useSettingsStore((s) => s);
   const set = useSettingsStore((s) => s.set);
   return (
@@ -35,6 +38,6 @@ export function BetaFeaturesSection() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   note: { paddingHorizontal: 16, paddingVertical: 8 },
 });

@@ -3,7 +3,7 @@ import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import { RegionPreviewThumb } from '../RegionPreviewThumb';
 import { usePreviewBbox } from './BaseMapCards';
 import {
@@ -14,6 +14,7 @@ import {
   useSheetAccent,
   useSheetWidth,
 } from './mapSheet';
+import { useScaledStyles } from '@ui/displayScale';
 
 const IMAGERY = IMAGERY_LOOKS.map((l) => ({ value: l, label: IMAGERY_LOOK_LABEL[l] }));
 const STRIP_H = 84;
@@ -27,6 +28,8 @@ const RING = 3;
  * right says "Base map in use", or offers "Use" when it is not.
  */
 export function SatellitePanel({ onBack }: { onBack: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent } = useSheetAccent();
   const inUse = useMapStore((s) => s.basemap === 'satellite');
@@ -101,7 +104,7 @@ export function SatellitePanel({ onBack }: { onBack: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   inUse: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   inUseText: { fontSize: 13.5, fontWeight: '700' },
   use: { fontSize: 15, fontWeight: '800' },

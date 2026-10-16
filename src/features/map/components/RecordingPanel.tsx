@@ -29,12 +29,13 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Icon, Switch, Text, useTheme } from 'react-native-paper';
+import { Icon, Switch, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Polyline } from 'react-native-svg';
 import { HoldButton } from './HoldButton';
 import { setStripRuntime, useStripRuntime } from '../infoStrip/stripRuntime';
 import { InukshukGlyph } from '@ui/components/InukshukGlyph';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   status: 'recording' | 'paused';
@@ -81,6 +82,8 @@ function splitUnit(text: string): { value: string; unit: string } {
  * keep their labels (Stop now needs a hold: flows use longPressOn).
  */
 export function RecordingPanel(props: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const {
     status,
     stats,
@@ -674,6 +677,8 @@ function ElevationSoFar({
   muted: string;
   line: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const [width, setWidth] = useState(0);
   const first = altitudes[0];
   const last = altitudes[altitudes.length - 1];
@@ -704,7 +709,7 @@ function ElevationSoFar({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   sheet: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,

@@ -19,11 +19,12 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import { IconButton, Text, useTheme } from 'react-native-paper';
+import { IconButton, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Rect, Text as SvgText } from 'react-native-svg';
 
 import { ActivityChips, Segmented, StatsCard } from './StatsControls';
+import { useScaledStyles } from '@ui/displayScale';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const METRICS: { value: ReviewMetric; label: string }[] = [
@@ -38,6 +39,8 @@ const METRICS: { value: ReviewMetric; label: string }[] = [
  * with the best month darker.
  */
 export function YearReviewScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const router = useRouter();
@@ -163,6 +166,8 @@ export function YearReviewScreen() {
 }
 
 function Summary({ value, label }: { value: string; label: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <View style={styles.summaryCell} accessible accessibilityLabel={`${value} ${label}`}>
@@ -277,6 +282,8 @@ function CalendarHeatmap({
 }
 
 function Legend() {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const shades = [tokens.stats.dayEmpty, ...tokens.stats.dayShades];
   return (
@@ -312,6 +319,8 @@ function MonthBars({
   best: number | null;
   format: (m: number) => string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const max = Math.max(1, ...months);
   return (
@@ -351,7 +360,7 @@ function MonthBars({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   content: { paddingHorizontal: space.lg, paddingTop: 2, gap: 12 },
   yearRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },

@@ -11,9 +11,10 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Icon, IconButton, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Icon, IconButton, Text, TextInput, useTheme } from '@ui/paper';
 
 import { actionMessage } from '../messages';
+import { useScaledStyles } from '@ui/displayScale';
 
 const menuClock = () => teamService()?.active?.draw.clock() ?? Date.now();
 
@@ -27,6 +28,8 @@ export function ShapeMenu({
   /** Its edge: from the top, or from the bottom (whichever leaves the shape in view). */
   place: { top: number } | { bottom: number };
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { colors } = useTheme();
   const view = useTeamStore((s) => s.view);
@@ -131,7 +134,7 @@ export function ShapeMenu({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   // Centred, the same margin either side, at most 340 dp wide.
   dock: {

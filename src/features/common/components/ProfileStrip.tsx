@@ -16,8 +16,9 @@ import {
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 import Svg, { Line, Path } from 'react-native-svg';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The app's compact elevation strip: an ochre line on a light ochre fill, the
@@ -66,6 +67,8 @@ export function ProfileStrip({
   onScrub,
   testID = 'route-profile',
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const [width, setWidth] = useState(0);
   const [scrub, setScrub] = useState<ProfileScrubPoint | null>(null);
@@ -174,7 +177,7 @@ export function ProfileStrip({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   wrap: { height: PROFILE_HEIGHT, width: '100%' },
   dimmed: { opacity: 0.45 },
   // On a paper chip, so a label never sits illegibly on the line.

@@ -6,7 +6,8 @@
 import type { TeamTask } from '@core/team/tasks';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, StyleSheet } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 export function taskStateLabel(task: TeamTask): string {
   if (!task.done) return 'open';
@@ -24,6 +25,8 @@ export function TaskChip({
   canToggle: boolean;
   onToggle: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const label = `Task · ${assigneeName} · ${taskStateLabel(task)}`;
   return (
@@ -48,7 +51,7 @@ export function TaskChip({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',

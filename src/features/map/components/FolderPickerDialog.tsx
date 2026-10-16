@@ -1,6 +1,6 @@
 import { UNGROUPED_FOLDER_ID } from '@core/library/visibility';
 import { useLibraryStore } from '@state/libraryStore';
-import { Button, Checkbox, Dialog, Portal, Text } from 'react-native-paper';
+import { Button, Checkbox, Dialog, Portal, Text } from '@ui/paper';
 
 interface Props {
   visible: boolean;

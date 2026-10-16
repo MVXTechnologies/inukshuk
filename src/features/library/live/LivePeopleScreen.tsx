@@ -6,10 +6,11 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text, useTheme } from '@ui/paper';
 
-import { LibrarySheet, SheetDivider, SheetRow, sheetStyles } from '../selection/LibrarySheet';
+import { LibrarySheet, SheetDivider, SheetRow, sheetStylesSheet } from '../selection/LibrarySheet';
 import { liveService, refreshLive, useLiveFolders } from './useLive';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * A shared folder's People (#712, G10 mockup 9): everyone with their role,
@@ -17,6 +18,10 @@ import { liveService, refreshLive, useLiveFolders } from './useLive';
  * their own sub-panel: Can edit / Can view, and Remove from folder.
  */
 export function LivePeopleScreen() {
+  const sheetStyles = useScaledStyles(sheetStylesSheet);
+
+  const styles = useScaledStyles(stylesSheet);
+
   const { id } = useLocalSearchParams<{ id: string }>();
   const groupId = typeof id === 'string' ? id : '';
   const t = useSchemeTokens();
@@ -121,6 +126,8 @@ export function PersonSheet({
   onRemove: () => void;
   onClose: () => void;
 }) {
+  const sheetStyles = useScaledStyles(sheetStylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   const role = person?.role;
@@ -171,7 +178,7 @@ export function PersonSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',

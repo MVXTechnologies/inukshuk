@@ -11,7 +11,7 @@ import { selectChatUnread, useTeamStore } from '@state/teamStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
-import { Button, Icon, Text } from 'react-native-paper';
+import { Button, Icon, Text } from '@ui/paper';
 
 import {
   SheetNote,
@@ -21,6 +21,7 @@ import {
 } from '../../map/components/mapSheet';
 import { setExtensionPrefs, useExtensionPrefs } from '../prefs';
 import type { ExtensionSubPanelProps } from '../types';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Map overlays › Extensions › Team mode (#668): the open team's card (into
@@ -30,6 +31,8 @@ import type { ExtensionSubPanelProps } from '../types';
  * join. With no team, the card says so and Create and Join come first.
  */
 export function TeamSubPanel({ onBack, onClose }: ExtensionSubPanelProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent, onAccent } = useSheetAccent();
   const router = useRouter();
@@ -121,7 +124,7 @@ export function TeamSubPanel({ onBack, onClose }: ExtensionSubPanelProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: { marginHorizontal: 16, marginTop: 4, marginBottom: 8, padding: 12, borderRadius: 14 },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   cardTitle: { fontSize: 16, lineHeight: 21, fontWeight: '800' },

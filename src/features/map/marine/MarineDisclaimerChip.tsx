@@ -1,6 +1,7 @@
 import { MARINE_DISCLAIMER } from '@core/geo/marineLayers';
 import { StyleSheet, View } from 'react-native';
-import { Icon, Surface, Text, useTheme } from 'react-native-paper';
+import { Icon, Surface, Text, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The mandatory "Not for navigation" notice (marine M3): a small persistent
@@ -12,6 +13,8 @@ import { Icon, Surface, Text, useTheme } from 'react-native-paper';
  * light and dark maps.
  */
 export function MarineDisclaimerChip() {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   return (
     <Surface
@@ -32,7 +35,7 @@ export function MarineDisclaimerChip() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   chip: {
     borderRadius: 14,
     paddingVertical: 4,

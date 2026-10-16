@@ -12,10 +12,11 @@ import { radius, space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { type LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { TRAIL_FOCUS_PADDING } from './trailFocus';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The chrome of a long-distance trail shown on the main map (#467, board
@@ -32,6 +33,8 @@ import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
  */
 
 export function ShownTrailPill({ shown }: { shown: ShownTrail }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const hide = useLongTrailsStore((s) => s.hide);
   return (
@@ -75,6 +78,8 @@ export function ShownTrailSheet({
   /** Download outcomes (the map's snackbar). */
   onMessage: (message: string) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const setStage = useLongTrailsStore((s) => s.setStage);
@@ -195,7 +200,7 @@ export function ShownTrailSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   pill: {
     minHeight: 48,
     borderRadius: 24,

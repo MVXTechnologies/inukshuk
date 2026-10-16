@@ -6,6 +6,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The detail screen's coverage mini-map (#447, `Detail.dc.html`): the map's
@@ -40,6 +41,8 @@ export const CoverageMap = memo(function CoverageMap({
   position: LatLng | null;
   height: number;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const scene = useMemo(() => locatorScene(bbox, CANVAS_PX), [bbox]);
   const sheet = minFootprint(scene.sheet, MIN_FOOTPRINT);
@@ -107,6 +110,6 @@ export function coverageText(bbox: CatalogBbox): string {
   return `${lat(bbox[1])} to ${lat(bbox[3])} · ${lon(bbox[0])} to ${lon(bbox[2])}`;
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   frame: { width: '100%', overflow: 'hidden' },
 });

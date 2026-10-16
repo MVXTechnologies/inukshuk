@@ -4,9 +4,10 @@ import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 
 import { TrailThumb } from './TrailThumb';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The long-distance trail card (Explore's carousel, board `Main.dc.html`) and
@@ -31,6 +32,8 @@ export const LongTrailCard = memo(function LongTrailCard({
   distance: string | null;
   onPress: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -78,6 +81,8 @@ export const LongTrailRow = memo(function LongTrailRow({
   distance: string | null;
   onPress: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -111,7 +116,7 @@ export const LongTrailRow = memo(function LongTrailRow({
   );
 });
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   pressed: { opacity: 0.85 },
   card: { width: TRAIL_CARD_WIDTH, gap: 6 },
   cardImage: {

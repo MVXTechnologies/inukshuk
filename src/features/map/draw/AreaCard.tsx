@@ -3,10 +3,11 @@ import type { Units } from '@core/format';
 import type { Area } from '@core/models';
 import { useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Icon, IconButton, Surface, Text, useTheme } from 'react-native-paper';
+import { Button, Icon, IconButton, Surface, Text, useTheme } from '@ui/paper';
 
 import { HoldButton } from '../components/HoldButton';
 import { useRealSafeAreaInsets } from '../infoStrip/InfoStripInsets';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   area: Area;
@@ -28,6 +29,8 @@ interface Props {
  * bottom card, never a Portal dialog: the map stays visible while reading.
  */
 export function AreaCard({ area, units, onEdit, onDelete, onClose, onAddPhoto, onShare }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const [viewing, setViewing] = useState<string | null>(null);
   const note = area.note?.trim() ?? '';
@@ -136,6 +139,8 @@ export function AreaCard({ area, units, onEdit, onDelete, onClose, onAddPhoto, o
 }
 
 function PhotoModal({ uri, onClose }: { uri: string | null; onClose: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   // Its own window, under the status bar: the real inset, not the strip-shifted one.
   const insets = useRealSafeAreaInsets();
   return (
@@ -170,7 +175,7 @@ function PhotoModal({ uri, onClose }: { uri: string | null; onClose: () => void 
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: {
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,

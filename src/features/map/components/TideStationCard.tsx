@@ -5,7 +5,7 @@ import type { TideStation } from '@core/tides/station';
 import { tideColors } from '@core/map/tideStyle';
 import { useMemo } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Icon, IconButton, Surface, Text, useTheme } from 'react-native-paper';
+import { Button, Icon, IconButton, Surface, Text, useTheme } from '@ui/paper';
 import { useLiveTide } from '../hooks/useLiveTide';
 import { useChsStationDetail } from '../hooks/useChs';
 import { CONVERT_ENABLED } from '@core/features/flags';
@@ -13,6 +13,7 @@ import { convertFromTideStation, type ConvertRequest } from '@core/convert/entry
 import { tideImage } from '../tideImages';
 import { CopyValueButton } from './CopyValueButton';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   station: TideStation | null;
@@ -59,6 +60,8 @@ export function TideStationCard({
   offline = false,
   floating = false,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   // A CHS station arrives as a map stub; its levels come live from CHS (cached).
@@ -354,7 +357,7 @@ export function TideStationCard({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: {
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,

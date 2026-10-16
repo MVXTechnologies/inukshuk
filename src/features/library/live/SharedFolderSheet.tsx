@@ -3,9 +3,10 @@ import { palette, space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text, useTheme } from '@ui/paper';
 
-import { LibrarySheet, SheetDivider, SheetRow, sheetStyles } from '../selection/LibrarySheet';
+import { LibrarySheet, SheetDivider, SheetRow, sheetStylesSheet } from '../selection/LibrarySheet';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * A shared folder's (or item's) own sheet (#712, G10 mockup 6), from its ⋮:
@@ -34,6 +35,10 @@ export function SharedFolderSheet({
   onLeave: () => void;
   onClose: () => void;
 }) {
+  const sheetStyles = useScaledStyles(sheetStylesSheet);
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   const f = folder;
@@ -197,6 +202,8 @@ export function StopDialog({
   onStop: () => void;
   onCancel: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   if (name === null) return null;
   return (
@@ -227,6 +234,10 @@ function Choice({
   onPress: () => void;
   testID: string;
 }) {
+  const sheetStyles = useScaledStyles(sheetStylesSheet);
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   return (
@@ -265,6 +276,8 @@ function ThemedDialog({
   testID: string;
   children: React.ReactNode;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   return (
@@ -305,7 +318,7 @@ function ThemedDialog({
 const SCRIM_LIGHT = 'rgba(20,24,28,0.40)';
 const SCRIM_DARK = 'rgba(0,0,0,0.55)';
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   activity: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.xs },
   review: {
     fontSize: 11,

@@ -16,10 +16,11 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import { Icon, List, Switch, Text } from 'react-native-paper';
+import { Icon, List, Switch, Text } from '@ui/paper';
 
 import { dismissImportJob, stopSourceImport } from '../import/importController';
 import { Card, SourceTile, type SourceTileKind } from '../import/importParts';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Settings › Connections (#432/#435, board `Main`): Strava (connect,
@@ -39,6 +40,8 @@ function CardHead({
   title: string;
   children?: ReactNode;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={styles.head}>
@@ -52,6 +55,8 @@ function CardHead({
 }
 
 function Line({ children, muted = true }: { children: ReactNode; muted?: boolean }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Text style={[styles.line, { color: muted ? t.inkMuted : t.inkVariant }]}>{children}</Text>
@@ -64,6 +69,8 @@ function Actions({
 }: {
   items: { label: string; onPress: () => void; strong?: boolean; disabled?: boolean }[];
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={[styles.actions, { borderTopColor: t.divider }]}>
@@ -95,6 +102,8 @@ function Actions({
 }
 
 function Pill({ label }: { label: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={[styles.pill, { backgroundColor: t.library.onMap }]}>
@@ -110,6 +119,8 @@ function StravaCard({
   showSnack: (message: string) => void;
   openImport: (source: ImportSheetSource) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const connection = useStravaStore((s) => s.connection);
   const tracks = useLibraryStore((s) => s.tracks);
@@ -269,6 +280,8 @@ function StravaCard({
 }
 
 function HealthCard({ openImport }: { openImport: (source: ImportSheetSource) => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const health = healthSource();
   const allowed = useImportStore((s) => s.healthAllowed);
   const setAllowed = useImportStore((s) => s.setHealthAllowed);
@@ -349,6 +362,8 @@ const GARMIN_STEPS = [
 ];
 
 function GarminCard() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const [open, setOpen] = useState(false);
   return (
@@ -383,6 +398,8 @@ function GarminCard() {
 }
 
 function FilesRow({ onPress }: { onPress: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -406,6 +423,8 @@ function FilesRow({ onPress }: { onPress: () => void }) {
 }
 
 export function ConnectionsSection({ showSnack }: { showSnack: (message: string) => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const requestSheet = useImportStore((s) => s.requestSheet);
@@ -439,7 +458,7 @@ export function ConnectionsSection({ showSnack }: { showSnack: (message: string)
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   intro: { marginHorizontal: space.lg, marginBottom: space.md, fontSize: 15, lineHeight: 21 },
   card: { marginHorizontal: space.lg, marginBottom: 14 },
   head: { flexDirection: 'row', gap: 14, alignItems: 'flex-start', padding: space.lg },

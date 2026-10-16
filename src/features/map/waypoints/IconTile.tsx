@@ -6,9 +6,10 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { useTheme } from '@ui/paper';
 
 import { mciGlyph } from '../components/waypointGlyph';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   /** `undefined` = the default inukshuk pin. */
@@ -38,6 +39,8 @@ export const IconTile = memo(function IconTile({
   favorite = false,
   onToggleFavorite,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const glyph = mciGlyph(icon);
@@ -95,7 +98,7 @@ export const IconTile = memo(function IconTile({
 
 export const ICON_TILE_HEIGHT = 70;
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   tile: {
     height: ICON_TILE_HEIGHT,
     alignItems: 'center',

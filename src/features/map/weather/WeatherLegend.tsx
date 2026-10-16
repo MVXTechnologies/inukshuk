@@ -3,9 +3,10 @@ import { useSettingsStore } from '@state/settingsStore';
 import { interpolateRamp } from '@core/weather/colorRamp';
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 
 import { weatherChrome as wc } from './weatherChrome';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Windy-style value legend (weather UX M1 polish): a slim floating pill just
@@ -16,6 +17,8 @@ import { weatherChrome as wc } from './weatherChrome';
  * default WMS styles — device QA calibrates them against the live drape.
  */
 export function WeatherLegend({ layer }: { layer: WeatherLayer }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const ramp = useMemo(() => interpolateRamp(layer.swatch, RAMP_STEPS), [layer]);
   const units = useSettingsStore((s) => s.units);
   const legend = legendInUnits(layer, units);
@@ -45,7 +48,7 @@ export function WeatherLegend({ layer }: { layer: WeatherLayer }) {
 /** Enough steps that 300+ px of ramp reads as a continuous gradient. */
 const RAMP_STEPS = 32;
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   pill: {
     flexDirection: 'row',
     height: 22,

@@ -1,6 +1,6 @@
 import { useSettingsStore } from '@state/settingsStore';
 import { Platform } from 'react-native';
-import { List, Switch } from 'react-native-paper';
+import { List, Switch } from '@ui/paper';
 
 /**
  * Settings › Display › "Show phone navigation buttons" (#682). Android only:

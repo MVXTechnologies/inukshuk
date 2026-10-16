@@ -1,8 +1,9 @@
 import { StyleSheet, View } from 'react-native';
-import { Icon, Text, TouchableRipple } from 'react-native-paper';
+import { Icon, Text, TouchableRipple } from '@ui/paper';
 import { weatherChrome as wc } from '../weather/weatherChrome';
 import { InukshukGlyph } from '@ui/components/InukshukGlyph';
 import { MapButton } from './MapButton';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The map-actions entry point (wave A item 6): the old bottom-right "+"
@@ -61,6 +62,8 @@ export function MapActionsMenu({
   open: boolean;
   onToggle: (open: boolean) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const run = (action: (() => void) | undefined) => () => {
     onToggle(false);
     action?.();
@@ -123,7 +126,7 @@ export function MapActionsMenu({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   sheet: {
     minWidth: 210,
     backgroundColor: wc.panelSolid,

@@ -5,9 +5,10 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { liveService, refreshLive, useLiveFolders } from './useLive';
+import { useScaledStyles } from '@ui/displayScale';
 
 const ICON: Record<string, string> = {
   trk: 'map-marker-path',
@@ -22,6 +23,8 @@ const ICON: Record<string, string> = {
  * everyone (with any edit a delete beat).
  */
 export function LiveTrashScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const { id } = useLocalSearchParams<{ id: string }>();
   const groupId = typeof id === 'string' ? id : '';
   const t = useSchemeTokens();
@@ -79,7 +82,7 @@ export function LiveTrashScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   empty: { fontSize: 14, lineHeight: 20, fontWeight: '600', marginTop: space.md },
   row: {
     flexDirection: 'row',

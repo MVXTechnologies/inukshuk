@@ -16,11 +16,12 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { BackHandler, StyleSheet, View } from 'react-native';
-import { IconButton, Text } from 'react-native-paper';
+import { IconButton, Text } from '@ui/paper';
 
 import { MemberAvatar } from '../components';
 import { Round } from '../map/TeamCards';
 import { useTeamMapFocus } from '../map/teamMapFocus';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** The card for the shape whose key is in the drawing store, or nothing. */
 export function TeamShapeCard({
@@ -56,6 +57,8 @@ function Card({
   onNavigate: (latitude: number, longitude: number) => void;
   focused: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const view = useTeamStore((s) => s.view);
@@ -187,7 +190,7 @@ function Card({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   card: {
     borderRadius: 16,

@@ -33,7 +33,7 @@ import {
   type OverlayTab,
 } from '@core/map/overlayTabs';
 import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { Icon, Text, TouchableRipple } from 'react-native-paper';
+import { Icon, Text, TouchableRipple } from '@ui/paper';
 import {
   CONTOUR_INTERVALS,
   contourIntervalLabel,
@@ -59,6 +59,7 @@ import { PointingLinePanel, PointingLineRow } from './PointingLinePanel';
 import { openStripEditor } from '../infoStrip/stripRuntime';
 import { SatellitePanel } from './SatellitePanel';
 import { SlopeRow, SlopeSubPanel } from './SlopePanel';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * THE overlays menu, titled "Map layers" (#484 redesign; #668–#670): how the
@@ -348,6 +349,8 @@ function OverlayRows({
  * the North American composite.
  */
 function WeatherList({ onBack }: { onBack: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent } = useSheetAccent();
   const weatherLayer = useSettingsStore((s) => s.weatherLayer);
@@ -419,6 +422,8 @@ function WeatherList({ onBack }: { onBack: () => void }) {
  * as label and `selected` state.
  */
 function OverlayTabBar({ tab, onSelect }: { tab: OverlayTab; onSelect: (t: OverlayTab) => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent, onAccent } = useSheetAccent();
   return (
@@ -503,6 +508,8 @@ export function OverlaysPanel({
    */
   openOn?: OverlayRow;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   // The remembered tab (persisted), unless a caller asked for a row.
   const savedTab = useSettingsStore((s) => s.overlaysTab);
   const setSetting = useSettingsStore((s) => s.set);
@@ -638,7 +645,7 @@ export function MapOverlaysMenu({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   body: { paddingBottom: 4 },
   tabBar: {
     flexDirection: 'row',

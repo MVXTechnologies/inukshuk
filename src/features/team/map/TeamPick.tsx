@@ -9,7 +9,7 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
-import { Button, Icon, Text } from 'react-native-paper';
+import { Button, Icon, Text } from '@ui/paper';
 import { create } from 'zustand';
 
 import { teamService, useTeamStore } from '@state/teamStore';
@@ -17,6 +17,7 @@ import { teamService, useTeamStore } from '@state/teamStore';
 import { usePinDraft } from './TeamPinComposer';
 import { useTeamSheet } from './teamMode';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
+import { useScaledStyles } from '@ui/displayScale';
 
 export type PickPurpose = 'task' | 'notify' | 'pin' | 'rally';
 
@@ -90,6 +91,8 @@ export function usePickDone(): (p: Picked | null) => void {
 
 /** The banner while picking, then the confirm card. */
 export function TeamPickOverlay({ top, cardStyle }: { top: number; cardStyle: object }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const purpose = useTeamPick((s) => s.purpose);
   const picked = useTeamPick((s) => s.picked);
@@ -172,7 +175,7 @@ export function TeamPickOverlay({ top, cardStyle }: { top: number; cardStyle: ob
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   lane: { position: 'absolute', left: 8, right: 8, zIndex: MAP_OVERLAY_Z.teamPick },
   banner: {

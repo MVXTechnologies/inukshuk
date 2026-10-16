@@ -19,6 +19,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { FilterChip } from './ExploreParts';
 import { itemFacets } from './facetsAdapter';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The explorer's filter chips (#447): "All maps", then one chip per facet —
@@ -75,6 +76,8 @@ export function ExploreFilterBar({
   /** Link-out places per Type / Activity, where the screen shows places too. */
   placeCounts?: PlaceFacetCounts | undefined;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const [open, setOpen] = useState<Facet | null>(null);
   // Inside a collection the counts are the collection's (2.5.2 QA): a value
   // offered with a count must list that many when tapped.
@@ -214,6 +217,6 @@ export function ExploreFilterBar({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   row: { paddingHorizontal: space.lg, gap: space.sm, alignItems: 'center' },
 });

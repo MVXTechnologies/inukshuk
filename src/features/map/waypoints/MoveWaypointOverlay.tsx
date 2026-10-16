@@ -11,13 +11,14 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useRef } from 'react';
 import { BackHandler, StyleSheet, View } from 'react-native';
-import { Button, Icon, Text, useTheme } from 'react-native-paper';
+import { Button, Icon, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MapButton } from '../components/MapButton';
 import { formatWaypointCoords } from './formatWaypointCoords';
 import { WaypointPinView } from './WaypointPinView';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   /** The map's settled zoom (for the precision hint), null before the first settle. */
@@ -45,6 +46,8 @@ interface Props {
  * Back cancels.
  */
 export function MoveWaypointOverlay({ units, zoom = null, onCancel, onConfirm, onLocate }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const target = useWaypointMoveStore((s) => s.moving);
   const center = useMapStore((s) => s.mapCenter);
   // Settings › Pin size (#686): the moving pin matches the map's pins.
@@ -177,7 +180,7 @@ const BAR_HEIGHT = 140;
 const ARM = 18;
 const GAP = 6;
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // Above the recording panel (6), a waypoint card (7) and the snackbars (8):
   // move mode owns the screen until Confirm or Cancel.
   root: { ...StyleSheet.absoluteFill, zIndex: MAP_OVERLAY_Z.moveOverlay },

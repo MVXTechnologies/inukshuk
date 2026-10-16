@@ -2,7 +2,7 @@
 import { reportError } from '@lib/errorReporting';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { useRouter } from 'expo-router';
-import { List } from 'react-native-paper';
+import { List } from '@ui/paper';
 
 import { Note, TeamScreenFrame } from './components';
 

@@ -6,6 +6,7 @@ import { TideLegend } from '../../map/components/TideLegend';
 import { setExtensionPrefs, useExtensionPrefs } from '../prefs';
 import type { ExtensionSubPanelProps } from '../types';
 import { TideSources, useTideCoverage } from './TideSources';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Map overlays › Extensions › Tide stations (#668): the switch, the gauge
@@ -14,6 +15,8 @@ import { TideSources, useTideCoverage } from './TideSources';
  * benchmarks, which are a Geodetic points filter.
  */
 export function TideSubPanel({ onBack, openSubPanel }: ExtensionSubPanelProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const { show } = useExtensionPrefs('tides');
   const geodeticInstalled = useExtensionPrefs('geodetic').installedAt > 0;
   const coverage = useTideCoverage();
@@ -46,6 +49,6 @@ export function TideSubPanel({ onBack, openSubPanel }: ExtensionSubPanelProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   pad: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 6 },
 });

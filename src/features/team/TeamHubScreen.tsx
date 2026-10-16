@@ -15,7 +15,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Linking, Pressable, StyleSheet, View } from 'react-native';
-import { Badge, Button, Icon, List, Switch, Text } from 'react-native-paper';
+import { Badge, Button, Icon, List, Switch, Text } from '@ui/paper';
 
 import {
   ActionBanner,
@@ -36,6 +36,7 @@ import { useNavigationStore } from '@state/navigationStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { TeamDrawingsRow } from './draw/TeamDrawingsRow';
 import { memberSyncLine, memberSyncShort, openPeers, teamSyncLine } from './syncLine';
+import { useScaledStyles } from '@ui/displayScale';
 
 const SHARE_INTERVALS = [
   { id: 30, label: '30 s' },
@@ -64,6 +65,8 @@ export function tasksLine(tasks: readonly TeamTask[], me: string): string {
 }
 
 export function TeamHubScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const lastKnown = useSettingsStore((x) => x.lastKnownPosition);
@@ -512,7 +515,7 @@ export function hubSyncLine(
   return `internet + nearby · ${reached} phone${reached === 1 ? '' : 's'}`;
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   headerRow: { flexDirection: 'row', alignItems: 'center', marginTop: -space.sm },
   bands: { marginBottom: space.sm },

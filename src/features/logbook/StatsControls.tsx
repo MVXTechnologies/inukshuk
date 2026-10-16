@@ -3,7 +3,8 @@ import { radius, space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Shared controls of the Logbook statistics screens: the activity chips, a
@@ -24,6 +25,8 @@ export function ActivityChips({
   customCategories: readonly CustomCategory[];
   includeAll?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const chip = (key: string, id: string | null, label: string, icon?: string, color?: string) => {
@@ -82,6 +85,8 @@ export function Segmented<T extends string>({
   onChange: (v: T) => void;
   label: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   return (
@@ -123,6 +128,8 @@ export function StatsCard({
   style?: ViewStyle;
   accessibilityLabel?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <View
@@ -140,6 +147,8 @@ export function StatsCard({
 
 /** Caps label above a section ("FASTEST", "BIGGEST OUTINGS"). */
 export function SectionLabel({ children }: { children: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <Text accessibilityRole="header" style={[styles.caps, { color: tokens.inkMuted }]}>
@@ -160,6 +169,8 @@ export function LinkRow({
   subtitle?: string;
   onPress: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const theme = useTheme();
   return (
@@ -189,7 +200,7 @@ export function LinkRow({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   scroller: { marginHorizontal: -space.lg, flexGrow: 0 },
   chipRow: { paddingHorizontal: space.lg, paddingVertical: target.compactHitSlop, gap: 6 },
   chip: {

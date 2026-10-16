@@ -15,12 +15,13 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FilterChip } from './ExploreParts';
 import { useLinkOutCollections } from './useLinkOutCollections';
 import { openExternalLink } from '@lib/openLink';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * A link-out collection (#447, board `Collection.dc.html` — Parcs Québec):
@@ -36,6 +37,8 @@ import { openExternalLink } from '@lib/openLink';
 const keyExtractor = (entry: PlaceEntry) => entry.place.id;
 
 export function LinkOutCollectionScreen({ id }: { id: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -81,7 +84,7 @@ export function LinkOutCollectionScreen({ id }: { id: string }) {
         </Pressable>
       );
     },
-    [t, units],
+    [styles, t, units],
   );
 
   const header = (
@@ -155,10 +158,12 @@ export function LinkOutCollectionScreen({ id }: { id: string }) {
 }
 
 function Gap() {
+  const styles = useScaledStyles(stylesSheet);
+
   return <View style={styles.gap} />;
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   center: { textAlign: 'center' },
   missing: { alignItems: 'center', paddingTop: 64, paddingHorizontal: 24 },

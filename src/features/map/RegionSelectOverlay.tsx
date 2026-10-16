@@ -22,10 +22,11 @@ import { MAP_PACK_FORMAT } from './mapStyle';
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, Pressable, StyleSheet, View } from 'react-native';
-import { Button, Icon, SegmentedButtons, Surface, Text, useTheme } from 'react-native-paper';
+import { Button, Icon, SegmentedButtons, Surface, Text, useTheme } from '@ui/paper';
 
 import { RegionPreviewThumb } from './RegionPreviewThumb';
 import { useMapBottomInset } from './useMapBottomInset';
+import { useScaledStyles } from '@ui/displayScale';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -120,6 +121,8 @@ export function RegionSelectOverlay({
   onCancel,
   variant = 'download',
 }: Props): ReactElement {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const makeMapMode = variant === 'makeMap';
   // #682: while recording the tab bar is hidden, so the sheet clears the
@@ -646,7 +649,7 @@ export function RegionSelectOverlay({
 // Styles
 // ---------------------------------------------------------------------------
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   dim: { position: 'absolute', backgroundColor: 'rgba(0,0,0,0.45)' },
   selectionBorder: { position: 'absolute', borderWidth: 2, borderColor: '#ffffff' },

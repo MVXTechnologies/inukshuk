@@ -57,7 +57,7 @@ import {
   Surface,
   Text,
   useTheme,
-} from 'react-native-paper';
+} from '@ui/paper';
 import { useIosKeyboardHeight } from '../common/useIosKeyboardHeight';
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
 import { KEYBOARD_DONE_BAR_ID, KeyboardDoneBar } from '@ui/components/KeyboardDoneBar';
@@ -96,6 +96,7 @@ import { photosEditable, useTrailPhotos, useTrailPhotosStore } from '@state/trai
 import { usePhotoFocusStore } from '@state/photoFocusStore';
 import { AddPhotosSheet } from '../photos/AddPhotosSheet';
 import { ShareTrailSheet } from '../photos/ShareTrailSheet';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   trackId: string;
@@ -111,6 +112,8 @@ const MAP_H = 290;
  * below in one scroll. Scrubbing the profile drives a marker on the map.
  */
 export function Trail3DGLScreen({ trackId }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const tokens = useSchemeTokens();
@@ -1184,7 +1187,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   photoCardDock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20 },
   fill: { flex: 1 },
   tabContent: { paddingBottom: 24 },

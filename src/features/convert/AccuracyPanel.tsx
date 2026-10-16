@@ -3,7 +3,8 @@ import { formatBytes, type Pack } from '@core/convert/packs';
 import { palette, radius, space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { StyleSheet, View } from 'react-native';
-import { Button, Icon, ProgressBar, Text, useTheme } from 'react-native-paper';
+import { Button, Icon, ProgressBar, Text, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   panel: Panel;
@@ -33,6 +34,8 @@ export function AccuracyPanel({
   chart,
   lite,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const okColor = theme.dark ? palette.sage : palette.sageDeep;
@@ -159,7 +162,7 @@ export function AccuracyPanel({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   panel: { borderRadius: radius.lg, padding: space.md, gap: space.xs },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: 2 },
   dot: { width: 10, height: 10, borderRadius: 5 },

@@ -16,7 +16,7 @@ import {
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from 'react-native';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text, useTheme } from '@ui/paper';
 import Svg, {
   Circle,
   Defs,
@@ -26,6 +26,7 @@ import Svg, {
   Stop,
   Text as SvgText,
 } from 'react-native-svg';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** Height of the plot area (the tilted x-tick band hangs below it). */
 const CHART_HEIGHT = 140;
@@ -155,6 +156,8 @@ export function ElevationProfile({
   markers = [],
   selectedDistanceM = null,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const profile = useMemo(
     () => buildElevationProfile(points, { segmentStarts }),
@@ -716,7 +719,7 @@ function rangeOf(vals: (number | undefined)[]): { lo: number; hi: number } | nul
   return n >= 2 && hi > lo ? { lo, hi } : null;
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   container: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 10, gap: 8 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerRange: { flexGrow: 1 },

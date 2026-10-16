@@ -14,7 +14,8 @@ import { WaypointPinView } from '@features/map/waypoints/WaypointPinView';
 import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { StyleSheet, View } from 'react-native';
-import { List, SegmentedButtons } from 'react-native-paper';
+import { List, SegmentedButtons } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 const OPTIONS = PIN_SCALES.map((v) => ({
   value: String(v),
@@ -36,6 +37,8 @@ const PREVIEW_K = 0.7;
  * sizes at the chosen scale sits under the segments.
  */
 export function PinSizeSetting() {
+  const styles = useScaledStyles(stylesSheet);
+
   // The store normalises on hydrate; normalise here too, so the row never shows junk.
   const scale = normalizePinScale(useSettingsStore((s) => s.pinScale));
   const set = useSettingsStore((s) => s.set);
@@ -79,7 +82,7 @@ export function PinSizeSetting() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // Same inset as the Units and Coordinates segments around it.
   segment: { paddingHorizontal: 16, paddingBottom: 8 },
   preview: {

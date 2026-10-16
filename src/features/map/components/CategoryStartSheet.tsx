@@ -3,11 +3,12 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Chip, Icon, Surface, Text, useTheme } from 'react-native-paper';
+import { Button, Chip, Icon, Surface, Text, useTheme } from '@ui/paper';
 import { KeyboardLifted } from '@ui/components/KeyboardLifted';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NewCategoryForm } from './NewCategoryForm';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   visible: boolean;
@@ -36,6 +37,8 @@ export function CategoryStartSheet({ visible, onStart, onDismiss }: Props) {
 }
 
 function SheetContent({ onStart, onDismiss }: Omit<Props, 'visible'>) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const customCategories = useLibraryStore((s) => s.customCategories);
@@ -146,7 +149,7 @@ function SheetContent({ onStart, onDismiss }: Omit<Props, 'visible'>) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   scrim: {
     position: 'absolute',
     top: 0,

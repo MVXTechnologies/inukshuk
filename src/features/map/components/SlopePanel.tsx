@@ -25,7 +25,7 @@ import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 import Svg, { Circle, G, Line, Path, Text as SvgText } from 'react-native-svg';
 import {
   SectionTitle,
@@ -36,6 +36,7 @@ import {
   useSheetWidth,
 } from './mapSheet';
 import { RangeSlider } from './RangeSlider';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The slope layer's options (#723, mockup B1–B4, owner pick: Option 2
@@ -102,6 +103,8 @@ export function SlopeRow({
 
 /** "Reset": steepness, aspects and altitude back to their defaults; quiet while they are. */
 function SlopeReset({ onReset }: { onReset: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent } = useSheetAccent();
   const { minDeg, maxDeg, filter } = useSlopeSettings();
@@ -128,6 +131,8 @@ function SlopeReset({ onReset }: { onReset: () => void }) {
 
 /** The steepness bands as a strip with their thresholds (mockup B2). */
 function BandStrip() {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <View accessible accessibilityLabel="Bands from 27°, 30°, 32°, 35°, 45° and up">
@@ -172,6 +177,8 @@ function wedge(c: number, r0: number, r1: number, a0: number, a1: number): strin
  * and the hub is its own accessible toggle.
  */
 export function AspectRose({ mask, onChange }: { mask: number; onChange: (mask: number) => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent, onAccent } = useSheetAccent();
   const C = ROSE / 2;
@@ -294,6 +301,8 @@ export function MiniRose({ mask }: { mask: number }) {
  * rose, and Reset. Every change applies live and is persisted.
  */
 export function SlopeSubPanel({ onBack }: { onBack: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent } = useSheetAccent();
   const sheetW = useSheetWidth();
@@ -386,6 +395,8 @@ export function SlopeSubPanel({ onBack }: { onBack: () => void }) {
  * scale bar. A tap opens the Slope sub-panel. Renders nothing otherwise.
  */
 export function SlopeLegendChip({ onPress }: { onPress: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const outline = useChromeOutline();
   const { slope, minDeg, maxDeg, filter, units } = useSlopeSettings();
@@ -410,7 +421,7 @@ export function SlopeLegendChip({ onPress }: { onPress: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   reset: { fontSize: 15, fontWeight: '700' },
   bands: {
     flexDirection: 'row',
