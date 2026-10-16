@@ -1041,8 +1041,13 @@ FrameOutput Engine::frame(const FrameInput& in) {
     // Uploads (bounded per frame), evicting the least recently drawn slots.
     int uploads = 0;
     std::vector<uint64_t> ready;
+    std::vector<std::pair<uint64_t, uint64_t>> arrivals;  // (arrived, key)
     for (auto& [key, e] : imagery_)
-      if (e.pending && e.wanted) ready.push_back(key);
+      if (e.pending && e.wanted) arrivals.push_back({e.arrived, key});
+    // First arrived, first uploaded: the same order whatever the hash map's (it differs
+    // between standard libraries, and only kImageryUploadsPerFrame go per frame).
+    std::sort(arrivals.begin(), arrivals.end());
+    for (const auto& a : arrivals) ready.push_back(a.second);
     // Armed before the tilt shows the terrain (#720): nothing is drawn, nothing uploaded yet.
     if (!drawing) ready.clear();
     for (uint64_t key : ready) {
@@ -1053,7 +1058,8 @@ FrameOutput Engine::frame(const FrameInput& in) {
         uint64_t victim = 0;
         uint64_t oldest = UINT64_MAX;
         for (auto& [k2, e2] : imagery_) {
-          if (e2.slot >= 0 && e2.lastFrame + 2 < frameNo_ && e2.lastFrame < oldest) {
+          if (e2.slot >= 0 && e2.lastFrame + 2 < frameNo_ &&
+              (e2.lastFrame < oldest || (e2.lastFrame == oldest && k2 < victim))) {
             oldest = e2.lastFrame;
             victim = k2;
           }
