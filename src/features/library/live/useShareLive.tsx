@@ -37,6 +37,8 @@ export function useShareLive(args: {
   showSnack: (message: string) => void;
   /** Item counts per folder (the Leave dialog's "Remove it · 6 items"). */
   itemsIn: (folderId: string) => number;
+  /** The folder sheet's "Send a copy": the Share sheet for the shared folder or item. */
+  onSendCopy?: (target: LiveTarget) => void;
 }) {
   const list = useLiveFolders();
   const router = useRouter();
@@ -141,6 +143,15 @@ export function useShareLive(args: {
         onPeople={() => go('people')}
         onActivity={() => go('activity')}
         onTrash={() => go('trash')}
+        {...(args.onSendCopy !== undefined && open?.local !== undefined
+          ? {
+              onSendCopy: () => {
+                const local = open.local!;
+                setSheet(null);
+                args.onSendCopy!(local);
+              },
+            }
+          : {})}
         onStop={() => {
           setStopping(open);
           setSheet(null);

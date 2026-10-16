@@ -352,6 +352,49 @@ export function useLibrarySelection(args: LibrarySelectionArgs) {
     [args.creditLang, args.units],
   );
 
+  /** A shared folder's or item's "Send a copy" (#712): the same sheet, for it. */
+  const openCopy = useCallback(
+    (target: LiveTarget) => {
+      const s = useLibraryStore.getState();
+      if (target.kind === 'folder') {
+        const f = s.folders.find((x) => x.id === target.id);
+        if (f === undefined) return;
+        const inIt = <T extends { folderId?: string }>(xs: readonly T[]) =>
+          xs.filter((x) => x.folderId === f.id);
+        const c = {
+          maps: inIt(s.maps),
+          tracks: inIt(s.tracks),
+          waypoints: inIt(s.waypoints),
+          areas: inIt(s.areas),
+        };
+        openShare(
+          {
+            ...c,
+            refs: [
+              ...c.maps.map((m) => ({ kind: 'map' as const, id: m.id })),
+              ...c.tracks.map((t) => ({ kind: 'track' as const, id: t.id })),
+              ...c.waypoints.map((w) => ({ kind: 'waypoint' as const, id: w.id })),
+              ...c.areas.map((a) => ({ kind: 'area' as const, id: a.id })),
+            ],
+          },
+          f.name,
+          f.id,
+        );
+        return;
+      }
+      const one = <T extends { id: string }>(xs: readonly T[]) =>
+        xs.filter((x) => x.id === target.id);
+      const c = {
+        maps: target.kind === 'map' ? one(s.maps) : [],
+        tracks: target.kind === 'track' ? one(s.tracks) : [],
+        waypoints: target.kind === 'waypoint' ? one(s.waypoints) : [],
+        areas: target.kind === 'area' ? one(s.areas) : [],
+      };
+      openShare({ ...c, refs: [{ kind: target.kind, id: target.id }] }, null);
+    },
+    [openShare],
+  );
+
   /** A trail's ⋮ › Share (the same sheet, for one trail). */
   const shareTrail = useCallback(
     (t: TrackSummary) =>
@@ -614,6 +657,7 @@ export function useLibrarySelection(args: LibrarySelectionArgs) {
     longPressFolder,
     pickForMerge,
     shareTrail,
+    openCopy,
     moveIntoNewFolder,
     dropSelection,
     exit,

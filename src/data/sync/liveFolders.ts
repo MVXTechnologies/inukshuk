@@ -7,6 +7,7 @@
  */
 import type { LFO, LIT } from '@core/domains/library/kinds';
 import {
+  actionOf,
   buildHistory,
   historyOps,
   recordBeaten,
@@ -14,7 +15,9 @@ import {
   recordMerges,
   seenUpTo,
   toReview,
+  type ActivityAction,
   type LibraryHistory,
+  type LibWrite,
 } from '@core/domains/library/history';
 import {
   activityFeed,
@@ -49,6 +52,13 @@ import type { LocalKind } from '@core/domains/library/liveFields';
 
 type RecordKind = typeof LFO | typeof LIT;
 
+export interface RowNote {
+  text: string;
+  conflict: boolean;
+  /** "Not sent yet": the row's latest change is mine and no other phone holds it. */
+  pending?: boolean;
+}
+
 export interface Face {
   id: string;
   initials: string;
@@ -78,12 +88,22 @@ export interface LiveFolder {
   toReview: number;
   changesToday: number;
   trashCount: number;
-  /** Notes for rows inside it, by `kind:localId`. */
-  notes: ReadonlyMap<string, { text: string; conflict: boolean }>;
+  /** Notes for rows inside it, by `kind:localId` (`pending`: a change of mine no phone has yet). */
+  notes: ReadonlyMap<string, RowNote>;
   massDelete: MassDeleteAlert[];
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+const UNSENT: Record<ActivityAction, string> = {
+  create: 'added',
+  rename: 'renamed',
+  move: 'moved',
+  edit: 'edited',
+  trash: 'deleted',
+  restore: 'restored',
+  purge: 'deleted',
+};
 
 const ERRORS: ReadonlySet<string> = new Set<ActionError>([
   'read-only',
@@ -219,9 +239,24 @@ export class LiveFolders {
     const known = this.delivered.get(s.teamId) ?? mySeq;
     const delivered = Math.max(known, ...seen);
     this.delivered.set(s.teamId, delivered);
-    const notes = new Map<string, { text: string; conflict: boolean }>();
+    // My ops past what any peer's vector holds: their records are "not sent yet".
+    const unsent = new Set(
+      mySeq > delivered ? s.replica.opsInRange(s.me, delivered + 1, mySeq).map((op) => op.id) : [],
+    );
+    const pending = new Map<string, LibWrite>();
+    for (const w of h.writes) if (unsent.has(w.id)) pending.set(`${w.kind}:${w.rid}`, w);
+    const notes = new Map<string, RowNote>();
     for (const l of record?.links ?? []) {
-      const n = rowNote(h, l.kind, l.rid, s.me, name, now);
+      const mine = pending.get(`${l.kind}:${l.rid}`);
+      const writes = h.records.get(`${l.kind}:${l.rid}`) ?? [];
+      const n: RowNote | undefined =
+        mine !== undefined
+          ? {
+              text: `Not sent yet · ${UNSENT[actionOf(mine, writes[0]?.id === mine.id)]} by you`,
+              conflict: false,
+              pending: true,
+            }
+          : rowNote(h, l.kind, l.rid, s.me, name, now);
       if (n !== undefined) notes.set(`${l.localKind}:${l.local}`, n);
     }
     const lastSyncAt = this.lastSync.get(s.teamId);

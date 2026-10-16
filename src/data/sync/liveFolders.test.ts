@@ -114,4 +114,29 @@ describe('live folders (2.7.0 G10)', () => {
     expect(la.list()[0]!.people.map((p) => p.name)).toEqual(['You']);
     expect(la.follows(f.teamId)).toBe(true);
   });
+
+  it('a change no other phone has yet reads "Not sent yet"; it clears once delivered', async () => {
+    const { rig, a, b, la } = await shared();
+    await sync(rig, [a, b]);
+    expect(la.list()[0]!.line.text).toMatch(/^Synced/);
+    await active(b).stopMesh();
+    await rig.settle();
+    a.port.lib.waypoints[0]!.label = 'Refuge (fermé)';
+    await a.bridge.runAll();
+    const [f] = la.list();
+    expect(f!.notes.get('waypoint:w1')).toEqual({
+      text: 'Not sent yet · renamed by you',
+      conflict: false,
+      pending: true,
+    });
+    expect(f!.line).toMatchObject({ tone: 'wait' });
+    expect(f!.line.text).toMatch(/waiting$/);
+    await active(b).startMesh();
+    await rig.settle();
+    active(a).tick();
+    await rig.settle();
+    await sync(rig, [a, b]);
+    expect(la.list()[0]!.notes.get('waypoint:w1')).toBeUndefined();
+    expect(la.list()[0]!.line.tone).toBe('ok');
+  });
 });

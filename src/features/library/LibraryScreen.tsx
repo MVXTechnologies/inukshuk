@@ -94,7 +94,7 @@ import { pickAndImportMaps } from './importMap';
 import { itemCount, refKey, type ItemRef } from '@core/library/selection';
 import { JoiningFolders } from './live/JoiningFolders';
 import { useShareLive } from './live/useShareLive';
-import { useLibrarySelection } from './selection/useLibrarySelection';
+import { useLibrarySelection, type LiveTarget } from './selection/useLibrarySelection';
 import { NameDialog } from './NameDialog';
 import { DragGhost } from './DragGhost';
 import { useDragToFolder, type DragItem } from './useDragToFolder';
@@ -369,6 +369,7 @@ export function LibraryScreen() {
   // The select-mode hook, for the drag callbacks (declared before it).
   const selectionRef = useRef<{
     dropSelection: (item: ItemRef, target: string | null) => boolean;
+    openCopy: (target: LiveTarget) => void;
   } | null>(null);
   const scrollListTo = useCallback(
     (y: number) => listRef.current?.scrollToOffset({ offset: y, animated: false }),
@@ -638,6 +639,9 @@ export function LibraryScreen() {
   /** A row's Share live caption: "Renamed by Julie · 2 h", or "Live with …" for a shared item. */
   const liveNote = (kind: 'track' | 'waypoint' | 'area' | 'map', id: string): string | undefined =>
     live.note(kind, id)?.text ?? live.itemShare(kind, id)?.subtitle;
+  /** The "not sent yet" clock before a row's caption. */
+  const liveIcon = (kind: 'track' | 'waypoint' | 'area' | 'map', id: string) =>
+    live.note(kind, id)?.pending === true ? 'clock-outline' : undefined;
 
   const moveToFolderItems = (
     kind: 'map' | 'track' | 'waypoint' | 'area',
@@ -1002,6 +1006,7 @@ export function LibraryScreen() {
         name={w.label}
         detail={preview !== null ? `Waypoint · ${preview}` : 'Waypoint'}
         caption={liveNote('waypoint', w.id) ?? shortDate(w.createdAt, nowMs)}
+        captionIcon={liveIcon('waypoint', w.id)}
         photoUri={w.photoUri}
         glyph={waypointIconGlyph(w.icon)}
         accessibilityLabel={
@@ -1111,6 +1116,7 @@ export function LibraryScreen() {
         caption={
           liveNote('area', a.id) ?? [shortDate(a.createdAt, nowMs), ...(a.tags ?? [])].join(' · ')
         }
+        captionIcon={liveIcon('area', a.id)}
         color={a.color}
         photoUri={a.photoUris?.[0]}
         accessibilityLabel={
@@ -1187,6 +1193,7 @@ export function LibraryScreen() {
   const live = useShareLive({
     focused: isFocused,
     showSnack,
+    onSendCopy: (target) => selectionRef.current?.openCopy(target),
     itemsIn: (folderId) =>
       [...maps, ...tracks, ...waypoints, ...areas].filter((x) => x.folderId === folderId).length,
   });
@@ -1287,6 +1294,7 @@ export function LibraryScreen() {
             selected={sel.keys.has(`track:${t.id}`)}
             flash={sel.flashKeys.has(`track:${t.id}`)}
             note={liveNote('track', t.id)}
+            noteIcon={liveIcon('track', t.id)}
             menuOpen={menuTrackId === t.id}
             elevation={expanded ? (elevationPreview ?? null) : undefined}
             grip={grip}

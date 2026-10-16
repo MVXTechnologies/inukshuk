@@ -11,6 +11,7 @@ import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { SectionHeader } from '../components/LibraryChrome';
+import { WaypointRow } from '../components/LibraryRows';
 import { JoiningFolders } from './JoiningFolders';
 import { LeaveDialog, SharedFolderSheet, StopDialog } from './SharedFolderSheet';
 import { ShareLiveSheet } from './ShareLiveSheet';
@@ -121,6 +122,7 @@ describe.each(THEMES)('Share live screens (%s)', (_name, theme) => {
       </SafeAreaProvider>,
     );
     expect(screen.queryByTestId('shared-sheet-stop')).toBeNull();
+    expect(screen.queryByTestId('shared-sheet-copy')).toBeNull();
     expect(screen.queryByText('1 to review')).toBeNull();
     await fireEvent.press(screen.getByTestId('shared-sheet-leave'));
     expect(onLeave).toHaveBeenCalled();
@@ -177,5 +179,42 @@ describe.each(THEMES)('Share live screens (%s)', (_name, theme) => {
     expect(screen.getByText('Joining · from Julie')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('library-shared-menu'));
     expect(onMenu).toHaveBeenCalled();
+  });
+
+  it('the folder sheet offers Send a copy when it can', async () => {
+    const onSendCopy = jest.fn();
+    await show(
+      <SharedFolderSheet
+        folder={folder()}
+        focused
+        onPeople={jest.fn()}
+        onActivity={jest.fn()}
+        onTrash={jest.fn()}
+        onSendCopy={onSendCopy}
+        onStop={jest.fn()}
+        onLeave={jest.fn()}
+        onClose={jest.fn()}
+      />,
+      theme,
+    );
+    await fireEvent.press(screen.getByTestId('shared-sheet-copy'));
+    expect(onSendCopy).toHaveBeenCalled();
+  });
+
+  it('a row not sent yet shows the clock before its caption', async () => {
+    await show(
+      <WaypointRow
+        name="Refuge"
+        detail="Waypoint"
+        caption="Not sent yet · renamed by you"
+        captionIcon="clock-outline"
+        accessibilityLabel="Refuge"
+        onPress={jest.fn()}
+        onLongPress={jest.fn()}
+        testID="row"
+      />,
+      theme,
+    );
+    expect(screen.getByText('Not sent yet · renamed by you')).toBeTruthy();
   });
 });
