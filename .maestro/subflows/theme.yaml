@@ -1,0 +1,30 @@
+# Settings → App settings → Theme: ${THEME} (Light, Dark or System). From
+# anywhere with the tab bar. The accordion opener is guarded, then the
+# Theme segment is reached with the standard scroll (see extensions-review).
+appId: com.inukshuk.app
+---
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Settings'
+    timeout: 15000
+- tapOn: 'Settings'
+- assertVisible: 'App settings.*'
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Keep screen awake.*'
+          commands:
+            - tapOn: 'App settings.*'
+      - extendedWaitUntil:
+          visible: 'Keep screen awake.*'
+          timeout: 5000
+- scrollUntilVisible:
+    element:
+      text: '${THEME}'
+    direction: DOWN
+- tapOn: '${THEME}'
+- assertVisible: 'Theme.*'
