@@ -66,6 +66,11 @@ jobs:
       - name: iOS entitlements match the provisioning profile
         run: node scripts/ci/ios-entitlements.mjs
 
+      # WebRTC is data-only (security review R-RTC-5): no microphone purpose
+      # string, no audio / screen-capture permissions, our own camera string.
+      - name: No media permissions beyond the camera
+        run: node scripts/ci/media-permissions.mjs
+
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
