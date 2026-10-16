@@ -36,7 +36,10 @@ sign-in. Keep every value below out of the repository, issues and chats.
 2. **Choose the host.** Either the account's `*.workers.dev` subdomain, or a
    custom hostname (a domain in this account, then uncomment `routes` in
    `worker/wrangler.toml`). The phones sign the exact host they connect to, so
-   the app's relay URL and this host must match.
+   the app's relay host and this host must match. The app expects
+   **`rtc.mvxtechnologies.com`** (`RTC_HOST` in `src/data/rtcRelay.ts`, one
+   line to change, like `TILE_HOST`; a build can override it with
+   `RTC_RELAY_HOST`).
 3. **Create the TURN key.** Dashboard → Realtime → TURN Server → Create. Note
    the **key id** and the **API token** it shows once.
 4. **Create two API tokens** (My Profile → API Tokens → Create Custom Token):
