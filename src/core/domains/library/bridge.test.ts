@@ -296,4 +296,43 @@ describe('library bridge reconcile', () => {
     ju.run(at(6));
     expect(ju.get('waypoint', 'ju-w1')?.fields['n']).toBe('Later');
   });
+
+  it('a viewer writes nothing: changes are put back, deletes restored, new items stay local', () => {
+    const { sim, me, ju } = world();
+    me.put('folder', 'sub', { n: 'Jour 1' });
+    me.put('waypoint', 'w9', WPT('Source'), 'sub');
+    me.run(at(1));
+    sim.deliver(OWNER, JU, at(2));
+    ju.run(at(3));
+    ju.put('waypoint', 'ju-w1', WPT('Mine now'));
+    ju.lib.delete('waypoint:ju-w9');
+    ju.put('waypoint', 'jnew', WPT('Extra'));
+    const { view } = sim.look(JU);
+    let n = 0;
+    const plan = reconcile({
+      root: { kind: LFO, rid: ROOT },
+      rootLocal: { kind: 'folder', id: 'ju-gasp' },
+      local: [...ju.lib.values()],
+      view,
+      links: ju.links,
+      newLocalId: (rid) => `v${++n}-${rid}`,
+      newRecordId: (l) => l.id,
+      readOnly: true,
+    });
+    expect(plan.writes).toEqual([]);
+    const update = plan.local.find((o) => o.op === 'update');
+    expect(update).toMatchObject({ local: 'ju-w1', changed: ['n'] });
+    const back = plan.local.find((o) => o.op === 'create');
+    expect(back).toMatchObject({ kind: 'waypoint', rid: 'w9', parent: 'ju-sub' });
+    expect(plan.links.some((l) => l.local === 'jnew')).toBe(false);
+  });
+
+  it('a phone that lost its link table re-links the root without writing it again', () => {
+    const { me } = world();
+    me.run(at(1));
+    me.links = me.links.filter((l) => l.rid !== ROOT);
+    const out = me.run(at(2));
+    expect(out.writes.filter((w) => w.rid === ROOT)).toEqual([]);
+    expect(me.links.find((l) => l.rid === ROOT)).toMatchObject({ local: ROOT, seen: true });
+  });
 });

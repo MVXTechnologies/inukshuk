@@ -41,7 +41,7 @@ export class MemoryLibrary implements LibraryPort {
     return this.files.get(t.fileUri);
   }
   writeTrack(id: string, name: string, track: CodecTrack, category?: string): TrackSummary {
-    const fileUri = `file:///${this.tag}/${id}.gpx`;
+    const fileUri = `mem:///${this.tag}/${id}.gpx`;
     this.files.set(fileUri, track);
     const timed = track.points.some((p) => p.hasTime !== false);
     const kind = category ?? (timed ? undefined : 'navigation');
@@ -195,7 +195,7 @@ export function seed(a: Phone): void {
     longitude: -66.18,
     label: 'Refuge',
     folderId: 'gaspF',
-    photoUri: 'file:///a/photo.jpg',
+    photoUri: 'mem:///a/photo.jpg',
     createdAt: 1,
   });
   a.port.lib.areas.push({
@@ -206,7 +206,7 @@ export function seed(a: Phone): void {
     folderId: 'gaspF',
     createdAt: 1,
   });
-  a.port.files.set('file:///a/t1.gpx', {
+  a.port.files.set('mem:///a/t1.gpx', {
     points: [
       { latitude: 48.9, longitude: -66.2, altitude: 892.5, time: 1_790_000_000_000 },
       { latitude: 48.95, longitude: -66.1, altitude: 1_010.25, time: 1_790_000_060_000 },
@@ -218,13 +218,13 @@ export function seed(a: Phone): void {
     name: 'Mont Albert',
     startedAt: 1,
     stats: {} as TrackSummary['stats'],
-    fileUri: 'file:///a/t1.gpx',
+    fileUri: 'mem:///a/t1.gpx',
     folderId: 'gaspF',
   });
   a.port.lib.maps.push({
     id: 'm1',
     name: 'Berger',
-    fileUri: 'file:///a/m1.pdf',
+    fileUri: 'mem:///a/m1.pdf',
     folderId: 'gaspF',
     sourceItemId: 'cpa-berger',
   } as MapDocument);

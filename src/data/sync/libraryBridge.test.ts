@@ -62,7 +62,7 @@ describe('library bridge (2.7.0 G10)', () => {
     const aw = a.port.lib.waypoints.find((w) => w.id === 'w1')!;
     expect(aw).toMatchObject({
       note: 'Roof leaks',
-      photoUri: 'file:///a/photo.jpg',
+      photoUri: 'mem:///a/photo.jpg',
       folderId: 'gaspF',
     });
     // A deletes the area: gone on B too, and in the group's trash.
@@ -152,13 +152,13 @@ describe('library bridge (2.7.0 G10)', () => {
       altitude: Math.round((700 + Math.sin(i / 90) * 140 + (i % 7) * 0.03) * 100) / 100,
       time: 1_790_000_000_000 + i * 1000 + (i % 3) * 7,
     }));
-    a.port.files.set('file:///a/run.gpx', { points, segmentStarts: [2_000, 4_100] });
+    a.port.files.set('mem:///a/run.gpx', { points, segmentStarts: [2_000, 4_100] });
     a.port.lib.tracks.push({
       id: 'run1',
       name: 'Morning run',
       startedAt: points[0]!.time,
       stats: {} as never,
-      fileUri: 'file:///a/run.gpx',
+      fileUri: 'mem:///a/run.gpx',
       folderId: 'gaspF',
       category: 'run',
     });
