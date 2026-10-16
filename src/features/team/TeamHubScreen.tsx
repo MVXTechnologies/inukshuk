@@ -527,7 +527,8 @@ const stylesSheet = StyleSheet.create({
   member: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 8 },
   faded: { opacity: 0.6 },
   listItem: { paddingHorizontal: 0, marginHorizontal: -8 },
-  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
+  // Wraps only when the chip and its line truly don't fit (Large, #760).
+  linkRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginTop: 1 },
   shrink: { flexShrink: 1 },
   left: { alignSelf: 'flex-start' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },

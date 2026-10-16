@@ -29,7 +29,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { BackHandler, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { useTeamMapFocus } from '../map/teamMapFocus';
 import { useTeamMapSelection } from '../map/TeamMapOverlay';
@@ -42,6 +42,7 @@ import { BandAvatar, FaceStack } from './parts';
 import { syncGlyph, useTeamBarSummary } from './TeamStatusBar';
 import { LinkChip } from '../components';
 import type { SyncState } from '@core/teamui/teamBar';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /** The panel header's connection chip (#705): "Internet + nearby", "No internet · nearby"… */
 export function netLine(sync: SyncState, nearby: number, status: string): string {
@@ -72,6 +73,10 @@ export function TeamPanel({
   /** The gather's Go (#743). */
   onNavigate?: (latitude: number, longitude: number) => void;
 }) {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const units = useSettingsStore((s) => s.units);
   const router = useRouter();
@@ -160,7 +165,7 @@ export function TeamPanel({
         testID="team-panel"
       >
         <View style={styles.head}>
-          {summary.solo ? null : <FaceStack faces={summary.faces} size={26} ring={t.surface} />}
+          {summary.solo ? null : <FaceStack faces={summary.faces} size={sz(26)} ring={t.surface} />}
           <View style={styles.flex}>
             <Text style={[styles.title, { color: t.ink }]} numberOfLines={1}>
               {summary.name}
@@ -180,7 +185,10 @@ export function TeamPanel({
                   size={15}
                   color={summary.sync === 'net' ? t.status.gnssFixed : t.inkMuted}
                 />
-                <Text style={[styles.sync, { color: t.inkMuted }]} numberOfLines={1}>
+                <Text
+                  style={[styles.sync, styles.flexShrink, { color: t.inkMuted }]}
+                  numberOfLines={2}
+                >
                   {netLine(summary.sync, nearbyCount, summary.status)}
                 </Text>
                 <Icon source="chevron-right" size={15} color={t.inkMuted} />
@@ -292,7 +300,7 @@ export function TeamPanel({
                       initials={m.initials}
                       color={m.color}
                       band={m.band}
-                      size={36}
+                      size={sz(36)}
                       ring={t.surface}
                       live
                     />
@@ -424,6 +432,8 @@ function Row({
   onPress: () => void;
   testID: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -455,7 +465,7 @@ function Row({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   dim: { opacity: 0.62 },
   panel: {
@@ -492,7 +502,8 @@ const styles = StyleSheet.create({
     marginTop: 1,
     maxWidth: '100%',
   },
-  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
+  // Wraps only when the chip and its age truly don't fit (Large, #760).
+  linkRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginTop: 1 },
   flexShrink: { flexShrink: 1 },
   sync: { fontSize: 12.5 },
   x: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },

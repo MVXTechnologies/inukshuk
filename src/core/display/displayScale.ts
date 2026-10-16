@@ -299,3 +299,19 @@ export function scaleFont<T extends FontMetrics>(font: T, factor: number): T {
 export function effectiveScreenDp(screenDp: number, factor: number): number {
   return factor > 0 && Number.isFinite(factor) ? screenDp / factor : screenDp;
 }
+
+/** The OS font scale screen text is held to (the fit tests' 1.3x). */
+export const TEXT_FONT_CAP = 1.3;
+
+/**
+ * A Text's `maxFontSizeMultiplier` at a Display size (owner 2026-10-16): the
+ * Display size times the OS font scale never passes today's caps (1.15 on
+ * map chrome, 1.3 on screen text), so Large never grows text past where the
+ * screens were checked to fit. At Small and Default the caller's cap is kept
+ * as is (none stays none). React Native takes 1 or more.
+ */
+export function osFontCap(factor: number, cap?: number): number | undefined {
+  if (!(factor > 1)) return cap;
+  const base = cap === undefined || cap === 0 ? TEXT_FONT_CAP : cap;
+  return Math.max(1, Math.round((base / factor) * 1000) / 1000);
+}

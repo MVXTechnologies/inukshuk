@@ -15,6 +15,7 @@
 import {
   MIN_TOUCH,
   hitSlopFor,
+  osFontCap,
   scaleFontSize,
   scaleSize,
   scaleSpacing,
@@ -30,6 +31,7 @@ import {
   List as PaperList,
   Menu as PaperMenu,
   SegmentedButtons as PaperSegmentedButtons,
+  Text as PaperText,
 } from 'react-native-paper';
 
 import { useDisplayFactor } from './displayScale';
@@ -41,20 +43,36 @@ type IconRenderProps = { size: number; color: string };
 
 /**
  * An icon source Paper draws at its own built-in size (18 in buttons, 24 in
- * menus), redrawn at the Display size. Function sources already receive the
- * size; they get the scaled one.
+ * menus), redrawn at the Display size. A function source is the caller's own
+ * drawing, which renders this module's Icon and so scales itself: it passes
+ * through, or it would be scaled twice.
  */
 export function scaledIconSource(source: IconSource, factor: number): IconSource {
   if (factor === 1 || source === undefined || source === null) return source;
-  if (typeof source === 'function') {
-    const render = source as (p: IconRenderProps) => React.ReactNode;
-    return ((p: IconRenderProps) =>
-      render({ ...p, size: scaleSize(p.size, factor) })) as IconSource;
-  }
+  if (typeof source === 'function') return source;
   return ((p: IconRenderProps) => (
     <PaperIcon source={source} size={scaleSize(p.size, factor)} color={p.color} />
   )) as IconSource;
 }
+
+// ---------------------------------------------------------------- Text
+
+/**
+ * Paper's Text with the combined cap (owner 2026-10-16): at Large the OS
+ * font scale is held so Display size x OS font stays within today's caps
+ * (the caller's, else 1.3); unchanged at Small and Default.
+ */
+function ScaledText(props: ComponentProps<typeof PaperText>) {
+  const k = useDisplayFactor();
+  if (!(k > 1)) return <PaperText {...props} />;
+  return (
+    <PaperText
+      {...props}
+      maxFontSizeMultiplier={osFontCap(k, props.maxFontSizeMultiplier ?? undefined)}
+    />
+  );
+}
+export const Text = ScaledText as typeof PaperText;
 
 // ---------------------------------------------------------------- Icon
 
@@ -145,6 +163,7 @@ export const Button = forwardRef<
       ref={ref}
       {...props}
       hitSlop={hitSlop}
+      maxFontSizeMultiplier={osFontCap(k, props.maxFontSizeMultiplier ?? undefined)}
       icon={scaledIconSource(props.icon, k)}
       labelStyle={[label, props.labelStyle]}
     />
@@ -207,6 +226,8 @@ const ListItem = forwardRef<ComponentRef<typeof PaperList.Item>, ItemProps>(
         contentStyle={[{ paddingLeft: scaleSpacing(16, k) }, props.contentStyle]}
         titleStyle={[{ fontSize: scaleFontSize(16, k) }, props.titleStyle]}
         descriptionStyle={[{ fontSize: scaleFontSize(14, k) }, props.descriptionStyle]}
+        titleMaxFontSizeMultiplier={osFontCap(k, props.titleMaxFontSizeMultiplier)}
+        descriptionMaxFontSizeMultiplier={osFontCap(k, props.descriptionMaxFontSizeMultiplier)}
       />
     );
   },
@@ -271,6 +292,7 @@ function MenuItem(props: ComponentProps<typeof PaperMenu.Item>) {
       leadingIcon={scaledIconSource(props.leadingIcon, k)}
       trailingIcon={scaledIconSource(props.trailingIcon, k)}
       titleStyle={[{ fontSize: scaleFontSize(16, k) }, props.titleStyle]}
+      titleMaxFontSizeMultiplier={osFontCap(k, props.titleMaxFontSizeMultiplier)}
     />
   );
 }

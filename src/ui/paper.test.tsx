@@ -50,11 +50,9 @@ describe('scaledIconSource', () => {
     expect(scaledIconSource('check', 1)).toBe('check');
   });
 
-  it('hands a function source the scaled size', () => {
+  it('passes a function source through: it draws with the scaled Icon itself', () => {
     const fn = jest.fn(() => null);
-    const src = scaledIconSource(fn, 0.85) as (p: { size: number; color: string }) => unknown;
-    src({ size: 24, color: 'red' });
-    expect(fn).toHaveBeenCalledWith({ size: 20.5, color: 'red' });
+    expect(scaledIconSource(fn, 0.85)).toBe(fn);
   });
 });
 

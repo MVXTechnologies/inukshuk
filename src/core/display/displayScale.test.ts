@@ -19,6 +19,8 @@ import {
   SPACING_EXPONENT,
   scaleStyle,
   touchSize,
+  osFontCap,
+  TEXT_FONT_CAP,
 } from './displayScale';
 
 describe('sizes', () => {
@@ -256,5 +258,20 @@ describe('effectiveScreenDp', () => {
     expect(effectiveScreenDp(360, 0.85)).toBeCloseTo(423.53, 2);
     expect(effectiveScreenDp(360, 0)).toBe(360);
     expect(effectiveScreenDp(360, NaN)).toBe(360);
+  });
+});
+
+describe('osFontCap: Display size x OS font stays within the caps', () => {
+  it('keeps the caller cap at Small and Default (none stays none)', () => {
+    expect(osFontCap(0.85, 1.15)).toBe(1.15);
+    expect(osFontCap(1, undefined)).toBeUndefined();
+    expect(osFontCap(1, 1.3)).toBe(1.3);
+  });
+
+  it('at Large divides the cap by the size, screen text capped at 1.3 by default', () => {
+    expect(osFontCap(1.15, 1.15)).toBe(1);
+    expect(osFontCap(1.15, undefined)).toBe(1.13);
+    expect(osFontCap(1.15, 0)).toBe(1.13);
+    expect(1.15 * (osFontCap(1.15, undefined) ?? 0)).toBeLessThanOrEqual(TEXT_FONT_CAP);
   });
 });

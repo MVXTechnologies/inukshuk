@@ -14,7 +14,9 @@
  * map's top-centre chips (destination, marine notice, receiver) move below
  * it instead of colliding with it.
  */
-import { MAP_LANE_INSET } from '@core/map/mapChrome';
+import { scaleSize, scaleSpacing } from '@core/display/displayScale';
+import { MAP_LANE_INSET, mapChromeAt, teamPillLeft } from '@core/map/mapChrome';
+import { useMapChrome } from '@features/map/useMapChrome';
 import { gatherBadge } from '@core/teamui/alertBands';
 import { teamBarSummary, type TeamBarSummary } from '@core/teamui/teamBar';
 import { selectChatUnread, useTeamStore } from '@state/teamStore';
@@ -23,7 +25,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import { create } from 'zustand';
 
 import { useTeamSheet } from '../map/teamMode';
@@ -32,6 +34,7 @@ import { AlertBands, useActiveAlerts } from './AlertBands';
 import { enterDrawing } from '../draw/TeamDrawMode';
 import { FaceStack, myPosition } from './parts';
 import { usePendingAlert } from './pendingAlert';
+import { useDisplayScale, useScaledStyles } from '@ui/displayScale';
 
 /** The pill's height and the gap to the column under it. */
 export const PILL_H = 48;
@@ -140,12 +143,25 @@ const CHEVRON = 16;
 export const PILL_GLYPH = 14;
 export const PILL_STATUS_GAP = STATUS_GAP;
 
-/** The width left for the pill's text column with `faces` faces, on a screen `screenDp` wide. */
-export function pillTextRoom(screenDp: number, faces: number): number {
-  const face = PILL_FACE + 2 * FACE_BORDER;
-  const overlap = Math.round(PILL_FACE * PILL_FACE_OVERLAP);
-  const stack = faces === 0 ? 26 : face + (faces - 1) * (face - overlap);
-  return screenDp - 2 * PILL_INSET - 2 * PILL_PAD - stack - 2 * PILL_GAP - CHEVRON;
+/**
+ * The width left for the pill's text column with `faces` faces, on a screen
+ * `screenDp` wide, at a Display size (#760): the lane from the map chrome,
+ * paddings and gaps as spacing, faces and the chevron as sizes.
+ */
+export function pillTextRoom(screenDp: number, faces: number, factor = 1): number {
+  const faceDp = scaleSize(PILL_FACE, factor);
+  const face = faceDp + 2 * FACE_BORDER;
+  const overlap = Math.round(faceDp * PILL_FACE_OVERLAP);
+  const stack = faces === 0 ? scaleSize(26, factor) : face + (faces - 1) * (face - overlap);
+  return (
+    screenDp -
+    teamPillLeft(mapChromeAt(factor), factor) -
+    mapChromeAt(factor).laneInset -
+    2 * scaleSpacing(PILL_PAD, factor) -
+    stack -
+    2 * scaleSpacing(PILL_GAP, factor) -
+    scaleSize(CHEVRON, factor)
+  );
 }
 
 export function TeamStatusBar({
@@ -158,6 +174,14 @@ export function TeamStatusBar({
   here: { latitude: number; longitude: number } | null;
   onNavigate: (latitude: number, longitude: number) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+  // #760: the pill is drawn at the Display size in the map chrome's lane,
+  // touched at 48 dp at least; its chip column follows it.
+  const chrome = useMapChrome();
+  const { sz, sp, slop, factor } = useDisplayScale();
+  const pillH = sz(PILL_H);
+  const columnTop = pillH + sp(COLUMN_GAP);
+
   const t = useSchemeTokens();
   const summary = useTeamBarSummary();
   const netOn = useTeamStore((s) => s.net?.on === true && s.net.capable);
@@ -223,7 +247,19 @@ export function TeamStatusBar({
       {!panelOpen && (
         <Pressable
           onPress={() => open({ kind: 'menu' })}
-          style={[styles.pill, { top, backgroundColor: t.map.chrome, shadowColor: palette.shadow }]}
+          hitSlop={{ top: slop(PILL_H), bottom: slop(PILL_H) }}
+          style={[
+            styles.pill,
+            {
+              top,
+              left: teamPillLeft(chrome, factor),
+              right: chrome.laneInset,
+              height: pillH,
+              borderRadius: pillH / 2,
+              backgroundColor: t.map.chrome,
+              shadowColor: palette.shadow,
+            },
+          ]}
           accessibilityRole="button"
           accessibilityLabel={a11y}
           accessibilityHint={gather ? 'Opens the team panel on the gather' : undefined}
@@ -237,7 +273,7 @@ export function TeamStatusBar({
             // Offline, the longer status takes two faces' room (360 dp, `pillTextRoom`).
             <FaceStack
               faces={offline ? summary.faces.slice(0, 1) : summary.faces}
-              size={PILL_FACE}
+              size={sz(PILL_FACE)}
               overlap={PILL_FACE_OVERLAP}
               ring={t.map.chrome}
             />
@@ -327,9 +363,12 @@ export function TeamStatusBar({
         </Pressable>
       )}
       <View
-        style={[styles.column, { top: top + PILL_H + COLUMN_GAP }]}
+        style={[
+          styles.column,
+          { top: top + columnTop, left: chrome.edgeInset, right: chrome.laneInset },
+        ]}
         pointerEvents="box-none"
-        onLayout={(e) => setHeight(PILL_H + COLUMN_GAP + e.nativeEvent.layout.height)}
+        onLayout={(e) => setHeight(columnTop + e.nativeEvent.layout.height)}
         testID="team-bar-column"
       >
         <View style={styles.chips} pointerEvents="box-none" testID="team-chips">
@@ -355,6 +394,8 @@ interface ChipSpec {
 
 /** One small pill under the team pill: icon, a one-line label never cut, a count. */
 function Chip({ spec }: { spec: ChipSpec }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const bg = spec.pending ? t.team.gather : t.map.chrome;
   const ink = spec.pending ? t.team.gatherInk : t.map.chromeInk;
@@ -388,7 +429,7 @@ function Chip({ spec }: { spec: ChipSpec }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   shrink: { flexShrink: 1, minWidth: 0 },
   pill: {
