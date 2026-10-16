@@ -729,10 +729,15 @@ export function MapScreen() {
   // Which trail is "selected": a tap-selected heat spot (the carousel) wins,
   // otherwise whichever trail is open in the inspect panel. Its geometry is
   // loaded even when its trace is hidden (the heatmap itself no longer loads
-  // the library's, #500), so its highlight can be drawn.
+  // the library's, #500), so its highlight can be drawn. In team mode a
+  // trail tap opens the spot card instead: that trail is highlighted while
+  // the card is up (#747).
+  const teamSpotTrackId = useTeamSheet((s) =>
+    s.sheet?.kind === 'spot' ? (s.sheet.trackId ?? null) : null,
+  );
   const focusedTrackId = heatSelection
     ? (heatSelection.trackIds[heatSelection.focusedIdx] ?? null)
-    : inspectId;
+    : (inspectId ?? teamSpotTrackId);
   const trackHeat = useTrackHeat(
     tracks,
     drawnTrackIds,
@@ -2620,9 +2625,9 @@ export function MapScreen() {
   const initialCenter = resolveInitialCenter(location, lastKnownPosition);
 
   // Which trail is "selected": a tap-selected heat spot (the carousel) wins,
-  // otherwise whichever trail is open in the inspect panel. When ANY trail is
-  // selected, every other trail is hidden outright (not dimmed) via the lines
-  // layer's filter below — see item 1's selection-visibility rule.
+  // otherwise whichever trail is open in the inspect panel. The 2D map keeps
+  // the other trails drawn around its highlight (#747); the 3D scene below
+  // still draws the selected one alone.
   const hasSelection = heatSelection !== null || inspectId !== null;
 
   // The focused trail's own geometry, looked up independent of shown-trail
@@ -3263,21 +3268,15 @@ export function MapScreen() {
 
             {/* Trail lines: every shown trail as a thin, clean, category-
               coloured LineString — no glow layer, no width stepping (see
-              useTrackHeat). When a trail is selected (a tap-selected heat
-              spot OR the inspect panel), every trail from THIS shown-trails
-              source is hidden outright (not dimmed) — the focused trail's
-              highlight is drawn by the dedicated "focused-trail" layer just
-              below instead, since a hot-spot selection can point at a
-              trail outside the shown set (heatmap clickability works even
-              with traces hidden). Tapping a "hot" spot routes through
-              onMapPress below to open the HeatPointCarousel; the per-trail
-              onPress this replaced is gone for good — the map-level hit-test
-              (heatAt) is the only way in now. */}
+              useTrackHeat). They stay drawn while a trail is selected
+              (#747): the selected one is lifted out of them by the
+              "focused-trail" highlight just below, which also covers a
+              hot-spot selection outside the shown set (heatmap clickability
+              works even with traces hidden). Taps are hit-tested at the map
+              level (heatAt + the overlap chooser, #745). */}
             {showTrackOverlays && linesJson && (
               <GeoJSONSource id="tracks-lines" data={linesJson}>
-                {hasSelection
-                  ? TRACKS_LINES_LAYERS[lineOutline].hidden
-                  : TRACKS_LINES_LAYERS[lineOutline].shown}
+                {TRACKS_LINES_LAYERS[lineOutline].shown}
               </GeoJSONSource>
             )}
 

@@ -3,6 +3,7 @@ import { palette } from '@ui/tokens';
 import { Layer } from '@maplibre/maplibre-react-native';
 import type { ReactElement } from 'react';
 import { overlayAnchor } from '@core/map/layerSlots';
+import { selectionHighlight } from '@core/map/selectionHighlight';
 import { HILLSHADE_2D_MIN_ZOOM, HILLSHADE_DEM_SOURCE_ID, TILT_RELIEF_LAYER_ID } from './mapStyle';
 import {
   HEAT_CROSSFADE,
@@ -276,24 +277,65 @@ function outlinedTrailLayers(
 }
 
 function trackLineSet(tone: LineOutline) {
-  return {
-    shown: outlinedTrailLayers('tracks-lines-layer', 3, tone, true),
-    hidden: outlinedTrailLayers('tracks-lines-layer', 3, tone, false),
-  };
+  return { shown: outlinedTrailLayers('tracks-lines-layer', 3, tone, true) };
 }
 
-/** Trail lines per ground, one element set per `filter` value (see the selection rule). */
+/**
+ * Trail lines per ground. They stay drawn while a trail is selected (#747:
+ * the selection used to hide every other trail; now the highlight below
+ * lifts the selected one out of them instead).
+ */
 export const TRACKS_LINES_LAYERS = {
   paper: trackLineSet('paper'),
   night: trackLineSet('night'),
   imagery: trackLineSet('imagery'),
 } as const;
 
+/**
+ * The selected trail (#747, "bright casing"): a soft cyan glow, a white
+ * casing, then the line in its own colour (`selectionHighlight`). An array,
+ * bottom first: all three name the same anchor, and of children inserted
+ * below one anchor the later one lands on top.
+ */
+export function highlightedTrailLayers(id: string, tone: LineOutline): ReactElement[] {
+  const spec = selectionHighlight(tone);
+  const shared = {
+    beforeId: TRAIL_LINES_ANCHOR,
+    type: 'line' as const,
+    layout: { 'line-cap': 'round' as const, 'line-join': 'round' as const },
+  };
+  return [
+    <Layer
+      key="glow"
+      id={`${id}-glow`}
+      {...shared}
+      paint={{
+        'line-color': spec.glow.color,
+        'line-width': spec.glow.width,
+        'line-opacity': spec.glow.opacity,
+        'line-blur': spec.glow.blur,
+      }}
+    />,
+    <Layer
+      key="casing"
+      id={`${id}-casing`}
+      {...shared}
+      paint={{ 'line-color': spec.casing.color, 'line-width': spec.casing.width }}
+    />,
+    <Layer
+      key="line"
+      id={id}
+      {...shared}
+      paint={{ 'line-color': ['get', 'color'], 'line-width': spec.line.width }}
+    />,
+  ];
+}
+
 /** The focused trail's highlight per ground. */
 export const FOCUSED_TRAIL_LAYERS = {
-  paper: outlinedTrailLayers('focused-trail-line-layer', 4, 'paper'),
-  night: outlinedTrailLayers('focused-trail-line-layer', 4, 'night'),
-  imagery: outlinedTrailLayers('focused-trail-line-layer', 4, 'imagery'),
+  paper: highlightedTrailLayers('focused-trail-line-layer', 'paper'),
+  night: highlightedTrailLayers('focused-trail-line-layer', 'night'),
+  imagery: highlightedTrailLayers('focused-trail-line-layer', 'imagery'),
 } as const;
 
 export const INSPECT_MARKER_LAYER = (
