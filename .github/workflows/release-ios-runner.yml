@@ -1,0 +1,50 @@
+name: Release iOS on a GitHub Mac runner
+
+# Fallback for when the EAS cloud build quota is used up: the same production
+# build, done by `eas build --local` on a GitHub macOS runner (free for this
+# public repo), then submitted to TestFlight. Push the release tag's commit to
+# a `release-ios/<tag>` branch, or dispatch this workflow on that ref.
+on:
+  push:
+    branches:
+      - 'release-ios/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-submit:
+    runs-on: macos-15
+    environment: production
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Swift tools 6.2+ (see native-build.yml); local Xcode 27 rejects old pods.
+      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: expo/expo-github-action@eab7a230208c952974db8c3245cfd78402c7b385 # v9
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: npm ci
+
+      - name: Write App Store Connect API key
+        env:
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+        run: printf '%s' "$ASC_API_KEY_P8" > asc-api-key.p8
+
+      - name: Build (local, on this runner)
+        run: eas build -p ios --profile production --local --non-interactive --output "$RUNNER_TEMP/app.ipa"
+
+      - name: Submit to TestFlight
+        run: eas submit -p ios --path "$RUNNER_TEMP/app.ipa" --profile production --non-interactive
