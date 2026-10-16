@@ -436,6 +436,17 @@ describe('the alert bands (#708)', () => {
     expect(centre).toHaveBeenCalledWith(46.8026, -71.1977);
   });
 
+  it('an admin resolves a teammate’s SOS by the same hold', async () => {
+    crew({ soses: [sos('julie', 's1')] });
+    await act(async () =>
+      useTeamStore.setState((st) => ({ view: { ...st.view!, isAdmin: true } as TeamView })),
+    );
+    await render(wrap(<AlertBands here={HERE} onNavigate={jest.fn()} />));
+    expect(screen.getByTestId('team-band-sos-navigate')).toBeTruthy();
+    expect(screen.getByLabelText('Resolve the SOS. Hold for two seconds')).toBeTruthy();
+    expect(screen.getByTestId('team-band-sos-resolve-label').props.children).toBe('Resolve');
+  });
+
   it('SOS outranks gather; +1 expands to stacked bands', async () => {
     crew({ soses: [sos('julie', 's1')], rally });
     await render(wrap(<AlertBands here={HERE} onNavigate={jest.fn()} />));
@@ -703,6 +714,16 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
   afterEach(() => {
     for (const off of unsubscribers.splice(0)) off();
   });
+
+  /** Hold the band's Resolve for `ms`, then let go. */
+  const holdResolve = async (ms: number) => {
+    const b = screen.getByTestId('team-band-sos-resolve');
+    await fireEvent(b, 'pressIn');
+    await act(async () => {
+      jest.advanceTimersByTime(ms);
+    });
+    await fireEvent(b, 'pressOut');
+  };
 
   const sender = () =>
     wrap(
@@ -997,8 +1018,7 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
         </>,
       ),
     );
-    await fireEvent.press(screen.getByTestId('team-band-sos-resolve'));
-    await fireEvent.press(screen.getByTestId('team-band-sos-confirm-yes'));
+    await holdResolve(2100);
     expect(s.soses().every((x) => x.resolved)).toBe(true);
     await act(async () => {
       jest.advanceTimersByTime(5000);
@@ -1095,19 +1115,101 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
     expect(screen.getByText(/^SOS not sent: your position is unknown/)).toBeTruthy();
   });
 
-  it('my SOS band: "Sent" (no one can say yet), Resolve confirmed inline', async () => {
+  it.each(THEMES)(
+    'my SOS band: "Sent"; a tap never resolves, a 2 s hold then letting go does (dark: %s)',
+    async (dark) => {
+      expect(app.active!.raiseSos(HERE.longitude, HERE.latitude)).toBeNull();
+      await act(async () => useTeamStore.getState().refresh());
+      await render(wrap(<AlertBands here={HERE} onNavigate={jest.fn()} />, dark));
+      expect(screen.getByText('Your SOS is active')).toBeTruthy();
+      expect(screen.getByText('Sent · just now')).toBeTruthy();
+      expect(screen.getByTestId('team-band-sos-resolve-label').props.children).toBe('Resolve');
+      // A tap: nothing, and the label says to hold; no inline confirm any more.
+      await fireEvent.press(screen.getByTestId('team-band-sos-resolve'));
+      await holdResolve(300);
+      expect(app.active!.soses()[0]!.resolved).toBe(false);
+      expect(screen.queryByText('Resolve for everyone?')).toBeNull();
+      expect(screen.getByTestId('team-band-sos-resolve-label').props.children).toBe('Hold 2 s');
+      await act(async () => {
+        jest.advanceTimersByTime(60_000);
+      });
+      expect(app.active!.soses()[0]!.resolved).toBe(false);
+      expect(screen.getByTestId('team-band-sos-resolve-label').props.children).toBe('Resolve');
+      // The hold: a tick a second, "Let go" once armed; nothing until the finger lifts.
+      const vibrate = jest.spyOn(Vibration, 'vibrate');
+      vibrate.mockClear();
+      const b = screen.getByTestId('team-band-sos-resolve');
+      await fireEvent(b, 'pressIn');
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+      expect(screen.getByTestId('team-band-sos-resolve-label').props.children).toBe('1 s');
+      await act(async () => {
+        jest.advanceTimersByTime(1100);
+      });
+      expect(vibrate).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId('team-band-sos-resolve-label').props.children).toBe('Let go');
+      expect(screen.getByLabelText('Let go to resolve your SOS for everyone')).toBeTruthy();
+      expect(app.active!.soses()[0]!.resolved).toBe(false);
+      await fireEvent(b, 'pressOut');
+      expect(app.active!.soses()[0]!.resolved).toBe(true);
+      expect(screen.queryByTestId('team-band-sos')).toBeNull();
+    },
+  );
+
+  it('letting go before 2 s cancels: nothing resolves, then or later', async () => {
     expect(app.active!.raiseSos(HERE.longitude, HERE.latitude)).toBeNull();
     await act(async () => useTeamStore.getState().refresh());
     await render(wrap(<AlertBands here={HERE} onNavigate={jest.fn()} />));
-    expect(screen.getByText('Your SOS is active')).toBeTruthy();
-    expect(screen.getByText('Sent · just now')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('team-band-sos-resolve'));
-    expect(screen.getByText('Resolve for everyone?')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('team-band-sos-cancel'));
+    await holdResolve(1900);
+    await act(async () => {
+      jest.advanceTimersByTime(60_000);
+    });
     expect(app.active!.soses()[0]!.resolved).toBe(false);
-    await fireEvent.press(screen.getByTestId('team-band-sos-resolve'));
-    await fireEvent.press(screen.getByTestId('team-band-sos-confirm-yes'));
+    expect(screen.getByText('Your SOS is active')).toBeTruthy();
+    // A quick tap whose press-in and press-out land in one tick does nothing either.
+    const b = screen.getByTestId('team-band-sos-resolve');
+    await act(async () => {
+      const pressIn = fireEvent(b, 'pressIn');
+      const pressOut = fireEvent(b, 'pressOut');
+      await Promise.all([pressIn, pressOut]);
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(60_000);
+    });
+    expect(app.active!.soses()[0]!.resolved).toBe(false);
+  });
+
+  it('a finger resting past "Let go" still resolves (as raising does), once', async () => {
+    expect(app.active!.raiseSos(HERE.longitude, HERE.latitude)).toBeNull();
+    await act(async () => useTeamStore.getState().refresh());
+    await render(wrap(<AlertBands here={HERE} onNavigate={jest.fn()} />));
+    const resolve = jest.spyOn(app.active!, 'resolveSos');
+    const b = screen.getByTestId('team-band-sos-resolve');
+    await fireEvent(b, 'pressIn');
+    await act(async () => {
+      jest.advanceTimersByTime(2100 + 4000);
+    });
+    expect(app.active!.soses()[0]!.resolved).toBe(false);
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
     expect(app.active!.soses()[0]!.resolved).toBe(true);
-    expect(screen.queryByTestId('team-band-sos')).toBeNull();
+    expect(resolve).toHaveBeenCalledTimes(1);
+    resolve.mockRestore();
+  });
+
+  it('screen readers: the "Resolve for everyone" action resolves at once', async () => {
+    expect(app.active!.raiseSos(HERE.longitude, HERE.latitude)).toBeNull();
+    await act(async () => useTeamStore.getState().refresh());
+    await render(wrap(<AlertBands here={HERE} onNavigate={jest.fn()} />));
+    const b = screen.getByLabelText('Resolve your SOS. Hold for two seconds');
+    expect(b.props.accessibilityActions).toEqual([
+      { name: 'longpress', label: 'Resolve for everyone' },
+    ]);
+    await fireEvent(b, 'accessibilityAction', { nativeEvent: { actionName: 'activate' } });
+    expect(app.active!.soses()[0]!.resolved).toBe(false);
+    await fireEvent(b, 'accessibilityAction', { nativeEvent: { actionName: 'longpress' } });
+    expect(app.active!.soses()[0]!.resolved).toBe(true);
   });
 });

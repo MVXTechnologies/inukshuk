@@ -328,7 +328,7 @@ tags:
 - assertNotVisible:
     id: 'team-undo-snack'
 # Hold again and let the countdown run out (20 s in the E2E build): my SOS is
-# active, in a band under the pill, until I resolve it (confirmed inline).
+# active, in a band under the pill, until I resolve it (held, as raised).
 - longPressOn:
     id: 'team-sos-button'
     waitToSettleTimeoutMs: 500
@@ -343,16 +343,16 @@ tags:
     timeout: 30000
 - assertVisible: 'Your SOS is active'
 - takeScreenshot: team-sos-active
-- tapOn:
+# Resolve takes the same hold as raising (#748): hold, "Let go", release.
+- longPressOn:
     id: 'team-band-sos-resolve'
-- tapOn:
-    id: 'team-band-sos-confirm-yes'
+    waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     notVisible:
       id: 'team-band-sos'
     timeout: 5000
-# A new SOS right after "Resolve for everyone" goes out at once: the team's
-# one-minute guard once dropped it in silence (QA 2.6.1).
+# A new SOS right after a resolve goes out at once: the team's one-minute
+# guard once dropped it in silence (QA 2.6.1).
 - longPressOn:
     id: 'team-sos-button'
     waitToSettleTimeoutMs: 500
@@ -367,10 +367,10 @@ tags:
 - assertVisible: 'Your SOS is active'
 - assertNotVisible:
     id: 'team-undo-error'
-- tapOn:
+# Resolve takes the same hold as raising (#748): hold, "Let go", release.
+- longPressOn:
     id: 'team-band-sos-resolve'
-- tapOn:
-    id: 'team-band-sos-confirm-yes'
+    waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     notVisible:
       id: 'team-band-sos'
