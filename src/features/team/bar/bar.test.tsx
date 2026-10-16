@@ -5,6 +5,8 @@
  * no real sleeps; the clock moves only when a test advances it.
  */
 import { contrastRatio } from '@core/color/contrast';
+import { HOLD_SCALE_MAX, holdScale } from '@core/teamui/holdScale';
+import { SOS_HOLD_MS } from '@core/teamui/undo';
 import { IMPERIAL, METRIC } from '@core/format';
 import { MAP_BUTTON, MAP_EDGE_INSET, MAP_STACK_GAP } from '@core/map/mapChrome';
 import { defaultExtensionPrefs } from '@core/extensions/prefs';
@@ -22,6 +24,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react-n
 import type { ReactNode } from 'react';
 import { AppState, StyleSheet, Vibration, type StyleProp, type ViewStyle } from 'react-native';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
+import * as Reanimated from 'react-native-reanimated';
 
 import { teamFabBottom } from '@features/map/bottomLayers';
 
@@ -30,7 +33,7 @@ import { useTeamSheet } from '../map/teamMode';
 import { AlertBands } from './AlertBands';
 import { usePendingAlert } from './pendingAlert';
 import { ALARM_MAX_MS, RESOUND_MS, SosAlarmBanner } from './SosAlarmBanner';
-import { RING_PAD, SosButton } from './SosButton';
+import { RING_PAD, SosButton, SWELL_RELEASE_SPRING } from './SosButton';
 import { TeamPanel } from './TeamPanel';
 import { CHIP, CHIP_LABEL_MAX_SCALE, TeamStatusBar, useTeamBarLayout } from './TeamStatusBar';
 import { UNDO_SNACK_LIFT, UndoSnack } from './UndoSnack';
@@ -837,6 +840,60 @@ describe('sending: hold, undo, and nothing during the countdown (#708)', () => {
         <UndoSnack style={{}} />
       </>,
     );
+
+  it('swells while held, springs back on an early release, settles once armed; the target never moves', async () => {
+    const timing = jest.spyOn(Reanimated, 'withTiming');
+    const spring = jest.spyOn(Reanimated, 'withSpring');
+    await render(sender());
+    const b = screen.getByTestId('team-sos-button');
+    const target = () => StyleSheet.flatten(b.props.style);
+    const dock = () => StyleSheet.flatten(screen.getByTestId('team-sos-layer').props.style);
+    /** The drawing's scale as rendered (the mocked worklet runs at render). */
+    const scale = () => {
+      const st = StyleSheet.flatten(screen.getByTestId('team-sos-swell').props.style);
+      const t = (st.transform ?? []) as { scale?: number }[];
+      return t.find((x) => x.scale !== undefined)?.scale ?? 1;
+    };
+    /** Where the swell is headed: the scale at the progress last animated to. */
+    const target_ = (spy: jest.SpyInstance) => holdScale(Number(spy.mock.calls.at(-1)?.[0]));
+    const target0 = target();
+    const dock0 = dock();
+    // At rest: 1×.
+    expect(scale()).toBe(1);
+    // Held: the progress runs 0 → 1 over the hold (linear time, eased scale).
+    await fireEvent(b, 'pressIn');
+    expect(timing).toHaveBeenLastCalledWith(1, expect.objectContaining({ duration: SOS_HOLD_MS }));
+    await act(async () => {
+      jest.advanceTimersByTime(SOS_HOLD_MS / 2);
+    });
+    // Headed for the complete swell (the eased scale over progress is
+    // @core/teamui/holdScale's test).
+    expect(target_(timing)).toBeCloseTo(HOLD_SCALE_MAX, 6);
+    expect(target()).toEqual(target0);
+    expect(dock()).toEqual(dock0);
+    // An early release: it springs back to 1×, and nothing is sent.
+    await fireEvent(b, 'pressOut');
+    expect(spring).toHaveBeenLastCalledWith(0, SWELL_RELEASE_SPRING);
+    expect(target_(spring)).toBe(1);
+    expect(usePendingAlert.getState().pending).toBeNull();
+    // A complete hold: armed ("Let go"), the swell settles back before the finger lifts.
+    spring.mockClear();
+    await fireEvent(b, 'pressIn');
+    await act(async () => {
+      jest.advanceTimersByTime(SOS_HOLD_MS + 100);
+    });
+    expect(screen.getByTestId('team-sos-cue')).toHaveTextContent('Let go');
+    expect(spring).toHaveBeenCalledWith(0, SWELL_RELEASE_SPRING);
+    expect(target_(spring)).toBe(1);
+    expect(target()).toEqual(target0);
+    expect(dock()).toEqual(dock0);
+    await fireEvent(b, 'pressOut');
+    // It fires as before: the undo countdown starts; Undo it.
+    expect(usePendingAlert.getState().pending?.kind).toBe('sos');
+    await fireEvent.press(screen.getByTestId('team-undo'));
+    timing.mockRestore();
+    spring.mockRestore();
+  });
 
   it('sits on the rail’s column: 16 dp from the edge, 48 dp, "Hold" inside the button (#756)', async () => {
     await render(sender());
