@@ -906,11 +906,21 @@ export class TeamSession {
     this.gossip(ops, from);
     if (ops.some((op) => op.env.t === 'pen' || op.env.t === 'e.set')) this.deps.onDraw?.();
     if (from !== null && ops.some((op) => op.env.t === 'msg' || op.env.t === 'e.set')) {
-      const ctx = alertContext(this.replica.state, this.replica.data(this.deps.now()));
       const now = this.deps.now();
+      // The data first: reading it folds anything the replica deferred (an
+      // out-of-order batch soon after a refold), which replaces its state. A
+      // state read before it lacked the new ops, so an SOS arriving that way
+      // was "not applied" and never alerted (#752).
+      const data = this.replica.data(now);
+      const ctx = alertContext(this.replica.state, data);
+      const sosOpen = (entity: string) => {
+        const [, owner, id] = entity.split(':');
+        const sos = owner && id ? ctx.sos?.(owner, id) : undefined;
+        return sos !== undefined && !sos.resolved;
+      };
       for (const op of ops) {
         const alert = alertFor(this.replica.state, op, this.replica.decode(op), this.me, ctx);
-        if (alert) this.deps.onAlert(this.taskThrottle.admit(alert, now));
+        if (alert) this.deps.onAlert(this.taskThrottle.admit(alert, now, sosOpen));
       }
     }
     // A teammate's SOS or rally point just synced: say so (#708).

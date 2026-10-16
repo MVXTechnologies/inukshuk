@@ -302,3 +302,50 @@ describe('the in-app rally buzz (#743)', () => {
     state.soses = [];
   });
 });
+
+describe('a re-raised SOS rings again on this phone (#752)', () => {
+  const reopenAlert = (owner: string, id: string, op: string): TeamAlert => ({
+    ...sosAlert(owner, id, op),
+    sosPhase: 'reopen',
+  });
+
+  it.each([
+    ['acknowledged first', true],
+    ['still sounding', false],
+  ])('resolved here (%s), then raised again: same SOS reopened, or a new one', (_what, ack) => {
+    state.soses = [sos('julie', 'r1')];
+    useTeamStore.getState().refresh();
+    emit(sosAlert('julie', 'r1', 'a'));
+    expect(useTeamStore.getState().sosAlarm?.entity).toBe('sos:julie:r1');
+    if (ack) useTeamStore.getState().acknowledgeAlarm();
+    // This phone resolves it (the band's hold): the store refreshes.
+    state.soses = [sos('julie', 'r1', true)];
+    useTeamStore.getState().refresh();
+    expect(useTeamStore.getState().sosAlarm).toBeNull();
+    mockNotify.mockClear();
+    mockInApp.mockClear();
+    // Julie reopens the same SOS: the banner and the tone again.
+    state.soses = [sos('julie', 'r1')];
+    useTeamStore.getState().refresh();
+    emit(reopenAlert('julie', 'r1', 'b'));
+    expect(useTeamStore.getState().sosAlarm?.entity).toBe('sos:julie:r1');
+    expect(mockInApp).toHaveBeenLastCalledWith(true);
+    expect(mockNotify).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: 'sos', identifier: 'sos:julie:r1' }),
+    );
+    // Resolved here again, then a NEW SOS (past the reopen cooldown): again.
+    state.soses = [sos('julie', 'r1', true)];
+    useTeamStore.getState().refresh();
+    mockNotify.mockClear();
+    state.soses = [sos('julie', 'r1', true), sos('julie', 'r2')];
+    useTeamStore.getState().refresh();
+    emit(sosAlert('julie', 'r2', 'c'));
+    expect(useTeamStore.getState().sosAlarm?.entity).toBe('sos:julie:r2');
+    expect(mockNotify).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: 'sos', identifier: 'sos:julie:r2' }),
+    );
+    useTeamStore.getState().acknowledgeAlarm();
+    state.soses = [];
+    useTeamStore.getState().refresh();
+  });
+});

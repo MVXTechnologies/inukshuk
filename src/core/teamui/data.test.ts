@@ -12,7 +12,15 @@ import {
 import type { Json } from '@core/team/canonical';
 import type { SignedOp } from '@core/team/envelope';
 import { activeEntities, AlertLedger } from './alertLedger';
-import { alertContext, alertFor, TaskAlertThrottle, trailUrl, type AlertContext } from './alerts';
+import {
+  alertContext,
+  alertFor,
+  SOS_ALARM_WINDOW_MS,
+  TaskAlertThrottle,
+  trailUrl,
+  type AlertContext,
+  type TeamAlert,
+} from './alerts';
 import { teamSos } from './field';
 import { statusFields, taskFields } from '@core/team/tasks';
 import {
@@ -626,5 +634,52 @@ describe('alerts', () => {
         { level: 'badge', phase: 'reopen', rang: false },
       ]);
     });
+  });
+});
+
+describe('the SOS alarm window ends with the SOS it rang for (#752)', () => {
+  const T = 1_800_000_000_000;
+  const sos = (id: string, key: string, phase: 'raise' | 'reopen' = 'raise'): TeamAlert => ({
+    key,
+    author: 'julie',
+    level: 'alert',
+    kind: 'sos',
+    text: 'SOS · needs help',
+    priority: 2,
+    url: `/team/sos/julie/${id}`,
+    entity: `sos:julie:${id}`,
+    sosPhase: phase,
+  });
+
+  it('resolved anywhere (even on this phone, which sends itself no alert): the next SOS rings', () => {
+    const open = new Set(['sos:julie:s1']);
+    const isOpen = (e: string) => open.has(e);
+    const t = new TaskAlertThrottle();
+    expect(t.admit(sos('s1', 'k1'), T, isOpen).level).toBe('alert');
+    // The same SOS again (a resync, a second write): a badge while it is open.
+    expect(t.admit(sos('s1', 'k1b'), T + 1000, isOpen).level).toBe('badge');
+    // Resolved here: no resolve alert reaches the throttle; the data says so.
+    open.delete('sos:julie:s1');
+    open.add('sos:julie:s2');
+    expect(t.admit(sos('s2', 'k2'), T + 90_000, isOpen).level).toBe('alert');
+    // Its own repeats are held again.
+    expect(t.admit(sos('s2', 'k2b'), T + 91_000, isOpen).level).toBe('badge');
+  });
+
+  it('still open: one alarm per window, as before; without the data, as before', () => {
+    const t = new TaskAlertThrottle();
+    expect(t.admit(sos('s1', 'k1'), T, () => true).level).toBe('alert');
+    expect(t.admit(sos('s2', 'k2'), T + 1000, () => true).level).toBe('badge');
+    expect(t.admit(sos('s2', 'k3'), T + SOS_ALARM_WINDOW_MS, () => true).level).toBe('alert');
+    const old = new TaskAlertThrottle();
+    expect(old.admit(sos('s1', 'k1'), T).level).toBe('alert');
+    expect(old.admit(sos('s2', 'k2'), T + 1000).level).toBe('badge');
+  });
+
+  it('a reopen of the same SOS rings once per write, open or not', () => {
+    const t = new TaskAlertThrottle();
+    expect(t.admit(sos('s1', 'k1'), T, () => true).level).toBe('alert');
+    expect(t.admit(sos('s1', 'k2', 'reopen'), T + 1000, () => true).level).toBe('alert');
+    expect(t.admit(sos('s1', 'k2', 'reopen'), T + 2000, () => true).level).toBe('badge');
   });
 });
