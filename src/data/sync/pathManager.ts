@@ -38,7 +38,8 @@ import {
   type PathPolicy,
   type PathStatus,
 } from '@core/group/path';
-import { groupRooms, type Room } from '@core/group/rdv';
+import type { InviteRoom } from '@core/group/invites';
+import { deriveRoom, groupRooms, roomDays, type Room } from '@core/group/rdv';
 import { ROOM_BLOB_MAX_PAYLOAD } from '@core/group/roomBlob';
 import {
   decodeRoomPayload,
@@ -66,6 +67,8 @@ export interface PathGroup {
   parent?: string;
   /** The current epoch key (its room derives from it, rotating with it). */
   epochKey: Uint8Array | undefined;
+  /** Open invites whose rooms this phone listens in, to let joiners in (G7). */
+  invites?: InviteRoom[];
 }
 
 export interface PathManagerOptions {
@@ -87,9 +90,14 @@ export interface PathManagerOptions {
   stun?: IceServer[];
   /** Period of the decision tick (ms). */
   evalMs?: number;
+  /** Relay-only for every peer while true (a provisional join, R-INV-4). */
+  forceRelay?(): boolean;
   onChange?(): void;
   onDiag?(event: string): void;
 }
+
+/** A joiner's session in an invite room ends after this long (it continues over a link). */
+export const INVITE_SESSION_MS = 5 * 60_000;
 
 /** Cloudflare's public STUN (no credentials; reveals our public address to Cloudflare only). */
 export const DEFAULT_STUN: IceServer[] = [{ urls: ['stun:stun.cloudflare.com:3478'] }];
@@ -120,6 +128,8 @@ interface RoomEntry {
   client: RoomClient;
   groupId: string;
   room: Room;
+  /** An invite's room: joiners start sessions here, members only answer them. */
+  invite: boolean;
   /** Handle → when the next session may be started to it (initiator side). */
   retryAt: Map<string, number>;
 }
@@ -132,6 +142,9 @@ interface L0 {
   /** The initiator's first frame goes as a `hello`. */
   helloSent: boolean;
   member: string | undefined;
+  /** A joiner's session in an invite room (full sync, so the joiner gets the log). */
+  invite: boolean;
+  since: number;
 }
 
 interface AttemptRec {
@@ -187,6 +200,7 @@ export class PathManager {
 
   constructor(private readonly o: PathManagerOptions) {
     this.policy = { ...DEFAULT_PATH_POLICY, ...o.policy };
+    this.userRelay = this.policy.alwaysRelay;
     this.rtc = new RtcCarrier({
       module: o.rtc,
       timers: o.timers,
@@ -253,9 +267,18 @@ export class PathManager {
 
   /** "Always use the relay" (per phone, R-RTC-6): direct paths close and are never tried. */
   setAlwaysRelay(on: boolean): void {
-    if (this.policy.alwaysRelay === on) return;
+    this.userRelay = on;
+    if (this.applyRelayPolicy()) this.evaluateAll();
+  }
+
+  private userRelay = false;
+
+  /** The user's choice, or forced while a join is provisional (R-INV-4); true when it changed. */
+  private applyRelayPolicy(): boolean {
+    const on = this.userRelay || (this.o.forceRelay?.() ?? false);
+    if (this.policy.alwaysRelay === on) return false;
     this.policy.alwaysRelay = on;
-    this.evaluateAll();
+    return true;
   }
 
   stop(): void {
@@ -265,7 +288,7 @@ export class PathManager {
   /** The groups or their switches changed: open and close rooms to match. */
   refresh(): void {
     if (!this.online) return;
-    const want = new Map<string, { group: PathGroup; room: Room }>();
+    const want = new Map<string, { group: PathGroup; room: Room; invite: boolean }>();
     const seconds = Math.floor(this.serverNow() / 1000);
     for (const g of this.o.groups()) {
       if (!g.net || g.parent !== undefined || g.epochKey === undefined) continue;
@@ -275,18 +298,25 @@ export class PathManager {
           { groupId: g.groupId, epochKey: g.epochKey },
           seconds,
         )) {
-          want.set(room.roomId, { group: g, room });
+          want.set(room.roomId, { group: g, room, invite: false });
+        }
+        for (const inv of g.invites ?? []) {
+          for (const day of roomDays(seconds)) {
+            const room = deriveRoom(this.o.c, inv.ir, day);
+            want.set(room.roomId, { group: g, room, invite: true });
+          }
         }
       } catch {
         // A group id or key of the wrong shape has no room.
       }
     }
     for (const key of [...this.rooms.keys()]) if (!want.has(key)) this.dropRoom(key);
-    for (const [roomId, { group, room }] of want) {
+    for (const [roomId, { group, room, invite }] of want) {
       if (this.rooms.has(roomId)) continue;
       const entry: RoomEntry = {
         groupId: group.groupId,
         room,
+        invite,
         retryAt: new Map(),
         client: new RoomClient({
           c: this.o.c,
@@ -309,9 +339,16 @@ export class PathManager {
   /** Periodic: rooms (day, rotation, switches), session deadlines, retries, decisions. */
   tick(): void {
     if (!this.online) return;
+    this.applyRelayPolicy();
     this.refresh();
     const now = this.now();
-    for (const s of [...this.l0.values()]) this.handleStep(s, s.session.tick(now));
+    for (const s of [...this.l0.values()]) {
+      if (s.invite && now - s.since > INVITE_SESSION_MS) {
+        this.closeL0(s, 'done');
+        continue;
+      }
+      this.handleStep(s, s.session.tick(now));
+    }
     for (const [roomId, entry] of this.rooms) {
       const me = entry.client.me;
       if (entry.client.state !== 'ready' || me === undefined) continue;
@@ -400,6 +437,8 @@ export class PathManager {
 
   private maybeInitiate(roomId: string, entry: RoomEntry, h: string): void {
     const me = entry.client.me;
+    // In an invite room only joiners start sessions.
+    if (entry.invite) return;
     if (me === undefined || !initiatesTo(me, h) || this.l0.has(this.key(roomId, h))) return;
     if ((entry.retryAt.get(h) ?? 0) > this.now()) return;
     const g = this.group(entry.groupId);
@@ -412,6 +451,8 @@ export class PathManager {
       session,
       helloSent: false,
       member: undefined,
+      invite: false,
+      since: this.now(),
     };
     this.l0.set(this.key(roomId, h), s);
     this.handleStep(s, step);
@@ -423,8 +464,10 @@ export class PathManager {
     const k = this.key(roomId, from);
     let s = this.l0.get(k);
     if (msg.kind === ROOM_KIND.hello) {
-      // The peer starts over (only the higher handle answers one).
-      if (entry.client.me === undefined || initiatesTo(entry.client.me, from)) return;
+      // The peer starts over (only the higher handle answers one; in an
+      // invite room, whoever says hello is a joiner and is answered).
+      if (entry.client.me === undefined) return;
+      if (!entry.invite && initiatesTo(entry.client.me, from)) return;
       if (s !== undefined) s.session.close('restart');
       const g = this.group(entry.groupId);
       if (g === undefined) return;
@@ -432,9 +475,15 @@ export class PathManager {
         roomId,
         handle: from,
         groupId: g.groupId,
-        session: SyncSession.respond(this.o.c, g.store, this.sessionOptions()),
+        session: SyncSession.respond(
+          this.o.c,
+          g.store,
+          entry.invite ? { now: this.now(), limits: ROOM_SESSION_LIMITS } : this.sessionOptions(),
+        ),
         helloSent: true,
         member: undefined,
+        invite: entry.invite,
+        since: this.now(),
       };
       this.l0.set(k, s);
     }
@@ -457,8 +506,14 @@ export class PathManager {
       switch (event.type) {
         case 'open': {
           const now = this.now();
+          if (s.invite) {
+            // An invite room is for joiners only: they get the log, never ICE.
+            if (!event.joining) this.closeL0(s, 'not-joiner');
+            else this.diag('invite room: joiner admitted');
+            break;
+          }
           if (event.joining || this.o.links.memberBans.isBanned(event.peer, now)) {
-            // Joiners use invite rooms (G7); a banned member gets nothing.
+            // Joiners use invite rooms; a banned member gets nothing.
             this.closeL0(s, event.joining ? 'not-member' : 'banned');
             return;
           }
@@ -773,6 +828,7 @@ export class PathManager {
 
   private evaluate(member: string): void {
     if (!this.online) return;
+    this.applyRelayPolicy();
     const now = this.now();
     if (this.o.links.memberBans.isBanned(member, now)) {
       this.rtc.closeMember(member, 'banned');

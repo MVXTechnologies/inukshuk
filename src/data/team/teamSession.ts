@@ -10,7 +10,9 @@
  *
  * Every write goes replica → disk (`PersistingStore`) → peers, in that order.
  */
-import { GROUP_RECORD_ID, internetOn, NET } from '@core/group/meta';
+import { invitesToRevoke, irdvFields } from '@core/group/invites';
+import { GROUP_RECORD_ID, internetOn, IRDV, NET } from '@core/group/meta';
+import { joinConfirmed } from '@core/group/provisional';
 import type { PathKind } from '@core/group/path';
 import type { MeshNetworkInfo } from '@core/mesh/hotspot';
 import { addBreadcrumb, reportError } from '@lib/errorReporting';
@@ -830,6 +832,7 @@ export class TeamSession {
     switch (event.type) {
       case 'open': {
         this.note(event.joining ? 'open (joiner)' : 'open');
+        if (!event.joining) this.peersSeen.add(event.peer);
         if (meta) meta.joining = event.joining;
         if (event.joining && session.safetyCode !== undefined) {
           // The core admits during the handshake, so 'admitted' may come first.
@@ -943,7 +946,26 @@ export class TeamSession {
 
   private changed(): void {
     this.dirty = true;
+    this.checkProvisional();
     this.deps.onChange();
+  }
+
+  /** Members this phone completed a session with (R-INV-4 confirmation). */
+  private readonly peersSeen = new Set<string>();
+
+  /** Joined over the internet and not vouched for yet (R-INV-4). */
+  get provisional(): boolean {
+    return this.record.provisional !== undefined;
+  }
+
+  /** A second member, or another admin's later op, vouches for the log: no longer provisional. */
+  private checkProvisional(): void {
+    const join = this.record.provisional;
+    if (join === undefined) return;
+    if (!joinConfirmed(this.replica.state, join, this.peersSeen)) return;
+    const { provisional: _done, ...rest } = this.record;
+    this.record = rest;
+    this.onRecordChange?.(this.record);
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────
@@ -1047,6 +1069,8 @@ export class TeamSession {
     const blocked = this.guardWrite();
     if (blocked) return blocked;
     if (!this.record.prefs.sharePosition) return 'not-allowed';
+    // Provisional (R-INV-4): the admitting phone may be a removed member's.
+    if (this.provisional) return null;
     const pos: Record<string, Json> = {
       la: Math.round(fix.latitude * 1e6) / 1e6,
       lo: Math.round(fix.longitude * 1e6) / 1e6,
@@ -1311,6 +1335,13 @@ export class TeamSession {
     if (blocked) return blocked;
     const id = this.control('m.remove', { m: memberId, cut: cutFor(this.replica.state, memberId) });
     if (!this.accepted(id)) return 'not-allowed';
+    // R-INV-3: they may have seen an open invite; none of those works any more.
+    const stale = invitesToRevoke(this.replica.state, this.deps.now());
+    for (const inv of stale) this.control('i.revoke', { inv });
+    if (stale.length > 0) {
+      const who = this.view().members.find((m) => m.id === memberId)?.name ?? 'Someone';
+      this.revokedNotice = { count: stale.length, name: who, at: this.deps.now() };
+    }
     const err = this.rotateKey();
     // Their phone may still be connected: it got the removal; now hang up.
     this.deps.net?.closeMember(memberId, 'removed');
@@ -1401,6 +1432,9 @@ export class TeamSession {
       approve: choice.approve,
     });
     if (!this.accepted(this.control('i.create', inv.body))) return 'not-allowed';
+    // Its internet room (G7): members holding the key listen there for the joiner.
+    const irdv = irdvFields(this.deps.c, inv.token);
+    if (this.writeOk({ k: IRDV, id: irdv.id, f: irdv.f }) !== null) this.note('irdv not written');
     const net = this.netHint();
     const token: InviteToken = net ? { ...inv.token, net } : inv.token;
     return {
@@ -1426,6 +1460,9 @@ export class TeamSession {
     }
     return undefined;
   }
+
+  /** Invites a removal just cancelled (R-INV-3), for the admin's one banner; cleared by the screen. */
+  revokedNotice: { count: number; name: string; at: number } | null = null;
 
   /** Tell the admins I deleted the team from this phone (they should remove me). */
   announceLeave(): void {

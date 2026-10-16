@@ -233,9 +233,12 @@ export class TeamService {
     return this.host.cancelJoin();
   }
 
-  /** The codes matched: keep the team, post my name, make it active. */
-  async confirmJoin(): Promise<TeamSession | ActionError> {
-    const joined = await this.host.confirmJoin();
+  /**
+   * Keep the team, post my name, make it active. `compared` false: "Can't
+   * compare now" (an internet join then stays provisional, R-INV-4).
+   */
+  async confirmJoin(compared = true): Promise<TeamSession | ActionError> {
+    const joined = await this.host.confirmJoin(compared);
     if (typeof joined === 'string') return joined;
     const session = await this.activate(joined.teamId);
     addBreadcrumb('team join: confirmed, team session opened');
