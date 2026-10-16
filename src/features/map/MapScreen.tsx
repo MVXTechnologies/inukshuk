@@ -132,6 +132,7 @@ import { cardCameraCenterPx } from '@core/map/cardCamera';
 import {
   ExtensionCardDock,
   ExtensionImages,
+  ExtensionOverlays,
   extensionHitPosition,
   extensionRecenters,
   hitTestExtensions,
@@ -746,6 +747,21 @@ export function MapScreen() {
         : { zoom, latitude },
     );
   }, []);
+  // The settled camera for the extensions' live overlays (Tide stations'
+  // water levels, #764): a new object only when the zoom or centre moved.
+  const overlayZoom = scaleAt?.zoom ?? null;
+  const extensionView = useMemo(
+    () =>
+      overlayZoom !== null && mapCenter !== null
+        ? { zoom: overlayZoom, center: [mapCenter.longitude, mapCenter.latitude] as const }
+        : null,
+    [overlayZoom, mapCenter],
+  );
+  const queryRendered = useCallback(
+    (layers: string[]): Promise<unknown[]> =>
+      mapRef.current?.queryRenderedFeatures({ layers }) ?? Promise.resolve([]),
+    [],
+  );
   // What the trail lines and heatmap are built for (#494): the settled
   // viewport plus a margin, sticky across small moves (see useCullRegion).
   const cullRegion = useCullRegion(settledBounds, scaleAt?.zoom ?? null);
@@ -3457,6 +3473,15 @@ export function MapScreen() {
             {/* The map extensions: the symbols their layers name, and a ring
               under the feature whose card is up. */}
             <ExtensionImages shown={shownExtensions} dark={theme.dark} />
+            <ExtensionOverlays
+              shown={shownExtensions}
+              dark={theme.dark}
+              glyphs={style.glyphs}
+              beforeId={MARKERS_ANCHOR}
+              view={extensionView}
+              offline={offlineOnly}
+              queryRendered={queryRendered}
+            />
             {extensionHit !== null &&
               shownExtensions.includes(extensionHit.key) &&
               renderExtensionSelection(extensionHit, {

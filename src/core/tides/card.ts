@@ -13,7 +13,10 @@
  *   reference port's own levels above ITS chart datum — never merged in;
  * - every value has a copy string carrying its datum ("MHHW = 0.695 m
  *   NAVD88"), plus one for the whole table; copies use an ASCII minus;
- * - "Not for navigation" and the source credit are always there.
+ * - the source credit is always there; "Not for navigation" only where a
+ *   licence requires it (CHS, clause 10: its full notice); NOAA (public
+ *   domain), Kartverket (CC BY 4.0), SHOM (Licence Ouverte 2.0) and JMA ask
+ *   for credit only (checked 2026-10-16, #764).
  */
 import { formatLatLng } from '@core/geodetic/card';
 import { cdKind, levelName, nationalName, tideSourceAt } from './catalog';
@@ -46,15 +49,10 @@ export interface TideRow {
   copy: string;
 }
 
-export interface TideChip {
-  label: string;
-  tone: 'station' | 'live' | 'muted' | 'warn';
-}
-
 export interface TideCardModel {
   title: string;
+  /** "8443970 · NOAA · Live gauge · zone": id, source, kind, area. */
   subtitle: string;
-  chips: TideChip[];
   position: TideCell & { note: string };
   columns: TideColumn[];
   rows: TideRow[];
@@ -261,10 +259,10 @@ export function buildTideCard(s: TideStation): TideCardModel {
   if (s.landUpliftCmYr) notes.push(`Land uplift ${s.landUpliftCmYr} cm/yr.`);
 
   const source0 = source?.name ?? 'Tide station';
-  const subtitle = [s.id, source0, s.zone].filter(Boolean).join(' · ');
-  const chips: TideChip[] = [{ label: 'Tide station', tone: 'station' }];
-  chips.push({ label: KIND_LABEL[s.kind], tone: s.kind === 'gauge' ? 'live' : 'muted' });
-  chips.push({ label: NOT_FOR_NAVIGATION, tone: 'warn' });
+  // The kind rides in the subtitle (#764: the graph is the card's first content).
+  const subtitle = [s.id, source0, KIND_LABEL[s.kind], s.zone].filter(Boolean).join(' · ');
+  // "Not for navigation" only where a licence requires it: CHS's (clause 10).
+  const chs = source?.key === 'ca-chs';
 
   const pos = formatLatLng(s.lat, s.lng);
   const posNote = s.posAccM
@@ -283,13 +281,15 @@ export function buildTideCard(s: TideStation): TideCardModel {
     tableLines.push(ascii(refPort.title));
     for (const r of refPort.rows) tableLines.push(`${r.code}\t${ascii(r.cell.text)}`);
   }
-  tableLines.push(...notes, `${source?.attribution ?? ''} · ${NOT_FOR_NAVIGATION}`);
+  tableLines.push(
+    ...notes,
+    chs ? `${source.attribution} · ${NOT_FOR_NAVIGATION}` : (source?.attribution ?? ''),
+  );
 
   const page = source?.page.replace('{id}', encodeURIComponent(s.id));
   return {
     title: s.name,
     subtitle,
-    chips,
     position: {
       ...cell(pos, `${s.name} (${s.id}): ${pos}`, 'Copy station position'),
       note: posNote,
@@ -307,12 +307,10 @@ export function buildTideCard(s: TideStation): TideCardModel {
     link: page
       ? { url: page, label: source?.key === 'us-coops' ? 'Datums page' : 'Agency page' }
       : { url: source?.licenceUrl ?? '', label: 'Agency page' },
-    // CHS: the short credit in the footer, the licence's full notice in the card body.
-    credit:
-      source?.key === 'ca-chs'
-        ? `${source.attribution} · ${NOT_FOR_NAVIGATION}`
-        : [source?.attribution, source?.disclaimer].filter(Boolean).join(' · '),
-    ...(source?.key === 'ca-chs' ? { notice: source.disclaimer } : {}),
+    // CHS: the short credit in the footer, the licence's full notice in the
+    // card body. The others: their credit only (no licence asks for a notice).
+    credit: chs ? `${source.attribution} · ${NOT_FOR_NAVIGATION}` : (source?.attribution ?? ''),
+    ...(chs ? { notice: source.disclaimer } : {}),
     ...(s.live ? { live: s.live } : {}),
     cdLabel,
   };

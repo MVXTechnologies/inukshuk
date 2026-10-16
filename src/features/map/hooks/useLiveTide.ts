@@ -13,41 +13,13 @@ import {
 import type { TideStation } from '@core/tides/station';
 import { nextHighLow, parseSeries, stationDataUrl } from '@core/weather/tides';
 import { chsGet } from '@data/chsStations';
-import { useEffect, useState } from 'react';
-
-/**
- * The tide card's "Now" line: the station's own agency, live (NOAA CO-OPS or
- * Kartverket; two small requests per card open, nothing cached). Offline or
- * failing → 'error', and the card says "Live level needs a connection".
- * Stations without a live series never fetch.
- */
-export type LiveTideQuery =
-  | { status: 'none' }
-  | { status: 'loading' }
-  | { status: 'error' }
-  | { status: 'ready'; live: LiveTide };
-
-const TIMEOUT_MS = 12_000;
-
-async function get(url: string, signal: AbortSignal, as: 'json' | 'text'): Promise<unknown> {
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  signal.addEventListener('abort', abort, { once: true });
-  const timer = setTimeout(abort, TIMEOUT_MS);
-  try {
-    const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return as === 'json' ? await res.json() : await res.text();
-  } finally {
-    clearTimeout(timer);
-    signal.removeEventListener('abort', abort);
-  }
-}
+import { fetchWithTimeout as get } from '@data/tideSeries';
 
 /**
  * One station's live level and next high / low from its own agency (two
  * requests; CHS ones through the shared IWLS limiter). Throws when offline.
- * Also the info strip's tide fields' source (#695).
+ * The info strip's tide fields' source (#695); the card's graph and the map
+ * labels read `@data/tideSeries` (#764).
  */
 export async function loadLiveTide(s: TideStation, signal: AbortSignal): Promise<LiveTide> {
   const now = Date.now();
@@ -87,28 +59,4 @@ export async function loadLiveTide(s: TideStation, signal: AbortSignal): Promise
     .filter((r) => r.flag === 'obs')
     .map((r) => r.reading);
   return liveTide(observed, kvExtremes(parseKartverket(tab), now), now);
-}
-
-export function useLiveTide(station: TideStation | null, offline: boolean): LiveTideQuery {
-  const key = station?.live && !offline ? `${station.source}:${station.id}` : null;
-  const [result, setResult] = useState<{ key: string; query: LiveTideQuery } | null>(null);
-  useEffect(() => {
-    if (key === null || station === null) return;
-    const controller = new AbortController();
-    let cancelled = false;
-    loadLiveTide(station, controller.signal)
-      .then((live) => {
-        if (!cancelled) setResult({ key, query: { status: 'ready', live } });
-      })
-      .catch(() => {
-        if (!cancelled) setResult({ key, query: { status: 'error' } });
-      });
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [key, station]);
-  if (station?.live && offline) return { status: 'error' };
-  if (key === null) return { status: 'none' };
-  return result !== null && result.key === key ? result.query : { status: 'loading' };
 }

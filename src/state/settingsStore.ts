@@ -297,6 +297,11 @@ export interface Settings {
   extensions: ExtensionPrefsMap;
   /** Geodetic points shown, by attribute (overlays menu → the funnel; `@core/geodetic/filter`). */
   geodeticFilter: GeodeticFilter;
+  /**
+   * Tide stations › "Show levels on the map" (#764): each station's water
+   * level, trend and next high or low beside its symbol. Off by default.
+   */
+  tideLevelsOnMap: boolean;
   /** The overlays sheet's last tab (`@core/map/overlayTabs`), reopened next time. */
   overlaysTab: OverlayTab;
   /**
@@ -456,6 +461,7 @@ const DEFAULTS: Settings = {
   showParks: true,
   extensions: defaultExtensionPrefs(),
   geodeticFilter: DEFAULT_GEODETIC_FILTER,
+  tideLevelsOnMap: false,
   overlaysTab: 'map',
   tiltRelief: DEFAULT_TILT_RELIEF,
   betaTerrain3d: false,
@@ -576,6 +582,7 @@ function snapshot(s: SettingsState): Settings {
     showParks,
     extensions,
     geodeticFilter,
+    tideLevelsOnMap,
     overlaysTab,
     tiltRelief,
     betaTerrain3d,
@@ -644,6 +651,7 @@ function snapshot(s: SettingsState): Settings {
     showParks,
     extensions,
     geodeticFilter,
+    tideLevelsOnMap,
     overlaysTab,
     tiltRelief,
     betaTerrain3d,

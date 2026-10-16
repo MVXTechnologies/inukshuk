@@ -7,7 +7,8 @@
  * their details; one-line overlays rows without the legends; 2026-10-13,
  * #668: the overlays rows' sub-panel accessory; 2.5.1 QA: Geodetic points'
  * Settings badge is its one icon, GEODETIC_ICON; #760: Paper buttons carry a
- * 48 dp hitSlop). Each snapshot is the
+ * 48 dp hitSlop; #764: Tide stations' "Show levels on the map" row, and no
+ * navigation notice outside CHS's). Each snapshot is the
  * SHA-256 of the rendered tree's JSON (the full trees are ~1 MB), with every
  * `style` prop flattened (`[a, false, b]` and `[a, b]` draw the same pixels)
  * and image paths cut to `assets/…` (they are relative to the checkout).

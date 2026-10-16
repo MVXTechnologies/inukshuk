@@ -18,8 +18,62 @@ const IMAGES: Record<TideTheme, Record<string, ImageRequireSource>> = {
   },
 };
 
+/**
+ * The water level labels' images (#764, `scripts/map/build-tide-level-images.py`):
+ * SDF pills the style tints (one set for both themes) and the trend arrows,
+ * named as `tideLevelImageNames` lists them.
+ */
+const PILLS: Record<string, ImageRequireSource> = {
+  'tide-pill-1-48': require('../../../assets/map/tides/levels/tide-pill-1-48.png'),
+  'tide-pill-1-64': require('../../../assets/map/tides/levels/tide-pill-1-64.png'),
+  'tide-pill-1-80': require('../../../assets/map/tides/levels/tide-pill-1-80.png'),
+  'tide-pill-1-104': require('../../../assets/map/tides/levels/tide-pill-1-104.png'),
+  'tide-pill-1-128': require('../../../assets/map/tides/levels/tide-pill-1-128.png'),
+  'tide-pill-1-152': require('../../../assets/map/tides/levels/tide-pill-1-152.png'),
+  'tide-pill-1-184': require('../../../assets/map/tides/levels/tide-pill-1-184.png'),
+  'tide-pill-1-216': require('../../../assets/map/tides/levels/tide-pill-1-216.png'),
+  'tide-pill-2-48': require('../../../assets/map/tides/levels/tide-pill-2-48.png'),
+  'tide-pill-2-64': require('../../../assets/map/tides/levels/tide-pill-2-64.png'),
+  'tide-pill-2-80': require('../../../assets/map/tides/levels/tide-pill-2-80.png'),
+  'tide-pill-2-104': require('../../../assets/map/tides/levels/tide-pill-2-104.png'),
+  'tide-pill-2-128': require('../../../assets/map/tides/levels/tide-pill-2-128.png'),
+  'tide-pill-2-152': require('../../../assets/map/tides/levels/tide-pill-2-152.png'),
+  'tide-pill-2-184': require('../../../assets/map/tides/levels/tide-pill-2-184.png'),
+  'tide-pill-2-216': require('../../../assets/map/tides/levels/tide-pill-2-216.png'),
+};
+
+const ARROWS: Record<TideTheme, Record<string, ImageRequireSource>> = {
+  light: {
+    'tide-arr-up-ink-light': require('../../../assets/map/tides/levels/tide-arr-up-ink-light.png'),
+    'tide-arr-up-label-light': require('../../../assets/map/tides/levels/tide-arr-up-label-light.png'),
+    'tide-arr-down-ink-light': require('../../../assets/map/tides/levels/tide-arr-down-ink-light.png'),
+    'tide-arr-down-label-light': require('../../../assets/map/tides/levels/tide-arr-down-label-light.png'),
+    'tide-arr-flat-ink-light': require('../../../assets/map/tides/levels/tide-arr-flat-ink-light.png'),
+    'tide-arr-flat-label-light': require('../../../assets/map/tides/levels/tide-arr-flat-label-light.png'),
+  },
+  dark: {
+    'tide-arr-up-ink-dark': require('../../../assets/map/tides/levels/tide-arr-up-ink-dark.png'),
+    'tide-arr-up-label-dark': require('../../../assets/map/tides/levels/tide-arr-up-label-dark.png'),
+    'tide-arr-down-ink-dark': require('../../../assets/map/tides/levels/tide-arr-down-ink-dark.png'),
+    'tide-arr-down-label-dark': require('../../../assets/map/tides/levels/tide-arr-down-label-dark.png'),
+    'tide-arr-flat-ink-dark': require('../../../assets/map/tides/levels/tide-arr-flat-ink-dark.png'),
+    'tide-arr-flat-label-dark': require('../../../assets/map/tides/levels/tide-arr-flat-label-dark.png'),
+  },
+};
+
 export function tideImages(theme: TideTheme): Record<string, ImageRequireSource> {
   return IMAGES[theme];
+}
+
+/** The level labels' images for a theme: pills (SDF) and arrows. */
+export function tideLevelImages(
+  theme: TideTheme,
+): Record<string, ImageRequireSource | { source: ImageRequireSource; sdf: boolean }> {
+  const out: Record<string, ImageRequireSource | { source: ImageRequireSource; sdf: boolean }> = {
+    ...ARROWS[theme],
+  };
+  for (const [name, source] of Object.entries(PILLS)) out[name] = { source, sdf: true };
+  return out;
 }
 
 /** One symbol, for the legend and the card header. */

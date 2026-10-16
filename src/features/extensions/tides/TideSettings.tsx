@@ -2,8 +2,9 @@
  * Settings → Extensions → Tide stations (`@core/map/tideStyle`):
  *
  * - not installed: what it is, and "Get";
- * - installed: the layer switch (also in Map overlays › Extensions), Coverage
- *   & sources (stations per source; Canada live from CHS), Remove.
+ * - installed: the layer switch (also in Map overlays › Extensions), "Show
+ *   levels on the map" while it is on (#764), Coverage & sources (stations
+ *   per source; Canada live from CHS), Remove.
  *
  * Tidal benchmarks belong to Geodetic points (its Tidal chip), not here.
  */
@@ -14,10 +15,13 @@ import { List, useTheme } from '@ui/paper';
 import { TideLegend } from '../../map/components/TideLegend';
 import { tideImage } from '../../map/tideImages';
 import { ExtensionSettingsShell } from '../ExtensionSettingsShell';
+import { useExtensionPrefs } from '../prefs';
+import { TideLevelsSettingsItem } from './TideLevelsRow';
 import { TideSources, useTideCoverage } from './TideSources';
 
 export function TideSettings() {
   const theme = useTheme();
+  const { show } = useExtensionPrefs('tides');
   const coverage = useTideCoverage();
   const [sourcesOpen, setSourcesOpen] = useState(false);
 
@@ -28,11 +32,12 @@ export function TideSettings() {
       badgeIconSize={20}
       description="Tide gauges with their published tidal levels in chart datum, the national datum and as ellipsoidal heights, and the live water level. Canada live from CHS."
       legend={<TideLegend />}
-      note="Free · a few kB per offline region · not for navigation"
+      note="Free · a few kB per offline region"
       showLabel="Show tide stations"
       removeDescription="Hides the layer"
       removeMessage="The stations leave the map. You can get them again any time."
     >
+      {show && <TideLevelsSettingsItem />}
       <List.Item
         title="Tide coverage & sources"
         description={tideCoverageSummary(coverage)}

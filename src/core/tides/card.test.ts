@@ -47,26 +47,25 @@ describe('buildTideCard — The Battery (NOAA CO-OPS, ellipsoid confirmed by VDa
     for (const r of card.rows) for (const c of r.cells) expect(c?.a11y).toMatch(/^Copy /);
   });
 
-  it('copies the whole table with header, source and the navigation warning', () => {
+  it('copies the whole table with header and source credit', () => {
     const lines = card.tableCopy.split('\n');
     expect(lines[0]).toBe('THE BATTERY (8518750) · NOAA CO-OPS · tidal levels, metres');
     expect(lines[1]).toBe('Level\tabove MLLW\tNAVD88\th NAD83(2011) · epoch 2010.0');
     expect(lines).toContain('MHHW\t1.541\t0.695\t-31.23');
     expect(lines).toContain('Chart datum\t0\t-0.846\t-32.77');
     expect(card.tableCopy).not.toContain('−');
-    expect(lines[lines.length - 1]).toContain(NOT_FOR_NAVIGATION);
+    expect(lines[lines.length - 1]).toContain('NOAA/NOS/CO-OPS');
+    // NOAA data is public domain: no licence asks for a navigation notice (#764).
+    expect(card.tableCopy).not.toContain(NOT_FOR_NAVIGATION);
   });
 
-  it('says how far each number is checked, and never hides the warning', () => {
+  it('says how far each number is checked; the kind in the subtitle, the credit at the foot', () => {
     expect(card.cdBox.title).toBe('Chart datum (MLLW)');
     expect(card.cdBox.notes.join(' ')).toContain('confirmed by NOAA VDatum within 0.9 cm');
-    expect(card.chips.map((c) => c.label)).toEqual([
-      'Tide station',
-      'Live gauge',
-      'Not for navigation',
-    ]);
+    expect(card.subtitle).toBe('8518750 · NOAA CO-OPS · Live gauge');
     expect(card.credit).toContain('NOAA/NOS/CO-OPS');
-    expect(card.credit).toContain('Not for navigation');
+    expect(card.credit).not.toMatch(/navigation/i);
+    expect(card.notice).toBeUndefined();
     expect(card.extremes).toBe(
       `Recorded high 4.280 (2012-10-30) · low ${M}1.307 (1976-02-02) above MLLW`,
     );
@@ -85,8 +84,11 @@ describe('buildTideCard — other agencies', () => {
     expect(card.cdBox.notes.join(' ')).toContain(
       'Ellipsoidal height published by Shom; agrees with IGN RAF20',
     );
-    expect(card.subtitle).toBe('BREST-IROISESUDBRETAGNE · Shom · Iroise, Sud Bretagne');
+    expect(card.subtitle).toBe(
+      'BREST-IROISESUDBRETAGNE · Shom · Predictions · Iroise, Sud Bretagne',
+    );
     expect(card.credit).toContain('doi:10.17183/MAREE_COURANTS_RAM');
+    expect(card.credit).not.toMatch(/navigation/i);
   });
 
   it('Bergen without an oracle-confirmed ellipsoid: two columns and the reason', () => {
@@ -107,7 +109,8 @@ describe('buildTideCard — other agencies', () => {
     expect(card.rows[0]?.cells[0]?.copy).toBe('MSL = 0.180 m above the tide-table datum');
     expect(card.rows[0]?.cells[1]?.text).toBe(`${M}0.038`);
     expect(card.position.note).toBe('station position, ±1 km (as published)');
-    expect(card.credit).toContain('not guaranteed equal to');
+    expect(card.credit).toContain('気象庁');
+    expect(card.credit).not.toMatch(/navigation/i);
   });
 
   it('a secondary station shows its reference port HAT/LAT separately, labelled as the port’s own', () => {
@@ -123,7 +126,7 @@ describe('buildTideCard — other agencies', () => {
     expect(card.refPort?.rows[1]?.cell.copy).toBe(
       'LAT = -0.465 m above MLLW at reference port THE BATTERY (8518750)',
     );
-    expect(card.chips[1]?.label).toBe('Secondary station');
+    expect(card.subtitle).toContain('Secondary station');
     expect(card.live).toBeUndefined();
   });
 });

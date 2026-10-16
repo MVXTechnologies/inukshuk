@@ -73,6 +73,30 @@ export interface ExtensionTap {
   lngLat: readonly [number, number];
 }
 
+/** A map image: a bundled PNG, or one the style tints (`sdf`). */
+export type ExtensionImage = ImageRequireSource | { source: ImageRequireSource; sdf: boolean };
+
+/** The settled camera, as an extension's overlay sees it. */
+export interface ExtensionMapView {
+  zoom: number;
+  center: readonly [number, number];
+}
+
+/** What the map hands an extension's live overlay. */
+export interface ExtensionOverlayProps {
+  dark: boolean;
+  /** The style's glyph host (its labels' font follows it); none = no labels. */
+  glyphs: string | undefined;
+  /** Its layers go under this one (the markers). */
+  beforeId: string;
+  /** The settled camera; null before the first settle. */
+  view: ExtensionMapView | null;
+  /** Offline-only mode: no requests. */
+  offline: boolean;
+  /** The rendered features of these layers on screen (empty mid-teardown). */
+  queryRendered: (layers: string[]) => Promise<unknown[]>;
+}
+
 /**
  * An extension on the live map (`./mapModules`): what it adds to its style input, its
  * symbol images, its tap → card. `H` is what a tap finds (a mark, a
@@ -86,8 +110,14 @@ export interface ExtensionMapModule<H> {
    * `active`: the extension is drawn.
    */
   useStyleExtras(active: boolean, ctx: { offlineOnly: boolean }): object;
-  /** The symbol images its layers name. */
-  images(theme: 'light' | 'dark'): Record<string, ImageRequireSource>;
+  /** The symbol images its layers name (`sdf`: tinted by the style). */
+  images(theme: 'light' | 'dark'): Record<string, ExtensionImage>;
+  /**
+   * Live layers of its own over the map while it is drawn (data that moves
+   * with the camera or the clock, kept out of the style so it never reloads
+   * it): Tide stations' water levels (#764).
+   */
+  Overlay?: ComponentType<ExtensionOverlayProps>;
   /** What a tap at `tap` hits, or null (nothing there, or the map mid-teardown). */
   hitTest(tap: ExtensionTap): Promise<H | null>;
   /** Where a hit is: [lng, lat]. */

@@ -29,9 +29,11 @@ export function useTideCoverage(): TideCoverage | null {
   return coverage;
 }
 
-/** Not for navigation: said under the sources wherever they show. */
-export const TIDE_SOURCES_NOTE =
-  'Values are shown as each agency publishes them. Not for navigation.';
+/**
+ * Said under the sources wherever they show. No navigation notice: of the
+ * tide sources only CHS's licence asks for one, and its cards carry it (#764).
+ */
+export const TIDE_SOURCES_NOTE = 'Values are shown as each agency publishes them.';
 
 /** One row per source (name · network, attribution, stations or "live") and the note. */
 export function TideSources({ coverage }: { coverage: TideCoverage | null }) {

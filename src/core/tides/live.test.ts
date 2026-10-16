@@ -1,13 +1,14 @@
-import { IMPERIAL, METRIC } from '@core/format';
 import {
   coopsHiLoUrl,
   coopsLevelUrl,
+  coopsObservedUrl,
+  coopsPredictionsUrl,
   kvExtremes,
   kvUrl,
   liveTide,
-  nowLine,
   parseCoopsHiLo,
   parseCoopsLevels,
+  parseCoopsPredictions,
   parseKartverket,
 } from './live';
 
@@ -68,23 +69,18 @@ describe('live tide parsers', () => {
     expect(parseKartverket(null)).toEqual([]);
   });
 
-  it('builds the Now line: fresh level, trend, next extreme', () => {
+  it('reads now: fresh level, trend, next high and low', () => {
     const live = liveTide(parseCoopsLevels(COOPS_LEVELS), parseCoopsHiLo(COOPS_HILO), NOW);
     expect(live.level?.heightM).toBe(0.567);
     expect(live.trend).toBe('falling');
-    expect(nowLine(live, 'MLLW', () => '14:31', METRIC)).toBe(
-      'Water 0.57 m above MLLW · falling · next low 14:31 (0.26 m)',
-    );
-    // Heights follow the elevation unit (#702).
-    expect(nowLine(live, 'MLLW', () => '14:31', IMPERIAL)).toBe(
-      'Water 1.86 ft above MLLW · falling · next low 14:31 (0.84 ft)',
-    );
+    expect(live.nextLow?.heightM).toBe(0.255);
+    expect(live.nextHigh?.heightM).toBe(1.57);
   });
 
   it('never calls a stale reading "now"', () => {
     const live = liveTide(parseCoopsLevels(COOPS_LEVELS), [], NOW + 3 * 3_600_000);
     expect(live.level).toBeNull();
-    expect(nowLine(live, 'MLLW', () => '', METRIC)).toBeNull();
+    expect(live.trend).toBeNull();
   });
 
   it('builds key-free request URLs', () => {
@@ -97,5 +93,34 @@ describe('live tide parsers', () => {
     expect(kvUrl(60.398046, 5.320487, 'tab', NOW, NOW + 3_600_000)).toBe(
       'https://vannstand.kartverket.no/tideapi.php?tide_request=locationdata&lat=60.398046&lon=5.320487&datatype=tab&refcode=cd&lang=en&fromtime=2026-10-05T13:10:00Z&totime=2026-10-05T14:10:00Z&interval=10&dst=0&tzone=0',
     );
+  });
+
+  it('asks the graph’s windows: 12 h observed, a predicted curve or highs/lows (#764)', () => {
+    expect(coopsObservedUrl('8518750', NOW)).toContain(
+      'product=water_level&begin_date=20261005%2001%3A10&range=12&station=8518750',
+    );
+    expect(coopsPredictionsUrl('8518750', NOW, 60, '30')).toContain(
+      'product=predictions&interval=30&begin_date=20261005%2013%3A10&range=60',
+    );
+    expect(coopsPredictionsUrl('8518750', NOW, 60, 'hilo')).toContain('interval=hilo');
+    expect(kvUrl(60.4, 5.3, 'pre', NOW, NOW)).toContain('datatype=pre');
+  });
+
+  it('parses a CO-OPS predicted curve; junk is skipped', () => {
+    expect(
+      parseCoopsPredictions({
+        predictions: [
+          { t: '2026-10-05 14:00', v: '0.30' },
+          { t: '2026-10-05 13:30', v: '0.25' },
+          { t: 'x', v: '1' },
+          { t: '2026-10-05 15:00', v: '' },
+        ],
+      }),
+    ).toEqual([
+      { timeMs: Date.UTC(2026, 9, 5, 13, 30), heightM: 0.25 },
+      { timeMs: Date.UTC(2026, 9, 5, 14, 0), heightM: 0.3 },
+    ]);
+    expect(parseCoopsPredictions(null)).toEqual([]);
+    expect(parseCoopsPredictions({ predictions: [null] })).toEqual([]);
   });
 });

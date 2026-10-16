@@ -278,6 +278,10 @@ one registry, not hand-wired screens (architecture review P1-3):
    Remove) stays in Settings. To link to
    its details from elsewhere, push `extensionSettingsHref(key)`
    (`/settings?open=extensions&ext=<key>`), which opens it expanded.
+   Data that moves with the camera or the clock (Tide stations' water
+   levels, #764) stays out of the style, which would reload: the map
+   module's optional `Overlay` draws it as live layers, handed the settled
+   camera and a `queryRendered` over the drawn features.
 4. Pick its offline policy (`'installed'` for a few kB a region, `'opt-in'`
    with companion packs for more), then run `extensionStyles.pin.test.ts`:
    the existing extensions' hashes must not move.

@@ -109,7 +109,9 @@ describe('CHS stations, fetched live by the phone', () => {
       ['HAT', '4.80'],
       ['LAT', `${M}0.30`],
     ]);
-    expect(card.subtitle).toBe('09901 · CHS');
+    expect(card.subtitle).toBe('09901 · CHS · Live gauge');
+    // The CHS licence (clause 10) requires its notice: kept in full, and in the credit.
+    expect(card.tableCopy).toContain('Not for navigation');
     expect(card.notice).toBe(CHS_NOTICE);
     expect(card.credit).toBe(
       'Contains data of the Canadian Hydrographic Service (DFO), fetched live from IWLS · Not for navigation',

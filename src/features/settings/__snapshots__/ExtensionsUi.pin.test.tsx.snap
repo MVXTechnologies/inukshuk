@@ -64,37 +64,37 @@ exports[`Settings → Extensions, geodetic open: tides, shown, dark 1`] = `"e1a8
 
 exports[`Settings → Extensions, geodetic open: tides, shown, light 1`] = `"20d595b34b5917d9"`;
 
-exports[`Settings → Extensions, tides open: both, hidden, dark 1`] = `"c1fbecd72611c709"`;
+exports[`Settings → Extensions, tides open: both, hidden, dark 1`] = `"4d1ced2341b8327f"`;
 
-exports[`Settings → Extensions, tides open: both, hidden, light 1`] = `"a2f58e528ebe6b42"`;
+exports[`Settings → Extensions, tides open: both, hidden, light 1`] = `"75e95ad8996b9f63"`;
 
-exports[`Settings → Extensions, tides open: both, shown, dark 1`] = `"b4b05d1a74f704ae"`;
+exports[`Settings → Extensions, tides open: both, shown, dark 1`] = `"858a21deab1ae0bc"`;
 
-exports[`Settings → Extensions, tides open: both, shown, light 1`] = `"e32773024d252a4c"`;
+exports[`Settings → Extensions, tides open: both, shown, light 1`] = `"43b9fea727400687"`;
 
-exports[`Settings → Extensions, tides open: geodetic, hidden, dark 1`] = `"42d40fc442d4c538"`;
+exports[`Settings → Extensions, tides open: geodetic, hidden, dark 1`] = `"e1cfddc55df21677"`;
 
-exports[`Settings → Extensions, tides open: geodetic, hidden, light 1`] = `"b0f98e2496fbe675"`;
+exports[`Settings → Extensions, tides open: geodetic, hidden, light 1`] = `"44fa1a3de4787d03"`;
 
-exports[`Settings → Extensions, tides open: geodetic, shown, dark 1`] = `"870a8ed217de0981"`;
+exports[`Settings → Extensions, tides open: geodetic, shown, dark 1`] = `"cb187eaf8288ae7d"`;
 
-exports[`Settings → Extensions, tides open: geodetic, shown, light 1`] = `"e39f903cbd8c9e01"`;
+exports[`Settings → Extensions, tides open: geodetic, shown, light 1`] = `"83cbc0cd9580a9ec"`;
 
-exports[`Settings → Extensions, tides open: none, hidden, dark 1`] = `"06d9463c78a1cc22"`;
+exports[`Settings → Extensions, tides open: none, hidden, dark 1`] = `"cd07297742dc0da6"`;
 
-exports[`Settings → Extensions, tides open: none, hidden, light 1`] = `"f9d3505684643c45"`;
+exports[`Settings → Extensions, tides open: none, hidden, light 1`] = `"b53f1e624393b4ad"`;
 
-exports[`Settings → Extensions, tides open: none, shown, dark 1`] = `"06d9463c78a1cc22"`;
+exports[`Settings → Extensions, tides open: none, shown, dark 1`] = `"cd07297742dc0da6"`;
 
-exports[`Settings → Extensions, tides open: none, shown, light 1`] = `"f9d3505684643c45"`;
+exports[`Settings → Extensions, tides open: none, shown, light 1`] = `"b53f1e624393b4ad"`;
 
-exports[`Settings → Extensions, tides open: tides, hidden, dark 1`] = `"a8350e4d1df7f52e"`;
+exports[`Settings → Extensions, tides open: tides, hidden, dark 1`] = `"355f9d340c2c858f"`;
 
-exports[`Settings → Extensions, tides open: tides, hidden, light 1`] = `"463c6917de68d396"`;
+exports[`Settings → Extensions, tides open: tides, hidden, light 1`] = `"39c7ed0696675f5d"`;
 
-exports[`Settings → Extensions, tides open: tides, shown, dark 1`] = `"e7a879723f6332d3"`;
+exports[`Settings → Extensions, tides open: tides, shown, dark 1`] = `"c73231c5b6b250d6"`;
 
-exports[`Settings → Extensions, tides open: tides, shown, light 1`] = `"2304b872da45dd61"`;
+exports[`Settings → Extensions, tides open: tides, shown, light 1`] = `"dfa868b1b2450fef"`;
 
 exports[`Settings → Extensions: both, hidden, dark 1`] = `"72de3e93ae23cfa7"`;
 

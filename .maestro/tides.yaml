@@ -3,8 +3,11 @@
 # without expanding; tapping the row expands its details (coverage, Remove);
 # the overlays sheet's Extensions tab then carries its one-line switch row;
 # the flow flips it off and on, then removes the extension again so other
-# flows see the default state. The station card itself (levels in three datums, copy
-# buttons) is covered by src/core/tides/card.test.ts and the sim screenshots.
+# flows see the default state. On the way it turns "Show levels on the map"
+# (#764) on and off in the sub-panel, with review shots light and dark. The
+# station card itself (its graph, levels in three datums, copy buttons) is
+# covered by src/core/tides/card.test.ts, TideStationCard.test.tsx and the
+# sim screenshots: a tap on a live station needs the network and a fixed map.
 #
 # Settings rows merge title + subtitle on iOS, so their matches are wildcard
 # regexes; the overlays rows' accessibility text is exactly their label.
@@ -126,8 +129,47 @@ appId: com.inukshuk.app
 # Off, then on again.
 - tapOn: 'Tide stations'
 - tapOn: 'Tide stations'
+# "Show levels on the map" (#764): its row sits under the stations' switch in
+# the sub-panel; on, the level labels' three looks join the symbols legend.
+# Review shots in both themes (the owner's phone runs dark), each asserted
+# first; the setting is left off.
+- tapOn: 'Options for Tide stations'
+- extendedWaitUntil:
+    visible: 'Show levels on the map.*'
+    timeout: 5000
+- assertNotVisible: 'Predicted'
+- tapOn: 'Show levels on the map.*'
+- extendedWaitUntil:
+    visible: 'Predicted'
+    timeout: 5000
+- assertVisible: 'Water level by each station.*'
+- takeScreenshot: review-tides-levels-panel-light
+- tapOn: 'Back to extensions'
 - tapOn: 'Close overlays'
 - assertVisible: 'Map actions'
+- runFlow:
+    file: subflows/set-theme.yaml
+    env:
+      NEXT: Dark
+- tapOn: 'Map overlays'
+- tapOn: 'Extensions tab'
+- tapOn: 'Options for Tide stations'
+- extendedWaitUntil:
+    visible: 'Predicted'
+    timeout: 5000
+- assertVisible: 'Show levels on the map.*'
+- takeScreenshot: review-tides-levels-panel-dark
+- tapOn: 'Show levels on the map.*'
+- extendedWaitUntil:
+    notVisible: 'Predicted'
+    timeout: 5000
+- tapOn: 'Back to extensions'
+- tapOn: 'Close overlays'
+- assertVisible: 'Map actions'
+- runFlow:
+    file: subflows/set-theme.yaml
+    env:
+      NEXT: System
 # Leave it uninstalled.
 - tapOn:
     text: 'Library(, tab.*)?'

@@ -1,18 +1,28 @@
-import { buildTideCard, type TideChip } from '@core/tides/card';
-import { nowLine } from '@core/tides/live';
+import { buildTideCard } from '@core/tides/card';
 import { useSettingsStore } from '@state/settingsStore';
 import type { TideStation } from '@core/tides/station';
 import { tideColors } from '@core/map/tideStyle';
-import { useMemo } from 'react';
+import { formatElevation } from '@core/format';
+import {
+  ageText,
+  levelReading,
+  predictedAt,
+  rateText,
+  tideGraph,
+  type LevelReading,
+  type TideGraphModel,
+} from '@core/tides/levels';
+import { useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Surface, Text, useTheme } from '@ui/paper';
-import { useLiveTide } from '../hooks/useLiveTide';
+import { useTideSeries, type TideSeriesQuery } from '../hooks/useTideSeries';
 import { useChsStationDetail } from '../hooks/useChs';
 import { CONVERT_ENABLED } from '@core/features/flags';
 import { convertFromTideStation, type ConvertRequest } from '@core/convert/entry';
 import { tideImage } from '../tideImages';
+import { tideClock, tzOffsetMs } from '../tideClock';
 import { CopyValueButton } from './CopyValueButton';
-import { useSchemeTokens } from '@ui/useSchemeTokens';
+import { TideGraph } from './TideGraph';
 import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 interface Props {
@@ -28,27 +38,148 @@ interface Props {
   floating?: boolean;
 }
 
-/** "13:18 EDT": the phone's time, with its zone — the gauge may be in another one. */
-function clock(ms: number): string {
-  const d = new Date(ms);
-  const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  try {
-    const zone = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' })
-      .formatToParts(d)
-      .find((p) => p.type === 'timeZoneName')?.value;
-    return zone ? `${hm} ${zone}` : hm;
-  } catch {
-    return hm;
-  }
+const ARROW: Record<'up' | 'down' | 'flat', string> = {
+  up: 'arrow-top-right',
+  down: 'arrow-bottom-right',
+  flat: 'arrow-right',
+};
+
+/** The tide now under the graph: the level, its trend, and when it was read. */
+function ReadingRow({
+  reading,
+  series,
+  now,
+}: {
+  reading: LevelReading;
+  series: Parameters<typeof predictedAt>[0];
+  now: number;
+}) {
+  const styles = useScaledStyles(stylesSheet);
+  const { sz } = useDisplayScale();
+  const theme = useTheme();
+  const units = useSettingsStore((s) => s.units);
+  const c = tideColors(theme.dark ? 'dark' : 'light');
+  const muted = theme.colors.onSurfaceVariant;
+  const h = (m: number) => formatElevation(m, units, { decimals: 2 });
+  const predNow = predictedAt(series, now);
+  return (
+    <View style={styles.readingRow} testID="tide-now">
+      <Text
+        variant="titleLarge"
+        style={[
+          styles.readingValue,
+          reading.kind === 'pred' && { color: c.label },
+          reading.kind === 'stale' && styles.faded,
+        ]}
+      >
+        {h(reading.heightM)}
+      </Text>
+      {reading.kind === 'stale' ? (
+        <Text variant="bodyMedium" style={[styles.readingTrend, { color: muted }]}>
+          {`at ${tideClock(reading.timeMs)} · ${ageText(reading.ageMs)} ago`}
+        </Text>
+      ) : (
+        reading.dir !== null && (
+          <View style={styles.trend}>
+            <Icon source={ARROW[reading.dir]} size={sz(16)} color={c.station} />
+            {reading.rateMPerH !== null && (
+              <Text variant="bodyMedium" style={[styles.readingTrend, { color: c.station }]}>
+                {rateText(reading.rateMPerH, units)}
+              </Text>
+            )}
+          </View>
+        )
+      )}
+      <View style={styles.flex} />
+      <Text variant="bodySmall" style={{ color: muted }} numberOfLines={1}>
+        {reading.kind === 'live'
+          ? tideClock(reading.timeMs)
+          : reading.kind === 'pred'
+            ? 'predicted'
+            : predNow !== null
+              ? `now ≈ ${h(predNow)}`
+              : ''}
+      </Text>
+    </View>
+  );
+}
+
+/** The graph's key: solid observed, dashed predicted. */
+function GraphKey({ observed }: { observed: boolean }) {
+  const styles = useScaledStyles(stylesSheet);
+  const theme = useTheme();
+  const c = tideColors(theme.dark ? 'dark' : 'light');
+  const muted = theme.colors.onSurfaceVariant;
+  return (
+    <View style={styles.key}>
+      {observed && (
+        <View style={styles.keyItem}>
+          <View style={[styles.keySolid, { backgroundColor: c.station }]} />
+          <Text variant="labelSmall" style={{ color: muted }}>
+            observed
+          </Text>
+        </View>
+      )}
+      <View style={styles.keyItem}>
+        <View style={styles.keyDashes}>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={[styles.keyDash, { backgroundColor: c.station }]} />
+          ))}
+        </View>
+        <Text variant="labelSmall" style={{ color: muted }}>
+          predicted
+        </Text>
+      </View>
+    </View>
+  );
 }
 
 /**
- * A tapped tide station (Overlays → Tide stations; mockup 03): the live
- * level when online, the agency's tidal levels in three datums (chart datum ·
- * national datum · ellipsoid, owner Q4a), the chart-datum box with its
- * sources and how far each number is checked, copy buttons on every value,
- * and "Not for navigation". A bottom card in the WaypointViewerCard idiom —
- * never a Portal dialog (the #108 soft-lock).
+ * The graph section, the card's first content (#764): the graph, the tide
+ * now, the key; while loading or offline with nothing saved, one line.
+ */
+function GraphSection({ query, datum }: { query: TideSeriesQuery; datum: string }) {
+  const styles = useScaledStyles(stylesSheet);
+  const units = useSettingsStore((s) => s.units);
+  const muted = useTheme().colors.onSurfaceVariant;
+  // The clock the graph reads, fixed per series (a re-render never shifts it).
+  const [now] = useState(() => Date.now());
+  const series = query.status === 'ready' ? query.series : null;
+  const graph: TideGraphModel | null = useMemo(
+    () => (series ? tideGraph(series, now, units, tideClock, tzOffsetMs(now)) : null),
+    [series, now, units],
+  );
+  const reading = useMemo(() => (series ? levelReading(series, now) : null), [series, now]);
+  if (query.status === 'none') return null;
+  if (query.status !== 'ready' || graph === null || series === null) {
+    return (
+      <Text
+        variant="bodyMedium"
+        style={[styles.section, { color: muted }]}
+        testID="tide-graph-state"
+      >
+        {query.status === 'loading' ? 'Reading the tide…' : 'Needs a connection.'}
+      </Text>
+    );
+  }
+  return (
+    <View style={styles.graphSection}>
+      <TideGraph model={graph} datum={datum} />
+      {reading !== null && <ReadingRow reading={reading} series={series} now={now} />}
+      <GraphKey observed={graph.observed.length > 0} />
+    </View>
+  );
+}
+
+/**
+ * A tapped tide station (Overlays → Tide stations): the tide graph first
+ * (#764: observed past solid, predictions dashed, now, next high and low),
+ * the tide now under it, then the agency's tidal levels in three datums
+ * (chart datum · national datum · ellipsoid, owner Q4a), the position, the
+ * chart-datum box with its sources and how far each number is checked, copy
+ * buttons on every value, and the source credit (CHS: its licence notice).
+ * A bottom card in the WaypointViewerCard idiom — never a Portal dialog (the
+ * #108 soft-lock).
  */
 export function TideStationCard({
   station,
@@ -65,32 +196,35 @@ export function TideStationCard({
   const styles = useScaledStyles(stylesSheet);
 
   const theme = useTheme();
-  const tokens = useSchemeTokens();
   // A CHS station arrives as a map stub; its levels come live from CHS (cached).
   const chs = useChsStationDetail(station);
   const shown = chs.status === 'ready' ? chs.station : station;
   const model = useMemo(() => (shown ? buildTideCard(shown) : null), [shown]);
-  const live = useLiveTide(station, offline);
-  const units = useSettingsStore((s) => s.units);
+  const series = useTideSeries(station, offline);
   if (!station || !model) return null;
   const scheme = theme.dark ? 'dark' : 'light';
   const teal = tideColors(scheme).station;
   const muted = theme.colors.onSurfaceVariant;
   const icon = tideImage(scheme, station.kind === 'gauge');
-  const line = live.status === 'ready' ? nowLine(live.live, model.cdLabel, clock, units) : null;
 
-  const chipStyle = (tone: TideChip['tone']) => {
-    switch (tone) {
-      case 'station':
-        return { bg: `${teal}26`, fg: teal };
-      case 'live':
-        return { bg: theme.colors.secondaryContainer, fg: theme.colors.onSecondaryContainer };
-      case 'warn':
-        return { bg: `${tokens.status.pausedInk}26`, fg: tokens.status.pausedInk };
-      default:
-        return { bg: theme.colors.surfaceVariant, fg: muted };
-    }
-  };
+  const position = (
+    <View style={[styles.posRow, styles.section]}>
+      <View style={styles.flex}>
+        <Text variant="bodyMedium" selectable>
+          {model.position.text}
+        </Text>
+        <Text variant="bodySmall" style={{ color: muted }}>
+          {model.position.note}
+        </Text>
+      </View>
+      <CopyValueButton
+        text={model.position.copy}
+        label={model.position.a11y}
+        onCopy={onCopy}
+        testID="tide-copy-position"
+      />
+    </View>
+  );
 
   return (
     <Surface style={[styles.card, floating && styles.floating]} elevation={4} testID="tide-card">
@@ -112,52 +246,8 @@ export function TideStationCard({
         />
       </View>
 
-      <View style={styles.chips}>
-        {model.chips.map((c) => {
-          const s = chipStyle(c.tone);
-          return (
-            <View key={c.label} style={[styles.chip, { backgroundColor: s.bg }]}>
-              {c.tone === 'warn' && <Icon source="alert-outline" size={13} color={s.fg} />}
-              <Text variant="labelSmall" style={{ color: s.fg, fontWeight: '700' }}>
-                {c.label}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
-
       <ScrollView style={styles.body} nestedScrollEnabled>
-        <View style={styles.posRow}>
-          <View style={styles.flex}>
-            <Text variant="bodyMedium" selectable>
-              {model.position.text}
-            </Text>
-            <Text variant="bodySmall" style={{ color: muted }}>
-              {model.position.note}
-            </Text>
-          </View>
-          <CopyValueButton
-            text={model.position.copy}
-            label={model.position.a11y}
-            onCopy={onCopy}
-            testID="tide-copy-position"
-          />
-        </View>
-
-        {station.live !== undefined && (
-          <View style={styles.section} testID="tide-now">
-            <Text variant="labelSmall" style={[styles.caps, { color: muted }]}>
-              NOW
-            </Text>
-            <Text variant="bodyMedium">
-              {live.status === 'ready'
-                ? (line ?? 'No recent reading from the gauge.')
-                : live.status === 'loading'
-                  ? 'Reading the gauge…'
-                  : 'Live level needs a connection.'}
-            </Text>
-          </View>
-        )}
+        <GraphSection query={series} datum={model.cdLabel} />
 
         {chs.status === 'loading' && (
           <Text variant="bodyMedium" style={styles.section}>
@@ -274,6 +364,8 @@ export function TideStationCard({
           </View>
         )}
 
+        {position}
+
         {model.refPort !== undefined && (
           <View style={styles.section} testID="tide-ref-port">
             <Text variant="bodySmall" style={{ color: muted }}>
@@ -376,16 +468,18 @@ const stylesSheet = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center' },
   icon: { width: 24, height: 24, marginRight: 10 },
   titles: { flex: 1 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2, marginBottom: 4 },
-  chip: {
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
   body: { maxHeight: 360 },
+  graphSection: { marginTop: 4 },
+  readingRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 4 },
+  readingValue: { fontWeight: '700', fontVariant: ['tabular-nums'] },
+  readingTrend: { fontWeight: '600' },
+  trend: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  faded: { opacity: 0.5 },
+  key: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 2 },
+  keyItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  keySolid: { width: 16, height: 2 },
+  keyDashes: { flexDirection: 'row', gap: 2, width: 16 },
+  keyDash: { width: 4, height: 1.5 },
   flex: { flex: 1 },
   posRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 2 },
   section: { marginTop: 8 },

@@ -18,7 +18,7 @@ import { View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { availableExtensions, extensionTilesUrl } from './availability';
 import { EXTENSION_MAP_MODULES } from './mapModules';
-import type { ExtensionCardHost, ExtensionTap } from './types';
+import type { ExtensionCardHost, ExtensionOverlayProps, ExtensionTap } from './types';
 
 /** What a map tap found: the extension, and its own record (a mark, a station). */
 export interface ExtensionHit {
@@ -100,6 +100,17 @@ export function ExtensionImages({
   return shown.map((key) => {
     const map = EXTENSION_MAP_MODULES[key];
     return map ? <Images key={key} images={map.images(dark ? 'dark' : 'light')} /> : null;
+  });
+}
+
+/** The drawn extensions' live overlays (`ExtensionMapModule.Overlay`). */
+export function ExtensionOverlays({
+  shown,
+  ...props
+}: ExtensionOverlayProps & { shown: readonly ExtensionKey[] }): ReactNode {
+  return shown.map((key) => {
+    const Overlay = EXTENSION_MAP_MODULES[key]?.Overlay;
+    return Overlay ? <Overlay key={key} {...props} /> : null;
   });
 }
 
