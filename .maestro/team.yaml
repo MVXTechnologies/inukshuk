@@ -418,7 +418,7 @@ tags:
     notVisible:
       id: 'team-bar-gather'
     timeout: 5000
-# A pin: a long-press on the map → Message pin, its card with the thread
+# A pin: a long-press on the map → Pin (the grid, #757), its card with the thread
 # (pins are made from a spot on the map, not from a menu).
 - longPressOn:
     point: '50%,55%'

@@ -4181,6 +4181,7 @@ export function MapScreen() {
             here={location}
             cardSlotFree={cardSlotFree && viewWaypoint === null && extensionHit === null}
             cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+            cardFloating={recordingPanelUp}
             onNavigate={(latitude, longitude) => setDestination({ latitude, longitude })}
             screenFocused={isFocused}
           />
