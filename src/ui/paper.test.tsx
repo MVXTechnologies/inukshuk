@@ -4,7 +4,16 @@ import { render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
-import { Button, IconButton, List, Menu, iconButtonBox, scaledIconSource } from './paper';
+import {
+  Button,
+  IconButton,
+  List,
+  Menu,
+  buttonHeight,
+  buttonHitSlop,
+  iconButtonBox,
+  scaledIconSource,
+} from './paper';
 import { resolveTheme } from './theme';
 
 jest.mock('@data/storage', () => ({ writeJson: jest.fn(), readJson: async () => null }));
@@ -78,14 +87,35 @@ describe('wrappers at Small', () => {
     expect(flat('row').minHeight).toBeUndefined();
   });
 
-  it('Button keeps its 40 dp height and tightens its label margins', async () => {
+  it.each(DISPLAY_SCALES.map((k) => [k]))(
+    'Button: drawn height + hitSlop reaches 48 dp at %p',
+    async (k) => {
+      await renderAt(
+        k,
+        <Button mode="contained" onPress={() => {}} testID="btn">
+          Save
+        </Button>,
+      );
+      const slop = screen.getByTestId('btn').props.hitSlop as { top: number; bottom: number };
+      expect(buttonHeight(k) + slop.top + slop.bottom).toBeGreaterThanOrEqual(MIN_TOUCH);
+    },
+  );
+
+  it("Button: a caller's own hitSlop wins", async () => {
     await renderAt(
       0.85,
-      <Button mode="contained" onPress={() => {}} testID="btn">
+      <Button onPress={() => {}} testID="btn" hitSlop={2}>
         Save
       </Button>,
     );
-    expect(screen.getByText('Save')).toBeTruthy();
+    expect(screen.getByTestId('btn').props.hitSlop).toBe(2);
+  });
+
+  it('Button heights: 40 at Default, denser at Small, roomier at Large', () => {
+    expect(buttonHeight(1)).toBe(40);
+    expect(buttonHeight(0.85)).toBe(33);
+    expect(buttonHeight(1.15)).toBe(48);
+    expect(buttonHitSlop(1)).toEqual({ top: 4, bottom: 4 });
   });
 
   it('Menu.Item renders through the wrapper', async () => {

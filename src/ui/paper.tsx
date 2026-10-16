@@ -10,11 +10,17 @@
  *
  * Touch areas: a wrapper never takes a pressable below where Paper puts it
  * at 100 % on the axis that matters (List rows and menu items keep 48 dp,
- * buttons 40 dp, icon buttons a 48 dp box); the visuals inside shrink.
+ * icon buttons a 48 dp box, buttons a 48 dp hitSlop); the visuals shrink.
  */
-import { MIN_TOUCH, scaleFontSize, scaleSize, scaleSpacing } from '@core/display/displayScale';
+import {
+  MIN_TOUCH,
+  hitSlopFor,
+  scaleFontSize,
+  scaleSize,
+  scaleSpacing,
+} from '@core/display/displayScale';
 import { forwardRef, type ComponentProps, type ComponentRef } from 'react';
-import { type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import { type StyleProp, type TextStyle } from 'react-native';
 import {
   ActivityIndicator as PaperActivityIndicator,
   Button as PaperButton,
@@ -103,26 +109,44 @@ export const IconButton = forwardRef<
 
 // ---------------------------------------------------------------- Button
 
-/** Paper MD3 button label margins (vertical 10; horizontal 24, text mode 12). */
+/** Paper MD3 button: a 20 dp label line with 10 dp above and below (40 dp). */
+const BUTTON_LINE = 20;
+const BUTTON_PAD = 10;
+
+/** A Paper button's drawn height at `factor`: its label line plus its padding. */
+export function buttonHeight(factor: number): number {
+  return scaleSize(BUTTON_LINE, factor) + 2 * scaleSpacing(BUTTON_PAD, factor);
+}
+
+/**
+ * Paper's button is drawn 40 dp tall (less at Small): a vertical hitSlop
+ * takes its touch area to 48 dp at every size (#760). A caller's own hitSlop
+ * wins.
+ */
+export function buttonHitSlop(factor: number): { top: number; bottom: number } {
+  const slop = hitSlopFor(buttonHeight(factor));
+  return { top: slop, bottom: slop };
+}
+
 export const Button = forwardRef<
   ComponentRef<typeof PaperButton>,
   ComponentProps<typeof PaperButton>
 >(function Button(props, ref) {
   const k = useDisplayFactor();
-  if (k === 1) return <PaperButton ref={ref} {...props} />;
+  const hitSlop = props.hitSlop ?? buttonHitSlop(k);
+  if (k === 1) return <PaperButton ref={ref} {...props} hitSlop={hitSlop} />;
   const text = props.mode === undefined || props.mode === 'text';
   const label: TextStyle = {
-    marginVertical: scaleSpacing(10, k),
+    marginVertical: scaleSpacing(BUTTON_PAD, k),
     marginHorizontal: scaleSpacing(text ? 12 : 24, k),
   };
-  const content: ViewStyle = { minHeight: 40 };
   return (
     <PaperButton
       ref={ref}
       {...props}
+      hitSlop={hitSlop}
       icon={scaledIconSource(props.icon, k)}
       labelStyle={[label, props.labelStyle]}
-      contentStyle={[content, props.contentStyle]}
     />
   );
 });
