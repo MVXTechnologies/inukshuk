@@ -85,7 +85,8 @@ export function TeamPanel({
   const meshRunning = useTeamStore((s) => s.meshRunning);
   const statuses = useTeamStore((s) => s.statuses);
   const net = useTeamStore((s) => s.net);
-  const netOn = net !== null && net.on && net.capable;
+  // The team's switch decides the chip; this phone's ability is in the Connection sheet.
+  const netOn = net !== null && net.on;
   const nearbyCount =
     net === null ? 0 : [...net.links.values()].filter((l) => l === 'nearby').length;
   const unread = useTeamStore(selectChatUnread);

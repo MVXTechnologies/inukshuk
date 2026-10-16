@@ -7,6 +7,7 @@
  */
 import { hotspotCandidates, MESH_DEFAULT_PORT } from '@core/mesh/hotspot';
 import type { InviteToken } from '@core/team/invite';
+import { appStoreLinks } from '@core/links/appStore';
 import { inviteNeedsUpdate, parseAnyInvite, parseHostPort } from '@core/teamui/invites';
 import { cleanName } from '@core/teamui/system';
 import type { ComponentType } from 'react';
@@ -321,15 +322,13 @@ export function JoinScreen() {
           icon="cellphone-arrow-down"
           title="This invite needs a newer Inukshuk"
           body="Update the app, then open the invite again."
-          {...(Platform.OS === 'android'
-            ? {
-                action: 'Update',
-                onAction: () =>
-                  void Linking.openURL(`market://details?id=${ANDROID_PACKAGE}`).catch(
-                    () => undefined,
-                  ),
-              }
-            : {})}
+          action="Update"
+          onAction={() => {
+            const store = appStoreLinks(Platform.OS);
+            void Linking.openURL(store.app).catch(() =>
+              Linking.openURL(store.web).catch(() => undefined),
+            );
+          }}
         />
         <Button mode="outlined" onPress={() => setNewer(false)} testID="team-join-newer-back">
           Back
@@ -389,9 +388,6 @@ export function JoinScreen() {
     </TeamScreenFrame>
   );
 }
-
-/** The Android package, for the store link of "needs a newer Inukshuk". */
-const ANDROID_PACKAGE = 'com.inukshuk.app';
 
 /** One step of an internet join (G7): done, in progress, or to come. */
 function Step({

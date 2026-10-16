@@ -46,7 +46,7 @@ export function InviteScreen() {
   const { width } = useWindowDimensions();
   const view = useTeamStore((s) => s.view);
   // Over the internet (#705), the invite works wherever they are.
-  const anywhere = useTeamStore((s) => s.net?.on === true && s.net.capable);
+  const anywhere = useTeamStore((s) => s.net?.on === true);
   const [choice, setChoice] = useState<InviteChoice>(DEFAULT_INVITE);
   const [invite, setInvite] = useState<CreatedInvite | null>(null);
   const set = (patch: Partial<InviteChoice>) => setChoice((c) => ({ ...c, ...patch }));

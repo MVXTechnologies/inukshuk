@@ -79,7 +79,8 @@ export function TeamHubScreen() {
   const tasks = useTeamStore((s) => s.tasks);
   const notices = useTeamStore((s) => s.joinNotices);
   const net = useTeamStore((s) => s.net);
-  const netOn = net !== null && net.on && net.capable;
+  // The team's switch decides the chips; this phone's ability is in the Connection sheet.
+  const netOn = net !== null && net.on;
   const [, setNoticeSeen] = useState(0);
 
   const session = teamService()?.active ?? null;

@@ -7,6 +7,7 @@
  * "Can't compare now" and newer-invite states.
  */
 import { defaultExtensionPrefs } from '@core/extensions/prefs';
+import { appStoreLinks } from '@core/links/appStore';
 import { toB64u } from '@core/team/bytes';
 import { nodeCrypto } from '@core/team/testing/nodeCrypto';
 import { lifetimeMs } from '@core/teamui/lifetime';
@@ -19,6 +20,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { settleTeamStoreForTests, useTeamStore, wireTeamStore } from '@state/teamStore';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
+import { Linking, Platform } from 'react-native';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
 
 import { ConnectionScreen } from './ConnectionScreen';
@@ -241,5 +243,8 @@ describe('Joining over the internet', () => {
     mockParams = { t: toB64u(b) };
     await render(wrap(<JoinScreen />));
     expect(screen.getByText('This invite needs a newer Inukshuk')).toBeTruthy();
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    await fireEvent.press(screen.getByText('Update'));
+    expect(open).toHaveBeenCalledWith(appStoreLinks(Platform.OS).app);
   });
 });

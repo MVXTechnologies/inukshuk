@@ -16,7 +16,12 @@ import { LinkChip, MemberAvatar, useNow } from '../components';
 import { Card } from './TeamCards';
 
 /** This phone's internet line, from the team's room state. */
-export function internetLine(room: string, online: boolean): { text: string; ok: boolean } {
+export function internetLine(
+  room: string,
+  online: boolean,
+  capable = true,
+): { text: string; ok: boolean } {
+  if (!capable) return { text: 'Not available on this phone', ok: false };
   if (room === 'ready') return { text: 'Connected', ok: true };
   if (room === 'failing') return { text: 'No internet', ok: false };
   return { text: online ? 'Connecting…' : 'Paused while the app is closed', ok: false };
@@ -36,7 +41,7 @@ export function ConnectionCard({ onClose }: { onClose: () => void }) {
     return l === 'direct' || l === 'relay' || l === 'nearby';
   }).length;
   const nearby = mates.filter((m) => net.links.get(m.id) === 'nearby').length;
-  const inet = internetLine(net.room, net.online);
+  const inet = internetLine(net.room, net.online, net.capable);
 
   return (
     <Card
