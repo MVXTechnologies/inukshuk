@@ -4,7 +4,7 @@
  * Screens read the snapshot and call the service's actions directly
  * (`teamActions()`); nothing here holds protocol state of its own.
  */
-import type { TeamAlert } from '@core/teamui/alerts';
+import { withTeam, type TeamAlert } from '@core/teamui/alerts';
 import type { TeamPhoto } from '@core/teamui/comments';
 import type { Said } from '@core/teamui/mapMarks';
 import type { TeamRally, TeamSos } from '@core/teamui/field';
@@ -233,6 +233,27 @@ export const useTeamStore = create<TeamStore>((set) => ({
   },
 }));
 
+/**
+ * Show a team (an SOS from a team not on screen, owner 2026-10-16): make it
+ * the active one and refresh the store at once. True when it is on screen
+ * after the call; false for a team this phone doesn't have.
+ */
+export async function switchToTeam(teamId: string): Promise<boolean> {
+  const service = appTeamService();
+  if (service === null) return false;
+  if (service.active?.teamId === teamId) return true;
+  if (!service.teams.some((r) => r.teamId === teamId)) return false;
+  await service.activate(teamId);
+  useTeamStore.getState().refresh();
+  return service.active?.teamId === teamId;
+}
+
+/** The ringing SOS's team on screen (its banner or notification was tapped). */
+export async function showAlarmTeam(): Promise<boolean> {
+  const alarm = useTeamStore.getState().sosAlarm;
+  return alarm === null ? false : switchToTeam(alarm.teamId);
+}
+
 /** Teammates' live strokes into the drawing store, at most once per frame (#683). */
 let liveFrame: ReturnType<typeof requestAnimationFrame> | null = null;
 function refreshLive(): void {
@@ -308,7 +329,8 @@ export function wireTeamStore(): TeamService | null {
         void notifyTeam({
           title: `SOS · ${authorName}`,
           body: `${alert.text === 'SOS · needs help' ? 'Needs help' : alert.text} · ${teamName}`,
-          url: alert.url,
+          // Opening it shows that team, whichever is on screen now.
+          url: withTeam(alert.url, teamId),
           channel: 'sos',
           identifier: routed.id,
         });

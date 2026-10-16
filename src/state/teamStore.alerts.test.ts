@@ -73,11 +73,12 @@ const mockService = {
   onDraw: () => () => undefined,
   onDrawAlert: () => () => undefined,
   load: () => new Promise<void>(() => undefined),
+  activate: jest.fn(async (_id: string) => session),
 };
 jest.mock('@data/team/appTeam', () => ({ appTeamService: () => mockService }));
 
 // Loaded after the fakes above exist (a static import would run first).
-const { resetRallyBuzzForTests, useTeamStore, wireTeamStore } =
+const { resetRallyBuzzForTests, showAlarmTeam, switchToTeam, useTeamStore, wireTeamStore } =
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('./teamStore') as typeof import('./teamStore');
 
@@ -378,6 +379,8 @@ describe('an SOS from a team not on screen (owner decision 2026-10-16)', () => {
       body: 'Needs help · Hut crew',
       channel: 'sos',
       identifier: 'sos:lea:h1',
+      // Opening it shows that team.
+      url: '/team/sos/lea/h1?team=hut',
     });
     expect(useTeamStore.getState().sosAlarm).toMatchObject({
       entity: 'sos:lea:h1',
@@ -395,6 +398,21 @@ describe('an SOS from a team not on screen (owner decision 2026-10-16)', () => {
     expect(useTeamStore.getState().sosAlarm).toBeNull();
     expect(mockDismiss).toHaveBeenCalledWith('sos:lea:h1');
     expect(mockInApp).toHaveBeenLastCalledWith(false);
+  });
+
+  it('its banner or notification shows that team', async () => {
+    mockService.teams = [{ teamId: 't' }, { teamId: 'hut' }];
+    hut.soses = [sos('lea', 'h3')];
+    useTeamStore.getState().refresh();
+    emit(sosAlert('lea', 'h3'), 'hut');
+    mockService.activate.mockClear();
+    await showAlarmTeam();
+    expect(mockService.activate).toHaveBeenCalledWith('hut');
+    // The team on screen, or one this phone doesn't have: nothing to switch.
+    mockService.activate.mockClear();
+    expect(await switchToTeam('t')).toBe(true);
+    expect(await switchToTeam('gone')).toBe(false);
+    expect(mockService.activate).not.toHaveBeenCalled();
   });
 
   it('a reopen in that team rings again', () => {

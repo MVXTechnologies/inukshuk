@@ -13,6 +13,7 @@
  * the banner unmounts. A plain absolutely positioned View: never a Paper
  * Portal on this spontaneous path (paper-portal-touch-swallow).
  */
+import { sosUrl, withTeam } from '@core/teamui/alerts';
 import { metres } from '@core/teamui/field';
 import { compassPoint, shortAge } from '@core/teamui/positions';
 import { distanceText } from '@core/teamui/teamBar';
@@ -72,7 +73,7 @@ export function SosAlarmBanner() {
       void notifyTeam({
         title: `SOS · ${a.authorName}`,
         body: `Needs help · ${a.teamName}`,
-        url: `/team/sos/${a.owner}/${a.entity.split(':')[2] ?? ''}`,
+        url: withTeam(sosUrl(a.owner, a.entity.split(':')[2] ?? ''), a.teamId),
         channel: 'sos',
         identifier: a.entity,
       });
