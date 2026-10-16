@@ -156,6 +156,15 @@ export class LibraryGroups {
   async scan(): Promise<Ended[]> {
     await this.load();
     const now = this.now;
+    // 0. A group joined by invite (a "new group" share) folds as a team until
+    // its meta says it is a library: re-open it as one.
+    for (const t of this.host.teams) {
+      const s = this.host.open(t.teamId);
+      if (s === undefined || groupMeta(s.replica.data(now)).app !== 'lib') continue;
+      s.updateRecord({ app: 'lib' });
+      await this.host.reopen(t.teamId);
+    }
+
     // 1. Pick up what the teams announce.
     let pending = this.sessions().filter((s) => s.pickupParent() !== undefined).length;
     const announced = new Set<string>();

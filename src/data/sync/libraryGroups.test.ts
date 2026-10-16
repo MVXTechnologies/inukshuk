@@ -194,6 +194,27 @@ describe('Share live groups (2.7.0 G10)', () => {
     expect(a.service.host.open(id)).toBeUndefined();
   });
 
+  it('a folder joined by invite (a new group) becomes a shared folder, not a team', async () => {
+    const rig = new Rig();
+    const a = phone(rig);
+    const b = phone(rig);
+    // A has no team: the folder is its own group, joined by QR invite.
+    const f = await a.lib.share({ name: 'Solo', root: 'solo' });
+    if (typeof f === 'string') throw new Error(f);
+    const inv = f.createInvite(DEFAULT_INVITE) as CreatedInvite;
+    await f.startMesh();
+    const attempt = await b.service.startJoin(parseAnyInvite(webJoinLink(inv.payload))!, 'Julie');
+    await rig.settle();
+    expect(attempt.state().phase).toBe('verify');
+    const joined = await b.service.confirmJoin();
+    if (typeof joined === 'string') throw new Error(joined);
+    await rig.settle();
+    await b.lib.scan();
+    expect(b.service.teams).toEqual([]);
+    expect(b.service.host.libraries.map((r) => r.teamId)).toEqual([f.teamId]);
+    expect(b.service.host.open(f.teamId)?.replica.registry.forKind('lit')).toBeDefined();
+  });
+
   it('a pickup the sharer never added stays waiting and costs no strike', async () => {
     const rig = new Rig();
     const { a, b } = await team(rig);

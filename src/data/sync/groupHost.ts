@@ -355,6 +355,17 @@ export class GroupHost implements SessionNet {
   }
 
   /**
+   * Re-open a group's session from disk (its record changed what its replica
+   * folds: a group joined by invite that turned out to be a shared folder).
+   */
+  async reopen(groupId: string): Promise<TeamSession> {
+    await this.load();
+    this.linkHost?.dropGroup(groupId, 'reopen');
+    this.sessions.delete(groupId);
+    return this.ensure(groupId);
+  }
+
+  /**
    * Hold a group this phone learned of but has no log for yet (a folder a
    * teammate shared with the team, #712): an empty replica the links fill
    * from a teammate's phone. Its session opens at once.

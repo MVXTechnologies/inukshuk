@@ -272,6 +272,23 @@ describe('library bridge (2.7.0 G10)', () => {
     expect(a.port.names('waypoints')).toEqual(['Refuge']);
   });
 
+  it('deleting the shared folder here leaves the share without trashing its items for anyone', async () => {
+    const rig = new Rig();
+    const { a, b } = await team(rig);
+    seed(a);
+    const f = await a.bridge.shareFolder('gaspF', { team: active(a).teamId });
+    if (typeof f === 'string') throw new Error(f);
+    await sync(rig, [a, b]);
+    const bf = b.port.lib.folders[0]!.id;
+    // As the store's folder delete does: the folder goes, its items are ungrouped.
+    b.port.apply({ folders: { remove: [bf] } });
+    await sync(rig, [a, b]);
+    expect(b.service.host.open(f.teamId)).toBeUndefined();
+    expect(b.port.names('waypoints')).toEqual(['Refuge']);
+    expect(a.port.names('waypoints')).toEqual(['Refuge']);
+    expect(a.port.names('areas')).toEqual(['Bleuets']);
+  });
+
   it('shares a single trail on its own', async () => {
     const rig = new Rig();
     const { a, b } = await team(rig);
