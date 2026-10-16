@@ -105,6 +105,8 @@ export const RELAY_TIMEOUT_MS = 15_000;
 /** The answering side adds TURN when this many offers came within {@link OFFER_WINDOW_MS}. */
 export const OFFERS_FOR_TURN = 2;
 export const OFFER_WINDOW_MS = 2 * 60_000;
+/** A server clock offset that moved less than this keeps the rooms as they are. */
+export const CLOCK_SLACK_MS = 60_000;
 /** Minted credentials are reused until this long before they expire. */
 const TURN_MARGIN_MS = 60_000;
 
@@ -172,6 +174,13 @@ export class PathManager {
   private readonly rtc: RtcCarrier;
   private readonly policy: PathPolicy;
   private online = false;
+  /**
+   * The relay's clock minus ours (ms), once a room told it. Rooms are named
+   * by the UTC day, so a phone whose clock is hours off would wait in the
+   * wrong day's room: once the offset is known, rooms follow the server's day.
+   */
+  private clockOffsetMs: number | undefined;
+  private reroom: unknown = null;
   private detach: (() => void) | null = null;
   private interval: unknown = null;
   private offLinks: (() => void) | null = null;
@@ -188,6 +197,24 @@ export class PathManager {
 
   private now(): number {
     return this.o.now();
+  }
+
+  /** The relay's time (ms): our clock corrected by the last offset a room gave. */
+  serverNow(): number {
+    return this.now() + (this.clockOffsetMs ?? 0);
+  }
+
+  /** A room told the server's time: keep the offset, and re-pick the rooms when it moved. */
+  private learnClock(client: RoomClient): void {
+    const before = this.clockOffsetMs ?? 0;
+    this.clockOffsetMs = client.serverNow() - this.now();
+    if (Math.abs(this.clockOffsetMs - before) < CLOCK_SLACK_MS || this.reroom !== null) return;
+    this.diag('room clock offset');
+    // Not from inside the room's own event: the refresh may stop that room.
+    this.reroom = this.o.timers.setTimeout(() => {
+      this.reroom = null;
+      this.refresh();
+    }, 0);
   }
 
   private diag(event: string): void {
@@ -211,6 +238,8 @@ export class PathManager {
     } else {
       if (this.interval !== null) this.o.timers.clearInterval(this.interval);
       this.interval = null;
+      if (this.reroom !== null) this.o.timers.clearTimeout(this.reroom);
+      this.reroom = null;
       for (const key of [...this.rooms.keys()]) this.dropRoom(key);
       this.rtc.closeAll('offline');
       this.peers.clear();
@@ -237,7 +266,7 @@ export class PathManager {
   refresh(): void {
     if (!this.online) return;
     const want = new Map<string, { group: PathGroup; room: Room }>();
-    const seconds = Math.floor(this.now() / 1000);
+    const seconds = Math.floor(this.serverNow() / 1000);
     for (const g of this.o.groups()) {
       if (!g.net || g.parent !== undefined || g.epochKey === undefined) continue;
       try {
@@ -329,6 +358,7 @@ export class PathManager {
     if (entry === undefined) return;
     switch (e.type) {
       case 'ready':
+        this.learnClock(entry.client);
         for (const h of e.peers) this.maybeInitiate(roomId, entry, h);
         break;
       case 'join':
