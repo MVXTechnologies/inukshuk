@@ -1,0 +1,3 @@
+# Local wrangler state (dev / dry-run) and the Worker's own install.
+.wrangler/
+node_modules/
