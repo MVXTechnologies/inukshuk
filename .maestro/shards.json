@@ -61,6 +61,7 @@
   },
   "parked": {
     "marine.yaml": "Marine is parked behind MARINE_ENABLED (src/core/features/flags.ts); the flow cannot pass on the shipping build",
+    "overlap-chooser.yaml": "Needs two crossing GPX imported first (scripts/e2e/overlap-chooser.sh: adb push + Open-with intents), which the CI runner does not do yet; a review/screenshot aid for #745 until the runner seeds them",
     "weather.yaml": "Weather is parked behind WEATHER_ENABLED (src/core/features/flags.ts)",
     "weather-models.yaml": "Weather is parked behind WEATHER_ENABLED (src/core/features/flags.ts)",
     "weather-wind.yaml": "Weather is parked behind WEATHER_ENABLED (src/core/features/flags.ts)",
