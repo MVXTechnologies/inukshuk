@@ -73,7 +73,13 @@ export function Round({
           styles.roundBtn,
           tint
             ? { borderWidth: 3, borderColor: c, backgroundColor: filled ? c : 'transparent' }
-            : { backgroundColor: t.surfaceVariant },
+            : // The well's ring keeps it visible where surfaceVariant equals the
+              // card's level2 (dark: both #242B32, #744 QA).
+              {
+                backgroundColor: t.surfaceVariant,
+                borderWidth: 1.5,
+                borderColor: t.outlineVariant,
+              },
         ]}
       >
         <Icon source={icon} size={26} color={filled ? palette.white : c} />

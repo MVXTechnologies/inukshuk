@@ -6,10 +6,11 @@
  */
 import type { TeamView } from '@core/teamui/view';
 import { FLOATING_CARD_GAP } from '@features/map/bottomLayers';
+import { contrastRatio } from '@core/color/contrast';
 import { useTeamStore } from '@state/teamStore';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, type ViewStyle } from 'react-native';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
 
 import { TeamSheetCard } from './TeamCards';
@@ -94,6 +95,24 @@ describe('the team long-press card (#744)', () => {
       expect(screen.queryByTestId('team-press-notify')).toBeNull();
       await fireEvent.press(screen.getByTestId('team-press-coordinates'));
       expect(onPointActions).toHaveBeenCalledWith(AT, 'coordinates');
+    },
+  );
+
+  it.each(THEMES)(
+    'each round button shows its circle on the card (dark: %s; QA: invisible in dark)',
+    async (dark) => {
+      team('member');
+      await render(card(dark));
+      const bg = StyleSheet.flatten(screen.getByTestId('team-press-card').props.style)
+        .backgroundColor as string;
+      for (const id of rowIds()) {
+        const child = screen.getByTestId(id).children[0];
+        if (child === undefined || typeof child === 'string') throw new Error(`${id}: no well`);
+        const well = StyleSheet.flatten(child.props.style as ViewStyle);
+        expect(well.borderWidth).toBeGreaterThan(0);
+        // A ring the eye finds: the circle never melts into the card.
+        expect(contrastRatio(String(well.borderColor), bg)).toBeGreaterThanOrEqual(1.3);
+      }
     },
   );
 
