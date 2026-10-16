@@ -78,7 +78,7 @@ import {
   useState,
 } from 'react';
 import { AppState, Linking, Share, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { Banner, Snackbar, useTheme } from 'react-native-paper';
+import { Banner, Snackbar, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
 import { MapMakerEditor, type EditorCamera } from './mapmaker/MapMakerEditor';
@@ -107,7 +107,7 @@ import { useFollowTrail } from './nav/useFollowTrail';
 import { useNavigationStore } from '@state/navigationStore';
 import { DestinationMarkerPin } from './components/DestinationMarkerPin';
 import { MapCreditsButton, MapCreditsSheet } from './components/MapCredits';
-import { MAP_EDGE_INSET, MAP_LANE_INSET } from '@core/map/mapChrome';
+import { MAP_EDGE_INSET, MAP_LANE_INSET, teamPillSpansLeft } from '@core/map/mapChrome';
 import { mapCredits } from '@core/map/mapCredits';
 import { bareTapAfterFocus } from '@core/map/mapTap';
 import { centreCursorPoint } from '@core/map/centreCursor';
@@ -321,6 +321,8 @@ import { useMapSnackbars } from './useMapSnackbars';
 import { RecordingCheckPanel } from '@features/recording/RecordingCheckPanel';
 import { useRecordingCheck } from '@features/recording/useRecordingCheck';
 import { useMapDrawing } from './draw/useMapDrawing';
+import { useDisplayScale, useScaledStyles } from '@ui/displayScale';
+import { useMapChrome } from './useMapChrome';
 
 /** Kept out of the 3D drape: the 2D tilted-relief pass (the mesh is the relief). */
 const TERRAIN_DRAPE_DROP_IDS: readonly string[] = [TILT_RELIEF_LAYER_ID];
@@ -437,6 +439,13 @@ function useThrottledLineFeature(
 let holdHintShown = false;
 
 export function MapScreen() {
+  const styles = useScaledStyles(stylesSheet);
+  // #760: the chrome's insets, lane and top gap at the Display size.
+  const mapChrome = useMapChrome();
+  const { sp, factor: displayFactor } = useDisplayScale();
+  const topGap = sp(8);
+  const lane = { left: mapChrome.laneInset, right: mapChrome.laneInset };
+
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraRef>(null);
@@ -2941,6 +2950,7 @@ export function MapScreen() {
     !searchOpen;
   // The top-centre chip rows (lane, On map #710, receiver) under the slot.
   const topChips = topChipLayout({
+    factor: displayFactor,
     teamBarHeight: teamBarShown ? teamBarHeight : 0,
     laneTaken: topLaneTaken,
     onMapChip: onMapChip !== null,
@@ -3683,7 +3693,21 @@ export function MapScreen() {
         )}
 
         {/* Top-left compass (decision 1): snug to the safe area. */}
-        <View style={[styles.topLeft, { top: insets.top + 8 }]} pointerEvents="box-none">
+        <View
+          style={[
+            styles.topLeft,
+            {
+              left: mapChrome.edgeInset,
+              // At Large the team pill spans over this corner (#760): the
+              // compass sits just below the team bar instead.
+              top:
+                teamBarShown && teamPillSpansLeft(displayFactor)
+                  ? insets.top + topGap + teamBarHeight + topGap
+                  : insets.top + topGap,
+            },
+          ]}
+          pointerEvents="box-none"
+        >
           <CompassBadge
             onPress={resetNorth}
             mapBearing={mapBearing}
@@ -3733,7 +3757,10 @@ export function MapScreen() {
           !drawing.active &&
           !teamDrawing &&
           movingWp === null && (
-            <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
+            <View
+              style={[styles.searchPill, lane, { top: insets.top + topGap }]}
+              pointerEvents="box-none"
+            >
               {/* A shown long-distance trail takes the pill's place (#467). */}
               {shownTrail !== null ? (
                 <ShownTrailPill shown={shownTrail} />
@@ -3746,13 +3773,13 @@ export function MapScreen() {
         {/* Team mode (#707): the team status bar in the search slot. */}
         {teamBarShown && (
           <TeamStatusBar
-            top={insets.top + 8}
+            top={insets.top + topGap}
             here={location}
             onNavigate={(latitude, longitude) => setDestination({ latitude, longitude })}
           />
         )}
         {searchOpen && !drawing.active && (
-          <View style={[styles.searchSheet, { top: insets.top + 8 }]} pointerEvents="box-none">
+          <View style={[styles.searchSheet, { top: insets.top + topGap }]} pointerEvents="box-none">
             <PlaceSearchSheet
               origin={location}
               bias={searchBias}
@@ -3768,7 +3795,7 @@ export function MapScreen() {
           like the GPS warning, never a Portal/Dialog. */}
         {marineActive && (
           <View
-            style={[styles.marineChip, { top: insets.top + topChipOffset }]}
+            style={[styles.marineChip, lane, { top: insets.top + topChipOffset }]}
             pointerEvents="none"
           >
             <MarineDisclaimerChip />
@@ -3781,7 +3808,7 @@ export function MapScreen() {
           destination exists; the ✕ on it is the way out. */}
         {destination !== null && !marineActive && (
           <View
-            style={[styles.topCenterChip, { top: insets.top + topChipOffset }]}
+            style={[styles.topCenterChip, lane, { top: insets.top + topChipOffset }]}
             pointerEvents="box-none"
           >
             <DestinationChip onClear={() => setDestination(null)} />
@@ -3789,7 +3816,7 @@ export function MapScreen() {
         )}
         {follow !== null && !marineActive && (
           <View
-            style={[styles.topCenterChip, { top: insets.top + topChipOffset }]}
+            style={[styles.topCenterChip, lane, { top: insets.top + topChipOffset }]}
             pointerEvents="box-none"
           >
             <FollowChip name={follow.name} onStop={stopFollowing} />
@@ -3800,7 +3827,7 @@ export function MapScreen() {
           (#707) never covers it. */}
         {onMapChip !== null && makeMapState === null && (
           <View
-            style={[styles.topCenterChip, { top: insets.top + topChips.onMap }]}
+            style={[styles.topCenterChip, lane, { top: insets.top + topChips.onMap }]}
             pointerEvents="box-none"
           >
             <OnMapTrailChip trail={onMapChip} />
@@ -3818,7 +3845,7 @@ export function MapScreen() {
         {/* Also hidden while the team menu runs down the same edge. */}
         {makeMapState === null && heatSelection === null && !teamOwnsRail && movingWp === null && (
           <MapControlsRail
-            top={insets.top + 8}
+            top={insets.top + topGap}
             viewToggle={
               betaTerrain3d ? { is3d: viewToggle.is3d, onPress: viewToggle.onPress } : undefined
             }
@@ -3890,7 +3917,7 @@ export function MapScreen() {
         {permission === 'denied' && (
           <Banner
             visible
-            style={[styles.banner, { top: insets.top + 8 }]}
+            style={[styles.banner, { top: insets.top + topGap }]}
             icon="map-marker-off"
             actions={[]}
           >
@@ -3902,7 +3929,7 @@ export function MapScreen() {
         {permission === 'granted' && unavailableReason !== null && (
           <Banner
             visible
-            style={[styles.banner, { top: insets.top + 8 }]}
+            style={[styles.banner, { top: insets.top + topGap }]}
             icon="map-marker-off"
             actions={[]}
           >
@@ -4151,7 +4178,7 @@ export function MapScreen() {
         {/* "Night on · tap to exit" (Night-Mode board), under the search pill. */}
         {displayCondition === 'night' && makeMapState === null && (
           <View
-            style={[styles.topCenterChip, { top: insets.top + topChipOffset }]}
+            style={[styles.topCenterChip, lane, { top: insets.top + topChipOffset }]}
             pointerEvents="box-none"
           >
             <NightExitPill />
@@ -4262,7 +4289,7 @@ export function MapScreen() {
           onCredits={setCreditsOpen}
         />
         <TeamPickOverlay
-          top={insets.top + 8}
+          top={insets.top + topGap}
           cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
         />
         {/* A tapped photo's bottom card (app-wide, owner 2026-10-07). */}
@@ -4645,7 +4672,7 @@ export function MapScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   // Top-left instrument column: the compass badge alone since the scale bar
   // moved to the bottom-left corner — no gap left floating under it.

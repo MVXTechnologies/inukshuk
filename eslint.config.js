@@ -29,31 +29,6 @@ const HEX_ALLOWLIST = [
   'src/features/store/LocatorThumb.tsx',
 ];
 
-/**
- * Screens the Display size rollout (#760) reaches after the 2.7.0 integration
- * (team bar, team draw, map chrome from 2.6.4): they still import Paper
- * directly and use unscaled sheets until then. Shrinks to nothing.
- */
-const DISPLAY_SCALE_PENDING = [
-  'src/features/map/MapScreen.tsx',
-  'src/features/map/components/MapControlsRail.tsx',
-  'src/features/map/components/MapPointChip.tsx',
-  'src/features/team/TeamTasksScreen.tsx',
-  'src/features/team/bar/AlertBands.tsx',
-  'src/features/team/bar/SosAlarmBanner.tsx',
-  'src/features/team/bar/SosButton.tsx',
-  'src/features/team/bar/TeamPanel.tsx',
-  'src/features/team/bar/TeamStatusBar.tsx',
-  'src/features/team/bar/UndoSnack.tsx',
-  'src/features/team/bar/parts.tsx',
-  'src/features/team/components.tsx',
-  'src/features/team/draw/DrawStylePopover.tsx',
-  'src/features/team/draw/TeamDrawLayers.tsx',
-  'src/features/team/draw/TeamDrawMode.tsx',
-  'src/features/team/map/TeamCards.tsx',
-  'src/features/team/map/TeamMapOverlay.tsx',
-];
-
 module.exports = [
   ...expoConfig,
   eslintConfigPrettier,
@@ -119,7 +94,6 @@ module.exports = [
       'src/ui/theme.ts',
       '**/*.test.{ts,tsx}',
       '**/*TestUtils.{ts,tsx}',
-      ...DISPLAY_SCALE_PENDING,
     ],
     rules: {
       'no-restricted-imports': [

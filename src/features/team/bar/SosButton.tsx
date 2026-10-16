@@ -25,14 +25,15 @@
  */
 import { holdScale } from '@core/teamui/holdScale';
 import { holdProgress, holdTicks, SOS_ARMED_MAX_MS, SOS_HOLD_MS } from '@core/teamui/undo';
-import { MAP_BUTTON, MAP_EDGE_INSET } from '@core/map/mapChrome';
+import { MAP_BUTTON, MAP_EDGE_INSET, onColumnRight } from '@core/map/mapChrome';
+import { useMapChrome } from '@features/map/useMapChrome';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 import { useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Vibration, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -44,6 +45,7 @@ import Animated, {
 
 import { myPosition, ProgressRing } from './parts';
 import { usePendingAlert } from './pendingAlert';
+import { useDisplayScale, useScaledStyles } from '@ui/displayScale';
 
 const FRAME_MS = 50;
 const HINT_MS = 2500;
@@ -62,6 +64,17 @@ export function SosButton({
   bottom: number;
   here: { latitude: number; longitude: number } | null;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+  // #760: a button of the rail's column at the Display size; its ring box is
+  // centred on the column's axis, the button never under 48 dp.
+  const chrome = useMapChrome();
+  const { sp } = useDisplayScale();
+  const ringPad = sp(RING_PAD);
+  const size = chrome.button;
+  const ring = size + 2 * ringPad;
+  const box = { width: ring, height: ring };
+  const round = { width: size, height: size, borderRadius: size / 2 };
+
   const t = useSchemeTokens();
   const me = useTeamStore((s) => s.view?.me);
   const mineActive = useTeamStore((s) => s.soses.some((x) => x.owner === me && !x.resolved));
@@ -211,7 +224,7 @@ export function SosButton({
         : 'SOS. Hold for two seconds to alert the whole team';
   return (
     <View
-      style={[styles.dock, { bottom: bottom - RING_PAD }]}
+      style={[styles.dock, { right: onColumnRight(chrome, ring), bottom: bottom - ringPad }]}
       pointerEvents="box-none"
       testID="team-sos-layer"
     >
@@ -230,7 +243,7 @@ export function SosButton({
         </View>
       )}
       <View style={styles.column} pointerEvents="box-none">
-        <View style={styles.ringBox}>
+        <View style={[styles.ringBox, box]}>
           {/* The ring swells with the button (the same scale, about the same centre). */}
           <Animated.View
             style={[StyleSheet.absoluteFill, swellStyle]}
@@ -238,7 +251,7 @@ export function SosButton({
             testID="team-sos-ring-swell"
           >
             <ProgressRing
-              size={RING}
+              size={ring}
               stroke={3.5}
               fraction={fraction}
               color={t.team.sos}
@@ -249,7 +262,7 @@ export function SosButton({
           <Pressable
             onPressIn={down}
             onPressOut={up}
-            style={styles.button}
+            style={[styles.button, round]}
             accessibilityRole="button"
             accessibilityLabel={label}
             accessibilityHint={mineActive ? undefined : 'Touch and hold'}
@@ -259,6 +272,7 @@ export function SosButton({
             <Animated.View
               style={[
                 styles.disc,
+                { borderRadius: size / 2 },
                 {
                   backgroundColor: t.team.sos,
                   borderColor: t.team.mapHalo,
@@ -294,7 +308,7 @@ export function SosButton({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // Under the bottom cards (QA 2.6.0, 09b); the button's elevation stays inside.
   // The ring box's right edge sits RING_PAD outside the button's, which is
   // MAP_EDGE_INSET from the screen's edge: the rail's column.
