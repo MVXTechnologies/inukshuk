@@ -218,19 +218,72 @@ export function ActionBanner({
   );
 }
 
-/** A segmented choice row ("Today · 3 days · 14 days · 30 days"). */
+/** The one-line choice row's labels grow with the font scale up to this (#757). */
+export const CHOICE_ONE_LINE_MAX_SCALE = 1.15;
+
+/**
+ * A segmented choice row ("Today · 3 days · 14 days · 30 days"). `oneLine`
+ * (#757: the task filters) keeps every choice on one row in equal shares,
+ * each label on one line beside its count, at up to 1.15× font: "Open 3".
+ */
 export function ChoiceRow<T extends string | number>({
   options,
   value,
   onChange,
   testIDPrefix,
+  oneLine = false,
 }: {
-  options: readonly { id: T; label: string }[];
+  options: readonly { id: T; label: string; count?: number }[];
   value: T;
   onChange: (v: T) => void;
   testIDPrefix?: string;
+  oneLine?: boolean;
 }) {
   const t = useSchemeTokens();
+  if (oneLine) {
+    return (
+      <View
+        style={[styles.choices, styles.choicesOneLine]}
+        accessibilityRole="radiogroup"
+        testID={testIDPrefix ? `${testIDPrefix}-row` : undefined}
+      >
+        {options.map((o) => {
+          const on = o.id === value;
+          const ink = on ? t.ink : t.inkVariant;
+          return (
+            <Pressable
+              key={String(o.id)}
+              onPress={() => onChange(o.id)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={o.count === undefined ? o.label : `${o.label}, ${o.count}`}
+              testID={testIDPrefix ? `${testIDPrefix}-${o.id}` : undefined}
+              style={[
+                styles.choice,
+                styles.choiceOneLine,
+                {
+                  borderColor: on ? t.ink : t.outlineVariant,
+                  backgroundColor: on ? t.surfaceVariant : 'transparent',
+                },
+              ]}
+            >
+              <Text
+                style={[styles.choiceTextOneLine, { color: ink }]}
+                numberOfLines={1}
+                maxFontSizeMultiplier={CHOICE_ONE_LINE_MAX_SCALE}
+                testID={testIDPrefix ? `${testIDPrefix}-${o.id}-label` : undefined}
+              >
+                {o.label}
+                {o.count !== undefined && (
+                  <Text style={on ? styles.countOn : styles.countOff}>{` ${o.count}`}</Text>
+                )}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  }
   return (
     <View style={styles.choices} accessibilityRole="radiogroup">
       {options.map((o) => {
@@ -325,4 +378,9 @@ const styles = StyleSheet.create({
     minHeight: 40,
   },
   choiceText: { fontSize: 14, fontWeight: '600' },
+  choicesOneLine: { flexWrap: 'nowrap' },
+  choiceOneLine: { flex: 1, minWidth: 0, justifyContent: 'center', paddingHorizontal: 6 },
+  choiceTextOneLine: { fontSize: 13, fontWeight: '600' },
+  countOn: { fontWeight: '800' },
+  countOff: { fontWeight: '700', opacity: 0.8 },
 });

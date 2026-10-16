@@ -1,5 +1,5 @@
 import { IMPERIAL, METRIC } from '@core/format';
-import { destinationReadout, formatBearing } from './destination';
+import { destinationReadout, formatBearing, HERE_RADIUS_M, pointCardReadout } from './destination';
 
 const QC = { latitude: 46.8139, longitude: -71.2082 };
 
@@ -62,5 +62,27 @@ describe('destinationReadout', () => {
     expect(destinationReadout({ latitude: 91, longitude: 0 }, QC, METRIC)).toBeNull();
     expect(destinationReadout(QC, { latitude: 0, longitude: 181 }, METRIC)).toBeNull();
     expect(destinationReadout(QC, { latitude: Number.NaN, longitude: 0 }, METRIC)).toBeNull();
+  });
+});
+
+describe('pointCardReadout (#757 c)', () => {
+  const at = { latitude: 46.8, longitude: -71.2 };
+  it('says nothing without a fix', () => {
+    expect(pointCardReadout(null, at, METRIC)).toBeNull();
+    expect(pointCardReadout(undefined, at, METRIC)).toBeNull();
+  });
+
+  it('says nothing for a point where you stand (under 5 m)', () => {
+    expect(pointCardReadout(at, at, METRIC)).toBeNull();
+    // ~3.3 m north.
+    expect(pointCardReadout(at, { latitude: 46.80003, longitude: -71.2 }, METRIC)).toBeNull();
+    expect(HERE_RADIUS_M).toBe(5);
+  });
+
+  it('gives distance and bearing from 5 m on', () => {
+    // ~111 m north.
+    expect(pointCardReadout(at, { latitude: 46.801, longitude: -71.2 }, METRIC)).toMatch(
+      /^1\d\d m · 000° N$/,
+    );
   });
 });

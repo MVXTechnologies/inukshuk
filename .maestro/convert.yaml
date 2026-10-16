@@ -22,13 +22,9 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
-# Convert opens from a long-pressed spot's chip (owner 2026-10-07: no longer
-# in the "+" menu). The chip is a map marker the map hit-tests itself (not in
-# the accessibility tree): its Convert button sits 75 pt right of and 31 pt
-# above the chip's point (MAP_POINT_ACTION_LAYOUT). Since #709 a long-press
-# opens the chip at the CENTRE CURSOR (the map's centre), not the finger; the
-# map ends above the tab bar, so the button row lands at ~41–44 % of the
-# screen height (was 46 % at the finger): the flow tries 43 % then 41 %.
+# Convert opens from a long-pressed spot's card (owner 2026-10-07: no longer
+# in the "+" menu; #757 c: the card's grid replaced the map-drawn bubble, so
+# its Convert is a real, accessible button).
 - retry:
     maxRetries: 3
     commands:
@@ -39,23 +35,12 @@ appId: com.inukshuk.app
           commands:
             - longPressOn:
                 point: '50%,50%'
-            - waitForAnimationToEnd:
-                timeout: 2000
+            - extendedWaitUntil:
+                visible:
+                  id: 'point-card'
+                timeout: 5000
             - tapOn:
-                point: '68%,43%'
-      # The other button row height (see above): a missed tap closed the
-      # chip, so long-press again.
-      - runFlow:
-          when:
-            notVisible:
-              id: 'convert-screen'
-          commands:
-            - longPressOn:
-                point: '50%,50%'
-            - waitForAnimationToEnd:
-                timeout: 2000
-            - tapOn:
-                point: '68%,41%'
+                id: 'point-card-convert'
       - extendedWaitUntil:
           visible:
             id: 'convert-screen'

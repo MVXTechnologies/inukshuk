@@ -354,7 +354,8 @@ describe('the active SOS band while the bar is away (QA 2.6.1, #708)', () => {
     );
     const bands = () => StyleSheet.flatten(screen.getByTestId('team-alert-bands').props.style);
     expect(screen.getByTestId('team-band-sos')).toBeTruthy();
-    expect(bands()).toMatchObject({ bottom: 80, right: 88, zIndex: MAP_OVERLAY_Z.teamButton });
+    // Beside the SOS button, which is on the rail's column (#756): the lane's inset.
+    expect(bands()).toMatchObject({ bottom: 80, right: 76, zIndex: MAP_OVERLAY_Z.teamButton });
     // Draw mode hides the bar and the SOS button, never the band.
     await act(() => useTeamDrawStore.getState().enter());
     expect(screen.queryByTestId('team-sos-button')).toBeNull();

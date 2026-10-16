@@ -51,6 +51,24 @@ export function destinationReadout(
   };
 }
 
+/** Below this, a point is where you stand: "0 ft · 000° N" says nothing (#757 review). */
+export const HERE_RADIUS_M = 5;
+
+/**
+ * The point card's "how far, which way" (#757 c): the destination readout,
+ * or null without a fix or when the point is within {@link HERE_RADIUS_M} of
+ * it (a long-press on your own position).
+ */
+export function pointCardReadout(
+  from: LatLng | null | undefined,
+  to: LatLng | null | undefined,
+  units: Units,
+): string | null {
+  const r = destinationReadout(from, to, units);
+  if (r === null || r.distanceM < HERE_RADIUS_M) return null;
+  return `${r.distance} · ${r.bearing}`;
+}
+
 function isUsable(p: LatLng | null | undefined): p is LatLng {
   return (
     p != null &&

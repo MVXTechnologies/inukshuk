@@ -9,7 +9,7 @@
  *   team's rally point).
  * - **Collapsed:** the top band and "+N"; expanded, up to
  *   {@link MAX_STACKED_BANDS} bands stacked, the rest left to the panel.
- * - **Texts:** others' SOS "SOS · Julie Tremblay" / "640 m NE · 2 min"; my
+ * - **Texts:** others' SOS "Julie Tremblay" (under an "SOS" badge, #756) / "640 m NE · 2 min"; my
  *   own "Your SOS is active" / "3 of 5 received · 1 min"; a gather
  *   "Gather · Lac-Delage" / "1.2 km · by Noé", its creator's
  *   "By you · 4 of 5 received". An unnamed gather is "Gather point": its
@@ -17,6 +17,7 @@
  *   the screen-reader label, never in the band's one-line title, which they
  *   overflowed on a phone (QA 2.6.1).
  */
+import { MAP_EDGE_INSET, MAP_LANE_INSET } from '@core/map/mapChrome';
 import type { Units } from '@core/format';
 import { formatCoordinate, type CoordinateFormat } from '@core/convert/coordinateDisplay';
 
@@ -114,6 +115,11 @@ export type BandAction = 'navigate' | 'centre' | 'resolve' | 'end';
 
 export interface BandModel {
   title: string;
+  /**
+   * Others' SOS: "SOS" rides the band's badge (#756), so the title is the
+   * name alone and is never cut to "SOS · Julie Trem…" at 360 dp.
+   */
+  tag: 'SOS' | null;
   sub: string;
   a11y: string;
   /** Buttons, left to right; a tap on the text centres the map. */
@@ -146,6 +152,7 @@ export function bandModel(
       const sub = `${o.receipts} · ${age}`;
       return {
         title: 'Your SOS is active',
+        tag: null,
         sub,
         a11y: `Your SOS is active, ${sub}`,
         actions: ['resolve'],
@@ -154,7 +161,8 @@ export function bandModel(
     const where = rb ? `${distanceText(rb.meters, o.units)} ${rb.compass}` : null;
     const sub = [where, age].filter(Boolean).join(' · ');
     return {
-      title: `SOS · ${a.ownerName}`,
+      title: a.ownerName,
+      tag: 'SOS',
       sub,
       a11y: `SOS from ${a.ownerName}, ${sub}`,
       actions: o.isAdmin ? ['navigate', 'resolve'] : ['navigate', 'centre'],
@@ -164,13 +172,14 @@ export function bandModel(
   const said = `Gather at ${a.place}`;
   if (a.mine) {
     const sub = `By you · ${o.receipts}`;
-    return { title, sub, a11y: `${said}, ${sub}`, actions: ['end'] };
+    return { title, tag: null, sub, a11y: `${said}, ${sub}`, actions: ['end'] };
   }
   const sub = [rb ? distanceText(rb.meters, o.units) : null, `by ${first}`]
     .filter(Boolean)
     .join(' · ');
   return {
     title,
+    tag: null,
     sub,
     a11y: `${said}, ${sub}`,
     actions: o.isAdmin ? ['navigate', 'end'] : ['navigate'],
@@ -266,9 +275,12 @@ export function alertBandPlace(i: {
 
 /** Gap above the strip-area anchor, dp. */
 export const STRIP_BAND_GAP = 8;
-/** The strip band's right edge clears the SOS button (its ring and margin), dp. */
-export const STRIP_BAND_RIGHT_BESIDE_SOS = 88;
-export const STRIP_BAND_RIGHT = 16;
+/**
+ * The strip band's right edge clears the SOS button, which is a button of the
+ * rail's column (#756): the top-centre lane's inset, 8 dp past its ring.
+ */
+export const STRIP_BAND_RIGHT_BESIDE_SOS = MAP_LANE_INSET;
+export const STRIP_BAND_RIGHT = MAP_EDGE_INSET;
 
 /**
  * The strip-area band's place: above the bottom chrome (the SOS button's

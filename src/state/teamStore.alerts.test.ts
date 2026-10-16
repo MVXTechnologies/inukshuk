@@ -10,7 +10,11 @@ const mockNotify = jest.fn();
 const mockDismiss = jest.fn();
 const mockInApp = jest.fn();
 const mockBuzz = jest.fn();
+const mockSilence = jest.fn();
+const mockArm = jest.fn();
 jest.mock('@data/team/teamNotifications', () => ({
+  armSos: (id: string) => mockArm(id),
+  silenceSos: (id: string) => mockSilence(id),
   buzzRally: () => mockBuzz(),
   notifyTeam: (n: unknown) => mockNotify(n),
   dismissTeamNotification: (id: string) => mockDismiss(id),
@@ -109,6 +113,8 @@ beforeAll(() => {
 beforeEach(() => {
   mockNotify.mockClear();
   mockDismiss.mockClear();
+  mockSilence.mockClear();
+  mockArm.mockClear();
   mockInApp.mockClear();
   mockBuzz.mockClear();
   resetRallyBuzzForTests();
@@ -152,8 +158,13 @@ describe('team alerts in the store (#708)', () => {
     useTeamStore.getState().refresh();
     emit(sosAlert('noe', 's2'));
     expect(useTeamStore.getState().sosAlarm).not.toBeNull();
+    expect(mockArm).toHaveBeenCalledWith('sos:noe:s2');
+    expect(mockSilence).not.toHaveBeenCalled();
     useTeamStore.getState().acknowledgeAlarm();
     expect(useTeamStore.getState().sosAlarm).toBeNull();
+    // This phone's sound stops at once: the notification is silenced and removed.
+    expect(mockSilence).toHaveBeenCalledWith('sos:noe:s2');
+    expect(mockInApp).toHaveBeenLastCalledWith(false);
     useTeamStore.getState().refresh();
     emit(sosAlert('noe', 's2', 'again'));
     expect(useTeamStore.getState().sosAlarm).toBeNull();
@@ -334,12 +345,18 @@ describe('a re-raised SOS rings again on this phone (#752)', () => {
     expect(useTeamStore.getState().sosAlarm).toBeNull();
     mockNotify.mockClear();
     mockInApp.mockClear();
+    mockArm.mockClear();
     // Julie reopens the same SOS: the banner and the tone again.
     state.soses = [sos('julie', 'r1')];
     useTeamStore.getState().refresh();
     emit(reopenAlert('julie', 'r1', 'b'));
     expect(useTeamStore.getState().sosAlarm?.entity).toBe('sos:julie:r1');
     expect(mockInApp).toHaveBeenLastCalledWith(true);
+    // Re-armed (an acknowledged SOS may sound again), before it is posted.
+    expect(mockArm).toHaveBeenCalledWith('sos:julie:r1');
+    expect(mockArm.mock.invocationCallOrder[0]!).toBeLessThan(
+      mockNotify.mock.invocationCallOrder[0]!,
+    );
     expect(mockNotify).toHaveBeenCalledWith(
       expect.objectContaining({ channel: 'sos', identifier: 'sos:julie:r1' }),
     );

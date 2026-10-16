@@ -1,17 +1,11 @@
-# Navigate to a point e2e (#672): a long-pressed spot's chip → Navigate enters
+# Navigate to a point e2e (#672): a long-pressed spot's card → Navigate enters
 # navigation mode straight away (no coordinates dialog any more): the
 # destination chip with its ✕ is up, and the ✕ ends it.
 #
 # Portability notes (same rules as convert.yaml / waypoint.yaml):
 # - Per-platform launchApp permission values (#128).
-# - The point chip is a map marker the map hit-tests itself (not in the
-#   accessibility tree): its Navigate button sits 75 pt LEFT of and 31 pt
-#   above the chip's point (MAP_POINT_ACTION_LAYOUT) — the mirror of
-#   convert.yaml's. Since #709 a long-press opens the chip at the CENTRE
-#   CURSOR (the map's centre), not the finger: the map ends above the tab
-#   bar, so its centre is ~30–55 pt above the screen's and the button row
-#   lands at ~41–44 % of the height (was 46 % at the finger). The flow tries
-#   43 % then 41 %.
+# - Since #757 c the long-press opens a docked card whose grid buttons are
+#   real, accessible views: tapped by id, no screen-percentage guesses.
 # - The linear compass itself is not asserted: it needs a compass heading
 #   (or walking, for the course-over-ground fallback), and neither emulator
 #   nor simulator promises one. Jest covers the tape (NavCompass.test.tsx).
@@ -37,6 +31,8 @@ appId: com.inukshuk.app
 - setLocation:
     latitude: 46.8139
     longitude: -71.2082
+# A long-press opens the point's card (#757 c), docked at the bottom with its
+# grid (Waypoint, Navigate, Copy, Convert, Share): real, accessible buttons.
 - retry:
     maxRetries: 3
     commands:
@@ -46,22 +42,12 @@ appId: com.inukshuk.app
           commands:
             - longPressOn:
                 point: '50%,50%'
-            - waitForAnimationToEnd:
-                timeout: 2000
+            - extendedWaitUntil:
+                visible:
+                  id: 'point-card'
+                timeout: 5000
             - tapOn:
-                point: '32%,43%'
-      # The other button row height (see the header): a missed tap closed
-      # the chip, so long-press again.
-      - runFlow:
-          when:
-            notVisible: 'Clear destination'
-          commands:
-            - longPressOn:
-                point: '50%,50%'
-            - waitForAnimationToEnd:
-                timeout: 2000
-            - tapOn:
-                point: '32%,41%'
+                id: 'point-card-navigate'
       - extendedWaitUntil:
           visible: 'Clear destination'
           timeout: 10000

@@ -18,6 +18,7 @@ import { TeamService } from '@data/team/teamService';
 import { useSettingsStore } from '@state/settingsStore';
 import { useTeamStore } from '@state/teamStore';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import type { ReactNode } from 'react';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
 
@@ -46,6 +47,9 @@ jest.mock('@data/team/teamNotifications', () => ({
   dismissTeamNotification: async () => undefined,
   setInAppAlarm: () => undefined,
   SOS_VIBRATION: [0, 900],
+  armSos: () => undefined,
+  silenceSos: () => undefined,
+  SOS_TONE_MS: 8_000,
 }));
 jest.mock('@lib/errorReporting', () => ({ addBreadcrumb: jest.fn(), reportError: jest.fn() }));
 jest.mock('react-native-safe-area-context', () => ({
@@ -102,7 +106,7 @@ describe('who gets the row menu (#746)', () => {
   });
 
   it.each(THEMES)(
-    'a member: ⋮ on the tasks they created, none on one given to them (dark: %s)',
+    'a member: Edit and Delete on the tasks they created, none on one given to them (dark: %s)',
     async (dark) => {
       useTeamStore.setState({
         view: {
@@ -124,9 +128,40 @@ describe('who gets the row menu (#746)', () => {
       });
       await render(wrap(<TeamTasksScreen />, dark));
       expect(screen.getAllByTestId('team-task-row')).toHaveLength(2);
-      expect(screen.getAllByTestId('team-task-menu')).toHaveLength(1);
-      expect(screen.getByLabelText('Options for “Check the bridge at km 4”')).toBeTruthy();
-      expect(screen.queryByLabelText('Options for “Bring the stove to camp”')).toBeNull();
+      // #757: visible on the row, no ⋮ menu.
+      expect(screen.queryByTestId('team-task-menu')).toBeNull();
+      expect(screen.getAllByTestId('team-task-edit')).toHaveLength(1);
+      expect(screen.getAllByTestId('team-task-delete')).toHaveLength(1);
+      expect(screen.getByLabelText('Edit “Check the bridge at km 4”')).toBeTruthy();
+      expect(screen.getByLabelText('Delete “Check the bridge at km 4”')).toBeTruthy();
+      expect(screen.queryByLabelText('Edit “Bring the stove to camp”')).toBeNull();
+      // Compact: a list row (no card), the title on up to two lines, one meta line.
+      const row = StyleSheet.flatten(screen.getAllByTestId('team-task-row')[0]!.props.style);
+      expect(row.minHeight).toBeLessThanOrEqual(56);
+      expect(row.backgroundColor).toBeUndefined();
+      expect(screen.getByText('Check the bridge at km 4').props.numberOfLines).toBe(2);
+      expect(screen.getAllByTestId('team-task-meta')[0]).toHaveTextContent(/from /);
+      // The filters stay on one line, in equal shares, labels capped at 1.15×.
+      const filters = StyleSheet.flatten(screen.getByTestId('team-task-filter-row').props.style);
+      expect(filters).toMatchObject({ flexDirection: 'row', flexWrap: 'nowrap' });
+      for (const id of ['open', 'mine', 'all', 'done']) {
+        expect(
+          StyleSheet.flatten(screen.getByTestId(`team-task-filter-${id}`).props.style),
+        ).toMatchObject({ flex: 1, minWidth: 0 });
+        const label = screen.getByTestId(`team-task-filter-${id}-label`);
+        expect(label.props.numberOfLines).toBe(1);
+        expect(label.props.maxFontSizeMultiplier).toBe(1.15);
+      }
+      expect(screen.getByTestId('team-task-filter-open-label')).toHaveTextContent('Open 2');
+      // At 360 dp (16 dp margins, 4 dp gaps) each share is 79 dp: "Done 12" at the
+      // cap (13 sp × 1.15, semibold ≤ 0.6 em a character) plus padding and border fits.
+      const share = (360 - 2 * 16 - 3 * 4) / 4;
+      const chip = StyleSheet.flatten(screen.getByTestId('team-task-filter-done').props.style);
+      const need =
+        'Done 12'.length * 0.6 * 13 * 1.15 +
+        2 * Number(chip.paddingHorizontal) +
+        2 * Number(chip.borderWidth);
+      expect(need).toBeLessThanOrEqual(share);
       // The assignee still ticks theirs.
       expect(
         screen.getByLabelText('Bring the stove to camp, open').props.accessibilityState,
@@ -155,22 +190,9 @@ describe('edit and delete on a real team (#746)', () => {
     await app.active?.stopMesh();
   });
 
-  /**
-   * Jest's clock for a test that opens the row menu: Paper's Menu opens
-   * through an effect, a Portal mount and a measure loop that re-polls every
-   * animation frame under real timers (Jest's views measure 0 × 0). On CI's
-   * runners that left the items unrendered when the test looked (run
-   * 38881902827); on fake timers the frame loop waits for the clock.
-   */
+  /** Jest's clock: the Undo's 6 s run on it. */
   const useFakeClock = () =>
     jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
-
-  /** Tap the row's ⋮ and wait until its items are on screen (the menu opens asynchronously). */
-  const openRowMenu = async () => {
-    await fireEvent.press(screen.getByTestId('team-task-menu'));
-    await screen.findByText('Edit');
-    await screen.findByText('Delete');
-  };
 
   const create = (over: { notes?: string; due?: number | null } = {}) => {
     const s = app.active!;
@@ -185,8 +207,7 @@ describe('edit and delete on a real team (#746)', () => {
     create();
     await act(async () => useTeamStore.getState().refresh());
     await render(wrap(<TeamTasksScreen />, dark));
-    await openRowMenu();
-    await fireEvent.press(screen.getByText('Delete'));
+    await fireEvent.press(screen.getByTestId('team-task-delete'));
     expect(screen.queryByText('Check the bridge at km 4')).toBeNull();
     expect(screen.getByText('Task deleted')).toBeTruthy();
     // Nothing leaves the phone while Undo is offered.
@@ -208,8 +229,7 @@ describe('edit and delete on a real team (#746)', () => {
     create();
     await act(async () => useTeamStore.getState().refresh());
     await render(wrap(<TeamTasksScreen />));
-    await openRowMenu();
-    await fireEvent.press(screen.getByText('Delete'));
+    await fireEvent.press(screen.getByTestId('team-task-delete'));
     await act(async () => {
       jest.advanceTimersByTime(TASK_UNDO_MS - 1);
     });
@@ -227,8 +247,7 @@ describe('edit and delete on a real team (#746)', () => {
     create();
     await act(async () => useTeamStore.getState().refresh());
     const r = await render(wrap(<TeamTasksScreen />));
-    await openRowMenu();
-    await fireEvent.press(screen.getByText('Delete'));
+    await fireEvent.press(screen.getByTestId('team-task-delete'));
     await r.unmount();
     expect(app.active!.tasks()).toHaveLength(0);
   });
@@ -238,8 +257,7 @@ describe('edit and delete on a real team (#746)', () => {
     const task = create();
     await act(async () => useTeamStore.getState().refresh());
     await render(wrap(<TeamTasksScreen />));
-    await openRowMenu();
-    await fireEvent.press(screen.getByText('Edit'));
+    await fireEvent.press(screen.getByTestId('team-task-edit'));
     expect(mockPush).toHaveBeenCalledWith(`/team/task-new?eo=${task.owner}&ei=${task.id}`);
   });
 

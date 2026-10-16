@@ -58,6 +58,9 @@ jest.mock('@data/team/teamNotifications', () => ({
   setInAppAlarm: () => undefined,
   buzzRally: () => undefined,
   SOS_VIBRATION: [0, 900],
+  armSos: () => undefined,
+  silenceSos: () => undefined,
+  SOS_TONE_MS: 8_000,
 }));
 
 const wrap = (children: ReactNode, dark = false) => (

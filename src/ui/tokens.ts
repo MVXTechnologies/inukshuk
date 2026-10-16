@@ -75,6 +75,12 @@ export interface SchemeTokens {
     /** Chrome floating over the map (pills, rail, compass). */
     chrome: string;
     chromeInk: string;
+    /**
+     * Secondary words on `chrome` (the team pill's "online ·", #756): an
+     * opaque colour, so nested text spans (which ignore opacity) keep it;
+     * ≥ 4.5:1 on `chrome`.
+     */
+    chromeInkMuted: string;
     /** The "following" state of the target button (decision 2). */
     followInk: string;
     /** The minimized recording pill (decision 3 A: stone at 70 %). */
@@ -324,6 +330,7 @@ export const lightScheme: SchemeTokens = {
     // Opaque (2.5.1 QA): at 92 % the pins showed through the rail buttons.
     chrome: palette.stone,
     chromeInk: palette.paper,
+    chromeInkMuted: '#C9C6BE',
     followInk: '#8CC4F0',
     // The board's 70 % leans on a blur(14) backdrop; without blur, 70 % over
     // a white map is 4.1:1 for the paper ink. 78 % clears text contrast alone.
@@ -510,6 +517,7 @@ export const darkScheme: SchemeTokens = {
     // Opaque since 2.5.1 QA (pins showed through the rail at 94 %).
     chrome: '#242B32',
     chromeInk: '#E9E4D8',
+    chromeInkMuted: '#BDB9B0',
     followInk: '#8CC4F0',
     chromeMini: 'rgba(36,43,50,0.78)',
     chromeActive: '#13171B',
@@ -698,6 +706,7 @@ export const sunlightScheme: SchemeTokens = {
   divider: '#555555',
   map: {
     chrome: palette.white,
+    chromeInkMuted: '#333333',
     chromeMini: palette.white,
     chromeInk: palette.black,
     followInk: '#1565C0',
@@ -885,6 +894,7 @@ export const nightScheme: SchemeTokens = {
     chrome: 'rgba(0,0,0,0.94)',
     chromeMini: 'rgba(0,0,0,0.94)',
     chromeInk: NIGHT_INK,
+    chromeInkMuted: NIGHT_INK,
     followInk: NIGHT_INK,
     chromeActive: '#3A0B08',
     chromeDivider: 'rgba(255,59,48,0.25)',

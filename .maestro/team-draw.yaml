@@ -1,8 +1,14 @@
 # Team drawing e2e (#683), one phone, on the loopback mesh build (see team.yaml).
 #
-# Create a team → the team menu's "Draw on map" → drawing mode (tool bar,
-# top bar) → Style: fade Never → Arrow → one-finger drag draws it →
+# Create a team → the Draw chip under the team pill → drawing mode (tool bar,
+# top bar) → Time: fade Never → Arrow → one-finger drag draws it →
 # Done → tap the arrow: its card → leave the team.
+#
+# Then the owner's review screenshots (#756/#757), light and dark
+# (subflows/team-review.yaml): the team pill and its chips with the SOS
+# button, the panel, the task list, the long-press grid, drawing mode with
+# its Shape and Time panels; after leaving, the normal-mode long-press card.
+# The theme goes back to System at the end.
 #
 # First of the team shard, on the shard's fresh emulator; it does not clear
 # state itself (team.yaml, which does, must stay last), so it creates its own
@@ -124,11 +130,9 @@ appId: com.inukshuk.app
     visible:
       id: 'team-bar-pill'
     timeout: 10000
-# The team panel (tap the team bar, #707): Draw, right after Rally here.
+# Draw: the chip under the team pill, after Chat and Meet here (#757).
 - tapOn:
-    id: 'team-bar-pill'
-- tapOn:
-    id: 'team-panel-draw'
+    id: 'team-chip-draw'
 - extendedWaitUntil:
     visible:
       id: 'team-draw-toolbar'
@@ -143,18 +147,18 @@ appId: com.inukshuk.app
     id: 'team-sos-button'
 - assertNotVisible: 'Search places'
 - takeScreenshot: team-draw-entered
-# Style: fades Never (the arrow must outlive this flow's taps).
+# Time (#756): fades Never (the arrow must outlive this flow's taps).
 - tapOn:
-    id: 'team-draw-style-button'
+    id: 'team-draw-time'
 - extendedWaitUntil:
     visible:
-      id: 'team-draw-style'
+      id: 'team-draw-panel-time'
     timeout: 5000
-- takeScreenshot: team-draw-style
+- takeScreenshot: team-draw-time
 - tapOn:
     id: 'team-draw-fade-6'
 - tapOn:
-    id: 'team-draw-style-close'
+    id: 'team-draw-panel-close'
 # Arrow: one finger from tail to head.
 - tapOn:
     id: 'team-draw-tool-arrow'
@@ -191,6 +195,43 @@ appId: com.inukshuk.app
     notVisible:
       id: 'team-shape-card'
     timeout: 5000
+# --- Review screenshots (#756/#757). A task of mine first, for the list's
+# Edit and Delete.
+- tapOn:
+    id: 'team-bar-pill'
+- tapOn:
+    id: 'team-panel-tasks'
+- extendedWaitUntil:
+    visible:
+      id: 'team-tasks-screen'
+    timeout: 5000
+- tapOn:
+    id: 'team-task-new'
+- tapOn:
+    id: 'team-task-title'
+- inputText: 'Check the bridge at km 4'
+- hideKeyboard
+- tapOn: 'Me'
+- tapOn:
+    id: 'team-task-place-none'
+- tapOn:
+    id: 'team-task-create'
+- extendedWaitUntil:
+    visible: '.*Check the bridge at km 4.*'
+    timeout: 5000
+- tapOn: 'Back'
+- runFlow:
+    file: subflows/team-review.yaml
+    env:
+      THEME: light
+- runFlow:
+    file: subflows/set-theme.yaml
+    env:
+      NEXT: Dark
+- runFlow:
+    file: subflows/team-review.yaml
+    env:
+      THEME: dark
 # Leave the team (it is deleted from this phone): the panel's Manage team.
 - tapOn:
     id: 'team-bar-pill'
@@ -209,3 +250,45 @@ appId: com.inukshuk.app
     notVisible:
       id: 'team-hub-screen'
     timeout: 10000
+# Normal mode now: the long-press point card (#757 c), dark then light; the
+# theme goes back to System.
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 15000
+- longPressOn:
+    point: '50%,50%'
+- extendedWaitUntil:
+    visible:
+      id: 'point-card'
+    timeout: 5000
+- assertVisible:
+    id: 'point-card-grid'
+- takeScreenshot: review-point-card-dark
+- tapOn:
+    id: 'point-card-close'
+- extendedWaitUntil:
+    notVisible:
+      id: 'point-card'
+    timeout: 5000
+- runFlow:
+    file: subflows/set-theme.yaml
+    env:
+      NEXT: System
+- longPressOn:
+    point: '50%,50%'
+- extendedWaitUntil:
+    visible:
+      id: 'point-card'
+    timeout: 5000
+- assertVisible:
+    id: 'point-card-grid'
+- takeScreenshot: review-point-card-light
+- tapOn:
+    id: 'point-card-close'
+- extendedWaitUntil:
+    notVisible:
+      id: 'point-card'
+    timeout: 5000

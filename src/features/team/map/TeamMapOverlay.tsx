@@ -4,10 +4,12 @@
  * panel), the sender's undo snackbar, the team panel dropped from the bar,
  * the active SOS / gather band in the strip area while the bar is away, and
  * the compact cards; a tapped teammate's card (`TeammateCard`) or shared
- * waypoint; pins and the pin composer. A plain themed View
+ * waypoint; pins and notes (#706: a note's card, the composer, the arrival
+ * snackbar). A plain themed View
  * for the card (paper-surface-ios-flex-collapse); its own state store so
  * MapScreen only routes the tap.
  */
+import { MAP_LANE_INSET } from '@core/map/mapChrome';
 import { stripBandLayout, type AlertBandPlace } from '@core/teamui/alertBands';
 import { rangeAndBearing } from '@core/teamui/positions';
 import { useExtensionPrefs } from '@features/extensions/prefs';
@@ -37,6 +39,9 @@ import { TeamPinCard } from './TeamPinCard';
 import { useTeamPick } from './TeamPick';
 import { TeamPinComposer, usePinDraft } from './TeamPinComposer';
 import { DrawAlertSnack } from '../draw/DrawAlertSnack';
+import { NoteCard } from '../notes/NoteCard';
+import { NoteSnack } from '../notes/NoteSnack';
+import { isNote } from '@core/teamui/notes';
 import { TeamShapeCard } from '../draw/ShapeCard';
 import { useTeamDrawStore } from '@state/teamDrawStore';
 
@@ -89,6 +94,7 @@ const dist = (m: number) => formatDistance(m, { style: 'short' });
 export function TeamMapOverlay({
   here,
   cardStyle,
+  cardFloating = false,
   cardSlotFree,
   fabBottom,
   panelTop,
@@ -102,6 +108,8 @@ export function TeamMapOverlay({
   /** My position, for distance and bearing. */
   here: { latitude: number; longitude: number } | null;
   cardStyle: StyleProp<ViewStyle>;
+  /** The card dock floats over the recording panel (its own side gaps). */
+  cardFloating?: boolean;
   cardSlotFree: boolean;
   /** Where the SOS button sits (above the bottom chrome). */
   fabBottom: number;
@@ -201,17 +209,28 @@ export function TeamMapOverlay({
         <SosButton bottom={pending ? fabBottom + 28 + UNDO_SNACK_LIFT : fabBottom} here={here} />
       )}
       {signal && !drawing && <UndoSnack style={snackStyle} />}
+      {signal && !drawing && draft === null && hit === null && !card && (
+        <NoteSnack here={here} style={snackStyle} />
+      )}
       {panel && (
         <TeamPanel top={panelTop} here={here} focused={screenFocused} onNavigate={onNavigate} />
       )}
       {draft !== null && (
         <KeyboardLifted style={cardStyle} testID="team-card-dock">
-          <TeamPinComposer onPinned={(owner, id) => select({ kind: 'pin', owner, id })} />
+          <TeamPinComposer
+            here={here}
+            onPinned={(owner, id) => select({ kind: 'pin', owner, id })}
+          />
         </KeyboardLifted>
       )}
       {!editing && draft === null && card && sheet !== null && (
         <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
-          <TeamSheetCard sheet={sheet} here={here} onPointActions={onPointActions} />
+          <TeamSheetCard
+            sheet={sheet}
+            here={here}
+            onPointActions={onPointActions}
+            floating={cardFloating}
+          />
         </View>
       )}
       {!drawing && draft === null && !card && cardSlotFree && hit === null && shapeCard && (
@@ -219,10 +238,22 @@ export function TeamMapOverlay({
           <TeamShapeCard here={here} onNavigate={onNavigate} screenFocused={screenFocused} />
         </View>
       )}
-      {signal && !drawing && <DrawAlertSnack style={{ bottom: fabBottom, right: 76 }} />}
+      {signal && !drawing && (
+        <DrawAlertSnack style={{ bottom: fabBottom, right: MAP_LANE_INSET }} />
+      )}
       {draft === null && !card && cardSlotFree && pin && (
         <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
-          <TeamPinCard pin={pin} view={view} here={here} onClose={() => select(null)} />
+          {isNote(pin) ? (
+            <NoteCard
+              pin={pin}
+              view={view}
+              here={here}
+              onNavigate={onNavigate}
+              onClose={() => select(null)}
+            />
+          ) : (
+            <TeamPinCard pin={pin} view={view} here={here} onClose={() => select(null)} />
+          )}
         </View>
       )}
       {draft === null && !card && cardSlotFree && member && row && (

@@ -6,23 +6,24 @@
  *   called it, where it is from me, Go, End (its creator or an admin), and
  *   every member's distance and ETA (`GatherPanel`). The map has no gather
  *   band any more; the pill's amber "!" leads here.
- * - Actions: Chat (unread), Rally here, Draw, and my status (primary): the
- *   map keeps no chip row for them (#743).
+ * - My status (primary), full width. Chat, Meet here and Draw are not
+ *   repeated here (#757): they are the pills under the team pill.
  * - Members, live first and nearest first (`panelMembers`); each row opens
  *   that teammate's card on the map (Message, Navigate to, Centre), or their
  *   page when their position is unknown.
- * - From the old team button's menu, at the bottom: Tasks, Rally at a
- *   point…, Manage team. SOS is deliberately not here: only the hold button
- *   sends it.
+ * - Notes (#706) with its "2 new"; then, from the old team button's menu,
+ *   at the bottom: Tasks, Rally at a point…, Manage team. SOS is
+ *   deliberately not here: only the hold button sends it.
  *
  * A plain themed View over a scrim (no Paper Portal: paper-portal-touch-swallow);
  * Back and a tap on the scrim close it.
  */
 import { STATUS_LABEL } from '@core/teamui/system';
 import { distanceText, panelMembers } from '@core/teamui/teamBar';
+import { noteSections } from '@core/teamui/notes';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 import { useSettingsStore } from '@state/settingsStore';
-import { selectChatUnread, useTeamStore } from '@state/teamStore';
+import { useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
@@ -30,7 +31,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { BackHandler, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
 
-import { enterDrawing } from '../draw/TeamDrawMode';
 import { useTeamMapFocus } from '../map/teamMapFocus';
 import { useTeamMapSelection } from '../map/TeamMapOverlay';
 import { useTeamSheet } from '../map/teamMode';
@@ -38,8 +38,7 @@ import { useTeamPick } from '../map/TeamPick';
 import { openPeers, teamSyncLine } from '../syncLine';
 import { useActiveAlerts } from './AlertBands';
 import { GatherPanel } from './GatherPanel';
-import { BandAvatar, FaceStack, myPosition } from './parts';
-import { usePendingAlert } from './pendingAlert';
+import { BandAvatar, FaceStack } from './parts';
 import { syncGlyph, useTeamBarSummary } from './TeamStatusBar';
 import { LinkChip } from '../components';
 import type { SyncState } from '@core/teamui/teamBar';
@@ -89,9 +88,13 @@ export function TeamPanel({
   const netOn = net !== null && net.on;
   const nearbyCount =
     net === null ? 0 : [...net.links.values()].filter((l) => l === 'nearby').length;
-  const unread = useTeamStore(selectChatUnread);
   const gather = useActiveAlerts().find((a) => a.kind === 'gather');
   const me = view?.me;
+  const newNotes = useTeamStore(
+    (s) =>
+      noteSections(s.pins, s.view?.me ?? '', (th) => s.record?.seen?.[th] ?? 0, Date.now(), 'new')
+        .counts.new,
+  );
   const myOpenTasks = useTeamStore(
     (s) => s.tasks.filter((x) => !x.done && x.assignee === me).length,
   );
@@ -120,17 +123,6 @@ export function TeamPanel({
     close();
     router.push(href as never);
   };
-  const rallyHere = async () => {
-    close();
-    const at = await myPosition(here);
-    if (at !== null) usePendingAlert.getState().start('rally', at);
-    else
-      usePendingAlert.getState().fail({
-        text: 'Your position is unknown: no rally point was set.',
-        retry: null,
-        sticky: false,
-      });
-  };
   const openMember = (id: string) => {
     close();
     const pos = positions.find((p) => p.id === id);
@@ -139,24 +131,6 @@ export function TeamPanel({
       useTeamMapFocus.getState().focus(pos.lon, pos.lat, 16);
     } else router.push(`/team/member/${id}` as never);
   };
-
-  const actions: [string, string, () => void, string, number?][] = [
-    ['forum-outline', 'Chat', go('/team/chat'), 'team-panel-chat', unread],
-    ...(guest
-      ? []
-      : ([
-          ['flag-variant', 'Rally here', () => void rallyHere(), 'team-panel-rally'],
-          [
-            'draw',
-            'Draw',
-            () => {
-              close();
-              void enterDrawing();
-            },
-            'team-panel-draw',
-          ],
-        ] as [string, string, () => void, string][])),
-  ];
 
   return (
     // One elevation-free layer at the map's overlay order (as the 2.6.0 team
@@ -218,7 +192,11 @@ export function TeamPanel({
                   size={15}
                   color={summary.sync === 'lan' ? t.status.gnssFixed : t.inkMuted}
                 />
-                <Text style={[styles.sync, { color: t.inkMuted }]} numberOfLines={1}>
+                <Text
+                  style={[styles.sync, styles.flex, { color: t.inkMuted }]}
+                  numberOfLines={2}
+                  testID="team-panel-sync"
+                >
                   {summary.sync === 'lan'
                     ? `Nearby · ${teamSyncLine(peers, meshRunning)}`
                     : summary.status === 'Only you'
@@ -252,16 +230,18 @@ export function TeamPanel({
           />
         )}
         <View style={[styles.acts, { borderBottomColor: t.outlineVariant }]}>
-          {actions.map(([icon, label, run, id, count]) => (
-            <Act key={id} icon={icon} label={label} onPress={run} testID={id} count={count} />
-          ))}
-          <Act
-            icon="check-circle"
-            label={myStatus ? `Status · ${STATUS_LABEL[myStatus]}` : 'My status'}
+          <Pressable
             onPress={() => openSheet({ kind: 'status' })}
+            style={[styles.status, { backgroundColor: t.support.accent }]}
+            accessibilityRole="button"
+            accessibilityLabel={myStatus ? `Status, ${STATUS_LABEL[myStatus]}` : 'My status'}
             testID="team-panel-status"
-            primary
-          />
+          >
+            <Icon source="check-circle" size={20} color={t.support.onAccent} />
+            <Text style={[styles.statusText, { color: t.support.onAccent }]} numberOfLines={2}>
+              {myStatus ? `Status · ${STATUS_LABEL[myStatus]}` : 'My status'}
+            </Text>
+          </Pressable>
         </View>
 
         <ScrollView
@@ -392,6 +372,14 @@ export function TeamPanel({
         </ScrollView>
 
         <Row
+          icon="note-text-outline"
+          label="Notes"
+          chip={newNotes > 0 ? `${newNotes} new` : undefined}
+          fresh
+          onPress={go('/team/notes')}
+          testID="team-panel-notes"
+        />
+        <Row
           icon="checkbox-marked-circle-outline"
           label="Tasks"
           chip={myOpenTasks > 0 ? `${myOpenTasks} open` : undefined}
@@ -420,61 +408,19 @@ export function TeamPanel({
   );
 }
 
-function Act({
-  icon,
-  label,
-  onPress,
-  testID,
-  count = 0,
-  primary = false,
-}: {
-  icon: string;
-  label: string;
-  onPress: () => void;
-  testID: string;
-  count?: number;
-  primary?: boolean;
-}) {
-  const t = useSchemeTokens();
-  return (
-    <Pressable
-      onPress={onPress}
-      style={styles.act}
-      accessibilityRole="button"
-      accessibilityLabel={count > 0 ? `${label}, ${count} unread` : label}
-      testID={testID}
-    >
-      <View
-        style={[styles.actIcon, { backgroundColor: primary ? t.support.accent : t.surfaceVariant }]}
-      >
-        <Icon source={icon} size={24} color={primary ? t.support.onAccent : t.ink} />
-        {count > 0 && (
-          <View
-            style={[styles.badge, { backgroundColor: t.team.bubbleNew, borderColor: t.surface }]}
-          >
-            <Text style={[styles.badgeText, { color: t.team.bubbleNewInk }]}>
-              {count > 9 ? '9+' : count}
-            </Text>
-          </View>
-        )}
-      </View>
-      <Text style={[styles.actLabel, { color: t.inkVariant }]} numberOfLines={2}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 function Row({
   icon,
   label,
   chip,
+  fresh = false,
   onPress,
   testID,
 }: {
   icon: string;
   label: string;
   chip?: string;
+  /** The chip says something new (the orange "2 new"). */
+  fresh?: boolean;
   onPress: () => void;
   testID: string;
 }) {
@@ -490,8 +436,18 @@ function Row({
       <Icon source={icon} size={22} color={t.inkVariant} />
       <Text style={[styles.footLabel, styles.flex, { color: t.ink }]}>{label}</Text>
       {chip && (
-        <View style={[styles.schip, { backgroundColor: t.surfaceVariant }]}>
-          <Text style={[styles.schipText, { color: t.inkVariant }]}>{chip}</Text>
+        <View
+          style={[styles.schip, { backgroundColor: fresh ? t.team.bubbleNew : t.surfaceVariant }]}
+        >
+          <Text
+            style={[
+              styles.schipText,
+              { color: fresh ? t.team.bubbleNewInk : t.inkVariant },
+              fresh && styles.freshText,
+            ]}
+          >
+            {chip}
+          </Text>
         </View>
       )}
       <Icon source="chevron-right" size={22} color={t.inkMuted} />
@@ -524,9 +480,11 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   title: { fontSize: 18, lineHeight: 22, fontWeight: '800' },
-  syncRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  syncRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5 },
+  /** The internet chip is one line: its icons centre on the label. */
   syncChip: {
     alignSelf: 'flex-start',
+    alignItems: 'center',
     borderRadius: 8,
     paddingLeft: 5,
     paddingRight: 2,
@@ -538,34 +496,23 @@ const styles = StyleSheet.create({
   flexShrink: { flexShrink: 1 },
   sync: { fontSize: 12.5 },
   x: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  acts: {
+  acts: { paddingHorizontal: 14, paddingBottom: 10, borderBottomWidth: 1 },
+  status: {
+    minHeight: 44,
+    borderRadius: 22,
     flexDirection: 'row',
-    paddingHorizontal: 10,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-  },
-  act: { flex: 1, alignItems: 'center', gap: 5 },
-  actIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
   },
-  actLabel: { fontSize: 12, lineHeight: 14, fontWeight: '700', textAlign: 'center' },
-  badge: {
-    position: 'absolute',
-    top: -5,
-    right: -6,
-    minWidth: 19,
-    height: 19,
-    borderRadius: 10,
-    borderWidth: 2,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
+  statusText: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+    flexShrink: 1,
   },
-  badgeText: { fontSize: 10.5, fontWeight: '900' },
   list: { maxHeight: 330 },
   /** The gather takes the top of the panel: the members' list gives way. */
   listUnderGather: { maxHeight: 168 },
@@ -596,11 +543,12 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   memberName: { fontSize: 15, lineHeight: 19, fontWeight: '700', flexShrink: 1 },
   line: { fontSize: 12.5, lineHeight: 16 },
-  right: { alignItems: 'flex-end' },
+  right: { alignItems: 'flex-end', flexShrink: 0, minWidth: 56 },
   dist: { fontSize: 13.5, fontWeight: '800' },
   lastPos: { fontSize: 11.5, fontWeight: '700' },
-  schip: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 1 },
+  schip: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 1, flexShrink: 0 },
   schipText: { fontSize: 11, fontWeight: '800' },
+  freshText: { fontWeight: '900' },
   foot: {
     flexDirection: 'row',
     alignItems: 'center',

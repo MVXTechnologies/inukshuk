@@ -11,8 +11,21 @@
  * - While my SOS is active, the ring stays full and the button says so.
  *
  * The ring redraws every {@link FRAME_MS} only while held: a leaf of the map.
+ *
+ * #756: a button of the right rail's column (`@core/map/mapChrome`): its
+ * centre on the rail's axis, {@link MAP_EDGE_INSET} from the edge like Locate,
+ * Layers and +, and its bottom edge at `bottom` (the caller puts that
+ * `MAP_STACK_GAP` above the bottom row). The ring hugs it ({@link RING_PAD}
+ * outside) and the "HOLD" cue is inside the button, never a label under it.
+ *
+ * It swells while held (owner): 1× → 1.35× over the hold, eased
+ * (`@core/teamui/holdScale`), on the UI thread from a shared value; let go
+ * early and it springs back; armed, it settles back. Only the drawing scales,
+ * about its centre: the touch target and the dock never move.
  */
+import { holdScale } from '@core/teamui/holdScale';
 import { holdProgress, holdTicks, SOS_ARMED_MAX_MS, SOS_HOLD_MS } from '@core/teamui/undo';
+import { MAP_BUTTON, MAP_EDGE_INSET } from '@core/map/mapChrome';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 import { useTeamStore } from '@state/teamStore';
 import { palette } from '@ui/tokens';
@@ -20,19 +33,32 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Vibration, View } from 'react-native';
 import { Text } from 'react-native-paper';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { myPosition, ProgressRing } from './parts';
 import { usePendingAlert } from './pendingAlert';
 
 const FRAME_MS = 50;
 const HINT_MS = 2500;
-const SIZE = 48;
-const RING = SIZE + 16;
+const SIZE = MAP_BUTTON;
+/** The ring's reach outside the button. */
+export const RING_PAD = 4;
+const RING = SIZE + 2 * RING_PAD;
+/** Back to rest after an early release or once armed: quick, a touch of bounce. */
+export const SWELL_RELEASE_SPRING = { damping: 14, stiffness: 220, mass: 0.6 } as const;
 
 export function SosButton({
   bottom,
   here,
 }: {
+  /** Where the button's bottom edge sits (its ring reaches {@link RING_PAD} below). */
   bottom: number;
   here: { latitude: number; longitude: number } | null;
 }) {
@@ -44,6 +70,20 @@ export function SosButton({
   const [now, setNow] = useState(0);
   const [hint, setHint] = useState<string | null>(null);
   const [armed, setArmed] = useState(false);
+  // The hold's progress, 0–1, animated on the UI thread: the swell reads it.
+  const swell = useSharedValue(0);
+  const swellStyle = useAnimatedStyle(() => ({ transform: [{ scale: holdScale(swell.get()) }] }));
+  const swellTo = useCallback(
+    (to: 0 | 1) => {
+      cancelAnimation(swell);
+      swell.set(
+        to === 1
+          ? withTiming(1, { duration: SOS_HOLD_MS, easing: Easing.linear })
+          : withSpring(0, SWELL_RELEASE_SPRING),
+      );
+    },
+    [swell],
+  );
   // Held past SOS_HOLD_MS, finger still down: where to send from; the
   // countdown starts on release (or SOS_ARMED_MAX_MS later at the latest).
   const armedRef = useRef<{ from: typeof here } | null>(null);
@@ -99,6 +139,8 @@ export function SosButton({
     },
     [launch],
   );
+  // Apart from the hold's own cleanup: that one must run only on unmount.
+  useEffect(() => () => cancelAnimation(swell), [swell]);
 
   const down = () => {
     if (mineActive) {
@@ -111,6 +153,7 @@ export function SosButton({
     const from = here;
     ticks.current = 0;
     heldRef.current = start;
+    swellTo(1);
     setHeld(start);
     setNow(start);
     stopFrames();
@@ -134,6 +177,8 @@ export function SosButton({
         setHeld(null);
         armedRef.current = { from };
         setArmed(true);
+        // Armed: the swell settles back while "Let go" shows.
+        swellTo(0);
         armedTimer.current = setTimeout(() => launch(), SOS_ARMED_MAX_MS);
       }
     }, FRAME_MS);
@@ -143,6 +188,8 @@ export function SosButton({
       launch();
       return;
     }
+    // Let go before the hold completed: the swell springs back.
+    swellTo(0);
     // The ref, not `held`: press-in and press-out can both land before the
     // re-render, and a stale `held` (null) let the timer run on to an SOS (#708).
     const start = heldRef.current;
@@ -163,7 +210,11 @@ export function SosButton({
         ? 'SOS ready. Let go to start the five second undo'
         : 'SOS. Hold for two seconds to alert the whole team';
   return (
-    <View style={[styles.dock, { bottom }]} pointerEvents="box-none" testID="team-sos-layer">
+    <View
+      style={[styles.dock, { bottom: bottom - RING_PAD }]}
+      pointerEvents="box-none"
+      testID="team-sos-layer"
+    >
       {hint !== null && (
         // Inside the dock's own bounds (a row, left of the button), never
         // absolutely placed outside them: Android leaves a view outside its
@@ -180,7 +231,12 @@ export function SosButton({
       )}
       <View style={styles.column} pointerEvents="box-none">
         <View style={styles.ringBox}>
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          {/* The ring swells with the button (the same scale, about the same centre). */}
+          <Animated.View
+            style={[StyleSheet.absoluteFill, swellStyle]}
+            pointerEvents="none"
+            testID="team-sos-ring-swell"
+          >
             <ProgressRing
               size={RING}
               stroke={3.5}
@@ -188,42 +244,51 @@ export function SosButton({
               color={t.team.sos}
               track={`${t.team.sos}4D`}
             />
-          </View>
+          </Animated.View>
+          {/* The touch target keeps its 48 dp and its place; only its drawing swells. */}
           <Pressable
             onPressIn={down}
             onPressOut={up}
-            style={[
-              styles.button,
-              {
-                backgroundColor: t.team.sos,
-                borderColor: t.team.mapHalo,
-                shadowColor: palette.shadow,
-              },
-            ]}
+            style={styles.button}
             accessibilityRole="button"
             accessibilityLabel={label}
             accessibilityHint={mineActive ? undefined : 'Touch and hold'}
             accessibilityState={{ busy: held !== null }}
             testID="team-sos-button"
           >
-            <Text style={[styles.sos, { color: t.team.sosInk }]} allowFontScaling={false}>
-              SOS
-            </Text>
+            <Animated.View
+              style={[
+                styles.disc,
+                {
+                  backgroundColor: t.team.sos,
+                  borderColor: t.team.mapHalo,
+                  shadowColor: palette.shadow,
+                },
+                swellStyle,
+              ]}
+              pointerEvents="none"
+              testID="team-sos-swell"
+            >
+              <Text style={[styles.sos, { color: t.team.sosInk }]} allowFontScaling={false}>
+                SOS
+              </Text>
+              {!mineActive && (
+                <Text
+                  style={[styles.cue, { color: t.team.sosInk }]}
+                  allowFontScaling={false}
+                  accessible={false}
+                  testID="team-sos-cue"
+                >
+                  {armed
+                    ? 'Let go'
+                    : held !== null
+                      ? `${Math.max(1, Math.ceil((SOS_HOLD_MS - (now - held)) / 1000))} s`
+                      : 'Hold'}
+                </Text>
+              )}
+            </Animated.View>
           </Pressable>
         </View>
-        {!mineActive && (
-          <Text
-            style={[styles.under, { color: t.team.mapInk, textShadowColor: t.team.mapHalo }]}
-            allowFontScaling={false}
-            accessible={false}
-          >
-            {armed
-              ? 'Let go'
-              : held !== null
-                ? `${Math.max(1, Math.ceil((SOS_HOLD_MS - (now - held)) / 1000))} s`
-                : 'Hold'}
-          </Text>
-        )}
       </View>
     </View>
   );
@@ -231,11 +296,13 @@ export function SosButton({
 
 const styles = StyleSheet.create({
   // Under the bottom cards (QA 2.6.0, 09b); the button's elevation stays inside.
+  // The ring box's right edge sits RING_PAD outside the button's, which is
+  // MAP_EDGE_INSET from the screen's edge: the rail's column.
   dock: {
     position: 'absolute',
-    right: 10,
+    right: MAP_EDGE_INSET - RING_PAD,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     zIndex: MAP_OVERLAY_Z.teamButton,
   },
   column: { alignItems: 'center' },
@@ -245,9 +312,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  button: {
-    width: SIZE,
-    height: SIZE,
+  // The touch target: fixed, never scaled.
+  button: { width: SIZE, height: SIZE, borderRadius: SIZE / 2 },
+  // The drawn button, which swells.
+  disc: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     borderRadius: SIZE / 2,
     borderWidth: 2.5,
     alignItems: 'center',
@@ -257,17 +330,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
   },
-  sos: { fontSize: 13.5, fontWeight: '900', letterSpacing: 0.5 },
-  under: {
-    marginTop: -6,
-    fontSize: 11,
+  sos: { fontSize: 13.5, lineHeight: 15, fontWeight: '900', letterSpacing: 0.5 },
+  // Inside the 48 dp button, so it never meets the bottom row (#756).
+  cue: {
+    fontSize: 9,
+    lineHeight: 11,
     fontWeight: '800',
-    textShadowRadius: 3,
-    textShadowOffset: { width: 0, height: 0 },
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    opacity: 0.92,
   },
   hint: {
-    marginTop: RING / 2 - 18,
-    marginRight: 4,
+    marginRight: 8,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,

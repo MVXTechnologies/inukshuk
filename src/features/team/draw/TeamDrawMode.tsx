@@ -2,9 +2,12 @@
  * Drawing mode (#683, mockups 252 frames 1–6): the team's sketch tool over
  * the main map.
  *
- * - A top bar (Clear mine, with a 5 s UNDO; Done) and a bottom tool bar
- *   (Pencil · Arrow · Circle · Rectangle | Style | Undo). The tab bar, the
- *   search (the team bar), the + menu and the SOS button step aside; Android Back = Done.
+ * - A top bar (a live dot, "Drawing / Team sees it live"; Clear mine, with a
+ *   5 s UNDO; Done) and a bottom tool bar of five labelled buttons (#756):
+ *   Freehand · Arrow · Shape · Time · Undo. A tap on the selected Freehand or
+ *   Arrow opens its options; Shape opens the shape picker; Time the fade
+ *   time (`DrawToolPanel`). The tab bar, the search (the team bar), the +
+ *   menu and the SOS button step aside; Android Back closes a panel, then Done.
  * - One finger draws; two fingers pan, zoom and rotate the map. The overlay
  *   takes every touch (`@core/teamdraw/gesture`) and moves the camera itself
  *   for two fingers (`@core/teamdraw/screen`): MapLibre's native gestures
@@ -15,6 +18,11 @@
  *   Under 12 dp it is dropped; a second finger cancels it.
  * - A tap on my shape selects it; a long-press opens its menu (note, delete).
  *   An admin may do both on anyone's shape.
+ * - Text (#706), a choice of Shape's panel (Circle · Rectangle · Text; owner
+ *   2026-10-16), places a note: one tap on the map leaves drawing mode and
+ *   opens the note composer there, in the drawing's colour and its Time fade
+ *   (`noteFadeForDrawing`). While it is the choice, the Shape button shows
+ *   the Text glyph and label; Freehand, Arrow or a shape turns it off.
  */
 import type { Units } from '@core/format';
 import { DrawGesture, type GestureAction, type Touch } from '@core/teamdraw/gesture';
@@ -60,17 +68,29 @@ import { Icon, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path, Polygon } from 'react-native-svg';
 
-import { DrawStylePopover, fadeLabel } from './DrawStylePopover';
+import { noteFadeForDrawing } from '@core/domains/team/notes';
+import { unproject } from '@core/teamdraw/screen';
+
+import { usePinDraft } from '../map/TeamPinComposer';
+import {
+  DrawToolPanel,
+  fadeBadge,
+  fadeLabel,
+  SHAPE_CHOICES,
+  type ToolPanel,
+} from './DrawToolPanel';
 import { useDrawPrefs, useOwnColour } from './drawShared';
 import { hitTestTeamDraw } from './hitTestDraw';
 import { ShapeMenu } from './ShapeMenu';
 
-export const TOOLS: readonly { k: ShapeKind; icon: string; label: string }[] = [
-  { k: 'free', icon: 'draw', label: 'Pencil' },
+/** The tool bar's two stroke tools; Shape, Time and Undo follow. */
+export const TOOLS: readonly { k: 'free' | 'arrow'; icon: string; label: string }[] = [
+  { k: 'free', icon: 'draw', label: 'Freehand' },
   { k: 'arrow', icon: 'arrow-top-right', label: 'Arrow' },
-  { k: 'circle', icon: 'circle-outline', label: 'Circle' },
-  { k: 'rect', icon: 'square-outline', label: 'Rectangle' },
 ];
+/** The tool bar's labels grow with the font scale up to this (owner's cap, #756). */
+export const TOOL_LABEL_MAX_SCALE = 1.2;
+const isShape = (k: ShapeKind): k is 'circle' | 'rect' => k === 'circle' || k === 'rect';
 const TOOL_ICON: Record<ShapeKind, string> = {
   free: 'draw',
   arrow: 'arrow-top-right',
@@ -214,11 +234,22 @@ function DrawModeBody({
   const prefs = useDrawPrefs();
   const own = useOwnColour();
   const snack = useActionSnackbar(5_000);
-  const [styleOpen, setStyleOpen] = useState(false);
+  const [panel, setPanel] = useState<ToolPanel | null>(null);
+  const styleOpen = panel !== null;
+  const setStyleOpen = (open: boolean) => {
+    if (!open) setPanel(null);
+  };
+  // The Shape button's shape: the last one picked (the current tool when it is one).
+  const [shape, setShape] = useState<'circle' | 'rect'>(() => (isShape(tool) ? tool : 'circle'));
   const [hint, setHint] = useState(hintNow);
   const [pts, setPts] = useState<readonly ScreenPt[]>([]);
   const [chip, setChip] = useState<string | null>(null);
   const [drawn, setDrawn] = useState<string[]>([]);
+  /** The Text tool (#706): the next tap places a note. Not remembered between entries. */
+  const [textTool, setTextTool] = useState(false);
+  // What the Shape button shows: Text while it is the choice, else the shape.
+  const shapeChoice =
+    SHAPE_CHOICES.find((c) => c.k === (textTool ? 'text' : shape)) ?? SHAPE_CHOICES[0]!;
 
   const gesture = useRef(new DrawGesture());
   const view = useRef<Viewport | null>(null);
@@ -236,9 +267,9 @@ function DrawModeBody({
   const throttle = useRef(new PenThrottle());
   const dueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const live = useRef({ tool, prefs, units, styleOpen, locked });
+  const live = useRef({ tool, prefs, units, styleOpen, locked, textTool });
   useEffect(() => {
-    live.current = { tool, prefs, units, styleOpen, locked };
+    live.current = { tool, prefs, units, styleOpen, locked, textTool };
   });
 
   const done = useCallback(() => {
@@ -367,6 +398,8 @@ function DrawModeBody({
       switch (a.type) {
         case 'begin':
           setStyleOpen(false);
+          // The Text tool draws nothing: only its tap counts.
+          if (live.current.textTool) break;
           stroke.current = new StrokeBuilder(
             live.current.tool,
             session()?.newId() ?? String(Date.now()),
@@ -379,6 +412,7 @@ function DrawModeBody({
           void syncView();
           break;
         case 'update': {
+          if (live.current.textTool) break;
           latest.current = a.pts;
           setPts([...a.pts]);
           const b = stroke.current;
@@ -414,6 +448,16 @@ function DrawModeBody({
         case 'long-press': {
           if (live.current.styleOpen) {
             setStyleOpen(false);
+            break;
+          }
+          if (live.current.textTool && a.type === 'tap') {
+            if (vp === null) break;
+            const [lng, lat] = unproject(a.at, vp);
+            const p = live.current.prefs;
+            done();
+            usePinDraft
+              .getState()
+              .open(lng, lat, { col: p.colour, fade: noteFadeForDrawing(p.fadeMs) });
             break;
           }
           const map = mapRef.current;
@@ -551,13 +595,23 @@ function DrawModeBody({
         <LocalStroke tool={tool} pts={pts} color={color} width={lineW} dashed={prefs.dashed} />
       </View>
 
-      <View style={[styles.top, { top: insets.top + 8, backgroundColor: t.map.chrome }]}>
-        <Icon source="draw" size={22} color={t.map.chromeInk} />
+      <View
+        style={[styles.top, { top: insets.top + 8, backgroundColor: t.map.chrome }]}
+        testID="team-draw-top"
+      >
+        {/* No pencil icon (the tool bar says it): the title keeps the width (#756). */}
         <View style={styles.flex}>
-          <Text style={[styles.t1, { color: t.map.chromeInk }]} numberOfLines={1}>
-            Drawing
-          </Text>
-          <Text style={[styles.t2, { color: t.map.chromeInk }]} numberOfLines={1}>
+          <View style={styles.titleRow}>
+            <View style={[styles.liveDot, { backgroundColor: t.map.gnssFixed }]} />
+            <Text
+              style={[styles.t1, { color: t.map.chromeInk }]}
+              numberOfLines={1}
+              testID="team-draw-title"
+            >
+              Drawing
+            </Text>
+          </View>
+          <Text style={[styles.t2, { color: t.map.chromeInk }]} numberOfLines={2}>
             Team sees it live
           </Text>
         </View>
@@ -569,7 +623,13 @@ function DrawModeBody({
           testID="team-draw-clear"
         >
           <Icon source="broom" size={20} color={t.map.chromeInk} />
-          <Text style={[styles.topBtnText, { color: t.map.chromeInk }]}>Clear mine</Text>
+          {/* At a large font it takes two lines inside its button, never the title's width. */}
+          <Text
+            style={[styles.topBtnText, styles.clearText, { color: t.map.chromeInk }]}
+            numberOfLines={2}
+          >
+            Clear mine
+          </Text>
         </Pressable>
         <Pressable
           onPress={done}
@@ -578,7 +638,9 @@ function DrawModeBody({
           accessibilityLabel="Done"
           testID="team-draw-done"
         >
-          <Text style={[styles.topBtnText, { color: drawChrome.onActive }]}>Done</Text>
+          <Text style={[styles.topBtnText, { color: drawChrome.onActive }]} numberOfLines={1}>
+            Done
+          </Text>
         </Pressable>
       </View>
 
@@ -590,6 +652,15 @@ function DrawModeBody({
         >
           <Icon source={TOOL_ICON[tool]} size={17} color={color} />
           <Text style={[styles.chipText, { color: drawChrome.chipInk }]}>{chip}</Text>
+        </View>
+      ) : textTool ? (
+        <View
+          style={[styles.hint, { top: insets.top + 70, backgroundColor: t.map.chip }]}
+          pointerEvents="none"
+          testID="team-draw-text-hint"
+        >
+          <Icon source="gesture-tap" size={18} color={t.map.chipInk} />
+          <Text style={[styles.hintText, { color: t.map.chipInk }]}>Tap where the note goes</Text>
         </View>
       ) : hint ? (
         <View
@@ -604,13 +675,25 @@ function DrawModeBody({
         </View>
       ) : null}
 
-      {styleOpen && (
-        <DrawStylePopover
+      {panel !== null && (
+        <DrawToolPanel
+          kind={panel}
           prefs={prefs}
           own={own}
-          bottom={barBottom + 74}
+          shape={textTool ? 'text' : shape}
+          onShape={(k) => {
+            setPanel(null);
+            if (k === 'text') {
+              setTextTool(true);
+              return;
+            }
+            setTextTool(false);
+            setShape(k);
+            useTeamDrawStore.getState().setTool(k);
+          }}
+          bottom={barBottom + BAR_H + 8}
           onChange={(next) => useTeamDrawStore.getState().setPrefs(next)}
-          onClose={() => setStyleOpen(false)}
+          onClose={() => setPanel(null)}
         />
       )}
       {menuShape && (
@@ -634,66 +717,137 @@ function DrawModeBody({
 
       <View style={[styles.bar, { bottom: barBottom }]} testID="team-draw-toolbar">
         {TOOLS.map(({ k, icon, label }) => {
-          const on = k === tool;
+          const on = k === tool && !textTool;
           return (
-            <Pressable
+            <ToolButton
               key={k}
-              onPress={() => useTeamDrawStore.getState().setTool(k)}
-              style={[styles.tool, on && { backgroundColor: drawChrome.active }]}
-              accessibilityRole="button"
-              accessibilityLabel={label}
-              accessibilityState={{ selected: on }}
+              icon={icon}
+              label={label}
+              on={on}
+              open={panel === k}
+              // Selected already: the tap opens (or closes) its options.
+              onPress={() => {
+                if (on) setPanel((p) => (p === k ? null : k));
+                else {
+                  setTextTool(false);
+                  useTeamDrawStore.getState().setTool(k);
+                  setPanel(null);
+                }
+              }}
+              caret={on}
+              a11y={on ? `${label}, options` : label}
               testID={`team-draw-tool-${k}`}
-            >
-              <Icon source={icon} size={26} color={on ? drawChrome.onActive : drawChrome.barInk} />
-            </Pressable>
+            />
           );
         })}
-        <View style={[styles.divider, { backgroundColor: drawChrome.barDivider }]} />
-        <Pressable
-          onPress={() => setStyleOpen((o) => !o)}
-          style={[
-            styles.style,
-            { borderColor: styleOpen ? drawChrome.active : drawChrome.barOutline },
-            styleOpen && { backgroundColor: drawChrome.activeSoft },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={`Style, fades after ${fadeLabel(prefs.fadeMs)}`}
-          accessibilityState={{ expanded: styleOpen }}
-          testID="team-draw-style-button"
-        >
-          <Svg width={34} height={18}>
-            <Path
-              d="M3 14 C9 3 15 3 17 9 S26 16 31 4"
-              fill="none"
-              stroke={color}
-              strokeWidth={Math.min(lineW, 6)}
-              strokeLinecap="round"
-              {...(prefs.dashed ? { strokeDasharray: `${lineW * 1.6} ${lineW * 1.4}` } : {})}
-            />
-          </Svg>
-          <View style={styles.fade}>
-            <Icon source="timer-sand" size={11} color={drawChrome.barInkMuted} />
-            <Text style={[styles.fadeText, { color: drawChrome.barInkMuted }]}>
-              {fadeLabel(prefs.fadeMs)}
-            </Text>
-          </View>
-        </Pressable>
-        <View style={styles.flex} />
-        <Pressable
-          onPress={undo}
+        <ToolButton
+          icon={shapeChoice.icon}
+          // Text (#706) names itself on the button while it is the choice.
+          label={textTool ? shapeChoice.label : 'Shape'}
+          on={isShape(tool) || textTool}
+          open={panel === 'shape'}
+          onPress={() => setPanel((p) => (p === 'shape' ? null : 'shape'))}
+          caret
+          a11y={`Shape, ${shapeChoice.label}`}
+          testID="team-draw-tool-shape"
+        />
+        <ToolButton
+          icon="timer-sand"
+          label="Time"
+          on={false}
+          open={panel === 'time'}
+          badge={fadeBadge(prefs.fadeMs)}
+          onPress={() => setPanel((p) => (p === 'time' ? null : 'time'))}
+          a11y={`Time, fades after ${fadeLabel(prefs.fadeMs)}`}
+          testID="team-draw-time"
+        />
+        <ToolButton
+          icon="undo"
+          label="Undo"
+          on={false}
+          open={false}
           disabled={drawn.length === 0}
-          style={[styles.tool, drawn.length === 0 && styles.dim]}
-          accessibilityRole="button"
-          accessibilityLabel="Undo my last shape"
-          accessibilityState={{ disabled: drawn.length === 0 }}
+          onPress={undo}
+          a11y="Undo my last shape"
           testID="team-draw-undo"
-        >
-          <Icon source="undo" size={26} color={drawChrome.barInk} />
-        </Pressable>
+          divided
+        />
       </View>
       <ActionSnackbar snack={snack.current} style={{ bottom: barBottom + 70 }} />
     </View>
+  );
+}
+
+/** One labelled tool bar button (#756): icon over a label that is never cut. */
+function ToolButton({
+  icon,
+  label,
+  on,
+  open,
+  onPress,
+  a11y,
+  testID,
+  caret = false,
+  badge,
+  disabled = false,
+  divided = false,
+}: {
+  icon: string;
+  label: string;
+  /** The current tool. */
+  on: boolean;
+  /** Its panel is open. */
+  open: boolean;
+  onPress: () => void;
+  a11y: string;
+  testID: string;
+  /** It has options (a small chevron). */
+  caret?: boolean;
+  /** A value on the icon's corner ("30s"). */
+  badge?: string;
+  disabled?: boolean;
+  /** A hairline before it (Undo). */
+  divided?: boolean;
+}) {
+  const ink = on ? drawChrome.onActive : open ? drawChrome.openInk : drawChrome.barInk;
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={[
+        styles.tool,
+        on && { backgroundColor: drawChrome.active },
+        open && !on && [styles.toolOpen, { backgroundColor: drawChrome.activeSoft }],
+        divided && [styles.divided, { borderLeftColor: drawChrome.barDivider }],
+        disabled && styles.dim,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={a11y}
+      accessibilityState={{ selected: on, expanded: caret || badge ? open : undefined, disabled }}
+      testID={testID}
+    >
+      <Icon source={icon} size={24} color={ink} />
+      {caret && (
+        <View style={styles.caret} pointerEvents="none">
+          <Icon source="chevron-up" size={13} color={ink} />
+        </View>
+      )}
+      {badge !== undefined && (
+        <View style={[styles.badge, { backgroundColor: drawChrome.active }]} pointerEvents="none">
+          <Text style={[styles.badgeText, { color: drawChrome.onActive }]} allowFontScaling={false}>
+            {badge}
+          </Text>
+        </View>
+      )}
+      <Text
+        style={[styles.toolLabel, { color: ink }]}
+        numberOfLines={1}
+        maxFontSizeMultiplier={TOOL_LABEL_MAX_SCALE}
+        testID={`${testID}-label`}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -722,13 +876,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
-    height: 52,
+    // Grows at a large font (#756) rather than cutting its title.
+    minHeight: 52,
     borderRadius: 26,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     paddingLeft: 16,
     paddingRight: 4,
+    paddingVertical: 4,
     zIndex: 9,
     elevation: 6,
     shadowColor: palette.shadow,
@@ -736,18 +892,21 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
   },
-  t1: { fontSize: 15, fontWeight: '800' },
-  t2: { fontSize: 12, opacity: 0.7 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  liveDot: { width: 8, height: 8, borderRadius: 4 },
+  t1: { fontSize: 15, fontWeight: '800', flexShrink: 0 },
+  t2: { fontSize: 12, opacity: 0.75 },
   topBtn: {
     minHeight: 44,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     borderRadius: 22,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
   topBtnText: { fontSize: 14, fontWeight: '800' },
-  done: { paddingHorizontal: 18 },
+  clearText: { maxWidth: 96, textAlign: 'center' },
+  done: { paddingHorizontal: 14 },
   chip: {
     position: 'absolute',
     alignSelf: 'center',
@@ -774,17 +933,19 @@ const styles = StyleSheet.create({
     zIndex: 6,
   },
   hintText: { fontSize: 13, fontWeight: '700' },
+  // Five equal labelled buttons (#756): 6 dp from the edges, so at 360 dp
+  // each is 68 dp and "Freehand" fits at the 1.2× label cap.
   bar: {
     position: 'absolute',
-    left: 12,
-    right: 12,
-    height: BAR_H,
-    borderRadius: 24,
+    left: 6,
+    right: 6,
+    minHeight: BAR_H,
+    borderRadius: 22,
     backgroundColor: drawChrome.bar,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 7,
+    alignItems: 'stretch',
+    gap: 2,
+    padding: 4,
     zIndex: 9,
     elevation: 8,
     shadowColor: palette.shadow,
@@ -793,23 +954,33 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
   },
   tool: {
-    width: 52,
-    height: 52,
+    flex: 1,
+    minWidth: 0,
+    minHeight: 56,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 2,
+    paddingTop: 5,
+    paddingBottom: 4,
   },
-  dim: { opacity: 0.35 },
-  divider: { width: 1, height: 34, marginHorizontal: 4 },
-  style: {
-    width: 62,
-    height: 52,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 1,
+  toolOpen: { borderWidth: 1.5, borderColor: drawChrome.active },
+  divided: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderTopLeftRadius: 0,
+    borderBottomLeftRadius: 0,
   },
-  fade: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  fadeText: { fontSize: 10, fontWeight: '800' },
+  toolLabel: { fontSize: 11, lineHeight: 14, fontWeight: '800' },
+  caret: { position: 'absolute', top: 2, right: 6 },
+  badge: {
+    position: 'absolute',
+    top: 2,
+    left: '50%',
+    marginLeft: 6,
+    borderRadius: 7,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  badgeText: { fontSize: 9.5, lineHeight: 11, fontWeight: '900' },
+  dim: { opacity: 0.38 },
 });

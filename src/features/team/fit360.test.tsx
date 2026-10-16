@@ -24,7 +24,7 @@ jest.mock('expo-router', () => ({ useRouter: () => ({}), useLocalSearchParams: (
 const EM: Record<string, number> = {
   '800 6/6': 1.74,
   '800 12/12': 2.54,
-  '700 online': 2.92,
+  '700  online ·': 3.83,
   '700 Offline · 120 min': 7.92,
   '700 Out of reach': 5.84,
   '700 Needs update': 6.56,
@@ -48,16 +48,13 @@ const chip = (key: string, scale: number) =>
 describe('360 dp fit (G7)', () => {
   const pill = Math.min(1.15, PILL_FONT_CAP);
 
-  it('the pill: glyph and "6/6 online" with three faces; "12/12" alone', () => {
+  // The status is one text, "6/6 online ·" (#756), then the glyph (G7).
+  it('the pill: "6/6 online ·" and the glyph with three faces; "12/12 online ·" too', () => {
     const room = pillTextRoom(SCREEN, 3);
-    const six =
-      PILL_GLYPH +
-      PILL_STATUS_GAP +
-      w('800 6/6', 12, pill) +
-      PILL_STATUS_GAP +
-      w('700 online', 12, pill);
-    expect(six).toBeLessThanOrEqual(room);
-    expect(PILL_GLYPH + PILL_STATUS_GAP + w('800 12/12', 12, pill)).toBeLessThanOrEqual(room);
+    const status = (count: string) =>
+      w(count, 12, pill) + w('700  online ·', 12, pill) + PILL_STATUS_GAP + PILL_GLYPH;
+    expect(status('800 6/6')).toBeLessThanOrEqual(room);
+    expect(status('800 12/12')).toBeLessThanOrEqual(room);
   });
 
   it('the pill offline: one face, "Offline · 120 min"', () => {

@@ -73,19 +73,22 @@ export function FaceStack({
   faces,
   size,
   ring,
+  overlap = 0.3,
 }: {
   faces: readonly { id: string; initials: string; color: string; band: AgeBand }[];
   size: number;
   ring: string;
+  /** How much of a face the next one covers (0–1). */
+  overlap?: number;
 }) {
   return (
-    <View style={styles.stack} accessible={false}>
+    <View style={styles.stack} accessible={false} testID="team-face-stack">
       {faces.map((f, i) => (
         <View
           key={f.id}
           style={[
             styles.stacked,
-            { marginLeft: i === 0 ? 0 : -Math.round(size * 0.3), borderColor: ring },
+            { marginLeft: i === 0 ? 0 : -Math.round(size * overlap), borderColor: ring },
             { borderRadius: size / 2 + 2 },
           ]}
         >

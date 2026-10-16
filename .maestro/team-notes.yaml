@@ -1,0 +1,300 @@
+# Team notes e2e (#706), one phone, on the loopback mesh build (see team.yaml).
+#
+# Create a team → a simulated teammate joins and posts a note → on the map
+# her note shows as text, unread → its card (Seen by, Fades in; no ⋮) → a
+# long-press → Note here → compose (counter, 1 day) → Post → my note's card
+# with its ⋮ menu and the Fades after sub-panel → the panel's Notes list
+# (All, Mine) → a row opens the card → Draw's Text tool opens the composer
+# where tapped → leave the team.
+#
+# In the team shard after team-draw.yaml, before team.yaml (which clears state
+# and stays last); it does not clear state itself, so it creates its own team
+# and leaves it at the end. Settings rows merge title + subtitle on iOS:
+# wildcard regexes (maestro-ios-tap-traps). Never hideKeyboard when the
+# keyboard may be down: on Android it then presses Back.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            notifications: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+            notifications: allow
+- tapOn:
+    text: 'Got it'
+    optional: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- setLocation:
+    latitude: 47.0745
+    longitude: -70.9065
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Settings'
+    timeout: 15000
+- tapOn: 'Settings'
+- scrollUntilVisible:
+    element: 'Extensions.*'
+    direction: DOWN
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: '.*Team mode.*'
+          commands:
+            - tapOn: 'Extensions.*'
+      - scrollUntilVisible:
+          element: '.*Team mode.*'
+          direction: DOWN
+          timeout: 5000
+- scrollUntilVisible:
+    element:
+      id: 'extension-row-team'
+    direction: DOWN
+- runFlow:
+    when:
+      visible: 'Get Team mode'
+    commands:
+      - tapOn: 'Get Team mode'
+- runFlow:
+    when:
+      notVisible:
+        id: 'extension-details-team'
+    commands:
+      - tapOn:
+          id: 'extension-row-team'
+- scrollUntilVisible:
+    element:
+      id: 'team-create-row'
+    direction: DOWN
+- tapOn:
+    id: 'team-create-row'
+- extendedWaitUntil:
+    visible:
+      id: 'team-create-screen'
+    timeout: 10000
+- tapOn:
+    id: 'team-create-name'
+- inputText: 'Ridge crew'
+- tapOn:
+    id: 'team-create-myname'
+- eraseText: 40
+- inputText: 'Marc'
+- hideKeyboard
+- tapOn:
+    id: 'team-create-ends-14d'
+- tapOn:
+    id: 'team-create-submit'
+- extendedWaitUntil:
+    visible: '(Allow|Ridge crew)'
+    timeout: 40000
+- runFlow:
+    when:
+      visible: 'Allow'
+    commands:
+      - tapOn: 'Allow'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 15000
+# A simulated teammate joins (she must be a member before she can post),
+# then posts a note near me; wait until this phone holds it.
+- scrollUntilVisible:
+    element:
+      id: 'team-sim-add'
+    direction: DOWN
+- tapOn:
+    id: 'team-sim-add'
+- scrollUntilVisible:
+    element: '.*Julie Tremblay.*'
+    direction: UP
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: 'team-sim-note'
+    direction: DOWN
+- tapOn:
+    id: 'team-sim-note'
+- scrollUntilVisible:
+    element:
+      id: 'team-sim-note-done'
+    direction: DOWN
+    timeout: 30000
+# To the map: her note shows as text, unread (the orange dot).
+- tapOn: 'Back'
+- tapOn: 'Back'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: 'team-bar-pill'
+    timeout: 10000
+- extendedWaitUntil:
+    visible: '.*Hut water is dry.*'
+    timeout: 10000
+- assertVisible:
+    id: 'note-callout-unread'
+- takeScreenshot: team-notes-map
+# Tap it: its card (opening it marks it read and sends a "seen" receipt).
+- tapOn: '.*Hut water is dry.*'
+- extendedWaitUntil:
+    visible:
+      id: 'team-note-card'
+    timeout: 5000
+- assertVisible:
+    id: 'note-seen-by'
+- assertVisible:
+    id: 'note-fades-in'
+# Not my note: no options menu.
+- assertNotVisible:
+    id: 'note-more'
+- takeScreenshot: team-note-card
+- tapOn: 'Close'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-note-card'
+    timeout: 5000
+- assertNotVisible:
+    id: 'note-callout-unread'
+# My own note: long-press → Note here → the composer.
+- longPressOn:
+    point: '50%,62%'
+- extendedWaitUntil:
+    visible:
+      id: 'team-press-card'
+    timeout: 5000
+- tapOn:
+    id: 'team-press-note'
+- extendedWaitUntil:
+    visible:
+      id: 'team-pin-composer'
+    timeout: 5000
+- tapOn:
+    id: 'team-pin-input'
+- inputText: 'Camp here tonight'
+- assertVisible: '17 / 140'
+- tapOn:
+    id: 'note-fade-1d'
+- takeScreenshot: team-note-composer
+# The composer stays above the keyboard: tap Post itself (never hideKeyboard:
+# with no keyboard up, Android's hideKeyboard presses Back).
+- tapOn:
+    id: 'team-pin-send'
+- extendedWaitUntil:
+    visible:
+      id: 'team-note-card'
+    timeout: 5000
+- assertVisible: 'Your note'
+- assertVisible: '.*Camp here tonight.*'
+# Its options live in its own menu; Fades after is a sub-panel.
+- tapOn:
+    id: 'note-more'
+- extendedWaitUntil:
+    visible:
+      id: 'note-menu'
+    timeout: 3000
+- takeScreenshot: team-note-menu
+- tapOn:
+    id: 'note-menu-fade'
+- extendedWaitUntil:
+    visible:
+      id: 'note-fade-menu'
+    timeout: 3000
+- takeScreenshot: team-note-fade
+- tapOn:
+    id: 'note-fade-4h'
+- extendedWaitUntil:
+    notVisible:
+      id: 'note-fade-menu'
+    timeout: 3000
+- tapOn: 'Close'
+# The team panel's Notes row, and the list.
+- tapOn:
+    id: 'team-bar-pill'
+- tapOn:
+    id: 'team-panel-notes'
+- extendedWaitUntil:
+    visible:
+      id: 'team-notes-screen'
+    timeout: 5000
+- assertVisible: '.*Hut water is dry.*'
+- assertVisible: '.*Camp here tonight.*'
+- takeScreenshot: team-notes-list
+- tapOn:
+    id: 'notes-filter-mine'
+- assertNotVisible: '.*Hut water is dry.*'
+# A row opens the note's card on the map.
+- tapOn: '.*Camp here tonight.*'
+- extendedWaitUntil:
+    visible:
+      id: 'team-note-card'
+    timeout: 5000
+- tapOn: 'Close'
+# Draw's Text: one tap places a note (the composer opens there). Draw is
+# the chip under the team pill (#757), no longer in the panel.
+- tapOn:
+    id: 'team-chip-draw'
+- extendedWaitUntil:
+    visible:
+      id: 'team-draw-toolbar'
+    timeout: 5000
+# Text is Shape's third choice (Circle · Rectangle · Text, owner 2026-10-16).
+- tapOn:
+    id: 'team-draw-tool-shape'
+- extendedWaitUntil:
+    visible:
+      id: 'team-draw-shape-text'
+    timeout: 3000
+- tapOn:
+    id: 'team-draw-shape-text'
+- extendedWaitUntil:
+    visible:
+      id: 'team-draw-text-hint'
+    timeout: 3000
+- takeScreenshot: team-draw-text-tool
+- tapOn:
+    point: '40%,40%'
+- extendedWaitUntil:
+    visible:
+      id: 'team-pin-composer'
+    timeout: 5000
+- tapOn:
+    id: 'team-pin-cancel'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-pin-composer'
+    timeout: 5000
+# Leave the team (it is deleted from this phone): the panel's Manage team.
+- tapOn:
+    id: 'team-bar-pill'
+- tapOn:
+    id: 'team-panel-manage'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 5000
+- scrollUntilVisible:
+    element: 'Leave team'
+    direction: DOWN
+- tapOn: 'Leave team'
+- tapOn: 'Leave'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-hub-screen'
+    timeout: 10000
