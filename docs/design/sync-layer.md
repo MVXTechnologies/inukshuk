@@ -416,6 +416,16 @@ This is pure (`src/core/group/conflicts.ts`) and works for any domain that opts 
 
 Owner-requested behaviour also falls out: "a delete beats a concurrent edit, with undo in history".
 
+**As built (G9, `src/core/group/conflicts.ts`).** Three changes to the text above:
+
+- **The base field is `b`, not `_b`.** The generic body check only accepts field names that start with a letter.
+- **The base is per record, not per field:** `b: { <memberId>: [wall, counter], … }`, holding each _other_ author's newest stamp on this record that the writer had folded (the writer's own author is implied by its chain). A phone receives each author's ops in chain order, so this is an exact per-record version vector: W2 saw W1 ⇔ W2 sorts after W1 and (same author, or `b[W1.author] ≥ W1`).
+  - For one field, the **heads** are the writes to it that no other write to it saw. More than one head is a conflict: the LWW winner is "Kept", the other heads are "Use this".
+  - A conflict stays listed until a write to that field that saw **both** versions lands. A write that saw only the winner does not clear it (the "base is the winner" rule above would have hidden a version nobody looked at).
+  - A base keeps at most 64 authors (the newest). A record edited by more people may then show a stale conflict, never hide one.
+  - A base is the signer's claim. Overstating what it had seen only hides a conflict from the claimant's own edit, which an editor can do anyway by overwriting. Claims about writes that sort after the claimant never count.
+- **Delete versus edit uses a trash flag, not `e.del`.** `e.del` bodies cannot carry fields, so a delete could not say what it had seen. A library soft delete is `e.set {rm: 1, b}`; Restore is `e.set {rm: 0, b}`. The newest `rm` write decides; while it is a removal, every edit concurrent with it (neither saw the other) is listed as "beaten" with Restore, older or newer than the delete. The delete wins whatever the clocks say, the fields stay in replicated state for the trash, and a plain Restore keeps any offline edit. `e.del` is a manager's final **purge** (only of something in the trash; a purged record is never written again).
+
 ### 4.4 Ephemeral streams versus durable state, and priority lanes
 
 | Class                    | Examples                                                                             | Envelope                                                               | Stored                               | Gated                                        |
@@ -571,6 +581,15 @@ _As built (G1):_
   - an incoming op is applied to `libraryStore` with `origin: 'sync'`, so it never echoes;
   - **"Leave, keep a copy"** detaches: the items stay as a normal folder, and the group record is deleted locally.
   - The bridge is the only place that touches `libraryStore`. The domain stays pure.
+
+**As built (G9, `src/core/domains/library/`).**
+
+- **Kinds:** `lfo`, `lit` as above, but with `rm` (trash flag, §4.3) instead of `purged`, and `b` instead of `_b`. `lac` is owned with id `g`. Comments are a library kind **`lcm`** (owned, `{on, tx ≤ 1000}`, viewers included), because the team's `comment` kind is not registered in a library group. Unknown fields are kept (forward-lenient), so a 2.7.1 blob manifest `m` passes a 2.7.0 phone.
+- **Inline geometry is capped at 16 KiB, not 24 KiB.** The 32 KiB `e.set` cap applies after AEAD and base64url, which leaves about 20.5 KB of plaintext (measured). `fitsInline(body)` (20,000 bytes of JSON) is the real gate; a larger track or area goes as a blob (2.7.1).
+- **Fold rules:** a record's first write names it (an item's type `t` never changes); the shared root is never trashed, moved or purged; purge is a manager's, from the trash; at most 5,000 live items and 1,000 live folders (a purge frees a slot).
+- **Tree shape is repaired in the view, not refused by the fold** (two moves can only be judged together). Cycles go back under the root as above; a folder deeper than 8 sits beside its deepest allowed ancestor; a dangling parent means the root; contents of a purged folder stay in the trash. `checkMove()` lets the UI refuse first. Shared folders stay **flat in the 2.7.0 UI**; the depth-8 support stays in core.
+- **Mass-delete alarm:** a folder soft delete weighs every record it takes with it, so trashing one folder of 500 items is not a way around it.
+- **Sharing rules** (`share.ts`): seed from the team's roster; follow the team (add active team members the folder never had, remove those the team removed). Someone removed from the folder alone is **never re-added**, even while still in the team (owner). Team folders are picked up from `gref`; "leave, keep a copy" detaches the tree; only teams sync in the background.
 
 ### 5.4 Plug-in #3 (sketch, not 2.7.0): "my phones"
 
