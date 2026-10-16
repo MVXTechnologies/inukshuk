@@ -148,17 +148,25 @@ export class TeamService {
 
   // ── Teams ────────────────────────────────────────────────────────────────
 
-  /** Found a team; it becomes the active one (mesh not started: `startMesh`). */
+  /**
+   * Found a team; it becomes the active one (mesh not started: `startMesh`).
+   * `internet` (default on, owner 2026-10-15) writes the team's `net` switch.
+   */
   async createTeam(options: {
     name: string;
     myName: string;
     lifetimeMs: number;
+    internet?: boolean;
   }): Promise<TeamSession> {
     const created = await this.host.create(options);
     const session = await this.activate(created.session.teamId);
     session.replica.addKey(created.key);
     session.setMyName(options.myName);
     session.republishIfNewKey();
+    if (options.internet ?? true) {
+      const err = session.setInternet(true);
+      if (err !== null) addBreadcrumb(`team create: internet switch not written (${err})`);
+    }
     return session;
   }
 

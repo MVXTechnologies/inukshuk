@@ -10,6 +10,7 @@
  *
  * Every write goes replica → disk (`PersistingStore`) → peers, in that order.
  */
+import { GROUP_RECORD_ID, internetOn, NET } from '@core/group/meta';
 import type { PathKind } from '@core/group/path';
 import type { MeshNetworkInfo } from '@core/mesh/hotspot';
 import { addBreadcrumb, reportError } from '@lib/errorReporting';
@@ -1335,6 +1336,24 @@ export class TeamSession {
     const exp = extendedExpiry(view.expiresAt, days, this.deps.now(), view.maxExpiresAt);
     if (exp === null) return 'no-change';
     return this.accepted(this.control('t.extend', { exp })) ? null : 'not-allowed';
+  }
+
+  /** Whether the team syncs over the internet (its `net` switch; absent = off, design §6). */
+  get internetOn(): boolean {
+    return internetOn(this.replica.data(this.deps.now()));
+  }
+
+  /**
+   * An admin turns the internet on or off for the whole team (#705, G7): the
+   * group's `net` record, which every member's phone follows (rooms open only
+   * for groups whose switch is on).
+   */
+  setInternet(on: boolean): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    if (!this.view().isAdmin) return 'not-allowed';
+    if (this.internetOn === on) return 'no-change';
+    return this.writeOk({ k: NET, id: GROUP_RECORD_ID, f: { inet: on ? 1 : 0 } });
   }
 
   /** End the team for everyone (read-only from now on). */

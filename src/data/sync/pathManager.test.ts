@@ -69,7 +69,13 @@ async function pair(w: ReturnType<typeof world>, net = true, bNow?: () => number
   const { rig } = w;
   const a = w.phone();
   const b = w.phone(bNow);
-  await a.createTeam({ name: 'Remote', myName: 'Marc', lifetimeMs: lifetimeMs('14d') });
+  // The switch comes later (below, or by the test), as for a team made before 2.7.0.
+  await a.createTeam({
+    name: 'Remote',
+    myName: 'Marc',
+    lifetimeMs: lifetimeMs('14d'),
+    internet: false,
+  });
   await active(a).startMesh();
   const inv = active(a).createInvite(DEFAULT_INVITE) as CreatedInvite;
   await b.startJoin(parseAnyInvite(webJoinLink(inv.payload))!, 'Julie');
