@@ -161,7 +161,7 @@ export function ChatScreen() {
             {view.name}
           </Text>
           <Text variant="bodySmall" style={{ color: t.inkVariant }}>
-            {view.activeCount} members · end-to-end encrypted
+            {view.activeCount} members
           </Text>
         </View>
       </View>

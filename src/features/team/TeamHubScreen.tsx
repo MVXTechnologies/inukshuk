@@ -4,11 +4,9 @@
  * team's lifetime. Warnings sit on top: Local Network denied (iOS), a key
  * rotation advised or required, the team ended, someone joining right now.
  */
-import { MESH_DEFAULT_PORT, hotspotCandidates, isPrivateIPv4, parseIPv4 } from '@core/mesh/hotspot';
 import { expiryLine, EXTEND_PRESETS } from '@core/teamui/lifetime';
-import { parseHostPort } from '@core/teamui/invites';
 import { reportError } from '@lib/errorReporting';
-import { teamService, selectChatUnread, useTeamStore } from '@state/teamStore';
+import { teamService, selectChatUnread, useTeamStore, type TeamNet } from '@state/teamStore';
 import type { ComponentType } from 'react';
 import type { TeamTask } from '@core/team/tasks';
 import { HeaderAction } from '@ui/components/ScreenHeader';
@@ -17,11 +15,12 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Linking, Pressable, StyleSheet, View } from 'react-native';
-import { Badge, Button, Icon, List, Switch, Text, TextInput } from 'react-native-paper';
+import { Badge, Button, Icon, List, Switch, Text } from 'react-native-paper';
 
 import {
   ActionBanner,
   ChoiceRow,
+  LinkChip,
   MemberAvatar,
   Note,
   ROLE_LABEL,
@@ -36,7 +35,7 @@ import { useTeamMapFocus } from './map/teamMapFocus';
 import { useNavigationStore } from '@state/navigationStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { TeamDrawingsRow } from './draw/TeamDrawingsRow';
-import { memberSyncLine, openPeers, teamSyncLine } from './syncLine';
+import { memberSyncLine, memberSyncShort, openPeers, teamSyncLine } from './syncLine';
 
 const SHARE_INTERVALS = [
   { id: 30, label: '30 s' },
@@ -79,10 +78,12 @@ export function TeamHubScreen() {
   const shares = useTeamStore((s) => s.shares);
   const tasks = useTeamStore((s) => s.tasks);
   const notices = useTeamStore((s) => s.joinNotices);
-  const [address, setAddress] = useState('');
-  const [showDial, setShowDial] = useState(false);
+  const net = useTeamStore((s) => s.net);
+  const netOn = net !== null && net.on && net.capable;
+  const [, setNoticeSeen] = useState(0);
 
   const session = teamService()?.active ?? null;
+  const revoked = session?.revokedNotice ?? null;
 
   if (!loaded || view === null || record === null || session === null) {
     return (
@@ -143,16 +144,11 @@ export function TeamHubScreen() {
       ],
     );
 
-  const dial = (host: string, port: number) => {
-    if (!session.dial(host, port)) Alert.alert('Not connected', 'Team sync is off right now.');
-    setShowDial(false);
-  };
-
   return (
     <TeamScreenFrame title={view.name} testID="team-hub-screen">
       <View style={styles.headerRow}>
         <Text variant="bodyMedium" style={[styles.flex, { color: t.inkVariant }]}>
-          {expiryLine(view.expiresAt, now, view.closed)} · {teamSyncLine(peers, meshRunning)}
+          {expiryLine(view.expiresAt, now, view.closed)} · {hubSyncLine(net, peers, meshRunning)}
         </Text>
         <View>
           <HeaderAction
@@ -252,6 +248,20 @@ export function TeamHubScreen() {
           </Note>
         );
       })}
+      {revoked !== null && view.isAdmin && (
+        <ActionBanner
+          icon="link-variant-off"
+          title={`${revoked.count} invite${revoked.count === 1 ? '' : 's'} stopped working`}
+          body={`${revoked.count === 1 ? 'It was' : 'They were'} made before ${revoked.name} was removed.`}
+          action="New invite"
+          onAction={() => {
+            session.dismissRevokedNotice();
+            setNoticeSeen((n) => n + 1);
+            router.push('/team/invite');
+          }}
+          testID="team-invites-revoked"
+        />
+      )}
       {leavers.map((m) => (
         <ActionBanner
           key={m.id}
@@ -294,11 +304,13 @@ export function TeamHubScreen() {
               Share my position
             </Text>
             <Text variant="bodySmall" style={{ color: t.inkVariant }} testID="team-share-state">
-              {prefs.sharePosition
-                ? prefs.shareOnlyWhileRecording
-                  ? 'On while you record · teammates see where you are'
-                  : 'On while Inukshuk is open · teammates see where you are'
-                : 'Off · nobody in the team sees where you are'}
+              {prefs.sharePosition && net?.provisional === true
+                ? 'On · starts once a second teammate’s phone confirms you'
+                : prefs.sharePosition
+                  ? prefs.shareOnlyWhileRecording
+                    ? 'On while you record · teammates see where you are'
+                    : 'On while Inukshuk is open · teammates see where you are'
+                  : 'Off · nobody in the team sees where you are'}
             </Text>
           </View>
           <Switch
@@ -355,23 +367,41 @@ export function TeamHubScreen() {
               <Text variant="titleSmall" style={{ color: t.ink }} numberOfLines={1}>
                 {m.isMe ? `${m.name} (you)` : m.name}
               </Text>
-              <Text variant="bodySmall" style={{ color: t.inkVariant }} numberOfLines={1}>
-                {!m.active
-                  ? 'Removed'
-                  : m.isMe
-                    ? [
-                        m.groups.map((g) => (g.lead ? `${g.name} lead` : g.name)).join(', '),
-                        'this phone',
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')
-                    : [
-                        m.groups.map((g) => (g.lead ? `${g.name} lead` : g.name)).join(', '),
-                        memberSyncLine(m.id, peers, m.lastSeenAt, now),
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-              </Text>
+              {m.active && !m.isMe && netOn && net?.links.get(m.id) !== undefined ? (
+                <View style={styles.linkRow}>
+                  <LinkChip link={net.links.get(m.id)!} />
+                  <Text
+                    variant="bodySmall"
+                    style={[styles.shrink, { color: t.inkVariant }]}
+                    numberOfLines={1}
+                  >
+                    {[
+                      m.groups.map((g) => (g.lead ? `${g.name} lead` : g.name)).join(', '),
+                      memberSyncShort(m.id, peers, m.lastSeenAt, now),
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
+                </View>
+              ) : (
+                <Text variant="bodySmall" style={{ color: t.inkVariant }} numberOfLines={1}>
+                  {!m.active
+                    ? 'Removed'
+                    : m.isMe
+                      ? [
+                          m.groups.map((g) => (g.lead ? `${g.name} lead` : g.name)).join(', '),
+                          'this phone',
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')
+                      : [
+                          m.groups.map((g) => (g.lead ? `${g.name} lead` : g.name)).join(', '),
+                          memberSyncLine(m.id, peers, m.lastSeenAt, now),
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                </Text>
+              )}
             </View>
             {m.active && <RoleChip role={m.role} left={m.left} />}
           </Pressable>
@@ -414,63 +444,18 @@ export function TeamHubScreen() {
       />
       <TeamDrawingsRow />
 
-      <SectionLabel>Sync</SectionLabel>
-      <Text variant="bodySmall" style={{ color: t.inkVariant }}>
-        Every phone keeps a full copy and passes on what others missed. Phones find each other on
-        the same Wi-Fi or a phone’s hotspot — no cell signal needed.
-      </Text>
-      {!showDial ? (
-        <Button
-          mode="text"
-          icon="lan-connect"
-          onPress={() => setShowDial(true)}
-          style={styles.left}
-          testID="team-dial-open"
-          disabled={!meshRunning}
-        >
-          Connect by address (hotspot)
-        </Button>
-      ) : (
-        <View style={[styles.card, { backgroundColor: t.surfaceVariant }]}>
-          <Text variant="bodySmall" style={{ color: t.inkVariant }}>
-            On a hotspot that hides phones from each other, type the address shown on the other
-            phone’s team screen, or try the hotspot itself:
-          </Text>
-          <View style={styles.chips}>
-            {hotspotCandidatesSafe().map((c) => (
-              <Button key={c.host} mode="outlined" compact onPress={() => dial(c.host, c.port)}>
-                {c.host}
-              </Button>
-            ))}
-          </View>
-          <TextInput
-            returnKeyType="done"
-            mode="outlined"
-            dense
-            label="Address (e.g. 172.20.10.1)"
-            value={address}
-            onChangeText={setAddress}
-            keyboardType="numbers-and-punctuation"
-            autoCapitalize="none"
-            testID="team-dial-address"
-          />
-          <Button
-            mode="contained"
-            onPress={() => {
-              const hp = parseHostPort(address, MESH_DEFAULT_PORT);
-              if (hp === null) Alert.alert('Check the address', 'Four numbers like 192.168.1.20');
-              else dial(hp.host, hp.port);
-            }}
-          >
-            Connect
-          </Button>
-        </View>
-      )}
-      {meshRunning && mesh?.port != null && (
-        <Text variant="bodySmall" style={{ color: t.inkMuted }} testID="team-my-address">
-          {myAddressLine(mesh.port)}
-        </Text>
-      )}
+      <List.Item
+        title="Connection"
+        description={connectionLine(net)}
+        descriptionNumberOfLines={2}
+        left={(p) => (
+          <List.Icon {...p} icon={net?.on === true ? 'cloud-check-outline' : 'access-point'} />
+        )}
+        right={(p) => <List.Icon {...p} icon="chevron-right" />}
+        onPress={() => router.push('/team/connection' as never)}
+        style={styles.listItem}
+        testID="team-connection-row"
+      />
 
       <SectionLabel>Team</SectionLabel>
       {view.isAdmin && !view.closed && (
@@ -500,29 +485,30 @@ export function TeamHubScreen() {
           End team for everyone
         </Button>
       )}
-      <Note icon="shield-lock-outline">
-        Nothing goes through an Inukshuk server. Messages, positions and shares are end-to-end
-        encrypted; only members can read them. Someone removed keeps what they already received.
-      </Note>
       {SimulatedTeammates && <SimulatedTeammates />}
     </TeamScreenFrame>
   );
 }
 
-/** The hotspot's likely addresses (gateway, each private subnet's .1), best first. */
-function hotspotCandidatesSafe(): { host: string; port: number }[] {
-  const info = teamService()?.networkInfo() ?? null;
-  return info ? hotspotCandidates(info).slice(0, 3) : [];
+/** Manage team's Connection row (#705). */
+export function connectionLine(net: TeamNet | null): string {
+  if (net === null || !net.on) return 'Nearby only · the internet is off';
+  const relay = useSettingsStore.getState().teamAlwaysRelay;
+  return relay ? 'Internet + nearby · relay only on this phone' : 'Internet + nearby';
 }
 
-/** "This phone: 192.168.1.20" — what a teammate types when discovery is blocked. */
-function myAddressLine(port: number): string {
-  const info = teamService()?.networkInfo() ?? null;
-  const addr = info?.interfaces.find((i) => {
-    const v = parseIPv4(i.address);
-    return v !== null && isPrivateIPv4(v);
-  })?.address;
-  return addr ? `This phone: ${addr}${port === MESH_DEFAULT_PORT ? '' : `:${port}`}` : '';
+/** The header's sync words, with the team's internet (#705). */
+export function hubSyncLine(
+  net: TeamNet | null,
+  peers: Parameters<typeof teamSyncLine>[0],
+  meshRunning: boolean,
+): string {
+  if (net === null || !net.on || !net.capable) return teamSyncLine(peers, meshRunning);
+  const reached = [...net.links.values()].filter(
+    (l) => l === 'direct' || l === 'relay' || l === 'nearby',
+  ).length;
+  if (reached === 0) return net.room === 'failing' ? 'no internet' : 'looking for teammates';
+  return `internet + nearby · ${reached} phone${reached === 1 ? '' : 's'}`;
 }
 
 const styles = StyleSheet.create({
@@ -537,6 +523,8 @@ const styles = StyleSheet.create({
   member: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 8 },
   faded: { opacity: 0.6 },
   listItem: { paddingHorizontal: 0, marginHorizontal: -8 },
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
+  shrink: { flexShrink: 1 },
   left: { alignSelf: 'flex-start' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
   extendRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' },

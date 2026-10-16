@@ -19,8 +19,7 @@ interface OptionProps {
 }
 
 /** The privacy line under the team options, wherever they show. */
-export const TEAM_PRIVACY_NOTE =
-  'Your position is shared only while you turn sharing on. A team lives only on its members’ phones, end-to-end encrypted.';
+export const TEAM_PRIVACY_NOTE = 'Your position is shared only while you turn sharing on.';
 
 function useGo(onLeave: (() => void) | undefined): (href: Href) => void {
   const router = useRouter();

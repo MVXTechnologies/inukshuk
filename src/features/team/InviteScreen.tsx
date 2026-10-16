@@ -45,6 +45,8 @@ export function InviteScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const view = useTeamStore((s) => s.view);
+  // Over the internet (#705), the invite works wherever they are.
+  const anywhere = useTeamStore((s) => s.net?.on === true && s.net.capable);
   const [choice, setChoice] = useState<InviteChoice>(DEFAULT_INVITE);
   const [invite, setInvite] = useState<CreatedInvite | null>(null);
   const set = (patch: Partial<InviteChoice>) => setChoice((c) => ({ ...c, ...patch }));
@@ -113,8 +115,12 @@ export function InviteScreen() {
               </Text>
               <Text variant="bodySmall" style={{ color: t.inkVariant }}>
                 {choice.approve === 'admin'
-                  ? 'They join only next to an admin’s phone'
-                  : 'Any member’s phone nearby can let them in'}
+                  ? anywhere
+                    ? 'Only an admin’s phone can let them in'
+                    : 'They join only next to an admin’s phone'
+                  : anywhere
+                    ? 'Any member’s phone can let them in'
+                    : 'Any member’s phone nearby can let them in'}
               </Text>
             </View>
             <Switch
@@ -134,8 +140,9 @@ export function InviteScreen() {
       ) : (
         <>
           <Text variant="bodyMedium" style={[styles.center, { color: t.inkVariant }]}>
-            Ask them to scan this with Inukshuk (Settings › Extensions › Team mode › Join a team),
-            on the same Wi-Fi or hotspot as you.
+            {anywhere
+              ? 'Ask them to scan this with Inukshuk, or send them the link. They can be anywhere.'
+              : 'Ask them to scan this with Inukshuk (Settings › Extensions › Team mode › Join a team), on the same Wi-Fi or hotspot as you.'}
           </Text>
           <View style={styles.qr}>
             <QrCode
@@ -152,7 +159,9 @@ export function InviteScreen() {
             {inviteSummary(choice)}
           </Text>
           <Text variant="bodySmall" style={[styles.center, { color: t.inkVariant }]}>
-            When they join, both screens show the same six digits: compare them out loud.
+            {anywhere
+              ? 'When they join, both screens show the same six digits: compare them, in person or on a call.'
+              : 'When they join, both screens show the same six digits: compare them out loud.'}
           </Text>
           <View style={styles.buttons}>
             <Button

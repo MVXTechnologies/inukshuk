@@ -7,7 +7,7 @@
  */
 import { hotspotCandidates, MESH_DEFAULT_PORT } from '@core/mesh/hotspot';
 import type { InviteToken } from '@core/team/invite';
-import { parseAnyInvite, parseHostPort } from '@core/teamui/invites';
+import { inviteNeedsUpdate, parseAnyInvite, parseHostPort } from '@core/teamui/invites';
 import { cleanName } from '@core/teamui/system';
 import type { ComponentType } from 'react';
 import { JOIN_SEARCH_HINT_MS } from '@data/team/teamJoin';
@@ -20,8 +20,8 @@ import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, StyleSheet, View } from 'react-native';
-import { Button, HelperText, Text, TextInput } from 'react-native-paper';
+import { Alert, Linking, Platform, StyleSheet, View } from 'react-native';
+import { Button, HelperText, Icon, Text, TextInput } from 'react-native-paper';
 
 import { ActionBanner, Note, SectionLabel, TeamScreenFrame, useNow } from './components';
 import { JOIN_FAILURE } from './messages';
@@ -53,6 +53,9 @@ export function JoinScreen() {
     [params.t],
   );
   const token = picked === undefined ? fromLink : picked;
+  const [newer, setNewer] = useState(() =>
+    params.t !== undefined ? inviteNeedsUpdate(params.t) : false,
+  );
   const [paste, setPaste] = useState('');
   const [scanning, setScanning] = useState(false);
   const [myName, setMyName] = useState(lastName);
@@ -92,8 +95,8 @@ export function JoinScreen() {
     await service.cancelJoin();
     useTeamStore.getState().refresh();
   };
-  const confirm = async () => {
-    const r = await service.confirmJoin();
+  const confirm = async (compared = true) => {
+    const r = await service.confirmJoin(compared);
     useTeamStore.getState().refresh();
     if (typeof r === 'string') Alert.alert('Not joined', 'The team did not admit this phone.');
     else {
@@ -115,7 +118,9 @@ export function JoinScreen() {
       return (
         <TeamScreenFrame title="Check the code" testID="team-join-verify">
           <Text variant="bodyLarge" style={[styles.center, { color: t.ink }]}>
-            You’re in. Ask the person whose phone let you in to read their code.
+            {join.via === 'internet'
+              ? 'You’re in. Ask the person whose phone let you in to read their code, in person or on a call.'
+              : 'You’re in. Ask the person whose phone let you in to read their code.'}
           </Text>
           <Text
             style={[styles.code, { color: t.ink }]}
@@ -138,6 +143,12 @@ export function JoinScreen() {
           <Button mode="outlined" onPress={mismatch} testID="team-join-mismatch">
             They don’t match
           </Button>
+          {join.via === 'internet' && (
+            // R-INV-4: in, but provisional until a second teammate's phone confirms.
+            <Button mode="text" onPress={() => void confirm(false)} testID="team-join-later">
+              Can’t compare now
+            </Button>
+          )}
         </TeamScreenFrame>
       );
     }
@@ -166,17 +177,28 @@ export function JoinScreen() {
     })();
     return (
       <TeamScreenFrame title="Joining…" testID="team-join-searching">
-        <View style={styles.spinner}>
-          <ActivityIndicator size="large" color={t.ink} />
-          <Text variant="bodyLarge" style={[styles.center, { color: t.ink }]}>
-            {join.phase === 'connecting'
-              ? 'Connecting to the team…'
-              : 'Looking for a teammate’s phone on this Wi-Fi or hotspot…'}
-          </Text>
-          <Text variant="bodySmall" style={[styles.center, { color: t.inkVariant }]}>
-            A teammate’s Inukshuk must be open nearby, on the same network.
-          </Text>
+        <View style={styles.steps}>
+          <Step state="done" title="Invite checked" />
+          <Step
+            state={join.phase === 'connecting' ? 'done' : 'busy'}
+            title={join.phase === 'connecting' ? 'Team found' : 'Looking for the team'}
+            line={
+              join.phase === 'connecting'
+                ? join.via === 'internet'
+                  ? 'Over the internet'
+                  : 'Nearby'
+                : join.internet
+                  ? 'Over the internet and on this Wi-Fi'
+                  : 'On this Wi-Fi or hotspot'
+            }
+            testID="team-join-step-found"
+          />
+          <Step state={join.phase === 'connecting' ? 'busy' : 'todo'} title="Letting you in" />
+          <Step state="todo" title="Catching up" line="Trails, pins and messages" />
         </View>
+        <Text variant="bodySmall" style={{ color: t.inkVariant }}>
+          A teammate’s Inukshuk must be open, nearby or online.
+        </Text>
         {(slow || join.hint !== null) && (
           <>
             <SectionLabel>On a hotspot?</SectionLabel>
@@ -288,10 +310,33 @@ export function JoinScreen() {
   // ── Step 1: get the invite ────────────────────────────────────────────────
   const usePaste = () => {
     const parsed = parseAnyInvite(paste);
-    if (parsed === undefined)
-      Alert.alert('Not an invite', 'Paste the whole link or code you received.');
-    else setToken(parsed);
+    if (parsed !== undefined) setToken(parsed);
+    else if (inviteNeedsUpdate(paste)) setNewer(true);
+    else Alert.alert('Not an invite', 'Paste the whole link or code you received.');
   };
+  if (newer) {
+    return (
+      <TeamScreenFrame title="Join a team" testID="team-join-newer">
+        <ActionBanner
+          icon="cellphone-arrow-down"
+          title="This invite needs a newer Inukshuk"
+          body="Update the app, then open the invite again."
+          {...(Platform.OS === 'android'
+            ? {
+                action: 'Update',
+                onAction: () =>
+                  void Linking.openURL(`market://details?id=${ANDROID_PACKAGE}`).catch(
+                    () => undefined,
+                  ),
+              }
+            : {})}
+        />
+        <Button mode="outlined" onPress={() => setNewer(false)} testID="team-join-newer-back">
+          Back
+        </Button>
+      </TeamScreenFrame>
+    );
+  }
   return (
     <TeamScreenFrame title="Join a team" testID="team-join-screen">
       {scanning && Scanner !== null ? (
@@ -345,7 +390,50 @@ export function JoinScreen() {
   );
 }
 
+/** The Android package, for the store link of "needs a newer Inukshuk". */
+const ANDROID_PACKAGE = 'com.inukshuk.app';
+
+/** One step of an internet join (G7): done, in progress, or to come. */
+function Step({
+  state,
+  title,
+  line,
+  testID,
+}: {
+  state: 'done' | 'busy' | 'todo';
+  title: string;
+  line?: string;
+  testID?: string;
+}) {
+  const t = useSchemeTokens();
+  return (
+    <View style={styles.step} testID={testID} accessibilityState={{ busy: state === 'busy' }}>
+      <Icon
+        source={
+          state === 'done' ? 'check-circle' : state === 'busy' ? 'progress-clock' : 'circle-outline'
+        }
+        size={22}
+        color={state === 'done' ? t.status.gnssFixed : t.inkMuted}
+      />
+      <View style={styles.flex}>
+        <Text variant="bodyLarge" style={[styles.stepTitle, { color: t.ink }]}>
+          {title}
+        </Text>
+        {line !== undefined && (
+          <Text variant="bodySmall" style={{ color: t.inkVariant }}>
+            {line}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  flex: { flex: 1, minWidth: 0 },
+  steps: { gap: 2, paddingVertical: space.sm },
+  step: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 48 },
+  stepTitle: { fontWeight: '600' },
   center: { textAlign: 'center' },
   code: {
     fontSize: 48,

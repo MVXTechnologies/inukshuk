@@ -40,7 +40,25 @@ import { useActiveAlerts } from './AlertBands';
 import { GatherPanel } from './GatherPanel';
 import { BandAvatar, FaceStack, myPosition } from './parts';
 import { usePendingAlert } from './pendingAlert';
-import { useTeamBarSummary } from './TeamStatusBar';
+import { syncGlyph, useTeamBarSummary } from './TeamStatusBar';
+import { LinkChip } from '../components';
+import type { SyncState } from '@core/teamui/teamBar';
+
+/** The panel header's connection chip (#705): "Internet + nearby", "No internet · nearby"… */
+export function netLine(sync: SyncState, nearby: number, status: string): string {
+  switch (sync) {
+    case 'net':
+      return nearby > 0 ? 'Internet + nearby' : 'Internet';
+    case 'noNet':
+      return 'No internet · nearby';
+    case 'lan':
+      return 'Nearby';
+    case 'look':
+      return 'Looking for teammates';
+    default:
+      return status;
+  }
+}
 
 export function TeamPanel({
   top,
@@ -66,6 +84,10 @@ export function TeamPanel({
   const peers = useTeamStore((s) => s.peers);
   const meshRunning = useTeamStore((s) => s.meshRunning);
   const statuses = useTeamStore((s) => s.statuses);
+  const net = useTeamStore((s) => s.net);
+  const netOn = net !== null && net.on && net.capable;
+  const nearbyCount =
+    net === null ? 0 : [...net.links.values()].filter((l) => l === 'nearby').length;
   const unread = useTeamStore(selectChatUnread);
   const gather = useActiveAlerts().find((a) => a.kind === 'gather');
   const me = view?.me;
@@ -168,22 +190,44 @@ export function TeamPanel({
             <Text style={[styles.title, { color: t.ink }]} numberOfLines={1}>
               {summary.name}
             </Text>
-            <View style={styles.syncRow}>
-              <Icon
-                source={summary.sync === 'off' ? 'access-point-off' : 'access-point'}
-                size={15}
-                color={summary.sync === 'lan' ? t.status.gnssFixed : t.inkMuted}
-              />
-              <Text style={[styles.sync, { color: t.inkMuted }]} numberOfLines={1}>
-                {summary.sync === 'lan'
-                  ? `Nearby · ${teamSyncLine(peers, meshRunning)}`
-                  : summary.status === 'Only you'
-                    ? `Only you · ${teamSyncLine(peers, meshRunning)}`
-                    : summary.sync === 'off' || summary.sync === 'pending'
-                      ? summary.status
-                      : teamSyncLine(peers, meshRunning)}
-              </Text>
-            </View>
+            {netOn ? (
+              // The team's internet (#705): a chip into the Connection sheet.
+              <Pressable
+                onPress={() => openSheet({ kind: 'connection' })}
+                style={[styles.syncRow, styles.syncChip, { backgroundColor: t.surfaceVariant }]}
+                accessibilityRole="button"
+                accessibilityLabel={`${netLine(summary.sync, nearbyCount, summary.status)}. Connection details`}
+                hitSlop={6}
+                testID="team-panel-connection"
+              >
+                <Icon
+                  source={syncGlyph(summary.sync, true).icon}
+                  size={15}
+                  color={summary.sync === 'net' ? t.status.gnssFixed : t.inkMuted}
+                />
+                <Text style={[styles.sync, { color: t.inkMuted }]} numberOfLines={1}>
+                  {netLine(summary.sync, nearbyCount, summary.status)}
+                </Text>
+                <Icon source="chevron-right" size={15} color={t.inkMuted} />
+              </Pressable>
+            ) : (
+              <View style={styles.syncRow}>
+                <Icon
+                  source={summary.sync === 'off' ? 'access-point-off' : 'access-point'}
+                  size={15}
+                  color={summary.sync === 'lan' ? t.status.gnssFixed : t.inkMuted}
+                />
+                <Text style={[styles.sync, { color: t.inkMuted }]} numberOfLines={1}>
+                  {summary.sync === 'lan'
+                    ? `Nearby · ${teamSyncLine(peers, meshRunning)}`
+                    : summary.status === 'Only you'
+                      ? `Only you · ${teamSyncLine(peers, meshRunning)}`
+                      : summary.sync === 'off' || summary.sync === 'pending'
+                        ? summary.status
+                        : teamSyncLine(peers, meshRunning)}
+                </Text>
+              </View>
+            )}
           </View>
           <Pressable
             onPress={close}
@@ -240,6 +284,7 @@ export function TeamPanel({
               </View>
               {rows.map((m) => {
                 const status = statuses.get(m.id);
+                const link = netOn ? net?.links.get(m.id) : undefined;
                 return (
                   <Pressable
                     key={m.id}
@@ -299,15 +344,33 @@ export function TeamPanel({
                           </View>
                         )}
                       </View>
-                      <Text
-                        style={[
-                          styles.line,
-                          { color: m.band === 'fresh' ? t.inkMuted : t.status.pausedInk },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {m.line}
-                      </Text>
+                      {link !== undefined ? (
+                        <View style={styles.linkRow}>
+                          <LinkChip link={link} />
+                          {link !== 'out' && (
+                            <Text
+                              style={[
+                                styles.line,
+                                styles.flexShrink,
+                                { color: m.band === 'fresh' ? t.inkMuted : t.status.pausedInk },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {m.short}
+                            </Text>
+                          )}
+                        </View>
+                      ) : (
+                        <Text
+                          style={[
+                            styles.line,
+                            { color: m.band === 'fresh' ? t.inkMuted : t.status.pausedInk },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {m.line}
+                        </Text>
+                      )}
                     </View>
                     {m.distanceM !== null && (
                       <View style={[styles.right, m.band !== 'fresh' && styles.dim]}>
@@ -461,6 +524,17 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 18, lineHeight: 22, fontWeight: '800' },
   syncRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  syncChip: {
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    paddingLeft: 5,
+    paddingRight: 2,
+    paddingVertical: 1,
+    marginTop: 1,
+    maxWidth: '100%',
+  },
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
+  flexShrink: { flexShrink: 1 },
   sync: { fontSize: 12.5 },
   x: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   acts: {
