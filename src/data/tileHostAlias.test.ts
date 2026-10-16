@@ -12,10 +12,18 @@ const addUrlTransform = TransformRequestManager.addUrlTransform as jest.Mock;
 
 beforeEach(() => addUrlTransform.mockClear());
 
-it('installs nothing while the Worker still lives on the template host', () => {
-  expect(TILE_HOST).toBe(TILE_KEY_HOST);
-  expect(installTileHostAlias()).toBe(false);
+it('installs nothing while the Worker lives on the template host', () => {
+  expect(installTileHostAlias(TILE_KEY_HOST, TILE_KEY_HOST)).toBe(false);
   expect(addUrlTransform).not.toHaveBeenCalled();
+});
+
+it('sends the shipped templates to the moved Worker (#731)', () => {
+  expect(TILE_HOST).not.toBe(TILE_KEY_HOST);
+  expect(installTileHostAlias()).toBe(true);
+  const alias = addUrlTransform.mock.calls[0]?.[0] as { find: string; replace: string };
+  expect(`${TILE_KEY_HOST}/basemap/1/2/3.mvt`.replace(new RegExp(alias.find), alias.replace)).toBe(
+    `${TILE_HOST}/basemap/1/2/3.mvt`,
+  );
 });
 
 it('rewrites the template host to the new one once the Worker moves', () => {

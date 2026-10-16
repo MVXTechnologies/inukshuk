@@ -54,8 +54,12 @@ const extensions = () => ({
 
 it('pins the tile host: the template (cache-key) host and where requests go', () => {
   expect(TILE_KEY_HOST).toBe('https://inukshuk-tiles.marcandre-vigneault-96.workers.dev');
-  // Moving the Worker changes THIS one (and only this one).
-  expect(TILE_HOST).toBe('https://inukshuk-tiles.marcandre-vigneault-96.workers.dev');
+  // Moving the Worker changes THIS one (and only this one). #731 moved it from
+  // the personal account's workers.dev host to the company Cloudflare account
+  // on its own domain. TILE_KEY_HOST above stays the old host on purpose: it
+  // is the offline-pack cache key, so every template below is unchanged and
+  // no downloaded region needs a re-download.
+  expect(TILE_HOST).toBe('https://tiles.mvxtechnologies.com');
 });
 
 it('pins every default template', () => {

@@ -7,7 +7,7 @@ vector tiles in the **Protomaps v4 schema** from our own host. Why self-host, an
 ```
 Protomaps daily planet ──(nas/refresh.sh: extract our regions)──▶ basemap.pmtiles
                                                                         │ upload
-phones ──▶ inukshuk-tiles.…workers.dev (worker/, edge-cached) ──▶ R2 bucket inukshuk-tiles
+phones ──▶ tiles.mvxtechnologies.com (worker/, edge-cached) ──▶ R2 bucket inukshuk-tiles
 ```
 
 | Path                               | What                                                             |
@@ -30,16 +30,84 @@ the rest the same afternoon (~140 GB in R2). One extract of a large area needs m
 NAS has (its directory alone was OOM-killed), so the Worker routes each tile to the piece whose
 bbox touches it; pieces never overlap.
 
-## Live state (2026-09-27)
+## Live state (2026-10-16): two accounts during the move (#731)
 
-- Worker `inukshuk-tiles` deployed on the free **workers.dev** host (account
-  `6da1749801bb30ce789cc1243b5b658f`), bound to R2 bucket `inukshuk-tiles`.
-- `basemap.pmtiles` = a **Québec City region extract** (−73.0…−69.5, 46.0…48.6; 180 MB),
-  uploaded from a Mac with `wrangler r2 object put` (limit ~300 MB). The full Canada + US +
-  Europe archive needs `nas/refresh.sh` (S3 keys, multipart upload).
-- Atkinson glyphs uploaded (10 ranges × Regular/Bold/Italic).
-- Custom domain `tiles.mvxtechnologies.com` waits for the zone to move from Namecheap DNS to
-  Cloudflare; the app's default host is `TILE_HOST` in `src/data/basemapTiles.ts`.
+| Host                                                        | Account                                      | Bucket `inukshuk-tiles`           | Who uses it                                  |
+| ----------------------------------------------------------- | -------------------------------------------- | --------------------------------- | -------------------------------------------- |
+| `https://tiles.mvxtechnologies.com` (Custom Domain)         | company (MVX), `b9307a7d…3680`, Workers Paid | new; filled from the NAS (below)  | the app from the release that ships #731     |
+| `https://inukshuk-tiles.marcandre-vigneault-96.workers.dev` | personal (old), `6da17498…658f`              | ~140 GB, frozen (no more uploads) | older installs, until it is retired (~3 mo.) |
+
+- `worker/wrangler.toml` pins the company `account_id` and the Custom Domain route; a deploy from
+  a machine logged into another account fails instead of landing there. Wrangler created the
+  `tiles` DNS record and certificate itself. There is no workers.dev address on this account.
+- `TILE_KEY_HOST` (`src/data/basemapTiles.ts`) stays the OLD host forever: it is the offline-pack
+  cache key. `TILE_HOST` is the new one; MapLibre's requests are rewritten to it after the offline
+  lookup (`docs/design/tile-urls.md`), so no downloaded region needs a re-download.
+- NAS uploads (`upload.py`, `republish.sh`, `dem.sh`) default to the new host; `TILE_HOST=…`
+  overrides. The old bucket no longer gets the monthly refresh: old installs keep the Oct-2026
+  data until that Worker is retired.
+
+### Moving to the company account (#731) — owner runbook
+
+Done by an agent (2026-10-16): bucket `inukshuk-tiles` created on the company account, the Worker
+from `main` deployed to `tiles.mvxtechnologies.com` (version `9a80b584`), Atkinson glyphs copied
+(30 ranges, byte-identical to the old host), lifecycle rule `donor-verify/` → expire after 1 day
+added. Without data the Worker answers the base map with
+`502 tile error` (no `basemap.index.json` yet) and serves `/dem` from AWS, `/search` and
+`/contours` normally.
+
+1. **Secrets on the new Worker** (Mac, in `infra/tiles/worker`; the values never appear on
+   screen or in chat):
+   ```sh
+   # The NAS upload token, piped straight from its file (reuses the existing token):
+   ssh nas 'cat ~/inukshuk-tiles/.upload-token' | npx wrangler secret put UPLOAD_TOKEN
+   npx wrangler secret put STRAVA_CLIENT_SECRET       # Strava → Settings → My API Application
+   npx wrangler secret put ERROR_REPORT_GITHUB_TOKEN  # fine-grained PAT, Issues R/W on this repo
+   npx wrangler secret put RESEND_API_KEY             # resend.com → API Keys
+   npx wrangler secret put DONOR_VERIFY_SALT          # any long random string (pending codes live 15 min)
+   ```
+   `wrangler secret put` prompts with hidden input (or reads a pipe). Check:
+   `npx wrangler secret list` names all five. Until each is set its route answers 404
+   (`/_upload`, `/strava/*`, `/error-report`, `/donor-verify/*`).
+2. **Refill the bucket from the NAS** — nothing is rebuilt; everything the NAS has on disk goes
+   up through the Worker's `/_upload` endpoint (no R2 S3 keys needed):
+   ```sh
+   tar -C infra/tiles -cf - nas | ssh nas 'tar -C ~/inukshuk-tiles/infra -xf -'   # scp is broken there
+   ssh nas 'nohup ~/inukshuk-tiles/infra/nas/republish.sh small   > ~/inukshuk-tiles/work/republish-small.log 2>&1 &'
+   # check the small group landed (minutes), then the base map (hours):
+   ssh nas 'nohup ~/inukshuk-tiles/infra/nas/republish.sh basemap > ~/inukshuk-tiles/work/republish-basemap.log 2>&1 &'
+   ```
+   `small` = Convert grid packs (~0.4 GB), trails (~51 MB), tides, geodetic (~0.9 GB), peaks,
+   parks, and climbing data if built (~70 MB); `basemap` = the 24 pieces (**139 GB**) then
+   `basemap.index.json`. At the ~30 MB/s measured on 2026-09-28 that is **~1.5 h** for the base
+   map (up to ~4 h if the uplink is slower). Interrupted? Run the same command again: finished
+   objects are skipped (`work/.republish/`), a half-sent one resumes part by part. Progress:
+   `ssh nas tail -f ~/inukshuk-tiles/work/.republish/tiles.mvxtechnologies.com/current.log`.
+3. **DEM** (#725) goes straight to the new bucket: the "Precise elevation" runbook below, unchanged
+   (`dem.sh` now defaults to the new host).
+4. **Check** the new host (the curls under _Check it_, which use it) and compare a few tiles byte
+   for byte with the old host.
+5. **Resend**: the records imported into the Cloudflare zone include none of Resend's
+   (`resend._domainkey`, `send.` MX/TXT). Resend → Domains → `mvxtechnologies.com` must say
+   _Verified_; if not, add the records it lists in Cloudflare → DNS, or the code emails fail.
+6. **Ship the app change** (`TILE_HOST`) only after 2–4 pass, then point `ERROR_REPORT_ENDPOINT`
+   (EAS env + repo variable, `docs/DEPLOYMENT.md`) at `https://tiles.mvxtechnologies.com/error-report`.
+7. **Retire the old Worker** after ~3 months (old installs then lose the base map unless updated).
+
+Not on the NAS, so step 2 does not bring them: generated contours (regenerated on demand, cached
+in the new bucket), the donor records (`donors/pending/*`, `donor-verify/*`) and anything else
+written by the old Worker. If those matter, copy the old bucket instead (or as well):
+
+**Alternative: Cloudflare Super Slurper** (dashboard on the company account → R2 → Data Migration
+→ Migrate files). Source: _S3-compatible_, endpoint
+`https://6da1749801bb30ce789cc1243b5b658f.r2.cloudflarestorage.com`, bucket `inukshuk-tiles`,
+with an R2 token **from the old account** (old dashboard → R2 → Manage R2 API Tokens → Create →
+_Object Read only_, bucket `inukshuk-tiles`). Destination: bucket `inukshuk-tiles` with a
+company-account token (R2 → Manage R2 API Tokens → Create → _Object Read & Write_, bucket
+`inukshuk-tiles`). Keys are pasted only into that dashboard form. It copies every object (~140 GB,
+including donors and contours) on Cloudflare's side, with no NAS uplink involved; expect hours, not
+days. Run it before `republish.sh` (or instead of its `basemap` group) so the NAS does not upload
+what the copy brings anyway, then delete both tokens.
 
 ## One-time setup (owner)
 
@@ -53,7 +121,6 @@ bbox touches it; pieces never overlap.
    ```sh
    npm ci   # exactly the committed package-lock.json, never a fresh resolve
    npx wrangler login
-   # uncomment the `routes` line in wrangler.toml once the zone is on Cloudflare
    npx wrangler deploy
    ```
 6. **First upload** from the NAS (Docker, ~80 GB free):
@@ -570,12 +637,12 @@ prettier), bump `CONTOUR_VERSION`, ship the app credits with it.
 ## Check it
 
 ```sh
-curl -sI https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/basemap/14/4950/5775.mvt   # 200, gzip
-curl -s  https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/basemap.json | head -c 200
-curl -sI "https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/fonts/Atkinson%20Hyperlegible%20Next%20Regular/0-255.pbf"
-curl -sI https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/peaks/7/66/45.mvt        # 200, gzip (the Alps)
-curl -s  https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/peaks.json | head -c 300
-curl -sI "https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/contours/13/4270/2915.mvt?v=2"  # 200, gzip; X-Contour-Source
+curl -sI https://tiles.mvxtechnologies.com/basemap/14/4950/5775.mvt   # 200, gzip
+curl -s  https://tiles.mvxtechnologies.com/basemap.json | head -c 200
+curl -sI "https://tiles.mvxtechnologies.com/fonts/Atkinson%20Hyperlegible%20Next%20Regular/0-255.pbf"
+curl -sI https://tiles.mvxtechnologies.com/peaks/7/66/45.mvt        # 200, gzip (the Alps)
+curl -s  https://tiles.mvxtechnologies.com/peaks.json | head -c 300
+curl -sI "https://tiles.mvxtechnologies.com/contours/13/4270/2915.mvt?v=2"  # 200, gzip; X-Contour-Source
 ```
 
 Then in the app: `VECTOR_BASEMAP_ENABLED = true` (`src/core/features/flags.ts`) and, once the

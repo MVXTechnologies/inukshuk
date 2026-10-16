@@ -248,7 +248,7 @@ the report, 429/5xx = the app retries with backoff, 404 = not configured.
 
    ```sh
    eas env:create --name ERROR_REPORT_ENDPOINT \
-     --value https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/error-report \
+     --value https://tiles.mvxtechnologies.com/error-report \
      --environment production --visibility plaintext
    ```
 
@@ -407,7 +407,7 @@ America is tens of GB) and set `PHOTON_URL` to it.
 ```sh
 cd infra/tiles/worker
 npx wrangler deploy          # ships GET /search with the [vars] above
-curl -s "https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/search?q=Katahdin&lang=en&alt=fr&limit=3" | head -c 400
+curl -s "https://tiles.mvxtechnologies.com/search?q=Katahdin&lang=en&alt=fr&limit=3" | head -c 400
 ```
 
 Until it is deployed the app shows "Search is unavailable right now" and still

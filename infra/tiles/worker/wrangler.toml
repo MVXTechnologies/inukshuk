@@ -3,8 +3,18 @@ name = "inukshuk-tiles"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
 
-# Bind to tiles.mvxtechnologies.com once the zone is on Cloudflare:
-# routes = [{ pattern = "tiles.mvxtechnologies.com", custom_domain = true }]
+# The company (MVX Technologies) Cloudflare account, which holds the
+# mvxtechnologies.com zone (#731). Pinned so a `wrangler deploy` from a machine
+# logged into another account fails instead of deploying there; override with
+# CLOUDFLARE_ACCOUNT_ID for a test account. The old personal-account Worker
+# (inukshuk-tiles.marcandre-vigneault-96.workers.dev) keeps serving old
+# installs until it is retired; it is no longer deployed from this file.
+account_id = "b9307a7d02bfa840fbd6fa20502b3680"
+
+# Custom Domain: wrangler creates the proxied DNS record and the certificate
+# itself. With a route set, wrangler turns the workers.dev address off: this
+# domain is the only host.
+routes = [{ pattern = "tiles.mvxtechnologies.com", custom_domain = true }]
 
 [[r2_buckets]]
 binding = "BUCKET"
@@ -17,7 +27,8 @@ CACHE_CONTROL = "public, max-age=86400"
 # an uncached tile near the free plan's 10 ms of CPU; a tile that needed more
 # is answered partial (X-Contour-Source: partial, cached 15 s, not stored).
 # On the Workers Paid plan set "9": every tile is full on its first request.
-CONTOUR_DECODE_BUDGET = "2"
+# The company account is on Workers Paid (#731).
+CONTOUR_DECODE_BUDGET = "9"
 # Strava API app (public id; the secret is `wrangler secret put STRAVA_CLIENT_SECRET`).
 STRAVA_CLIENT_ID = "283079"
 # Place search (GET /search, src/search.ts): the Photon /api endpoint it proxies.

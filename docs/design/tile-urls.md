@@ -41,8 +41,8 @@ uses the template URL, so every downloaded region keeps working with no
 re-download. Code that fetches tiles itself (contour recovery) uses
 `tileFetchUrl()` for the same rewrite.
 
-While the two hosts are equal (today), the alias is a no-op and no native
-module is touched. The transform API ships in the native binary already
+While the two hosts are equal, the alias is a no-op and no native module is
+touched (the case until #731 moved `TILE_HOST` to `tiles.mvxtechnologies.com`). The transform API ships in the native binary already
 (`@maplibre/maplibre-react-native` 11.4), so the move is OTA-able.
 
 The move, step by step:

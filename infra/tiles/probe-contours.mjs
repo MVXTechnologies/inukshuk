@@ -16,7 +16,7 @@
  * HOST overrides the Worker (e.g. HOST=http://127.0.0.1:8787 for `wrangler
  * dev`); VERBOSE=1 lists every tile.
  */
-const HOST = process.env.HOST ?? 'https://inukshuk-tiles.marcandre-vigneault-96.workers.dev';
+const HOST = process.env.HOST ?? 'https://tiles.mvxtechnologies.com';
 const [lat, lon, z] = process.argv.slice(2, 5).map(Number);
 if (![lat, lon, z].every(Number.isFinite)) {
   console.error(

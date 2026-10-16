@@ -9,7 +9,7 @@ import { TILE_HOST, TILE_KEY_HOST } from './basemapTiles';
  * in MapLibre's HTTP layer, after the offline database lookup, which keeps
  * using the template URL: downloaded regions survive a host move untouched.
  *
- * A no-op while the two hosts are the same (today), so it touches no native
+ * A no-op while the two hosts are the same (before #731), so it touches no native
  * module until the move. Call it once at startup, before any map mounts.
  * Returns whether an alias was installed.
  */
