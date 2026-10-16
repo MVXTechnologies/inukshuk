@@ -215,7 +215,7 @@ describe('type scale', () => {
     expect(style.fontSize).toBeGreaterThanOrEqual(BASE_MIN_FONT_SIZE);
   });
 
-  it('the floor at any Display size is 9 sp', () => {
-    expect(MIN_FONT_SIZE).toBe(9);
+  it('the floor at any Display size is 10 sp', () => {
+    expect(MIN_FONT_SIZE).toBe(10);
   });
 });

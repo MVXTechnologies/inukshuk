@@ -22,48 +22,45 @@ afterEach(() => {
   storage.readJson.mockResolvedValue(null);
 });
 
-it('defaults to 100 %', () => {
-  expect(useSettingsStore.getState().displayScale).toBe(100);
+it('defaults to 1 (Default)', () => {
+  expect(useSettingsStore.getState().displayScale).toBe(1);
 });
 
 it('set("displayScale") persists', () => {
-  useSettingsStore.getState().set('displayScale', 60);
+  useSettingsStore.getState().set('displayScale', 0.85);
   expect(storage.writeJson).toHaveBeenCalledWith(
     'settings.json',
-    expect.objectContaining({ displayScale: 60 }),
+    expect.objectContaining({ displayScale: 0.85 }),
   );
 });
 
 it('hydrates a persisted step', async () => {
-  storage.readJson.mockResolvedValue({ displayScale: 130 });
+  storage.readJson.mockResolvedValue({ displayScale: 1.15 });
   await useSettingsStore.getState().hydrate();
-  expect(useSettingsStore.getState().displayScale).toBe(130);
+  expect(useSettingsStore.getState().displayScale).toBe(1.15);
 });
 
-it.each([[105], [0], [-120], [0.8], ['120'], [null], [{}]])(
-  'normalises a junk persisted value (%p) to 100 %%',
+it.each([[100], [85], [0.9], [1.1], [0], [-1], ['0.85'], [null], [{}]])(
+  'reads a junk or older persisted value (%p) as 1',
   async (junk) => {
     storage.readJson.mockResolvedValue({ displayScale: junk });
     await useSettingsStore.getState().hydrate();
-    expect(useSettingsStore.getState().displayScale).toBe(100);
+    expect(useSettingsStore.getState().displayScale).toBe(1);
   },
 );
 
-it.each([60, 70, 80, 90, 110, 120, 130, 140, 150] as const)(
-  'round-trips %p %% through the file',
-  async (v) => {
-    useSettingsStore.getState().set('displayScale', v);
-    const written = storage.writeJson.mock.calls.at(-1)?.[1] as { displayScale: number };
-    expect(written.displayScale).toBe(v);
-    useSettingsStore.getState().reset();
-    storage.readJson.mockResolvedValue(written);
-    await useSettingsStore.getState().hydrate();
-    expect(useSettingsStore.getState().displayScale).toBe(v);
-  },
-);
+it.each([0.85, 1.15] as const)('round-trips %p through the file', async (v) => {
+  useSettingsStore.getState().set('displayScale', v);
+  const written = storage.writeJson.mock.calls.at(-1)?.[1] as { displayScale: number };
+  expect(written.displayScale).toBe(v);
+  useSettingsStore.getState().reset();
+  storage.readJson.mockResolvedValue(written);
+  await useSettingsStore.getState().hydrate();
+  expect(useSettingsStore.getState().displayScale).toBe(v);
+});
 
 it('a file from before #760 keeps the default', async () => {
   storage.readJson.mockResolvedValue({ units: 'imperial' });
   await useSettingsStore.getState().hydrate();
-  expect(useSettingsStore.getState().displayScale).toBe(100);
+  expect(useSettingsStore.getState().displayScale).toBe(1);
 });

@@ -1,8 +1,10 @@
 /**
  * Settings › Display › Display size (#760): one app-wide multiplier over the
- * UI's type, spacing, icons and map chrome, from 60 % to 150 % in 10 % steps
- * (default 100 %). The map's own content (lines, symbols) is not scaled; pins
- * keep their separate Pin size (`@core/map/pinScale`).
+ * UI's type, spacing, icons and map chrome. Three sizes (owner 2026-10-16:
+ * aesthetics first, no free slider): Small 85 %, Default 100 %, Large 115 %.
+ * Nothing reflows between them: every layout just scales, and still fits a
+ * 360 dp phone at 115 %. The map's own content (lines, symbols) is not
+ * scaled; pins keep their separate Pin size (`@core/map/pinScale`).
  *
  * The OS font size still applies on top, through React Native's own font
  * scaling and the per-text `maxFontSizeMultiplier` caps, which bound only the
@@ -12,22 +14,24 @@
  * `hitSlopFor` keep every target at {@link MIN_TOUCH} dp or more while the
  * visual shrinks.
  *
- * Persisted as a whole percentage (`displayScale: 100`). Anything else read
- * back (junk, a hand-edited file, a retired step) is 100 %.
+ * Persisted as the factor itself (`displayScale: 0.85`). Anything else read
+ * back (junk, a hand-edited file, an older build's value) is 1.
  *
  * PURE: no React Native / Expo imports.
  */
 
-export const DISPLAY_SCALES = [60, 70, 80, 90, 100, 110, 120, 130, 140, 150] as const;
+export const DISPLAY_SCALES = [0.85, 1, 1.15] as const;
 export type DisplayScale = (typeof DISPLAY_SCALES)[number];
-export const DEFAULT_DISPLAY_SCALE: DisplayScale = 100;
+export const DEFAULT_DISPLAY_SCALE: DisplayScale = 1;
 
 /**
- * The smallest text the Display size draws (sp, owner 2026-10-16): text
- * shrinks with the setting but stops here. Text designed smaller than this
- * (a badge digit) is never scaled below its own size.
+ * The smallest text the Display size draws (sp): text shrinks with the
+ * setting but stops here. 10 sp: the 100 % type scale's smallest caption is
+ * 12 sp, and 12 × 0.85 lands on 10, so the floor never bends a standard
+ * caption at Small; it only holds up the few sub-12 labels (badges, chips).
+ * Text designed smaller than the floor keeps its own size.
  */
-export const MIN_TEXT_SP = 9;
+export const MIN_TEXT_SP = 10;
 
 /** The size text designed at `fontSize` draws at `factor`, held at the floor. */
 export function scaleFontSize(fontSize: number, factor: number): number {
@@ -42,31 +46,31 @@ export function isDisplayScale(v: unknown): v is DisplayScale {
   return (DISPLAY_SCALES as readonly unknown[]).includes(v);
 }
 
-/** A stored value as a step: itself when it is one, 100 % otherwise. */
+/** A stored value as a size: itself when it is one, 1 otherwise. */
 export function normalizeDisplayScale(v: unknown): DisplayScale {
   return isDisplayScale(v) ? v : DEFAULT_DISPLAY_SCALE;
 }
 
-/** The multiplier a step stands for (80 → 0.8); junk is 1. */
+/** The multiplier a stored value stands for; junk is 1. */
 export function displayScaleFactor(v: unknown): number {
-  return normalizeDisplayScale(v) / 100;
+  return normalizeDisplayScale(v);
 }
 
-/** "80 %": the value next to the slider. */
-export function displayScaleLabel(v: DisplayScale): string {
-  return `${v} %`;
+/** The segment labels, smallest first. */
+export const DISPLAY_SCALE_LABELS: Record<DisplayScale, string> = {
+  0.85: 'Small',
+  1: 'Default',
+  1.15: 'Large',
+};
+
+/** "Small", "Default", "Large". */
+export function displayScaleLabel(v: unknown): string {
+  return DISPLAY_SCALE_LABELS[normalizeDisplayScale(v)];
 }
 
-/** The slider's stop index for a step (60 → 0, 150 → 9); junk is 100 %'s. */
-export function displayScaleIndex(v: unknown): number {
-  return DISPLAY_SCALES.indexOf(normalizeDisplayScale(v));
-}
-
-/** The step at a slider stop, clamped to the ends. */
-export function displayScaleAt(index: number): DisplayScale {
-  const last = DISPLAY_SCALES.length - 1;
-  const i = Number.isFinite(index) ? Math.min(last, Math.max(0, Math.round(index))) : 0;
-  return DISPLAY_SCALES[i] ?? DEFAULT_DISPLAY_SCALE;
+/** "85 %": the size as a percentage, for screen readers and the row. */
+export function displayScalePercent(v: unknown): string {
+  return `${Math.round(normalizeDisplayScale(v) * 100)} %`;
 }
 
 /**
@@ -144,19 +148,29 @@ const SCALED_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Minimum sizes that, at 100 %, already sit at a touch target: they keep at
- * least {@link MIN_TOUCH} at any scale. A row with `minHeight: 48` is a tap
- * row; its text and padding shrink, its touch area doesn't.
+ * Sizes that, at 100 %, sit at a touch target keep at least {@link MIN_TOUCH}
+ * at any scale: a `minHeight` / `minWidth` of 48 or more (a tap row), and a
+ * `width` / `height` of exactly 48 (`target.min`, the app's touch box; the
+ * icon inside it shrinks, the box doesn't). A visual 48 dp disc that should
+ * shrink draws its own visual inside a 48 dp touch box instead.
  */
-const TOUCH_FLOOR_KEYS: ReadonlySet<string> = new Set(['minHeight', 'minWidth']);
+const MIN_FLOOR_KEYS: ReadonlySet<string> = new Set(['minHeight', 'minWidth']);
+const BOX_FLOOR_KEYS: ReadonlySet<string> = new Set(['width', 'height']);
+
+function touchFloored(key: string, value: number): boolean {
+  return (
+    (MIN_FLOOR_KEYS.has(key) && value >= MIN_TOUCH) ||
+    (BOX_FLOOR_KEYS.has(key) && value === MIN_TOUCH)
+  );
+}
 
 /** A plain style object (what `StyleSheet.create` returns per key in RN ≥ 0.66). */
 export type StyleRecord = Record<string, unknown>;
 
 /**
  * One style object at `factor`: every size key scaled (see SCALED_KEYS),
- * `minHeight` / `minWidth` that were ≥ 48 floored at 48, `shadowOffset` and
- * `transform`-free nested objects left alone. Returns the same object at 1.
+ * touch sizes floored at 48 (see `touchFloored`), text held at the floor,
+ * `shadowOffset` scaled, everything else left alone. The same object at 1.
  */
 export function scaleStyle<T extends object>(style: T, factor: number): T {
   if (factor === 1) return style;
@@ -176,10 +190,12 @@ export function scaleStyle<T extends object>(style: T, factor: number): T {
         typeof fs === 'number' && fs > 0
           ? Math.max(scaled, Math.round(scaleFontSize(fs, factor) * (value / fs) * 2) / 2)
           : scaled;
+    } else if (typeof value === 'number' && key === 'borderRadius' && roundBox(style, value)) {
+      // A circle on a touch box the floor kept at 48 stays a circle.
+      out[key] = value;
     } else if (typeof value === 'number' && SCALED_KEYS.has(key)) {
       const scaled = scaleSize(value, factor);
-      out[key] =
-        TOUCH_FLOOR_KEYS.has(key) && value >= MIN_TOUCH ? Math.max(MIN_TOUCH, scaled) : scaled;
+      out[key] = touchFloored(key, value) ? Math.max(MIN_TOUCH, scaled) : scaled;
     } else if (key === 'shadowOffset' && isOffset(value)) {
       out[key] = {
         width: scaleSize(value.width, factor),
@@ -190,6 +206,12 @@ export function scaleStyle<T extends object>(style: T, factor: number): T {
     }
   }
   return out as T;
+}
+
+/** A 48 × 48 touch box drawn as a circle (radius 24): the floor keeps both. */
+function roundBox(style: object, radius: number): boolean {
+  const { width, height } = style as { width?: unknown; height?: unknown };
+  return width === MIN_TOUCH && height === MIN_TOUCH && radius === MIN_TOUCH / 2;
 }
 
 function isOffset(v: unknown): v is { width: number; height: number } {
@@ -235,12 +257,6 @@ export function scaleFont<T extends FontMetrics>(font: T, factor: number): T {
   if (factor === 1) return font;
   return scaleStyle(font, factor);
 }
-
-/**
- * The live preview's debounce (Settings rescales while the finger rests on a
- * stop for this long; the rest of the app follows on release).
- */
-export const DISPLAY_SCALE_PREVIEW_MS = 150;
 
 /**
  * The width a layout effectively gets at a Display size: everything (type,

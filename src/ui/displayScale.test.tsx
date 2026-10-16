@@ -42,43 +42,43 @@ describe('useScaledStyles / useDisplayScale', () => {
 
   it('follows the saved setting without a provider', async () => {
     await render(<Probe />);
-    await act(async () => useSettingsStore.getState().set('displayScale', 60));
+    await act(async () => useSettingsStore.getState().set('displayScale', 0.85));
     expect(read()).toEqual({
-      factor: 0.6,
+      factor: 0.85,
       // The tap row keeps its 48 dp; padding shrinks; the hairline doesn't.
-      row: { minHeight: 48, paddingHorizontal: 9.5, borderWidth: 1 },
-      label: { fontSize: 9.5, lineHeight: 13 },
-      sz: 29,
+      row: { minHeight: 48, paddingHorizontal: 13.5, borderWidth: 1 },
+      label: { fontSize: 13.5, lineHeight: 18.5 },
+      sz: 41,
       touch: 48,
-      slop: 10,
+      slop: 4,
       same: false,
     });
   });
 
   it('a provider factor (the live preview) overrides the saved one', async () => {
-    useSettingsStore.getState().set('displayScale', 60);
+    useSettingsStore.getState().set('displayScale', 0.85);
     await render(
-      <DisplayScaleProvider factor={1.5}>
+      <DisplayScaleProvider factor={1.15}>
         <Probe />
       </DisplayScaleProvider>,
     );
     expect(read()).toMatchObject({
-      factor: 1.5,
-      row: { minHeight: 72, paddingHorizontal: 24, borderWidth: 1 },
-      label: { fontSize: 24, lineHeight: 33 },
-      touch: 72,
+      factor: 1.15,
+      row: { minHeight: 55, paddingHorizontal: 18.5, borderWidth: 1 },
+      label: { fontSize: 18.5, lineHeight: 25.5 },
+      touch: 55,
       slop: 0,
     });
   });
 
   it('a provider without a factor reads the saved setting', async () => {
-    useSettingsStore.getState().set('displayScale', 80);
+    useSettingsStore.getState().set('displayScale', 1.15);
     await render(
       <DisplayScaleProvider>
         <Probe />
       </DisplayScaleProvider>,
     );
-    expect(read().factor).toBe(0.8);
+    expect(read().factor).toBe(1.15);
   });
 });
 
@@ -89,19 +89,19 @@ describe('the Paper theme at a Display size', () => {
   });
 
   it('scales every MD3 variant and keeps the colours', () => {
-    const t = resolveTheme('light', 'normal', 0.6);
+    const t = resolveTheme('light', 'normal', 0.85);
     expect(t.colors).toBe(lightTheme.colors);
-    expect(t.fonts.bodyLarge.fontSize).toBe(9.5);
-    expect(t.fonts.bodyLarge.lineHeight).toBe(14.5);
+    expect(t.fonts.bodyLarge.fontSize).toBe(13.5);
+    expect(t.fonts.bodyLarge.lineHeight).toBe(20.5);
     expect(t.fonts.bodyLarge.fontFamily).toBe(lightTheme.fonts.bodyLarge.fontFamily);
-    expect(t.fonts.titleLarge.fontSize).toBe(13);
+    expect(t.fonts.titleLarge.fontSize).toBe(18.5);
     expect(t.fonts.default).toBe(lightTheme.fonts.default);
   });
 
   it('is cached per theme and factor, and ignores a junk factor', () => {
-    expect(scaleTheme(lightTheme, 1.5)).toBe(scaleTheme(lightTheme, 1.5));
+    expect(scaleTheme(lightTheme, 1.15)).toBe(scaleTheme(lightTheme, 1.15));
     expect(scaleTheme(lightTheme, NaN)).toBe(lightTheme);
     expect(scaleTheme(lightTheme, 0)).toBe(lightTheme);
-    expect(scaleTheme(lightTheme, 1.5).fonts.bodyLarge.fontSize).toBe(24);
+    expect(scaleTheme(lightTheme, 1.15).fonts.bodyLarge.fontSize).toBe(18.5);
   });
 });
