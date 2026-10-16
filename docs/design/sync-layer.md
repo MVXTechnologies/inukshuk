@@ -180,6 +180,14 @@ _As built (G6):_
 - **TURN** is asked through the room socket of the member's signalling session, one request at a time, 10 s deadline; credentials are cached until a minute before they expire.
 - The relay host is a `GroupHost` dependency (`internet: { host, ws }`); `appTeam` does not pass one yet, so a shipped build is nearby-only until G7 configures the owner's relay.
 
+_As built (G7):_
+
+- **Relay host.** `RTC_HOST = 'rtc.mvxtechnologies.com'` in `src/data/rtcRelay.ts` (one line, like `TILE_HOST`; build override `RTC_RELAY_HOST`, `none` = nearby-only). `appTeam` passes it with React Native's `WebSocket`, except in loopback (E2E) builds.
+- **In use.** `TeamHost` calls `setInternetOnline` under the mesh's rule (team mode on, foreground or recording, no join running), for every team; "Always use the relay" is the per-phone setting `teamAlwaysRelay`.
+- **The switch.** `TeamSession.setInternet(on)` (admins) writes the `net` record; `createTeam` writes it on unless the creator turned it off.
+- **Server clock.** The path manager keeps the offset each room's admission gives and, when it moves by a minute or more, re-picks the rooms from the server's UTC day (a phone hours off still meets its team).
+- **For the screens.** `GroupHost.groupNet(id)`: capable, online, the room's state (`ready`, `failing`, `trying`: the pill turns amber only on `failing`, never during the 0–30 s jitter), open links and per-member paths; `@core/teamui/links` turns them into the chips.
+
 ### 2.4 Link establishment over the internet
 
 ```mermaid
@@ -364,6 +372,13 @@ There is one compat hazard. A 2.6.x phone that scans a _folder_ invite would joi
   - _As built (G1):_ verified. `decodeInvite` (unchanged since 2.5) returns `undefined` when any flag bit other than bit 0 is set, so a 2.6.x phone refuses a 2.7 folder invite as malformed. Pinned by `src/core/domains/team/compat.test.ts`. The join screen still needs its "update the app" wording (G7).
 
 **Removal** works as today: `m.remove` with a cut, then a forced `k.rotate`, then the room secret changes with the epoch (R-RDV-2), then pending invites are revoked (R-INV-3).
+
+_As built (G7, `src/core/group/invites.ts`, `provisional.ts`, `src/data/sync/inviteJoin.ts`):_
+
+- **Invite rooms.** `createInvite` also writes the admin-owned `irdv {s: ir}`. Members of a group with the internet on listen in the rooms of open invites whose `irdv` was written by the invite's own admin, none created before the last removal they know. In an invite room only joiners start sessions (whatever the handles); a member answers with the LAN join session (admission and the log) under the relay's budgets, never ICE, and ends it after 5 min. The relay therefore carries a joiner's first catch-up, bounded by `RELAY_LIMITS`; everything after goes over a WebRTC link.
+- **Joiner.** `JoinAttempt` also runs `InviteRoomJoin`: the rooms of `ir` (following the server's day), one member at a time. Once admitted it writes its capability claim and, at confirm, its name through that session, so the member can give it WebRTC signalling (`rtc` cap) before any link exists.
+- **R-INV-4.** `confirmJoin(compared = false)` on an internet join keeps `TeamRecord.provisional`: no position goes out, every internet path is relay-only (`forceRelay`), and the phone admits nobody. It clears when `joinConfirmed` holds: a session with an active member other than the admitter, or an op by another admin made after the invite.
+- **R-INV-3.** `removeMember` revokes every open invite (all predate the removal) and leaves `revokedNotice` for the admin's one banner.
 
 - The mockup line "His phone stops syncing. The folder gets a new key." describes this exactly.
 - "What it already had stays on it" is the W1 residual. It is said once, on that screen, as the mockups do.

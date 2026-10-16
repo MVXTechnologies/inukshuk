@@ -110,7 +110,7 @@
       ><a href="./" lang="fr" hreflang="fr" aria-current="page">FR</a>
     </div>
     <h1>Inukshuk — Politique de confidentialité</h1>
-    <p class="updated">Dernière mise à jour : 1er octobre 2026</p>
+    <p class="updated">Dernière mise à jour : 16 octobre 2026</p>
 
     <p>
       Inukshuk est une application gratuite et libre de navigation de sentiers hors ligne : elle
@@ -180,7 +180,8 @@
       Aligner un itinéraire tracé sur les sentiers ou les routes » ci-dessous) et, si vous connectez
       Strava, les jetons de connexion qui transitent par notre serveur de tuiles en route vers
       Strava. Aucune ne porte votre identité ni votre position GPS, et les jetons ne sont pas
-      conservés.
+      conservés. Une équipe qui utilise Internet passe aussi par notre relais, qui ne voit jamais
+      que des données chiffrées (voir « Mode équipe par Internet » plus bas).
     </p>
     <p>
       <strong>Pourboires.</strong> Un pourboire facultatif (Réglages → Support Inukshuk) est traité
@@ -399,6 +400,32 @@
         connexion.
       </li>
     </ul>
+
+    <h2>Mode équipe par Internet</h2>
+    <p>
+      Quand un administrateur d'équipe active Internet pour une équipe, les téléphones de ses
+      membres se trouvent grâce à un petit service relais à nous, exploité sur Cloudflare
+      (Cloudflare agit comme notre sous-traitant). Les positions, les messages et tout ce que
+      l'équipe partage sont chiffrés de bout en bout entre les téléphones des membres : le relais ne
+      peut pas les lire.
+    </p>
+    <p>
+      Le relais voit l'adresse IP de chaque téléphone qui se connecte, le moment de la connexion et
+      la quantité de données envoyées. Il ne conserve rien : aucun stockage, aucun journal. Les
+      téléphones se rencontrent dans des salles nommées par un code qui change chaque jour et que
+      seuls les membres de l'équipe peuvent calculer ; le relais ne peut donc pas distinguer une
+      équipe d'une autre.
+    </p>
+    <p>
+      Quand deux téléphones peuvent se joindre directement, ils se connectent de téléphone à
+      téléphone, et chacun voit l'adresse IP de l'autre. « Toujours passer par le relais », dans
+      l'écran Connexion d'une équipe, fait plutôt tout passer par le relais (le service TURN de
+      Cloudflare) : vos coéquipiers ne voient alors jamais votre adresse IP.
+    </p>
+    <p>
+      Une personne retirée d'une équipe garde ce que son téléphone a déjà reçu ; elle ne reçoit plus
+      rien de nouveau.
+    </p>
 
     <h2>Strava</h2>
     <p>
