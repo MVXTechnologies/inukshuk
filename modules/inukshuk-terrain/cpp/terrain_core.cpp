@@ -820,4 +820,82 @@ std::vector<uint8_t> buildMipChain(const uint8_t* rgba, int size, int& levels) {
   return out;
 }
 
+// ---- drape scheduling (#720) --------------------------------------------------------
+
+std::optional<ScreenRect> footprintOnScreen(const Mat4& P, const TileBounds& b, double width,
+                                            double height) {
+  const double xs[4] = {b.minX, b.maxX, b.minX, b.maxX};
+  const double ys[4] = {b.minY, b.minY, b.maxY, b.maxY};
+  ScreenRect r{std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity(),
+               -std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity()};
+  int front = 0;
+  bool behind = false;
+  for (int i = 0; i < 4; i++) {
+    const Vec4 c = transform(P, {xs[i], ys[i], 0, 1});
+    if (!(c[3] > 1e-9)) {
+      behind = true;
+      continue;
+    }
+    const double sx = (c[0] / c[3] * 0.5 + 0.5) * width;
+    const double sy = (0.5 - c[1] / c[3] * 0.5) * height;
+    r.minX = std::min(r.minX, sx);
+    r.maxX = std::max(r.maxX, sx);
+    r.minY = std::min(r.minY, sy);
+    r.maxY = std::max(r.maxY, sy);
+    front++;
+  }
+  if (front == 0) return std::nullopt;
+  if (behind) r.maxY = std::max(r.maxY, height);
+  return r;
+}
+
+double distanceToRect(double x, double y, const ScreenRect& r) {
+  const double dx = std::max({r.minX - x, 0.0, x - r.maxX});
+  const double dy = std::max({r.minY - y, 0.0, y - r.maxY});
+  return std::hypot(dx, dy);
+}
+
+bool rectsIntersect(const ScreenRect& a, const ScreenRect& b) {
+  return a.minX <= b.maxX && b.minX <= a.maxX && a.minY <= b.maxY && b.minY <= a.maxY;
+}
+
+std::vector<DemId> orderDrapeRequests(std::vector<DrapeCandidate> candidates, double coarseAfter) {
+  struct Keyed {
+    DemId id;
+    int band;     // 0: own and coarse, 1: the ring
+    double key;   // focus distance (coarse: held back to coarseAfter)
+    int kind;     // at an equal key: a coarse cover before the tile it covers
+    double eye;
+    size_t index;
+  };
+  std::vector<Keyed> keyed;
+  keyed.reserve(candidates.size());
+  for (size_t i = 0; i < candidates.size(); i++) {
+    const auto& c = candidates[i];
+    const double focus = std::isfinite(c.focus) ? std::max(0.0, c.focus) : 1e9;
+    Keyed k{c.id, 0, focus, 1, c.eye, i};
+    if (c.kind == DrapeKind::Coarse) {
+      k.key = std::max(focus, coarseAfter);
+      // Held back past the centre: after the own drapes there; else ahead of its tile.
+      k.kind = focus < coarseAfter ? 2 : 0;
+    } else if (c.kind == DrapeKind::Ring) {
+      k.band = 1;
+    }
+    keyed.push_back(k);
+  }
+  std::stable_sort(keyed.begin(), keyed.end(), [](const Keyed& a, const Keyed& b) {
+    if (a.band != b.band) return a.band < b.band;
+    if (a.key != b.key) return a.key < b.key;
+    if (a.kind != b.kind) return a.kind < b.kind;
+    if (a.eye != b.eye) return a.eye < b.eye;
+    return a.index < b.index;
+  });
+  std::vector<DemId> out;
+  out.reserve(keyed.size());
+  std::unordered_set<uint64_t> seen;
+  for (const auto& k : keyed)
+    if (seen.insert(demKey64(k.id)).second) out.push_back(k.id);
+  return out;
+}
+
 }  // namespace inukshuk::terrain

@@ -5,64 +5,19 @@ import {
   mercatorRowLat,
   SLOPE_BANDS,
   slopeBandColor,
-  slopeDegrees,
   SLOPE_BLEND_DEG,
   slopeOverlayColor,
+  slopeOverlayIndexed,
   slopeOverlayMercator,
-  slopeOverlayRgba,
+  slopePalette,
+  slopePaletteIndex,
+  NO_SLOPE_FILTER,
+  SLOPE_TRACE_ALPHA,
+  slopeFilterActive,
+  slopeFilterPass,
+  type SlopeFilter,
   smoothstep,
 } from './terrainAnalysis';
-
-const GRID = 9;
-const CELL = 30; // metres
-
-/** Heightmap for a plane h = sx·x + sy·y (slopes in m per m; row 0 = north). */
-function plane(sx: number, sy: number, grid = GRID, cell = CELL): Float32Array {
-  const data = new Float32Array(grid * grid);
-  for (let gy = 0; gy < grid; gy++)
-    for (let gx = 0; gx < grid; gx++) data[gy * grid + gx] = sx * gx * cell + sy * gy * cell;
-  return data;
-}
-
-/** Iterate interior cells only (Horn edge cells clamp and halve the gradient). */
-function* interior(grid = GRID): Generator<number> {
-  for (let gy = 1; gy < grid - 1; gy++) for (let gx = 1; gx < grid - 1; gx++) yield gy * grid + gx;
-}
-
-describe('slopeDegrees (Horn 3×3, metre space)', () => {
-  it('is 0 on flat ground', () => {
-    const s = slopeDegrees(plane(0, 0), GRID, CELL, CELL);
-    for (const v of s) expect(v).toBe(0);
-  });
-
-  it('recovers the exact slope of an inclined plane (interior cells)', () => {
-    for (const [sx, sy] of [
-      [Math.tan((30 * Math.PI) / 180), 0],
-      [0, Math.tan((45 * Math.PI) / 180)],
-      [0.2, -0.3],
-    ] as const) {
-      const expected = (Math.atan(Math.hypot(sx, sy)) * 180) / Math.PI;
-      const s = slopeDegrees(plane(sx, sy), GRID, CELL, CELL);
-      for (const i of interior()) expect(s[i]).toBeCloseTo(expected, 4);
-    }
-  });
-
-  it('respects anisotropic cell sizes', () => {
-    // 1 m of height per column at 10 m columns = 0.1 m/m eastward gradient.
-    const data = plane(0.1, 0, GRID, 10);
-    const s = slopeDegrees(data, GRID, 10, 999); // cellZm irrelevant: no z gradient
-    const expected = (Math.atan(0.1) * 180) / Math.PI;
-    for (const i of interior()) expect(s[i]).toBeCloseTo(expected, 4);
-  });
-
-  it('stays within 0..90', () => {
-    const s = slopeDegrees(plane(5, -7), GRID, CELL, CELL);
-    for (const v of s) {
-      expect(v).toBeGreaterThanOrEqual(0);
-      expect(v).toBeLessThanOrEqual(90);
-    }
-  });
-});
 
 describe('slope colour bands (CalTopo edges)', () => {
   it('is fully transparent below 27°', () => {
@@ -102,56 +57,6 @@ describe('autoContourInterval', () => {
   });
 });
 
-describe('slopeOverlayRgba', () => {
-  // A west→east ramp rising `rise` metres per cell: every interior cell slopes
-  // at atan(rise / cellXm).
-  const ramp = (grid: number, risePerCellM: number): Float32Array => {
-    const data = new Float32Array(grid * grid);
-    for (let y = 0; y < grid; y++)
-      for (let x = 0; x < grid; x++) data[y * grid + x] = x * risePerCellM;
-    return data;
-  };
-
-  it('leaves a flat grid fully transparent', () => {
-    const rgba = slopeOverlayRgba(new Float32Array(64).fill(500), 8, 30, 30, 27);
-    expect(rgba.every((v) => v === 0)).toBe(true);
-  });
-
-  it('paints interior cells with the band colour of their slope', () => {
-    // rise 20 m over 30 m ground → atan(2/3) ≈ 33.7° → the 32° band.
-    const grid = 9;
-    const rgba = slopeOverlayRgba(ramp(grid, 20), grid, 30, 30, 27);
-    const centre = (4 * grid + 4) * 4;
-    const [r, g, b, a] = slopeBandColor(Math.atan(20 / 30) * (180 / Math.PI));
-    expect([rgba[centre], rgba[centre + 1], rgba[centre + 2], rgba[centre + 3]]).toEqual([
-      r,
-      g,
-      b,
-      a,
-    ]);
-  });
-
-  it('hides slopes above the selected ceiling', () => {
-    // ≈33.7° cells: visible with max 90, transparent with max 30.
-    const grid = 9;
-    const centre = (4 * grid + 4) * 4;
-    const upTo90 = slopeOverlayRgba(ramp(grid, 20), grid, 30, 30, 27, 90);
-    expect(upTo90[centre + 3]).toBe(255);
-    const upTo30 = slopeOverlayRgba(ramp(grid, 20), grid, 30, 30, 27, 30);
-    expect(upTo30[centre + 3]).toBe(0);
-  });
-
-  it('hides bands below the selected floor', () => {
-    // ≈33.7° cells: visible at floor 27°/32°, transparent at floor 35°.
-    const grid = 9;
-    const centre = (4 * grid + 4) * 4;
-    const at32 = slopeOverlayRgba(ramp(grid, 20), grid, 30, 30, 32);
-    expect(at32[centre + 3]).toBe(255);
-    const at35 = slopeOverlayRgba(ramp(grid, 20), grid, 30, 30, 35);
-    expect(at35[centre + 3]).toBe(0);
-  });
-});
-
 describe('GLSL helper mirrors', () => {
   it('smoothstep matches the GLSL definition', () => {
     expect(smoothstep(0, 1, -1)).toBe(0);
@@ -187,7 +92,8 @@ describe('Web-Mercator pixel geometry', () => {
 describe('slopeOverlayColor (anti-aliased bands, #461)', () => {
   it('is transparent below 27° and outside the window', () => {
     expect(slopeOverlayColor(20, 0)).toEqual([0, 0, 0, 0]);
-    expect(slopeOverlayColor(26.9, 27)).toEqual([0, 0, 0, 0]);
+    expect(slopeOverlayColor(27 - SLOPE_BLEND_DEG / 2, 27)).toEqual([0, 0, 0, 0]);
+    expect(slopeOverlayColor(NaN, 27)).toEqual([0, 0, 0, 0]);
     expect(slopeOverlayColor(40, 27, 38)).toEqual([0, 0, 0, 0]);
     expect(slopeOverlayColor(33, 35)).toEqual([0, 0, 0, 0]);
   });
@@ -215,16 +121,21 @@ describe('slopeOverlayColor (anti-aliased bands, #461)', () => {
     expect(slopeOverlayColor(35 + SLOPE_BLEND_DEG / 2 + 0.01, 27)).toEqual([...to, 255]);
   });
 
-  it('fades in from the window floor and out at a ceiling below 90°', () => {
+  it('fades across the window floor and ceiling CENTRED on them, like the band edges (#722)', () => {
     const a = (deg: number, lo = 27, hi = 90) => slopeOverlayColor(deg, lo, hi)[3];
-    expect(a(27)).toBe(0);
-    expect(a(27.5)).toBeGreaterThan(0);
-    expect(a(27.5)).toBeLessThan(a(28));
-    expect(a(27 + SLOPE_BLEND_DEG)).toBe(255);
+    const half = SLOPE_BLEND_DEG / 2;
+    // Half-way exactly at the legend's 27°, fully drawn 0.75° inside the band
+    // (the old ramp started AT 27°: a 27.75° slope drew at half opacity).
+    expect(a(27)).toBe(128);
+    expect(a(27 + half)).toBe(255);
+    expect(a(27.5)).toBeGreaterThan(a(27));
+    expect(a(27 - half)).toBe(0);
     expect(a(89.9)).toBe(255); // no fade-out at the natural 90° ceiling
-    expect(a(40, 27, 40)).toBe(0);
-    expect(a(39, 27, 40)).toBeGreaterThan(0);
-    expect(a(39, 27, 40)).toBeLessThan(255);
+    expect(a(40, 27, 40)).toBe(128);
+    expect(a(40 - half, 27, 40)).toBe(255);
+    expect(a(40 + half, 27, 40)).toBe(0);
+    // The fade below the floor wears the floor band's colour, not black.
+    expect(slopeOverlayColor(26.8, 27).slice(0, 3)).toEqual([...SLOPE_BANDS[0]!.rgb]);
   });
 
   it('is continuous — no jump between neighbouring angles', () => {
@@ -280,5 +191,204 @@ describe('slopeOverlayMercator (full-resolution 2D slope, #461)', () => {
   it('treats a step below 1 as full resolution', () => {
     const img = slopeOverlayMercator(mercatorPlane(40, 6, 6), 6, 6, Z, TOP, 27, 90, 0);
     expect([img.width, img.height]).toEqual([6, 6]);
+  });
+
+  it('paints the mosaic’s outer ring like its interior — no halved edge slope (#722)', () => {
+    const img = slopeOverlayMercator(mercatorPlane(33.5, 8, 8), 8, 8, Z, TOP, 27);
+    const orange = [...SLOPE_BANDS[2]!.rgb, 255];
+    for (const [x, y] of [
+      [0, 0],
+      [7, 0],
+      [0, 7],
+      [7, 7],
+      [0, 4],
+      [7, 4],
+      [4, 0],
+      [4, 7],
+    ] as const) {
+      const i = (y * 8 + x) * 4;
+      expect([...img.rgba.slice(i, i + 4)]).toEqual(orange);
+    }
+  });
+
+  it('draws a Terrarium void as nothing — not a purple cliff ring around it (#722)', () => {
+    const d = new Float32Array(64).fill(250);
+    d[3 * 8 + 3] = -32768;
+    const img = slopeOverlayMercator(d, 8, 8, Z, TOP, 27);
+    expect(img.rgba.every((v) => v === 0)).toBe(true);
+  });
+
+  it('indexed and RGBA overlays agree pixel for pixel', () => {
+    const d = mercatorPlane(36, 16, 16);
+    for (let i = 0; i < d.length; i += 7) d[i] = d[i]! + 3; // some texture
+    const rgba = slopeOverlayMercator(d, 16, 16, Z, TOP, 27, 90, 2);
+    const ix = slopeOverlayIndexed(d, 16, 16, Z, TOP, 27, 90, 2);
+    expect([ix.width, ix.height]).toEqual([8, 8]);
+    for (let o = 0; o < 64; o++) {
+      const k = ix.indices[o]!;
+      expect(rgba.rgba[o * 4 + 3]).toBe(k === 0 ? 0 : ix.palette.alpha[k]);
+    }
+  });
+});
+
+describe('slopePalette (indexed overlay, #722)', () => {
+  it('reproduces the drawn colour of every slope within ±3 / 255 (premultiplied)', () => {
+    for (const [lo, hi] of [
+      [27, 90],
+      [30, 45],
+      [33.3, 61.7],
+    ] as const) {
+      const p = slopePalette(lo, hi);
+      expect(p.count).toBeLessThanOrEqual(256);
+      let worst = 0;
+      for (let deg = 0; deg <= 90; deg += 0.001) {
+        const want = slopeOverlayColor(deg, lo, hi);
+        const k = slopePaletteIndex(p, deg);
+        const got =
+          k === 0
+            ? [0, 0, 0, 0]
+            : [p.rgb[k * 3]!, p.rgb[k * 3 + 1]!, p.rgb[k * 3 + 2]!, p.alpha[k]!];
+        // Compare what is drawn: colour premultiplied by alpha, and alpha.
+        const pre = (c: number[], i: number) => (i === 3 ? c[3]! : (c[i]! * c[3]!) / 255);
+        for (let c = 0; c < 4; c++) worst = Math.max(worst, Math.abs(pre(got, c) - pre(want, c)));
+      }
+      expect(worst).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it('maps no-data and negative input to the transparent entry', () => {
+    const p = slopePalette(27);
+    expect(slopePaletteIndex(p, NaN)).toBe(0);
+    expect(slopePaletteIndex(p, -1)).toBe(0);
+    expect(p.alpha[0]).toBe(0);
+  });
+});
+
+describe('slope filter: aspect sectors × altitude range × steepness (#723)', () => {
+  const Z = 14;
+  const TOP = 5800 * 256;
+  const W = 12;
+  // Rises 1 m… eastward at 40°: faces WEST (sector 6), elevations 1000 → ~1060 m.
+  function westFace(): Float32Array {
+    const d = new Float32Array(W * W);
+    const tan = Math.tan((40 * Math.PI) / 180);
+    for (let y = 0; y < W; y++) {
+      const cell = mercatorMetersPerPixel(mercatorRowLat(TOP + y + 0.5, Z), Z);
+      for (let x = 0; x < W; x++) d[y * W + x] = 1000 + tan * x * cell;
+    }
+    return d;
+  }
+  const red = SLOPE_BANDS[3]!.rgb;
+  const traceA = Math.round(255 * SLOPE_TRACE_ALPHA);
+
+  it('the trace is the mockup’s faint ghost (13 % of a band’s alpha)', () => {
+    expect(SLOPE_TRACE_ALPHA).toBe(0.13);
+    expect(traceA).toBe(33);
+  });
+  const alphaAt = (img: { rgba: Uint8Array }, x: number, y: number) =>
+    img.rgba[(y * W + x) * 4 + 3]!;
+  const run = (d: Float32Array, f: SlopeFilter, lo = 27, hi = 90) =>
+    slopeOverlayMercator(d, W, W, Z, TOP, lo, hi, 1, f);
+  const sector = (...s: number[]) => s.reduce((m, k) => m | (1 << k), 0);
+
+  it('no filter (all 8 sectors, no altitude bounds) is exactly the unfiltered overlay', () => {
+    const d = westFace();
+    expect(slopeFilterActive(NO_SLOPE_FILTER)).toBe(false);
+    expect(run(d, NO_SLOPE_FILTER).rgba).toEqual(slopeOverlayMercator(d, W, W, Z, TOP, 27).rgba);
+    expect(slopeFilterActive({ aspectMask: 0xff, minAltM: 0, maxAltM: null })).toBe(true);
+  });
+
+  it('aspect: the selected sector draws full colour, any other the faint trace', () => {
+    const d = westFace();
+    const west = run(d, { aspectMask: sector(6), minAltM: null, maxAltM: null });
+    const north = run(d, { aspectMask: sector(0, 1, 2, 3, 4, 5, 7), minAltM: null, maxAltM: null });
+    for (let i = 0; i < W * W; i++) {
+      expect([...west.rgba.slice(i * 4, i * 4 + 4)]).toEqual([...red, 255]);
+      expect([...north.rgba.slice(i * 4, i * 4 + 4)]).toEqual([...red, traceA]);
+    }
+  });
+
+  it('altitude: inclusive bounds, outside → trace', () => {
+    const d = westFace();
+    // Bounds exactly on column 3's and column 8's elevations (row 5).
+    const lo = d[5 * W + 3]!;
+    const hi = d[5 * W + 8]!;
+    const img = run(d, { aspectMask: 0xff, minAltM: lo, maxAltM: hi });
+    for (let x = 0; x < W; x++) {
+      expect(alphaAt(img, x, 5)).toBe(x >= 3 && x <= 8 ? 255 : traceA);
+    }
+    // One-sided bounds.
+    const above = run(d, { aspectMask: 0xff, minAltM: lo, maxAltM: null });
+    expect(alphaAt(above, 2, 5)).toBe(traceA);
+    expect(alphaAt(above, 11, 5)).toBe(255);
+    const below = run(d, { aspectMask: 0xff, minAltM: null, maxAltM: hi });
+    expect(alphaAt(below, 9, 5)).toBe(traceA);
+    expect(alphaAt(below, 0, 5)).toBe(255);
+  });
+
+  it('all three must match; outside the steepness window stays transparent whatever the filter', () => {
+    const d = westFace();
+    const lo = d[5 * W + 3]!;
+    const both = run(d, { aspectMask: sector(6), minAltM: lo, maxAltM: null });
+    const aspectOnly = run(d, { aspectMask: sector(6), minAltM: 1e5, maxAltM: null });
+    const altOnly = run(d, { aspectMask: sector(2), minAltM: lo, maxAltM: null });
+    expect(alphaAt(both, 6, 5)).toBe(255);
+    expect(alphaAt(aspectOnly, 6, 5)).toBe(traceA);
+    expect(alphaAt(altOnly, 6, 5)).toBe(traceA);
+    // A 40° face with the window 27–35°: transparent, filtered or not.
+    const outside = run(d, { aspectMask: sector(6), minAltM: lo, maxAltM: null }, 27, 35);
+    expect(outside.rgba.every((v) => v === 0)).toBe(true);
+  });
+
+  it('no data never passes and never paints', () => {
+    const d = westFace();
+    d[5 * W + 5] = NaN;
+    const img = run(d, { aspectMask: 0xff, minAltM: 0, maxAltM: 5000 });
+    expect(alphaAt(img, 5, 5)).toBe(0);
+    expect(alphaAt(img, 4, 5)).toBe(255); // neighbours keep their exact slope
+    expect(slopeFilterPass({ aspectMask: 0xff, minAltM: 0, maxAltM: null }, 90, NaN)).toBe(false);
+    expect(slopeFilterPass({ aspectMask: 0xff, minAltM: 0, maxAltM: null }, 90, -32768)).toBe(
+      false,
+    );
+    expect(slopeFilterPass({ aspectMask: sector(2), minAltM: null, maxAltM: null }, NaN, 10)).toBe(
+      false,
+    );
+    expect(slopeFilterPass(NO_SLOPE_FILTER, NaN, NaN)).toBe(true);
+  });
+
+  it('decides a downsampled block by the majority of its pixels', () => {
+    const d = westFace();
+    // Altitude cut between columns 4 and 5: blocks (4,5) straddle? With step 2
+    // the blocks are columns {4,5}: one passes, one fails → half → full colour.
+    const lo = d[5 * W + 5]!;
+    const img = slopeOverlayMercator(d, W, W, Z, TOP, 27, 90, 2, {
+      aspectMask: 0xff,
+      minAltM: lo,
+      maxAltM: null,
+    });
+    const a = (bx: number) => img.rgba[(2 * 6 + bx) * 4 + 3]!;
+    expect(a(1)).toBe(traceA); // columns 2,3: both below
+    expect(a(2)).toBe(255); // columns 4,5: one of two passes (≥ half)
+    expect(a(3)).toBe(255);
+  });
+
+  it('the trace palette keeps the full colours exact and the trace within ±3 / 255', () => {
+    const p = slopePalette(27, 90, true);
+    expect(p.count).toBeLessThanOrEqual(256);
+    let worst = 0;
+    const pre = (c: number[], i: number) => (i === 3 ? c[3]! : (c[i]! * c[3]!) / 255);
+    for (let deg = 0; deg <= 90; deg += 0.001) {
+      for (const trace of [false, true]) {
+        const w = slopeOverlayColor(deg, 27, 90);
+        const want = trace ? [w[0], w[1], w[2], Math.round(w[3] * SLOPE_TRACE_ALPHA)] : w;
+        const k = slopePaletteIndex(p, deg, trace);
+        const got =
+          k === 0
+            ? [0, 0, 0, 0]
+            : [p.rgb[k * 3]!, p.rgb[k * 3 + 1]!, p.rgb[k * 3 + 2]!, p.alpha[k]!];
+        for (let c = 0; c < 4; c++) worst = Math.max(worst, Math.abs(pre(got, c) - pre(want, c)));
+      }
+    }
+    expect(worst).toBeLessThanOrEqual(3);
   });
 });

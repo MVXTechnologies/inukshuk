@@ -946,6 +946,9 @@ class Host final : public mln::style::CustomLayerHost {
     in.pitchDeg = pitchDeg;
     in.timeMs = t0 / 1e6;
     FrameOutput out = w_->engine->frame(in);
+    // #720 tap-to-sharp, from the 3D press (the engine arms at the press, or the ramp start).
+    if (out.drapeCentreSharpMs >= 0) LOGI("drape sharp centre %.0f ms", out.drapeCentreSharpMs);
+    if (out.drapeAllSharpMs >= 0) LOGI("drape sharp all %.0f ms", out.drapeAllSharpMs);
     if (!out.active) {
       w_->drawnTiles = 0;
       return;
@@ -1112,6 +1115,22 @@ JNIEXPORT jint JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeIma
                                                                                               jclass,
                                                                                               jlong h) {
   return static_cast<jint>((*handle(h))->engine->imageryGeneration());
+}
+
+/** #720: the drape's place in the render order (0 = next), −1 = no longer wanted. */
+JNIEXPORT jint JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeDrapeRank(JNIEnv*, jclass, jlong h,
+                                                                                      jint z, jint x, jint y) {
+  return static_cast<jint>((*handle(h))->engine->drapeRank(z, x, y));
+}
+
+JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeOnDrapeCancelled(
+    JNIEnv*, jclass, jlong h, jint z, jint x, jint y, jint generation) {
+  (*handle(h))->engine->onImageryCancelled(z, x, y, static_cast<uint32_t>(generation));
+}
+
+JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeArmActivation(JNIEnv*, jclass,
+                                                                                          jlong h) {
+  (*handle(h))->engine->armActivation();
 }
 
 /** A drape tile: size² RGBA8 (level 0); the mip chain is built here, off the render thread. */

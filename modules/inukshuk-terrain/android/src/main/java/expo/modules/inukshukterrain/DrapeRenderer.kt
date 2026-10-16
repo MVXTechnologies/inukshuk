@@ -28,6 +28,10 @@ import kotlin.math.sinh
  * scale a terrain tile shows); satellite: the tile's zoom at 1×. Drape
  * textures are [texture]² px (by device memory); the mip chain is built natively.
  *
+ * Order (#720): queued blocks render in the engine's current order
+ * ([rank]: the centre of the screen first), and those no tile wants any more
+ * are dropped before they start.
+ *
  * Threads: [request] from any thread; everything else on the main thread
  * (MapSnapshotter is a UI-thread API); pixels are copied on a worker.
  */
@@ -36,6 +40,10 @@ class DrapeRenderer(
   /** z, x, y, rgba (null = failed), size, generation */
   private val deliver: (Int, Int, Int, ByteArray?, Int, Int) -> Unit,
   private val generation: () -> Int,
+  /** #720: the engine's render order for z/x/y (0 = next), −1 = no longer wanted. */
+  private val rank: (Int, Int, Int) -> Int,
+  /** #720: z, x, y, generation of a queued render dropped before it started. */
+  private val cancelled: (Int, Int, Int, Int) -> Unit,
 ) {
   private class Job(val z: Int, val x: Int, val y: Int, val gen: Int)
 
@@ -85,6 +93,8 @@ class DrapeRenderer(
     }
   }
   @Volatile var full = false
+  /** Snapshotters rendering at once (QA A/B: TerrainController.DEBUG_MORE_SNAPSHOTTERS). */
+  @Volatile var maxSnapshotters = MAX_SNAPSHOTTERS
   val texture: Int
     get() = if (full) 512 else lowTier.first
   val slotBudget: Int
@@ -156,9 +166,8 @@ class DrapeRenderer(
     val json = styleJson ?: return
     while (!closed && jobs.isNotEmpty()) {
       var idle = busy.indexOf(false)
-      if (idle < 0 && snapshotters.size >= MAX_SNAPSHOTTERS) return
-      val job = jobs.pollFirst() ?: return
-      if (job.gen != generation()) continue
+      if (idle < 0 && snapshotters.size >= maxSnapshotters) return
+      val job = nextJob() ?: return
       val k = if (job.z >= 1) 2 else 1
       val x0 = job.x / k * k
       val y0 = job.y / k * k
@@ -228,6 +237,37 @@ class DrapeRenderer(
         return
       }
     }
+  }
+
+  /**
+   * Main thread (#720): the queued job the engine wants rendered first now
+   * (centre of the screen first). Jobs of an old generation, and those no
+   * tile wants any more (the view moved on), are dropped unrendered.
+   */
+  private fun nextJob(): Job? {
+    val gen = generation()
+    var best: Job? = null
+    var bestRank = Int.MAX_VALUE
+    val it = jobs.iterator()
+    while (it.hasNext()) {
+      val j = it.next()
+      if (j.gen != gen) {
+        it.remove()
+        continue
+      }
+      val r = rank(j.z, j.x, j.y)
+      if (r < 0) {
+        it.remove()
+        cancelled(j.z, j.x, j.y, j.gen)
+        continue
+      }
+      if (r < bestRank) {
+        bestRank = r
+        best = j
+      }
+    }
+    if (best != null) jobs.remove(best)
+    return best
   }
 
   private fun finishJob(gen: Int, slot: Int, started: Long) {

@@ -123,7 +123,7 @@ export const WaypointPinLayers = memo(function WaypointPinLayers({
     () => (selected ? pinFeatureCollection([selected], selectedKey) : null),
     [selected, selectedKey],
   );
-  // The largest sizes present decide the radius (see pinClusterRadius).
+  // The sizes present decide the radius (see pinClusterRadius).
   const radius = useMemo(
     () => pinClusterRadius(sizes.split('|').filter(isWaypointSize), k),
     [sizes, k],

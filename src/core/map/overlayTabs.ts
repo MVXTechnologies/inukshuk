@@ -46,6 +46,7 @@ export const OVERLAY_ROW_TAB = {
   tiltRelief: 'terrain',
   contours: 'terrain',
   slope: 'terrain',
+  slopeOptions: 'terrain',
   peaks: 'terrain',
   heatmap: 'sports',
   weather: 'sports',
@@ -66,6 +67,7 @@ export function tabForRow(row: OverlayRow): OverlayTab {
 /** The built-in sub-panels (not extensions) and the tab each belongs to. */
 export const BUILT_IN_SUB_PANEL_TAB = {
   satellite: 'terrain',
+  slope: 'terrain',
   pdfMaps: 'map',
   pointingLine: 'map',
   weather: 'sports',
@@ -91,6 +93,8 @@ export const OVERLAY_ROW_PANEL: Partial<Record<OverlayRow, OverlaySubPanel>> = {
   seeThroughWhite: 'pdfMaps',
   satelliteLabels: 'satellite',
   imagery: 'satellite',
+  // The slope's steepness, altitude and aspect (#723; the map's legend chip opens it).
+  slopeOptions: 'slope',
   geodeticFilter: 'geodetic',
 };
 

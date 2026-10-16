@@ -1,3 +1,4 @@
+import type { OverlayRow } from '@core/map/overlayTabs';
 import { useSettingsStore } from '@state/settingsStore';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -39,6 +40,11 @@ interface Props {
    * hides it): `is3d` = the map is tilted, so the button offers 2D.
    */
   viewToggle?: { is3d: boolean; onPress: () => void };
+  /**
+   * Open the Map layers sheet on a row (the slope legend chip opens Slope's
+   * page, #723): each new `seq` is one request.
+   */
+  overlaysRequest?: { row: OverlayRow; seq: number } | null;
 }
 
 /**
@@ -57,10 +63,23 @@ export function MapControlsRail(props: Props) {
   // the rail's own column; ONE open at a time, owned here so an outside tap
   // on the backdrop below closes whichever is up.
   const [openMenu, setOpenMenu] = useState<null | 'overlays' | 'actions'>(null);
+  // The row the sheet opens on (a request from the map), else its remembered tab.
+  const [openOn, setOpenOn] = useState<OverlayRow | undefined>(undefined);
+  const request = props.overlaysRequest ?? null;
+  const [handledSeq, setHandledSeq] = useState<number | null>(request?.seq ?? null);
+  if (request !== null && request.seq !== handledSeq) {
+    setHandledSeq(request.seq);
+    setOpenOn(request.row);
+    setOpenMenu('overlays');
+  }
   const { onMenuOpenChange } = props;
   useEffect(() => {
     onMenuOpenChange?.(openMenu !== null);
   }, [openMenu, onMenuOpenChange]);
+  // A request while the chrome is folded unfolds it first.
+  useEffect(() => {
+    if (openMenu !== null && compact && !compactOpen) onCompactOpenChange(true);
+  }, [openMenu, compact, compactOpen, onCompactOpenChange]);
 
   const { top, following, onLocate, onStopFollowing, showFitControl, onFit, actions } = props;
 
@@ -112,7 +131,11 @@ export function MapControlsRail(props: Props) {
         )}
         <MapOverlaysMenu
           open={openMenu === 'overlays'}
-          onToggle={(o) => setOpenMenu(o ? 'overlays' : null)}
+          onToggle={(o) => {
+            setOpenOn(undefined);
+            setOpenMenu(o ? 'overlays' : null);
+          }}
+          openOn={openOn}
         />
         {/* The "+" folds away while the Map layers sheet is up: under a tall
             sheet it was pushed onto the attribution chip (#484 emulator

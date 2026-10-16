@@ -163,6 +163,13 @@ struct FrameOutput {
   bool needsRepaint = false;
   /** Drape mode: tiles sample the per-tile render of the 2D map style (crisp map, contours included). */
   bool drape = false;
+  /**
+   * #720 milestones, set on the one frame they are reached (else −1): ms since
+   * the terrain turned on (the pitch crossed the ramp) until every tile over
+   * the screen's central third, then every tile in view, sampled its own drape.
+   */
+  double drapeCentreSharpMs = -1;
+  double drapeAllSharpMs = -1;
 };
 
 struct EngineStats {
@@ -187,6 +194,10 @@ struct EngineStats {
   int meshBakes = 0;         // meshes installed
   int imageryUploads = 0;    // drape textures uploaded to the GPU
   int labelToggles = 0;      // pin show/hide decision flips
+  // #720: the last milestones (ms since the terrain turned on; −1 = not reached).
+  double drapeCentreSharpMs = -1;
+  double drapeAllSharpMs = -1;
+  int drapeCancelled = 0;    // queued drape renders dropped before they started (cumulative)
 };
 
 class Engine {
@@ -231,6 +242,20 @@ class Engine {
   static constexpr double kRefSettleMs = 350;
   /** Unrequested drape textures (block siblings) kept CPU-side, waiting to be wanted. */
   static constexpr size_t kMaxUnwantedImagery = 48;
+  /**
+   * Drape/imagery requests outstanding (#720). The platform renders them in
+   * the engine's current order (drapeRank) and drops those no longer wanted,
+   * so a deeper queue costs nothing and lets the order see the whole view.
+   */
+  static constexpr int kMaxImageryInFlight = 48;
+  /** A coarse drape over the central area waits for the own drapes there (screen half-heights). */
+  static constexpr double kCoarseAfterFocus = 0.5;
+  /**
+   * debugFlags bit (QA A/B, #720): the pre-#720 drape order — eye distance, a
+   * coarse ancestor before each tile, rendered first-come first-served and
+   * never dropped.
+   */
+  static constexpr int kDebugDrapeFifo = 64;
 
   /**
    * `meshGrid`: cells per tile edge of the baked meshes (the LOD still splits
@@ -250,6 +275,21 @@ class Engine {
   /** Decoded imagery (kImagerySize² RGBA8) for a satellite tile. */
   void onImageryData(int z, int x, int y, std::vector<uint8_t> rgba);
   void onImageryFailed(int z, int x, int y);
+  /**
+   * #720: where the drape z/x/y stands in the current render order (0 = next),
+   * or −1 when no tile wants it any more — the platform then drops the queued
+   * render and calls onImageryCancelled. Any thread.
+   */
+  int drapeRank(int z, int x, int y) const;
+  /** A queued drape render dropped before it started (it may be asked for again). */
+  void onImageryCancelled(int z, int x, int y, uint32_t generation);
+  /**
+   * #720: the 3D button was pressed (the pitch animates up from 2D). For
+   * kArmMs the engine asks for the terrain and its drapes even below the
+   * ramp, drawing nothing, so the renders start at the press. Any thread.
+   */
+  void armActivation() { armRequested_ = true; }
+  static constexpr double kArmMs = 1500;
   /**
    * A drape/imagery texture of any power-of-two size with its mip chain
    * (`levels` levels, buildMipChain layout). Results for a generation older
@@ -419,6 +459,11 @@ class Engine {
   std::atomic<bool> drape_{false};
   std::atomic<uint32_t> imgGeneration_{0};
   std::atomic<bool> resetTileImagery_{false};
+  /** #720: the current render order of every wanted drape (imgMutex_). */
+  std::unordered_map<uint64_t, int> imgRank_;
+  /** kDebugDrapeFifo: request sequence numbers (first come, first served). */
+  int imgSequence_ = 0;
+  int imgCancelled_ = 0;
   void resetImageryLocked(int slots);
 
   // Scene inputs (own mutex: UI thread writes).
@@ -453,6 +498,12 @@ class Engine {
   double lastMoveMs_ = -1e300;
   std::atomic<size_t> demBudget_{kDemBudgetBytes};
   double lastTimeMs_ = -1;
+  std::atomic<bool> armRequested_{false};
+  double armUntilMs_ = -1e300;  // render thread
+  // #720 milestones (render thread).
+  bool wasActive_ = false;
+  double activeSinceMs_ = 0;
+  bool centreSharpSeen_ = false, allSharpSeen_ = false;
   double clockMs_ = 0;
   EngineStats stats_;
   std::atomic<int> requested_{0};

@@ -41,6 +41,11 @@ interface OfflineState {
   regions: OfflineRegion[];
   /** Whether `regions` was read from the native packs yet (an empty list may just mean "not yet"). */
   hydrated: boolean;
+  /**
+   * The running download, shown by its own banner ("Downloading Map… 87%")
+   * on the map and in Settings — so it is NOT also a busy-chip task (#721,
+   * PM 2026-10-15: one progress readout, not two).
+   */
   progress: DownloadProgress | null;
   hydrate: () => Promise<void>;
   /**

@@ -179,6 +179,18 @@ appId: com.inukshuk.app
 - tapOn: '50 m'
 - tapOn: 'Auto'
 - tapOn: 'Slope'
+# --- Slope's page (#723): its round accessory ('Options for slope') opens
+# Steepness (the window slider moved in here), Altitude and the Aspect rose,
+# with the tab strip hidden. The rose's petals are toggles named by sector
+# ('NW', testID aspect-NW); the selection reads under the rose
+# (testID aspect-selection).
+- tapOn: 'Options for slope'
+# Start from the defaults whatever an earlier run persisted (Reset is inert
+# when nothing is set).
+- extendedWaitUntil:
+    visible: 'Reset slope options'
+    timeout: 10000
+- tapOn: 'Reset slope options'
 # The range slider renders its committed window; default = every band. Since
 # 31b811e (#308) each thumb is its own adjustable a11y element labelled
 # '<label> minimum' / '<label> maximum' — the container is no longer an
@@ -198,6 +210,80 @@ appId: com.inukshuk.app
     commands:
       - assertVisible: 'Slope minimum, 27°'
       - assertVisible: 'Slope maximum, 90°'
+- assertNotVisible: 'Terrain tab'
+# Aspect: every sector is on by default (no filter); turning NW off leaves
+# the arc from N round to W. The rose sits below the fold.
+- scrollUntilVisible:
+    element:
+      id: 'aspect-NW'
+    direction: DOWN
+    timeout: 15000
+    centerElement: true
+- assertVisible:
+    id: 'aspect-selection'
+    text: 'All aspects'
+- tapOn:
+    id: 'aspect-NW'
+- extendedWaitUntil:
+    visible:
+      id: 'aspect-selection'
+      text: 'N · NE · E · SE · S · SW · W'
+    timeout: 10000
+# Altitude: no filter by default (the low thumb at 0, the top end open).
+# Drag the low thumb right; on Android the thumb's value is part of its
+# description, so the move is provable there. (A single swipe, never a
+# repeated one: under lag a retry would stack drags.)
+- scrollUntilVisible:
+    element:
+      id: 'altitude-min'
+    direction: UP
+    timeout: 15000
+    centerElement: true
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - assertVisible: 'Altitude minimum, 0 (m|ft)'
+- swipe:
+    from:
+      id: 'altitude-min'
+    direction: RIGHT
+    duration: 800
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          notVisible: 'Altitude minimum, 0 (m|ft)'
+          timeout: 10000
+# Reset puts steepness, aspects and altitude back, so the run leaves the
+# defaults behind (persisted settings).
+- tapOn: 'Reset slope options'
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          visible: 'Altitude minimum, 0 (m|ft)'
+          timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: 'aspect-selection'
+    direction: DOWN
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: 'aspect-selection'
+      text: 'All aspects'
+    timeout: 10000
+- scrollUntilVisible:
+    element: 'Back to overlays'
+    direction: UP
+    timeout: 15000
+- tapOn: 'Back to overlays'
+- extendedWaitUntil:
+    visible: 'Terrain tab'
+    timeout: 10000
 # --- Parked features (src/core/features/flags.ts): Weather and Marine have
 # no row at all on the Sports tab (no greyed "Coming soon" rows, 2.5.1).
 # The heatmap row is the tab's last row: once it is up, the whole tab is.
