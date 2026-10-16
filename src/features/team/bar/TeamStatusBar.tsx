@@ -186,20 +186,26 @@ export function TeamStatusBar({
             </View>
           </View>
           <Icon source="chevron-down" size={22} color={t.map.chromeInk} />
-          {gather && (
-            <View
-              style={[
-                styles.bang,
-                { backgroundColor: t.team.gather, borderColor: t.map.chrome },
-                { shadowColor: palette.shadow },
-              ]}
-              testID="team-bar-gather"
-            >
-              <Text style={[styles.bangText, { color: t.team.gatherInk }]} allowFontScaling={false}>
-                !
-              </Text>
-            </View>
-          )}
+        </Pressable>
+      )}
+      {/* The "!" rides the pill's corner, half outside it: its own target (a
+        child would only take taps inside the pill's bounds on Android). The
+        pill's label already says a gather is active. */}
+      {!panelOpen && gather && (
+        <Pressable
+          onPress={() => open({ kind: 'menu' })}
+          style={[
+            styles.bang,
+            { top: top - 6, backgroundColor: t.team.gather, borderColor: t.map.chrome },
+            { shadowColor: palette.shadow },
+          ]}
+          hitSlop={10}
+          accessible={false}
+          testID="team-bar-gather"
+        >
+          <Text style={[styles.bangText, { color: t.team.gatherInk }]} allowFontScaling={false}>
+            !
+          </Text>
         </Pressable>
       )}
       <View
@@ -254,8 +260,8 @@ const styles = StyleSheet.create({
   unreadText: { fontSize: 10, lineHeight: 12, fontWeight: '900' },
   bang: {
     position: 'absolute',
-    right: -6,
-    top: -6,
+    // The pill's right edge (76) less the overhang.
+    right: 76 - 6,
     width: 24,
     height: 24,
     borderRadius: 12,

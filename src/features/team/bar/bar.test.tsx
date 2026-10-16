@@ -276,6 +276,13 @@ describe('a gather: the pill’s "!" and the panel, no band on the map (#743)', 
       expect(screen.queryByTestId('team-alert-bands')).toBeNull();
       await fireEvent.press(screen.getByTestId('team-bar-pill'));
       expect(useTeamSheet.getState().sheet).toEqual({ kind: 'menu' });
+      // The "!" is its own target on the pill's corner (half of it sits outside
+      // the pill, where a child of the pill took no taps on Android).
+      await act(async () => useTeamSheet.getState().close());
+      const bang = screen.getByTestId('team-bar-gather');
+      expect(StyleSheet.flatten(bang.props.style)).toMatchObject({ top: 2, right: 70 });
+      await fireEvent.press(bang);
+      expect(useTeamSheet.getState().sheet).toEqual({ kind: 'menu' });
     },
   );
 

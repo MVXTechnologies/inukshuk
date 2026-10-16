@@ -217,6 +217,24 @@ export function simulatedTeammateCount(): number {
   return bots.length;
 }
 
+/**
+ * The first simulated teammate calls a gather near `center` (#743), or
+ * raises an SOS where they are (#748): the alerts a teammate's phone sends,
+ * for the flows and screenshots. False without a simulated teammate.
+ */
+export function simulatedAlert(
+  kind: 'rally' | 'sos',
+  center: { latitude: number; longitude: number },
+): boolean {
+  const session = bots.find((b) => b.service.active !== null)?.service.active;
+  if (!session) return false;
+  const err =
+    kind === 'rally'
+      ? session.setRally(center.longitude + 0.003, center.latitude + 0.008, 'Lac-Delage')
+      : session.raiseSos(center.longitude - 0.004, center.latitude - 0.003);
+  return err === null;
+}
+
 /** Stop every simulated phone. */
 export async function stopSimulatedTeammates(): Promise<void> {
   for (const bot of bots.splice(0)) {
