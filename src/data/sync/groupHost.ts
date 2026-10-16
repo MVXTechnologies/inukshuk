@@ -264,6 +264,11 @@ export class GroupHost implements SessionNet {
     return this.paths?.inviteSessions() ?? 0;
   }
 
+  /** A group's room or internet switch changed (a shared folder was created or joined). */
+  refreshPaths(): void {
+    this.paths?.refresh();
+  }
+
   /** Run the path decisions now (tests; the manager ticks by itself otherwise). */
   tickPaths(): void {
     this.paths?.tick();
@@ -374,15 +379,13 @@ export class GroupHost implements SessionNet {
 
   /**
    * Found a group (its genesis on disk, its record kept, its session open): a
-   * team, or with `app: 'lib'` a shared folder (#712; `parent` = the team it
-   * is shared with).
+   * team, or with `app: 'lib'` a shared folder (#712: its own group).
    */
   async create(options: {
     name: string;
     myName: string;
     lifetimeMs: number;
     app?: 'lib';
-    parent?: string;
   }): Promise<{ session: TeamSession; key: Parameters<TeamSession['replica']['addKey']>[0] }> {
     await this.load();
     const name = cleanName(options.name);
@@ -402,7 +405,6 @@ export class GroupHost implements SessionNet {
       prefs: { ...DEFAULT_TEAM_PREFS },
       lastReadAt: 0,
       ...(options.app !== undefined ? { app: options.app } : {}),
-      ...(options.parent !== undefined ? { parent: options.parent } : {}),
     });
     return { session: await this.ensure(team.teamId), key: team.key };
   }
@@ -542,6 +544,8 @@ export class GroupHost implements SessionNet {
       lastReadAt: 0,
       ...(attempt.replica.state.sendKeyId ? { profileKeyId: attempt.replica.state.sendKeyId } : {}),
       ...(provisional !== undefined ? { provisional } : {}),
+      // A shared folder's invite (#712) makes a folder, never a team.
+      ...(attempt.token.app === 'lib' ? { app: 'lib' as const } : {}),
     });
     return this.ensure(attempt.teamId);
   }

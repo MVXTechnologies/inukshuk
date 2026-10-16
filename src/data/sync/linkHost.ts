@@ -581,6 +581,7 @@ export class LinkHost {
       now: this.now(),
       pull: true,
       linkUpgrade: path === 'nearby',
+      claims: this.claims,
       limits: channelLimits(limitsForPath(path), link.conn.maxFrameBytes),
     };
     const session =
@@ -710,6 +711,21 @@ export class LinkHost {
     );
     for (const l of ranked.slice(1)) this.closeLink(l, 'duplicate');
   }
+
+  /**
+   * A link capability (`lnk`, `rtc`) claimed by `member` in **any** group both
+   * phones hold (#712: shared folders are their own groups; with no team at
+   * all, a folder's own claims upgrade the LAN link and allow WebRTC).
+   */
+  private readonly claims = (member: string, cap: string, now: number): boolean =>
+    this.o.groups().some((id) => {
+      const store = this.o.group(id)?.store;
+      return (
+        store !== undefined &&
+        store.isActiveMember(member) &&
+        store.canReceive?.(member, cap, now) === true
+      );
+    });
 
   private pickupParentOf(groupId: string): string | undefined {
     try {

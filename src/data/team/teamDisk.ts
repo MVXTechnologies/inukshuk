@@ -64,8 +64,6 @@ export interface TeamRecord {
    * shared folder or item (#712), whose replica folds the library domain.
    */
   app?: 'lib';
-  /** The team a shared folder was shared with (it rides that team's links). */
-  parent?: string;
   /** A renewed folder's predecessor group (#712 renewal): picked up through its members. */
   via?: string;
   /**

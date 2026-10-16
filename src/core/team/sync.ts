@@ -236,6 +236,12 @@ export interface SessionOptions {
   /** Carry WebRTC signalling (`rtc` frames), only with a peer claiming {@link RTC_CAP}. */
   rtc?: boolean;
   /**
+   * Link capabilities (`lnk`, `rtc`) the peer claims in **any** group the two
+   * phones share (#712: a shared folder is its own group, with no team): a
+   * claim in this session's own group always counts too.
+   */
+  claims?: (member: string, cap: string, now: number) => boolean;
+  /**
    * Authenticate and signal only (the L0 room session, design §2.3/§2.4): no
    * version vector, no `want`/`ops`, no pushes. The room is never a data
    * relay (review §2.9); a peer that sends sync frames anyway is struck.
@@ -580,6 +586,14 @@ export class SyncSession {
 
   // ── Capability-gated frames ───────────────────────────────────────────────
 
+  /** A link capability claim by `member`, here or in another group both phones share. */
+  private linkClaim(member: string, cap: string): boolean {
+    return (
+      this.store.canReceive?.(member, cap, this.clock) === true ||
+      this.options.claims?.(member, cap, this.clock) === true
+    );
+  }
+
   /** Whether {@link requestUpgrade} would offer the LAN upgrade now. */
   canUpgrade(now?: number): boolean {
     if (now !== undefined) this.clock = Math.max(this.clock, now);
@@ -591,7 +605,7 @@ export class SyncSession {
       this.upgrade === 'none' &&
       this.peer !== undefined &&
       !this.peerUnverified &&
-      this.store.canReceive?.(this.peer, LINK_CAP, this.clock) === true
+      this.linkClaim(this.peer, LINK_CAP)
     );
   }
 
@@ -621,7 +635,7 @@ export class SyncSession {
       this.peer !== undefined &&
       !this.peerUnverified &&
       this.store.isActiveMember(this.peer) &&
-      this.store.canReceive?.(this.peer, RTC_CAP, this.clock) === true
+      this.linkClaim(this.peer, RTC_CAP)
     );
   }
 

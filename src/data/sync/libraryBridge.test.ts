@@ -3,7 +3,7 @@
  * each with its own Library (an in-memory port applying the same `SyncEdit`
  * the store applies), over the loopback mesh on the rig.
  */
-import { active, seed, sync, team } from './testing/libraryRig';
+import { pair, seed, shareJoin, sync } from './testing/libraryRig';
 import { Rig } from './testing/rig';
 
 jest.mock('@lib/errorReporting', () => ({ addBreadcrumb: jest.fn(), reportError: jest.fn() }));
@@ -11,10 +11,9 @@ jest.mock('@lib/errorReporting', () => ({ addBreadcrumb: jest.fn(), reportError:
 describe('library bridge (2.7.0 G10)', () => {
   it('shares a folder with the team; a teammate gets it in their Library', async () => {
     const rig = new Rig();
-    const { a, b } = await team(rig);
+    const { a, b } = pair(rig);
     seed(a);
-    const f = await a.bridge.shareFolder('gaspF', { team: active(a).teamId });
-    if (typeof f === 'string') throw new Error(f);
+    const f = await shareJoin(rig, a, b, () => a.bridge.shareFolder('gaspF', { myName: 'Marc' }));
     expect(a.bridge.markOf('folder', 'gaspF')).toEqual({ groupId: f.teamId, root: true });
     expect(a.bridge.markOf('waypoint', 'w1')).toEqual({ groupId: f.teamId, root: false });
     await sync(rig, [a, b]);
@@ -41,10 +40,9 @@ describe('library bridge (2.7.0 G10)', () => {
 
   it('edits and deletes travel both ways, local-only fields stay', async () => {
     const rig = new Rig();
-    const { a, b } = await team(rig);
+    const { a, b } = pair(rig);
     seed(a);
-    const f = await a.bridge.shareFolder('gaspF', { team: active(a).teamId });
-    if (typeof f === 'string') throw new Error(f);
+    await shareJoin(rig, a, b, () => a.bridge.shareFolder('gaspF', { myName: 'Marc' }));
     await sync(rig, [a, b]);
     // B renames the waypoint and adds one.
     const bw = b.port.lib.waypoints[0]!;
@@ -75,10 +73,9 @@ describe('library bridge (2.7.0 G10)', () => {
 
   it('leaving keeps a copy as a normal folder; removing it frees the Library', async () => {
     const rig = new Rig();
-    const { a, b } = await team(rig);
+    const { a, b } = pair(rig);
     seed(a);
-    const f = await a.bridge.shareFolder('gaspF', { team: active(a).teamId });
-    if (typeof f === 'string') throw new Error(f);
+    const f = await shareJoin(rig, a, b, () => a.bridge.shareFolder('gaspF', { myName: 'Marc' }));
     await sync(rig, [a, b]);
     await b.bridge.leave(f.teamId);
     expect(b.port.names('folders')).toEqual(['Gaspésie 2026']);
@@ -92,10 +89,9 @@ describe('library bridge (2.7.0 G10)', () => {
 
   it('leaving without a copy removes the items', async () => {
     const rig = new Rig();
-    const { a, b } = await team(rig);
+    const { a, b } = pair(rig);
     seed(a);
-    const f = await a.bridge.shareFolder('gaspF', { team: active(a).teamId });
-    if (typeof f === 'string') throw new Error(f);
+    const f = await shareJoin(rig, a, b, () => a.bridge.shareFolder('gaspF', { myName: 'Marc' }));
     await sync(rig, [a, b]);
     await b.bridge.leave(f.teamId, false);
     expect(b.port.lib.folders).toEqual([]);
@@ -105,10 +101,9 @@ describe('library bridge (2.7.0 G10)', () => {
 
   it('the owner stops sharing: each phone keeps its folder', async () => {
     const rig = new Rig();
-    const { a, b } = await team(rig);
+    const { a, b } = pair(rig);
     seed(a);
-    const f = await a.bridge.shareFolder('gaspF', { team: active(a).teamId });
-    if (typeof f === 'string') throw new Error(f);
+    const f = await shareJoin(rig, a, b, () => a.bridge.shareFolder('gaspF', { myName: 'Marc' }));
     await sync(rig, [a, b]);
     expect(await a.bridge.stopSharing(f.teamId)).toBeNull();
     await sync(rig, [a, b]);
@@ -119,10 +114,9 @@ describe('library bridge (2.7.0 G10)', () => {
 
   it('deleting the shared folder here leaves the share without trashing its items for anyone', async () => {
     const rig = new Rig();
-    const { a, b } = await team(rig);
+    const { a, b } = pair(rig);
     seed(a);
-    const f = await a.bridge.shareFolder('gaspF', { team: active(a).teamId });
-    if (typeof f === 'string') throw new Error(f);
+    const f = await shareJoin(rig, a, b, () => a.bridge.shareFolder('gaspF', { myName: 'Marc' }));
     await sync(rig, [a, b]);
     const bf = b.port.lib.folders[0]!.id;
     // As the store's folder delete does: the folder goes, its items are ungrouped.
@@ -136,21 +130,20 @@ describe('library bridge (2.7.0 G10)', () => {
 
   it('shares a single trail on its own', async () => {
     const rig = new Rig();
-    const { a, b } = await team(rig);
+    const { a, b } = pair(rig);
     seed(a);
-    const f = await a.bridge.shareItem('track', 't1', { team: active(a).teamId });
-    if (typeof f === 'string') throw new Error(f);
+    await shareJoin(rig, a, b, () => a.bridge.shareItem('track', 't1', { myName: 'Marc' }));
     await sync(rig, [a, b]);
     expect(b.port.names('tracks')).toEqual(['Mont Albert']);
     expect(b.port.lib.tracks[0]!.folderId).toBeUndefined();
     expect(b.port.lib.waypoints).toEqual([]);
     expect(b.port.lib.folders).toEqual([]);
-    expect(await a.bridge.shareItem('track', 't1', { team: active(a).teamId })).toBe('no-change');
+    expect(await a.bridge.shareItem('track', 't1', { myName: 'Marc' })).toBe('no-change');
   });
 
   it('a long recorded run arrives whole: every point, elevation and time, its segments and type', async () => {
     const rig = new Rig();
-    const { a, b } = await team(rig);
+    const { a, b } = pair(rig);
     seed(a);
     // 6,000 fixes at 1 Hz, as a GPX holds them (7-decimal coordinates, cm elevations, ms times).
     const points = Array.from({ length: 6_000 }, (_, i) => ({
@@ -169,8 +162,7 @@ describe('library bridge (2.7.0 G10)', () => {
       folderId: 'gaspF',
       category: 'run',
     });
-    const f = await a.bridge.shareFolder('gaspF', { team: active(a).teamId });
-    if (typeof f === 'string') throw new Error(f);
+    const f = await shareJoin(rig, a, b, () => a.bridge.shareFolder('gaspF', { myName: 'Marc' }));
     // Several parts, each within the op cap.
     const parts = [...f.replica.data().entities.values()].filter((e) => e.kind === 'lpt');
     expect(parts.length).toBeGreaterThan(1);
@@ -185,7 +177,7 @@ describe('library bridge (2.7.0 G10)', () => {
 
   it('sub-folders of a shared folder are shared, with their items', async () => {
     const rig = new Rig();
-    const { a, b } = await team(rig);
+    const { a, b } = pair(rig);
     seed(a);
     a.port.lib.folders.push({ id: 'day1', name: 'Jour 1', createdAt: 1, parentId: 'gaspF' });
     a.port.lib.waypoints.push({
@@ -196,8 +188,7 @@ describe('library bridge (2.7.0 G10)', () => {
       folderId: 'day1',
       createdAt: 2,
     });
-    const f = await a.bridge.shareFolder('gaspF', { team: active(a).teamId });
-    if (typeof f === 'string') throw new Error(f);
+    await shareJoin(rig, a, b, () => a.bridge.shareFolder('gaspF', { myName: 'Marc' }));
     await sync(rig, [a, b]);
     const root = b.port.lib.folders.find((x) => x.name === 'Gaspésie 2026')!;
     const day = b.port.lib.folders.find((x) => x.name === 'Jour 1')!;

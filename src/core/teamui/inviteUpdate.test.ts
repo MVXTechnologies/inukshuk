@@ -10,8 +10,10 @@ const header = (version: number, flags: number) => {
 };
 
 describe('inviteNeedsUpdate (G7)', () => {
-  it('is a newer app’s invite: a higher version or an unknown flag (a shared folder)', () => {
-    expect(inviteNeedsUpdate(`https://inukshuk.mvxtechnologies.com/j#${header(1, 2)}`)).toBe(true);
+  it('is a newer app’s invite: a higher version or an unknown flag', () => {
+    expect(inviteNeedsUpdate(`https://inukshuk.mvxtechnologies.com/j#${header(1, 4)}`)).toBe(true);
+    // A shared folder's invite (flag 2) is read by this version: no update needed.
+    expect(inviteNeedsUpdate(header(1, 2))).toBe(false);
     expect(inviteNeedsUpdate(header(2, 0))).toBe(true);
   });
 

@@ -110,6 +110,11 @@ export interface ReconcileInput {
    * in, say). Default: what its fields alone allow (`representable`).
    */
   holdable?(node: LibNode): boolean;
+  /**
+   * This phone may only view (a viewer): nothing is written; the Library
+   * follows the group (a local change is put back, a local delete restored).
+   */
+  readOnly?: boolean;
 }
 
 /** Fields the bridge never compares (placement and trash are the bridge's own). */
@@ -266,6 +271,20 @@ export function reconcile(input: ReconcileInput): BridgePlan {
     const isRoot = link.rid === root.rid;
     // Handled here whatever happens (a record just trashed is not "new there").
     linkedRid.add(link.rid);
+    if (l === undefined && input.readOnly === true && alive(r) && !isRoot) {
+      // A viewer deleted it here: the group still has it, so it comes back.
+      const lk = r.kind === LFO ? 'folder' : localKindOf(r.fields);
+      if (lk !== undefined && (lk === 'folder' || holdable(r))) {
+        const id = input.newLocalId(r.id, lk);
+        const fields = remoteFields(r);
+        const op: LocalOp = { op: 'create', kind: lk, local: id, rid: r.id, fields };
+        const parent = localParent(fields['p']);
+        if (parent !== undefined) op.parent = parent;
+        local.push(op);
+        links.push({ ...link, local: id, localKind: lk, base: baseOf(fields), seen: true });
+      }
+      continue;
+    }
     if (l === undefined) {
       // Gone from the Library (or out of the folder): into the group's trash.
       if (alive(r) && !isRoot) writes.push({ op: 'trash', kind: link.kind, rid: link.rid });
@@ -292,11 +311,13 @@ export function reconcile(input: ReconcileInput): BridgePlan {
     linkedLocal.add(key);
     const lf = withPlace(l);
     const rf = remoteFields(r);
-    const mine = changedFrom(lf, link.base);
+    // A viewer writes nothing: what differs here is put back as the group has it.
+    const mine = input.readOnly === true ? [] : changedFrom(lf, link.base);
+    const base0 = input.readOnly === true ? baseOf(lf) : link.base;
     // A change there this phone cannot hold yet (a trail's parts still coming) waits.
     const ready = r.kind === LFO || holdable(r);
-    const theirs = ready ? changedFrom(rf, link.base).filter((k) => !mine.includes(k)) : [];
-    const base = { ...link.base };
+    const theirs = ready ? changedFrom(rf, base0).filter((k) => !mine.includes(k)) : [];
+    const base = { ...base0 };
     const out: Record<string, Json> = {};
     for (const k of mine) {
       const v = lf[k];
@@ -362,6 +383,8 @@ export function reconcile(input: ReconcileInput): BridgePlan {
     .filter((l) => newRid.has(localKey(l.kind, l.id)))
     .sort((a, b) => Number(b.kind === 'folder') - Number(a.kind === 'folder'));
   for (const l of fresh) {
+    // A viewer's new items stay on its phone, outside the share.
+    if (input.readOnly === true && !isRootLocal(l)) continue;
     const key = localKey(l.kind, l.id);
     const rid = newRid.get(key)!;
     const kind = recordKindOf(l.kind);

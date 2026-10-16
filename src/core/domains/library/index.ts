@@ -1,6 +1,7 @@
 import { isLive, visibleFields, type EntityState } from '@core/team/crdt';
 import type { EntityRecord, TeamData } from '@core/team/data';
 import { isAdminRole, type Role } from '@core/team/roles';
+import { validCapFields } from '@core/teamdraw/record';
 import { has, knownFieldsValid, rewritesOnce } from '@core/group/fields';
 import { groupMeta, groupPlugin } from '@core/group/meta';
 import {
@@ -159,18 +160,32 @@ function authorizePart(w: KindWrite, role: Role, view: Readonly<TeamData>): Auth
   return rewritesOnce(cur.state, w.f, spec.once) ? 'forbidden' : { owner: undefined };
 }
 
+/**
+ * Capability claims (`cap`, #683): a shared folder is its own group, apart
+ * from any team, so its members claim `lnk` and `rtc` in it too (nearby and
+ * internet paths with no team at all). Same rule as the team's: one record
+ * per member, its id the member's own.
+ */
+export const CAP = 'cap';
+
 export const libraryPlugin: DomainPlugin<LibraryView> = {
   id: LIBRARY_DOMAIN,
-  kinds: LIBRARY_KINDS,
-  owned: isOwnedLibraryKind,
+  kinds: [...LIBRARY_KINDS, CAP],
+  owned: (kind) => kind === CAP || isOwnedLibraryKind(kind),
   baseStamps: true,
   validate(w) {
     if (isTreeKind(w.kind) || w.kind === LPT || w.kind === LNX) return w.o === undefined;
+    if (w.kind === CAP) return w.o === undefined;
     // Owned: `o` names another's record on a delete only; the cursor is one per member.
     if (w.o !== undefined && w.op !== 'del') return false;
     return w.kind !== 'lac' || w.id === CURSOR_ID;
   },
   authorize(w, role, view) {
+    if (w.kind === CAP) {
+      if (w.o !== undefined || w.id !== w.author || (w.op === 'set' && !validCapFields(w.f)))
+        return 'invalid';
+      return { owner: w.author };
+    }
     if (w.kind === LPT) return authorizePart(w, role, view);
     if (w.kind === LNX) {
       // The successor: a manager's, never deleted; LWW picks one on every phone.

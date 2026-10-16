@@ -35,7 +35,7 @@ describe('registry', () => {
   it('registers the group kinds and the four library kinds, frozen', () => {
     const r = libraryRegistry();
     expect(r.isFrozen).toBe(true);
-    expect(r.kinds()).toEqual(['gmeta', 'irdv', 'net', ...LIBRARY_KINDS].sort());
+    expect(r.kinds()).toEqual(['cap', 'gmeta', 'irdv', 'net', ...LIBRARY_KINDS].sort());
     expect(r.forKind(LIT)?.id).toBe(LIBRARY_DOMAIN);
     expect(r.forKind('wpt')).toBeUndefined();
     expect(libraryRegistry()).toBe(r);

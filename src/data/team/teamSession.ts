@@ -1335,7 +1335,7 @@ export class TeamSession {
    */
   pickupParent(): string | undefined {
     // A renewal's successor is picked up through the old folder's members.
-    const parent = this.record.via ?? this.record.parent;
+    const parent = this.record.via;
     if (this.record.app !== 'lib' || parent === undefined) return undefined;
     return this.replica.isActiveMember(this.me) ? undefined : parent;
   }
@@ -1484,7 +1484,8 @@ export class TeamSession {
     const irdv = irdvFields(this.deps.c, inv.token);
     if (this.writeOk({ k: IRDV, id: irdv.id, f: irdv.f }) !== null) this.note('irdv not written');
     const net = this.netHint();
-    const token: InviteToken = net ? { ...inv.token, net } : inv.token;
+    const base: InviteToken = this.record.app === 'lib' ? { ...inv.token, app: 'lib' } : inv.token;
+    const token: InviteToken = net ? { ...base, net } : base;
     return {
       token,
       payload: encodeInvite(token, 'link'),

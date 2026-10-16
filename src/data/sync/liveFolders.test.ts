@@ -4,17 +4,16 @@
  * trash and Restore, roles and removal, on two phones over the rig.
  */
 import { LiveFolders } from './liveFolders';
-import { active, seed, sync, team } from './testing/libraryRig';
+import { meOf, offline, online, pair, seed, shareJoin, sync } from './testing/libraryRig';
 import { Rig } from './testing/rig';
 
 jest.mock('@lib/errorReporting', () => ({ addBreadcrumb: jest.fn(), reportError: jest.fn() }));
 
 async function shared() {
   const rig = new Rig();
-  const { a, b } = await team(rig);
+  const { a, b } = pair(rig);
   seed(a);
-  const f = await a.bridge.shareFolder('gaspF', { team: active(a).teamId });
-  if (typeof f === 'string') throw new Error(f);
+  const f = await shareJoin(rig, a, b, () => a.bridge.shareFolder('gaspF', { myName: 'Marc' }));
   const la = new LiveFolders(a.bridge, a.groups, rig.now);
   const lb = new LiveFolders(b.bridge, b.groups, rig.now);
   return { rig, a, b, f, la, lb };
@@ -23,14 +22,8 @@ async function shared() {
 const text = (l: { parts: { t: string }[] }) => l.parts.map((p) => p.t).join('');
 
 describe('live folders (2.7.0 G10)', () => {
-  it('joining, then the header, people and row notes on both phones', async () => {
+  it('the header, people and row notes on both phones', async () => {
     const { rig, a, b, f, la, lb } = await shared();
-    await rig.settle();
-    await b.groups.scan();
-    const joining = lb.list();
-    expect(joining).toHaveLength(1);
-    expect(joining[0]).toMatchObject({ joining: true, name: 'Gaspésie 2026' });
-    expect(joining[0]!.line.text).toBe('Joining · from Marc');
     await sync(rig, [a, b]);
     const [fa] = la.list();
     expect(fa).toMatchObject({
@@ -40,12 +33,12 @@ describe('live folders (2.7.0 G10)', () => {
       canManage: true,
       local: { kind: 'folder', id: 'gaspF' },
       peopleSummary: '2 can edit',
-      subtitle: 'Live with Chic-Chocs · yours',
+      subtitle: 'Live · yours',
     });
     expect(fa!.people.map((p) => p.name)).toEqual(['You', 'Julie']);
     expect(fa!.line.tone).toBe('ok');
     const [fb] = lb.list();
-    expect(fb!.subtitle).toBe('Live with Chic-Chocs · from Marc');
+    expect(fb!.subtitle).toBe('Live · from Marc');
     expect(fb!.isOwner).toBe(false);
     expect(fb!.canManage).toBe(false);
     const wb = b.port.lib.waypoints[0]!;
@@ -56,16 +49,16 @@ describe('live folders (2.7.0 G10)', () => {
     const { rig, a, b, f, la } = await shared();
     await sync(rig, [a, b]);
     // Both rename the waypoint while apart.
-    await active(a).stopMesh();
-    await active(b).stopMesh();
+    await offline(rig, a);
+    await offline(rig, b);
     await rig.settle();
     a.port.lib.waypoints[0]!.label = 'Refuge A';
     b.port.lib.waypoints[0]!.label = 'Refuge B';
     await a.bridge.runAll();
     rig.advance(1000);
     await b.bridge.runAll();
-    await active(a).startMesh();
-    await active(b).startMesh();
+    await online(rig, a);
+    await online(rig, b);
     await rig.settle();
     await sync(rig, [a, b]);
     expect(la.list()[0]!.toReview).toBe(1);
@@ -102,24 +95,22 @@ describe('live folders (2.7.0 G10)', () => {
   it('a manager changes a role and removes someone, who keeps a copy', async () => {
     const { rig, a, b, f, la } = await shared();
     await sync(rig, [a, b]);
-    const julie = active(b).me;
+    const julie = meOf(b, f.teamId);
     expect(la.setRole(f.teamId, julie, 'guest')).toBeNull();
     expect(la.list()[0]!.peopleSummary).toBe('1 can edit · 1 can view');
     expect(la.remove(f.teamId, julie)).toBeNull();
     await sync(rig, [a, b]);
     expect(b.service.host.open(f.teamId)).toBeUndefined();
     expect(b.port.names('waypoints')).toEqual(['Refuge']);
-    // The team does not add her back.
     await sync(rig, [a, b]);
     expect(la.list()[0]!.people.map((p) => p.name)).toEqual(['You']);
-    expect(la.follows(f.teamId)).toBe(true);
   });
 
   it('a change no other phone has yet reads "Not sent yet"; it clears once delivered', async () => {
     const { rig, a, b, la } = await shared();
     await sync(rig, [a, b]);
     expect(la.list()[0]!.line.text).toMatch(/^Synced/);
-    await active(b).stopMesh();
+    await offline(rig, b);
     await rig.settle();
     a.port.lib.waypoints[0]!.label = 'Refuge (fermé)';
     await a.bridge.runAll();
@@ -131,9 +122,9 @@ describe('live folders (2.7.0 G10)', () => {
     });
     expect(f!.line).toMatchObject({ tone: 'wait' });
     expect(f!.line.text).toMatch(/waiting$/);
-    await active(b).startMesh();
+    await online(rig, b);
     await rig.settle();
-    active(a).tick();
+    a.service.host.tick();
     await rig.settle();
     await sync(rig, [a, b]);
     expect(la.list()[0]!.notes.get('waypoint:w1')).toBeUndefined();

@@ -1,29 +1,26 @@
 /**
- * Shared folders and items as sync groups (2.7.0 #712, design §3.4): the
- * group side of Share live. The Library side is `libraryBridge.ts`.
+ * Shared folders and items as sync groups (2.7.0 #712): the group side of
+ * Share live. The Library side is `libraryBridge.ts`.
  *
- * - **Share** with a team: a new library group (`gmeta { app: 'lib', root,
- *   parent: team, follow: 1 }`), the team's active members added at the
- *   chosen role from the team's roster (their ids and box keys are already
- *   there: no invite, no handshake), then a `gref` in the team so their
- *   phones learn it exists.
- * - **Pick up**: a team member's phone that sees a `gref` holds the group
- *   with an empty log ("Joining…"); its links ask a teammate for it
- *   (`LinkHost` pickups) and the log arrives with its `m.add` and key.
- * - **Follow** the team: a manager's phone adds whoever the team admits and
- *   removes whoever the team removes (owner Q2-A; `followPlan`).
+ * **A shared folder is its own group, apart from team mode** (owner,
+ * 2026-10-16): its own members, its own invites, its own connectivity.
+ *
+ * - **Share**: a new library group (`gmeta { app: 'lib', root, net: 1 }`):
+ *   its own relay room (internet on from the start) and its own capability
+ *   claims (`lnk`, `rtc`), so nearby and internet paths work with no team.
+ * - **Invite**: the group's own invite (`createInvite`, flag bit 1: a folder's
+ *   invite), by QR or link, found nearby or through the invite's room.
+ * - **Join**: the team join flow, for the folder (`startJoin`/`confirmJoin`),
+ *   which never makes it the active team.
+ * - **Nearby**: with no team on the LAN, the LAN advertises a shared folder
+ *   (rotating through them while no link is up: one advert at a time).
+ * - **Renewal** before the group's year is up (`renewal.ts`).
  * - **Leave** (keeps a copy: the bridge detaches first) and **stop sharing**
  *   (the owner closes the group; every phone keeps its copy).
  *
- * Shared folders sync while the app is open (owner Q3-A): nothing here runs
- * in the background.
+ * Shared folders sync while the app is open (owner Q3-A).
  */
-import {
-  followPlan,
-  seedPlan,
-  sharedRefs,
-  DEFAULT_LIBRARY_ROLE,
-} from '@core/domains/library/share';
+import { DEFAULT_LIBRARY_ROLE } from '@core/domains/library/share';
 import {
   LIBRARY_LIFETIME_MS,
   renewDue,
@@ -33,14 +30,15 @@ import {
   SUPERSEDED_KEEP_MS,
 } from '@core/domains/library/renewal';
 import { CURSOR_ID, LNX } from '@core/domains/library/kinds';
-import { GREF } from '@core/domains/team/groupKinds';
 import { GMETA, GROUP_RECORD_ID, groupMeta, type GroupMeta } from '@core/group/meta';
 import type { Json } from '@core/team/canonical';
-import { activeMembers } from '@core/team/membership';
-import type { Role } from '@core/team/roles';
+import type { InviteToken } from '@core/team/invite';
+import { advertisedCapBody, needsAdvertisedCap } from '@core/teamdraw/caps';
+import type { InviteChoice } from '@core/teamui/invites';
 
-import { DEFAULT_TEAM_PREFS, type TeamRecord } from '@data/team/teamDisk';
-import type { ActionError, TeamSession } from '@data/team/teamSession';
+import { DEFAULT_TEAM_PREFS } from '@data/team/teamDisk';
+import type { JoinAttempt } from '@data/team/teamJoin';
+import type { ActionError, CreatedInvite, TeamSession } from '@data/team/teamSession';
 
 import type { GroupHost } from './groupHost';
 
@@ -55,8 +53,8 @@ const ACTION_ERRORS: ReadonlySet<string> = new Set<ActionError>([
   'no-change',
 ]);
 
-/** At most this many folders wait to be picked up at once (a teammate's `gref` spam stays bounded). */
-export const MAX_PICKUPS = 32;
+/** With no link up, the LAN's advert moves to the next shared folder this often. */
+export const ADVERT_ROTATE_MS = 60_000;
 
 /** Where the dismissed set lives (groups left or refused: never picked up again). */
 export interface DismissedStore {
@@ -77,12 +75,10 @@ export const memoryDismissed = (): DismissedStore => {
 export interface ShareOptions {
   /** The folder's (or item's) name, shown before the log loads. */
   name: string;
-  /** The share's root record id and kind. */
+  /** The share's root record id. */
   root: string;
-  /** The team it is shared with; absent: a new group (invites by QR). */
-  team?: string;
-  /** Everyone added gets this role (owner #712 Q1: editors by default). */
-  role?: Role;
+  /** My name in the folder (its members see it). */
+  myName: string;
 }
 
 /** Why a library group ended on this phone (the bridge then keeps a copy). */
@@ -131,56 +127,113 @@ export class LibraryGroups {
     return groupMeta(s.replica.data(this.now));
   }
 
-  /** Start sharing: the group, its meta, its seeded members, the team's `gref`. */
+  /** Start sharing: the folder's own group, its meta, my name and claims. */
   async share(options: ShareOptions): Promise<TeamSession | ActionError> {
     await this.load();
-    const team = options.team === undefined ? undefined : this.host.open(options.team);
-    if (options.team !== undefined) {
-      if (team === undefined) return 'not-member';
-      if (!team.view().active) return 'not-member';
-      if (team.view().readOnly) return 'read-only';
-    }
-    const myName = team?.record.myName ?? this.host.teams[0]?.myName ?? 'Me';
     const created = await this.host.create({
       name: options.name,
-      myName,
+      myName: options.myName,
       lifetimeMs: LIBRARY_LIFETIME_MS,
       app: 'lib',
-      ...(options.team !== undefined ? { parent: options.team } : {}),
     });
     const s = created.session;
     s.replica.addKey(created.key);
-    const meta: Record<string, Json> = { app: 'lib', v: 1, root: options.root };
-    if (options.team !== undefined) {
-      meta['parent'] = options.team;
-      meta['follow'] = 1;
-    }
+    // Its own relay room from the start (net: 1); no parent, no team.
+    const meta: Record<string, Json> = { app: 'lib', v: 1, root: options.root, net: 1 };
     const wrote = s.writeData('e.set', { k: GMETA, id: GROUP_RECORD_ID, f: meta });
     if (ACTION_ERRORS.has(wrote)) return 'invalid';
-    s.setMyName(myName);
-    if (team !== undefined) {
-      const role = options.role ?? DEFAULT_LIBRARY_ROLE;
-      const picks = activeMembers(team.replica.state).map((m) => ({ id: m.id, role }));
-      for (const m of seedPlan(team.replica.state, s.me, picks)) s.addMember(m);
-      team.writeData('e.set', {
-        k: GREF,
-        id: s.teamId,
-        f: { app: 'lib', name: options.name.slice(0, 80) },
-      });
-    }
+    s.setMyName(options.myName);
+    this.claim(s);
+    this.host.refreshPaths();
     return s;
   }
 
+  /** The folder's own invite (QR or link), with who it makes (`member`: can edit; `guest`: can view). */
+  invite(groupId: string, choice: InviteChoice): CreatedInvite | ActionError {
+    const s = this.host.open(groupId);
+    if (s === undefined || s.record.app !== 'lib') return 'not-member';
+    return s.createInvite(choice);
+  }
+
+  /** Start joining a folder by its invite (the join owns the transport meanwhile). */
+  async startJoin(token: InviteToken, myName: string): Promise<JoinAttempt> {
+    if (token.app !== 'lib') throw new Error('not-a-folder');
+    return this.host.startJoin(token, myName);
+  }
+
   /**
-   * One pass over every group (run on host changes): pick up folders the
-   * teams announce, follow the teams' members, notice ended folders. Returns
-   * the folders that ended here (the bridge keeps their copy, then forgets them).
+   * The folder let this phone in: keep it as a shared folder (never the active
+   * team), with its claims. `compared` as for a team (R-INV-4).
+   */
+  async confirmJoin(compared = true): Promise<TeamSession | ActionError> {
+    const joined = await this.host.confirmJoin(compared);
+    if (typeof joined === 'string') return joined;
+    this.claim(joined);
+    this.host.linkLayer?.groupsChanged();
+    this.host.refreshPaths();
+    return joined;
+  }
+
+  /** Renew this phone's `lnk`/`rtc` claims in a folder (they last 7 days). */
+  private claim(s: TeamSession): void {
+    const now = this.now;
+    if (s.pickupParent() !== undefined || !s.view().active || s.view().readOnly) return;
+    if (!needsAdvertisedCap(s.replica.data(now), s.me, now)) return;
+    s.writeData('e.set', advertisedCapBody(s.me, now) as unknown as Json);
+  }
+
+  private advertAt = 0;
+  private advertIndex = 0;
+
+  /**
+   * Nearby with no team: when the LAN does not run for a team, it advertises
+   * a shared folder this phone holds, moving to the next one every
+   * {@link ADVERT_ROTATE_MS} while no link is up (one advert at a time until
+   * the native multi-tag advert, design §8.3).
+   */
+  private async advertise(): Promise<void> {
+    const layer = this.host.linkLayer;
+    if (layer === null || this.host.join !== null) return;
+    // A renewed folder first: every member still holds it, while some may not
+    // have picked its successor up yet (they meet there, then it moves over).
+    const held = this.sessions().filter((s) => s.pickupParent() === undefined);
+    const now0 = this.now;
+    const meeting = (s: TeamSession) => this.renewed(s) && now0 <= s.replica.state.expiresAt;
+    const folders = [
+      ...held
+        .filter(meeting)
+        .map((s) => s.teamId)
+        .sort(),
+      ...held
+        .filter((s) => !this.renewed(s))
+        .map((s) => s.teamId)
+        .sort(),
+    ];
+    if (folders.length === 0) return;
+    const advertised = layer.advertised;
+    // A team runs the LAN: folders ride its links (two phones may share both).
+    if (advertised !== null && !this.host.libraries.some((r) => r.teamId === advertised)) return;
+    const now = this.now;
+    const linked = this.host.links().some((l) => l.state === 'open');
+    if (advertised !== null && (linked || now - this.advertAt < ADVERT_ROTATE_MS)) return;
+    this.advertIndex = advertised === null ? 0 : (this.advertIndex + 1) % folders.length;
+    const next = folders[this.advertIndex]!;
+    if (next === advertised) return;
+    this.advertAt = now;
+    await this.host.start(next);
+  }
+
+  /**
+   * One pass over every group (run on host changes): re-open folders joined
+   * as teams, renew claims and the year, follow renewals, advertise nearby,
+   * notice ended folders. Returns the folders that ended here (the bridge
+   * keeps their copy, then forgets them).
    */
   async scan(): Promise<Ended[]> {
     await this.load();
     const now = this.now;
-    // 0. A group joined by invite (a "new group" share) folds as a team until
-    // its meta says it is a library: re-open it as one.
+    // 0. A folder joined through the team join flow folds as a team until its
+    // meta says it is a library: re-open it as one.
     for (const t of this.host.teams) {
       const s = this.host.open(t.teamId);
       if (s === undefined || groupMeta(s.replica.data(now)).app !== 'lib') continue;
@@ -188,47 +241,17 @@ export class LibraryGroups {
       await this.host.reopen(t.teamId);
     }
 
-    // 1. Pick up what the teams announce.
-    let pending = this.sessions().filter((s) => s.pickupParent() !== undefined).length;
-    const announced = new Set<string>();
-    for (const t of this.host.teams) {
-      const team = this.host.open(t.teamId);
-      if (team === undefined || !team.view().active) continue;
-      for (const ref of sharedRefs(team.replica.data(now))) {
-        announced.add(ref.group);
-        if (
-          this.dismissed.has(ref.group) ||
-          this.host.allRecords.some((r) => r.teamId === ref.group)
-        )
-          continue;
-        if (pending >= MAX_PICKUPS) break;
-        pending++;
-        const record: TeamRecord = {
-          teamId: ref.group,
-          name: ref.name ?? 'Shared folder',
-          myName: t.myName,
-          joinedAt: now,
-          prefs: { ...DEFAULT_TEAM_PREFS },
-          lastReadAt: 0,
-          app: 'lib',
-          parent: t.teamId,
-        };
-        await this.host.adopt(record);
-      }
-    }
-    this.host.linkLayer?.groupsChanged();
-
-    // 2. Renewal: roll folders forward before their group's year is up, and
-    //    pick up the successors other managers made.
+    // 1. Claims and renewal: roll folders forward before their group's year is
+    //    up, and pick up the successors other managers made.
     for (const s of this.sessions()) {
       if (s.pickupParent() !== undefined) continue;
       const next = successorOf(s.replica.data(now));
       if (next === undefined) {
+        this.claim(s);
         if (renewDue(s.replica.state, s.me, now)) await this.renew(s);
         continue;
       }
       if (this.dismissed.has(next) || this.host.allRecords.some((r) => r.teamId === next)) continue;
-      const meta = this.meta(s);
       await this.host.adopt({
         teamId: next,
         name: s.record.name,
@@ -237,27 +260,23 @@ export class LibraryGroups {
         prefs: { ...DEFAULT_TEAM_PREFS },
         lastReadAt: 0,
         app: 'lib',
-        ...(meta.parent !== undefined ? { parent: meta.parent } : {}),
         via: s.teamId,
       });
     }
     this.host.linkLayer?.groupsChanged();
+    await this.advertise();
 
-    // 3. Each folder: refused pickups, ended folders, following its team.
+    // 2. Each folder: refused pickups, ended folders.
     const ended: Ended[] = [];
     for (const s of this.sessions()) {
       const state = s.replica.state;
       const mine = state.members.get(s.me);
-      const parent = s.pickupParent();
-      if (parent !== undefined) {
-        // Removed before it arrived, or the share is gone (from the team, or
-        // the old folder now names another successor): stop waiting.
+      if (s.pickupParent() !== undefined) {
+        // Removed before it arrived, or the old folder now names another successor: stop waiting.
         const via = s.record.via;
         const viaSession = via === undefined ? undefined : this.host.open(via);
         const gone =
-          viaSession !== undefined
-            ? successorOf(viaSession.replica.data(now)) !== s.teamId
-            : !announced.has(s.teamId) && this.host.open(parent) !== undefined;
+          viaSession === undefined || successorOf(viaSession.replica.data(now)) !== s.teamId;
         if (mine?.status === 'removed' || state.closedAt !== undefined || gone) {
           ended.push({ groupId: s.teamId, why: 'refused' });
         }
@@ -290,13 +309,6 @@ export class LibraryGroups {
       }
       if (s.record.name !== s.view().name && s.view().name !== '')
         s.updateRecord({ name: s.view().name });
-      const meta = this.meta(s);
-      if (!meta.follow || meta.parent === undefined) continue;
-      const team = this.host.open(meta.parent);
-      if (team === undefined) continue;
-      const plan = followPlan(team.replica.state, state, meta, s.me);
-      for (const m of plan.add) s.addMember(m);
-      for (const id of plan.remove) s.removeMember(id);
     }
     return ended;
   }
@@ -316,15 +328,13 @@ export class LibraryGroups {
       myName: s.record.myName,
       lifetimeMs: LIBRARY_LIFETIME_MS,
       app: 'lib',
-      ...(meta.parent !== undefined ? { parent: meta.parent } : {}),
     });
     const n = created.session;
     n.replica.addKey(created.key);
-    const gm: Record<string, Json> = { app: 'lib', v: 1, root: meta.root, prev: s.teamId };
-    if (meta.parent !== undefined) gm['parent'] = meta.parent;
-    if (meta.follow) gm['follow'] = 1;
+    const gm: Record<string, Json> = { app: 'lib', v: 1, root: meta.root, prev: s.teamId, net: 1 };
     n.writeData('e.set', { k: GMETA, id: GROUP_RECORD_ID, f: gm });
     n.setMyName(s.record.myName);
+    this.claim(n);
     for (const m of successorMembers(s.replica.state, s.me)) n.addMember(m);
     for (const body of snapshotBodies(data)) n.writeData('e.set', body as unknown as Json);
     const r = s.writeData('e.set', { k: LNX, id: CURSOR_ID, f: { g: n.teamId } });
@@ -334,13 +344,7 @@ export class LibraryGroups {
       await this.forget(n.teamId);
       return undefined;
     }
-    // Teammates who join the team later find the successor directly.
-    const team = meta.parent === undefined ? undefined : this.host.open(meta.parent);
-    team?.writeData('e.set', {
-      k: GREF,
-      id: n.teamId,
-      f: { app: 'lib', name: s.record.name.slice(0, 80) },
-    });
+    this.host.refreshPaths();
     return n;
   }
 
@@ -386,29 +390,16 @@ export class LibraryGroups {
     await this.forget(groupId);
   }
 
-  /** The owner ends the share: the group closes, the team's `gref` goes. */
+  /** The owner ends the share: the group closes; every phone keeps its copy. */
   async stop(groupId: string): Promise<ActionError | null> {
     const s = this.host.open(groupId);
     if (s === undefined) return 'not-member';
     const err = s.closeTeam();
     if (err !== null) return err;
-    const parent = this.meta(s).parent;
-    if (parent !== undefined) this.host.open(parent)?.writeData('e.del', { k: GREF, id: groupId });
     await this.forget(groupId);
     return null;
   }
 
-  /** Who is waiting to be added by a manager's phone (follow): active team members not in the folder. */
-  waitingMembers(groupId: string): string[] {
-    const s = this.host.open(groupId);
-    if (s === undefined) return [];
-    const meta = this.meta(s);
-    if (!meta.follow || meta.parent === undefined) return [];
-    const team = this.host.open(meta.parent);
-    if (team === undefined) return [];
-    return activeMembers(team.replica.state)
-      .map((m) => m.id)
-      .filter((id) => !s.replica.state.members.has(id))
-      .sort();
-  }
+  /** The role an invite makes by default (owner #712 Q1: people can edit). */
+  static readonly DEFAULT_ROLE = DEFAULT_LIBRARY_ROLE;
 }

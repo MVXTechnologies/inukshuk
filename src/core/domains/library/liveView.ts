@@ -245,11 +245,11 @@ export function activityFeed(
 export interface PersonRow {
   id: string;
   name: string;
-  /** "Owner", "Manager", "Can edit", "Can view", or when they join. */
+  /** "Owner", "Manager", "Can edit", "Can view". */
   detail: string;
   role?: Role;
   isMe: boolean;
-  /** Waiting for a manager's phone to add them (the folder follows its team). */
+  /** Not in the folder yet (kept for the row shape; always false since folders stand alone). */
   pending: boolean;
 }
 
@@ -266,13 +266,11 @@ export function roleLabel(role: Role): string {
 
 const RANK: Record<Role, number> = { owner: 0, admin: 1, member: 2, guest: 3 };
 
-/** People in a shared folder: active members by role, then teammates waiting to be added. */
+/** People in a shared folder: active members, me first, then by role and name. */
 export function peopleRows(
   members: Iterable<{ id: string; role: Role; status: string }>,
   me: string,
   name: NameOf,
-  waiting: readonly string[],
-  manager: string | undefined,
 ): PersonRow[] {
   const rows: PersonRow[] = [];
   for (const m of members) {
@@ -292,14 +290,6 @@ export function peopleRows(
       RANK[a.role!] - RANK[b.role!] ||
       a.name.localeCompare(b.name),
   );
-  for (const id of waiting)
-    rows.push({
-      id,
-      name: name(id),
-      detail: manager !== undefined ? `Joins when ${manager}’s phone is online` : 'Joins soon',
-      isMe: false,
-      pending: true,
-    });
   return rows;
 }
 

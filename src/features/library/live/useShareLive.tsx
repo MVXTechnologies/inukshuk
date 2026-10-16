@@ -93,10 +93,9 @@ export function useShareLive(args: {
     const bridge = appLibraryBridge();
     if (bridge === null || target === null) return;
     setBusy(true);
-    const options = {
-      ...('team' in choice.with ? { team: choice.with.team } : {}),
-      role: choice.canEdit ? ('member' as const) : ('guest' as const),
-    };
+    // Interim until the revised Share live panel lands (owner OK pending): my name
+    // from my teams, else "Me"; the invite step comes with the new panel.
+    const options = { myName: appTeamService()?.teams[0]?.myName ?? 'Me' };
     try {
       const r =
         target.kind === 'folder'

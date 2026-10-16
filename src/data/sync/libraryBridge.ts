@@ -55,7 +55,6 @@ import type { TeamData } from '@core/team/data';
 import type { Area, Folder, MapDocument, TrackSummary, Waypoint } from '@core/models';
 import type { Json } from '@core/team/canonical';
 import { isShortId } from '@core/team/ids';
-import type { Role } from '@core/team/roles';
 
 import type { ActionError, TeamSession } from '@data/team/teamSession';
 
@@ -272,10 +271,10 @@ export class LibraryBridge {
 
   // ── Sharing and leaving ─────────────────────────────────────────────────
 
-  /** Share a Library folder live (with a team, or a new group). */
+  /** Share a Library folder live: its own group (invite people next). */
   async shareFolder(
     folderId: string,
-    options: { team?: string; role?: Role } = {},
+    options: { myName: string },
   ): Promise<TeamSession | ActionError> {
     const folder = this.port.snapshot().folders.find((f) => f.id === folderId);
     if (folder === undefined) return 'invalid';
@@ -286,7 +285,7 @@ export class LibraryBridge {
   async shareItem(
     kind: ItemKind,
     id: string,
-    options: { team?: string; role?: Role } = {},
+    options: { myName: string },
   ): Promise<TeamSession | ActionError> {
     const item = itemOf(this.port.snapshot(), kind, id);
     if (item === undefined) return 'invalid';
@@ -297,16 +296,11 @@ export class LibraryBridge {
     rootLocal: { kind: LocalKind; id: string },
     kind: RecordKind,
     name: string,
-    options: { team?: string; role?: Role },
+    options: { myName: string },
   ): Promise<TeamSession | ActionError> {
     if (this.markOf(rootLocal.kind, rootLocal.id) !== undefined) return 'no-change';
     const rid = isShortId(rootLocal.id) ? rootLocal.id : this.port.newId();
-    const s = await this.groups.share({
-      name,
-      root: rid,
-      ...(options.team !== undefined ? { team: options.team } : {}),
-      ...(options.role !== undefined ? { role: options.role } : {}),
-    });
+    const s = await this.groups.share({ name, root: rid, myName: options.myName });
     if (typeof s === 'string') return s;
     this.save(s.teamId, { v: 1, root: { kind, rid }, rootLocal, links: [], waiting: [] });
     await this.runAll();
@@ -427,6 +421,7 @@ export class LibraryBridge {
       n.fields['t'] === 'trk' ? this.encodedOf(data, n) !== undefined : representable(n.fields);
     const plan = reconcile({
       holdable,
+      readOnly: s.myRole === 'guest',
       root: r.root,
       ...(rootLocal !== undefined ? { rootLocal } : {}),
       local,

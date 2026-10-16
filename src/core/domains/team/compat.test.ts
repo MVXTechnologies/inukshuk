@@ -215,7 +215,14 @@ describe('2.6.1 ↔ 2.7 across the sync-group seam', () => {
     const payload = encodeInvite(token, 'sms');
     expect(decodeInvite(payload)).toBeDefined();
     const bytes = fromB64u(payload)!;
-    for (const bit of [1, 2, 4, 6, 7]) {
+    // The 2.6.1 decoder's flag rule, verbatim (`(flags & ~1) !== 0` → refused).
+    const decode261Accepts = (b: Uint8Array) => (b[1]! & ~1) === 0;
+    const folder = fromB64u(encodeInvite({ ...token, app: 'lib' }, 'sms'))!;
+    expect(decode261Accepts(bytes)).toBe(true);
+    expect(decode261Accepts(folder)).toBe(false);
+    // A 2.7 phone reads the folder bit, and still refuses bits it does not know.
+    expect(decodeInvite(toB64u(folder))?.app).toBe('lib');
+    for (const bit of [2, 4, 6, 7]) {
       const flagged = bytes.slice();
       flagged[1] = flagged[1]! | (1 << bit);
       expect(decodeInvite(toB64u(flagged))).toBeUndefined();

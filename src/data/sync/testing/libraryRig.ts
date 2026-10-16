@@ -88,6 +88,56 @@ export type Phone = ReturnType<typeof phone>;
 
 export const active = (p: Phone): TeamSession => p.service.active!;
 
+/** Two phones with no team at all. */
+export function pair(rig: Rig): { a: Phone; b: Phone } {
+  return { a: phone(rig, 'a'), b: phone(rig, 'b') };
+}
+
+/** This phone's member id (one device key in every group). */
+export const meOf = (p: Phone, groupId: string): string => p.service.host.open(groupId)!.me;
+
+/**
+ * `a` shares (the folder's own group), invites `b` with the folder's own
+ * invite, and `b` joins it nearby: the LAN advertises the folder, no team.
+ */
+export async function shareJoin(
+  rig: Rig,
+  a: Phone,
+  b: Phone,
+  share: () => Promise<TeamSession | string>,
+  options: { role?: 'member' | 'guest' } = {},
+): Promise<TeamSession> {
+  const f = await share();
+  if (typeof f === 'string') throw new Error(f);
+  await a.groups.scan();
+  await rig.settle();
+  const inv = a.groups.invite(f.teamId, { ...DEFAULT_INVITE, role: options.role ?? 'member' });
+  if (typeof inv === 'string') throw new Error(inv);
+  const token = parseAnyInvite(webJoinLink(inv.payload))!;
+  expect(token.app).toBe('lib');
+  const attempt = await b.groups.startJoin(token, 'Julie');
+  await rig.settle();
+  expect(attempt.state().phase).toBe('verify');
+  const joined = await b.groups.confirmJoin();
+  if (typeof joined === 'string') throw new Error(joined);
+  joined.watchFirstLinkMs = 0;
+  await rig.settle();
+  await sync(rig, [a, b]);
+  return f;
+}
+
+/** A phone goes out of reach (its LAN stops). */
+export async function offline(rig: Rig, p: Phone): Promise<void> {
+  await p.service.host.linkLayer?.stop();
+  await rig.settle();
+}
+
+/** Back in reach: the LAN advertises its folders again. */
+export async function online(rig: Rig, p: Phone): Promise<void> {
+  await p.groups.scan();
+  await rig.settle();
+}
+
 /** `a` founds a team, `b` joins it, both on the LAN with the link upgraded. */
 export async function teamOf(
   rig: Rig,

@@ -74,9 +74,9 @@ export function parseAnyInvite(text: string): InviteToken | undefined {
 
 /**
  * Whether text that is not an invite this version reads is one from a newer
- * app (a version above 1, or flag bits this version doesn't know: a shared
- * folder's invite, #712): the join screen then asks for the update instead
- * of calling it "not an invite".
+ * app (a version above 1, or flag bits this version doesn't know; bit 1, a
+ * shared folder's invite, #712, is read since 2.7.0): the join screen then
+ * asks for the update instead of calling it "not an invite".
  */
 export function inviteNeedsUpdate(text: string): boolean {
   const trimmed = text.trim();
@@ -88,7 +88,7 @@ export function inviteNeedsUpdate(text: string): boolean {
   const bytes = fromB64u(payload);
   // A whole header: version, flags, team id, seed, expiry.
   if (bytes === undefined || bytes.length < 2 + 16 + 16 + 4) return false;
-  return bytes[0]! > 1 || (bytes[0] === 1 && (bytes[1]! & ~1) !== 0);
+  return bytes[0]! > 1 || (bytes[0] === 1 && (bytes[1]! & ~3) !== 0);
 }
 
 /** One SMS segment where possible: the name, then the link. */

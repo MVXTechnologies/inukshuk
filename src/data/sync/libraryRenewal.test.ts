@@ -9,7 +9,16 @@
  */
 import { RENEW_OWNER_MS, SUPERSEDED_KEEP_MS, successorOf } from '@core/domains/library/renewal';
 
-import { active, seed, sync, team, teamOf, type Phone } from './testing/libraryRig';
+import {
+  meOf,
+  offline,
+  online,
+  pair,
+  seed,
+  shareJoin,
+  sync,
+  type Phone,
+} from './testing/libraryRig';
 import type { Rig } from './testing/rig';
 import { Rig as RigClass } from './testing/rig';
 
@@ -17,33 +26,20 @@ jest.mock('@lib/errorReporting', () => ({ addBreadcrumb: jest.fn(), reportError:
 
 const DAY = 24 * 60 * 60 * 1000;
 
-/**
- * Move the clock by whole days as an app reopened later: the team on screen
- * renews its capability claims (as `activate` does at launch) and the LAN is
- * dialled again (links do not survive months of silence).
- */
+/** Move the clock by whole days as an app reopened later: the LAN goes and comes back. */
 async function days(rig: Rig, phones: Phone[], n: number): Promise<void> {
+  for (const p of phones) await offline(rig, p);
   rig.t += n * DAY;
-  for (const p of phones) {
-    await p.service.active?.stopMesh();
-  }
-  await rig.settle();
-  for (const p of phones) p.service.active?.draw.advertise();
-  for (const p of phones) await p.service.active?.startMesh();
-  await rig.settle();
-  for (const p of phones) p.service.active?.tick();
+  for (const p of phones) await online(rig, p);
+  for (const p of phones) p.service.host.tick();
   await rig.settle();
 }
 
-/** A team that lasts until day 360 (teams outlive 14 days when their owner extends them). */
-const TEAM_MS = 360 * DAY;
-
 async function shared() {
   const rig = new RigClass();
-  const { a, b } = await team(rig, { lifetimeMs: TEAM_MS });
+  const { a, b } = pair(rig);
   seed(a);
-  const f = await a.bridge.shareFolder('gaspF', { team: active(a).teamId });
-  if (typeof f === 'string') throw new Error(f);
+  const f = await shareJoin(rig, a, b, () => a.bridge.shareFolder('gaspF', { myName: 'Marc' }));
   await sync(rig, [a, b]);
   return { rig, a, b, f };
 }
@@ -66,21 +62,24 @@ describe('Share live renewal (2.7.0 G10)', () => {
     for (const p of [a, b]) {
       const n = p.service.host.open(next)!;
       expect(n.pickupParent()).toBeUndefined();
-      expect(n.replica.isActiveMember(active(a).me)).toBe(true);
-      expect(n.replica.isActiveMember(active(b).me)).toBe(true);
+      expect(n.replica.isActiveMember(meOf(a, f.teamId))).toBe(true);
+      expect(n.replica.isActiveMember(meOf(b, f.teamId))).toBe(true);
       expect(p.bridge.recordOf(next)).toBeDefined();
       expect(p.bridge.recordOf(f.teamId)).toBeUndefined();
     }
     // The old owner is a manager in the successor (one owner per group).
-    expect(a.service.host.open(next)!.replica.state.members.get(active(a).me)?.role).toBe('owner');
-    expect(b.service.host.open(next)!.replica.state.members.get(active(b).me)?.role).toBe('member');
+    expect(a.service.host.open(next)!.replica.state.members.get(meOf(a, f.teamId))?.role).toBe(
+      'owner',
+    );
+    expect(b.service.host.open(next)!.replica.state.members.get(meOf(b, f.teamId))?.role).toBe(
+      'member',
+    );
     expect(JSON.stringify(a.port.lib)).toBe(before.a);
     expect(JSON.stringify(b.port.lib)).toBe(before.b);
 
-    // Past the old group's expiry (and the team's), edits still travel in the
-    // successor, on whatever team link the two phones share now.
+    // Past the old group's expiry, edits still travel in the successor, on its
+    // own link (no team anywhere).
     await days(rig, [a, b], 70);
-    await teamOf(rig, a, b, { name: 'Hiver', lifetimeMs: TEAM_MS });
     expect(rig.now()).toBeGreaterThan(f.replica.state.expiresAt);
     b.port.lib.waypoints[0]!.label = 'Refuge (an 2)';
     await sync(rig, [a, b]);
@@ -90,7 +89,6 @@ describe('Share live renewal (2.7.0 G10)', () => {
 
     // The superseded group is forgotten a while after its expiry.
     await days(rig, [a, b], SUPERSEDED_KEEP_MS / DAY + 1);
-    await teamOf(rig, a, b, { name: 'Printemps', lifetimeMs: TEAM_MS });
     await sync(rig, [a, b]);
     expect(libraries(a)).toEqual([next]);
     expect(libraries(b)).toEqual([next]);
@@ -100,16 +98,16 @@ describe('Share live renewal (2.7.0 G10)', () => {
     const { rig, a, b, f } = await shared();
     // B is away when A renews; B edits in the old group meanwhile.
     await days(rig, [a, b], RENEW_OWNER_MS / DAY + 1);
-    await active(b).stopMesh();
+    await offline(rig, b);
     await rig.settle();
     await a.bridge.runAll();
     const next = successorOf(f.replica.data(rig.now()))!;
     expect(next).toBeDefined();
     b.port.lib.waypoints[0]!.note = 'Roof leaks';
     await b.bridge.runAll();
-    await active(b).startMesh();
+    await online(rig, b);
     await rig.settle();
-    active(a).tick();
+    a.service.host.tick();
     await rig.settle();
     await sync(rig, [a, b]);
     expect(b.bridge.recordOf(next)).toBeDefined();
@@ -121,25 +119,27 @@ describe('Share live renewal (2.7.0 G10)', () => {
   it('two managers renewing at once end with one successor on every phone', async () => {
     const { rig, a, b, f } = await shared();
     // B becomes a manager; both renew while apart.
-    expect(f.setRole(active(b).me, 'admin')).toBeNull();
+    expect(f.setRole(meOf(b, f.teamId), 'admin')).toBeNull();
     await sync(rig, [a, b]);
-    await days(rig, [a, b], 330);
-    await active(a).stopMesh();
-    await active(b).stopMesh();
-    await rig.settle();
+    await offline(rig, a);
+    await offline(rig, b);
+    rig.t += 330 * DAY;
+    // Each renews while the other is out of reach.
     await a.bridge.runAll();
+    await offline(rig, a);
     rig.t += 1000;
     await b.bridge.runAll();
+    await offline(rig, b);
     const mine = successorOf(f.replica.data(rig.now()));
     const fb = b.service.host.open(f.teamId)!;
     const theirs = successorOf(fb.replica.data(rig.now()));
     expect(mine).toBeDefined();
     expect(theirs).toBeDefined();
     expect(mine).not.toBe(theirs);
-    await active(a).startMesh();
-    await active(b).startMesh();
+    await online(rig, a);
+    await online(rig, b);
     await rig.settle();
-    active(a).tick();
+    a.service.host.tick();
     await rig.settle();
     await sync(rig, [a, b]);
     await sync(rig, [a, b]);

@@ -97,7 +97,7 @@ describe('liveView', () => {
     expect(julie.pinned).toEqual([]);
   });
 
-  it('lists people by role, then who waits to be added', () => {
+  it('lists people: me first, then by role', () => {
     const rows = peopleRows(
       [
         { id: JU, role: 'member', status: 'active' },
@@ -107,18 +107,15 @@ describe('liveView', () => {
       ],
       OWNER,
       name,
-      [mid('lea')],
-      'Julie',
     );
     expect(rows.map((r) => [r.name, r.detail])).toEqual([
       ['You', 'Owner'],
       ['Julie', 'Can edit'],
       ['Noé', 'Can view'],
-      ['Someone', 'Joins when Julie’s phone is online'],
     ]);
     expect(peopleSummary(rows)).toBe('2 can edit · 1 can view');
     expect(peopleSummary(rows.slice(0, 2))).toBe('2 can edit');
     expect(roleLabel('admin')).toBe('Manager');
-    expect(peopleRows([], OWNER, name, [mid('x')], undefined)[0]!.detail).toBe('Joins soon');
+    expect(peopleRows([], OWNER, name)).toEqual([]);
   });
 });

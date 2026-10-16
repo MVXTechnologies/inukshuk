@@ -130,17 +130,10 @@ export class LiveFolders {
     return this.groups.sessions().find((s) => s.teamId === groupId);
   }
 
+  /** A member's name in the folder (its own profiles: a folder is apart from any team). */
   private nameOf(s: TeamSession): (id: string) => string {
     const own = new Map(s.view().members.map((m) => [m.id, m]));
-    const parent = this.groups.meta(s).parent;
-    const team = parent === undefined ? undefined : this.groups.host.open(parent);
-    const theirs = new Map((team?.view().members ?? []).map((m) => [m.id, m]));
-    return (id) => {
-      const a = own.get(id);
-      if (a?.named === true) return a.name;
-      const b = theirs.get(id);
-      return b?.name ?? a?.name ?? 'Someone';
-    };
+    return (id) => own.get(id)?.name ?? 'Someone';
   }
 
   history(s: TeamSession): LibraryHistory {
@@ -167,49 +160,13 @@ export class LiveFolders {
 
   private summary(s: TeamSession): LiveFolder | undefined {
     const now = this.now();
-    const joining = s.pickupParent() !== undefined;
     const record = this.bridge.recordOf(s.teamId);
-    const meta = this.groups.meta(s);
-    const parent = meta.parent ?? s.record.parent;
-    const team = parent === undefined ? undefined : this.groups.host.open(parent);
-    if (joining) {
-      const from = this.sharerOf(s) ?? 'your team';
-      return {
-        groupId: s.teamId,
-        name: s.record.name,
-        joining: true,
-        line: syncLine({ joining: { from }, waiting: 0, now }),
-        faces: [],
-        people: [],
-        peopleSummary: '',
-        myRole: undefined,
-        isOwner: false,
-        canManage: false,
-        subtitle: `From ${from}`,
-        sharedBy: from,
-        toReview: 0,
-        changesToday: 0,
-        trashCount: 0,
-        notes: new Map(),
-        massDelete: [],
-      };
-    }
     const name = this.nameOf(s);
     const view = this.view(s);
     const h = this.history(s);
     const data = s.replica.data(now);
     const members = [...s.replica.state.members.values()];
-    const waitingIds = this.groups.waitingMembers(s.teamId);
-    const managers = members.filter(
-      (m) => m.status === 'active' && isAdminRole(m.role) && m.id !== s.me,
-    );
-    const people = peopleRows(
-      members,
-      s.me,
-      name,
-      waitingIds,
-      managers[0] ? name(managers[0].id) : undefined,
-    );
+    const people = peopleRows(members, s.me, name);
     const myRole = s.myRole;
     const owner = members.find((m) => m.role === 'owner')?.id;
     const isOwner = owner === s.me;
@@ -217,12 +174,11 @@ export class LiveFolders {
       view.root === undefined
         ? undefined
         : (view.folders.get(view.root) ?? view.items.get(view.root));
-    const teamName = team?.view().name;
     const sharer =
       owner === undefined ? undefined : owner === s.me ? 'yours' : `from ${name(owner)}`;
-    const subtitle = [teamName ? `Live with ${teamName}` : 'Live', sharer]
-      .filter(Boolean)
-      .join(' · ');
+    const subtitle = ['Live', sharer].filter(Boolean).join(' · ');
+    // Joining: in the group, but its folder not in the Library yet.
+    const joining = record?.rootLocal === undefined;
     const faces: Face[] = s
       .view()
       .members.filter((m) => m.active && !m.isMe)
@@ -264,12 +220,19 @@ export class LiveFolders {
       groupId: s.teamId,
       name: rootNode?.name ?? s.record.name,
       ...(record?.rootLocal !== undefined ? { local: record.rootLocal } : {}),
-      joining: false,
-      line: syncLine({
-        waiting: Math.max(0, mySeq - delivered),
-        ...(lastSyncAt !== undefined ? { lastSyncAt } : {}),
-        now,
-      }),
+      joining,
+      line: joining
+        ? syncLine({
+            joining: { from: owner === undefined ? 'the folder' : name(owner) },
+            waiting: 0,
+            now,
+          })
+        : syncLine({
+            waiting: Math.max(0, mySeq - delivered),
+            ...(lastSyncAt !== undefined ? { lastSyncAt } : {}),
+            now,
+          }),
+      ...(joining && owner !== undefined ? { sharedBy: name(owner) } : {}),
       faces,
       people,
       peopleSummary: peopleSummary(people),
@@ -284,19 +247,6 @@ export class LiveFolders {
       massDelete:
         myRole !== undefined && isAdminRole(myRole) ? this.massDelete(s, h, view, now) : [],
     };
-  }
-
-  /** Who shared a folder being picked up (the oldest `gref`'s writer, by the team's names). */
-  private sharerOf(s: TeamSession): string | undefined {
-    const parent = s.record.parent;
-    const team = parent === undefined ? undefined : this.groups.host.open(parent);
-    if (team === undefined) return undefined;
-    for (const rec of team.replica.data(this.now()).entities.values()) {
-      if (rec.kind === 'gref' && rec.id === s.teamId && rec.owner !== undefined) {
-        return team.view().members.find((m) => m.id === rec.owner)?.name;
-      }
-    }
-    return undefined;
   }
 
   /** Deletes noted as they arrive (only recent ones: a relaunch never raises an old burst). */

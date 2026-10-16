@@ -458,8 +458,20 @@ export class PathManager {
       rtc: true,
       signalOnly: true,
       limits: ROOM_SESSION_LIMITS,
+      claims: this.claims,
     };
   }
+
+  /**
+   * An `rtc`/`lnk` claim by `member` in any group both phones hold (#712: a
+   * shared folder is its own group; a claim in any shared group counts).
+   */
+  private readonly claims = (member: string, cap: string, now: number): boolean =>
+    this.o
+      .groups()
+      .some(
+        (g) => g.store.isActiveMember(member) && g.store.canReceive?.(member, cap, now) === true,
+      );
 
   private maybeInitiate(roomId: string, entry: RoomEntry, h: string): void {
     const me = entry.client.me;
@@ -588,7 +600,11 @@ export class PathManager {
   private inviteHandover(s: L0): void {
     const now = this.now();
     const g = this.group(s.groupId);
-    if (s.member !== undefined && g?.store.canReceive?.(s.member, RTC_CAP, now) === true) {
+    if (
+      s.member !== undefined &&
+      (g?.store.canReceive?.(s.member, RTC_CAP, now) === true ||
+        (g?.store.isActiveMember(s.member) === true && this.claims(s.member, RTC_CAP, now)))
+    ) {
       this.closeL0(s, 'handover');
     } else if (s.sent > INVITE_SESSION_MAX_BYTES) {
       this.closeL0(s, 'cap');
