@@ -1,5 +1,6 @@
 import { palette, space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
+import { KeyboardLifted } from '@ui/components/KeyboardLifted';
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { IconButton, Text, useTheme } from '@ui/paper';
@@ -48,40 +49,44 @@ export function LibrarySheet({
         accessibilityRole="button"
         importantForAccessibility="no"
       />
-      <View
-        style={[
-          styles.sheet,
-          {
-            backgroundColor: theme.dark ? t.elevation.level1 : t.surface,
-            paddingBottom: insets.bottom + space.md,
-          },
-        ]}
-        accessibilityViewIsModal
-      >
-        <View style={[styles.handle, { backgroundColor: t.outline }]} />
-        <View style={styles.head}>
-          <View style={styles.headText}>
-            <Text accessibilityRole="header" style={[styles.title, { color: t.ink }]}>
-              {title}
-            </Text>
-            {subtitle ? (
-              <Text numberOfLines={1} style={[styles.subtitle, { color: t.inkMuted }]}>
-                {subtitle}
+      {/* Above the keyboard while it is up: Share live's name field sat under
+        the keys with the sheet's Start button (E2E run 38979337220). */}
+      <KeyboardLifted style={styles.dock}>
+        <View
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: theme.dark ? t.elevation.level1 : t.surface,
+              paddingBottom: insets.bottom + space.md,
+            },
+          ]}
+          accessibilityViewIsModal
+        >
+          <View style={[styles.handle, { backgroundColor: t.outline }]} />
+          <View style={styles.head}>
+            <View style={styles.headText}>
+              <Text accessibilityRole="header" style={[styles.title, { color: t.ink }]}>
+                {title}
               </Text>
-            ) : null}
+              {subtitle ? (
+                <Text numberOfLines={1} style={[styles.subtitle, { color: t.inkMuted }]}>
+                  {subtitle}
+                </Text>
+              ) : null}
+            </View>
+            <IconButton
+              icon="close"
+              iconColor={t.inkMuted}
+              onPress={onClose}
+              style={styles.close}
+              accessibilityLabel="Close"
+            />
           </View>
-          <IconButton
-            icon="close"
-            iconColor={t.inkMuted}
-            onPress={onClose}
-            style={styles.close}
-            accessibilityLabel="Close"
-          />
+          <ScrollView style={styles.body} bounces={false} keyboardShouldPersistTaps="handled">
+            {children}
+          </ScrollView>
         </View>
-        <ScrollView style={styles.body} bounces={false}>
-          {children}
-        </ScrollView>
-      </View>
+      </KeyboardLifted>
     </View>
   );
 }
@@ -168,12 +173,8 @@ export const sheetStylesSheet = StyleSheet.create({
 
 const stylesSheet = StyleSheet.create({
   scrim: { ...StyleSheet.absoluteFill },
+  dock: { position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '85%' },
   sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    maxHeight: '85%',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingTop: space.sm,

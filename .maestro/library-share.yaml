@@ -12,8 +12,11 @@
 #   stop    the Stop sharing dialog; the light pass confirms it
 #
 # Portability notes:
-# - Runs after make-map.yaml in the catalog shard: its map ("My map …") is
-#   the item the folder holds (an empty folder cannot be shared).
+# - Runs last in the catalog shard, after make-map.yaml (its "My map …" is
+#   waited for) and pdf-overlays.yaml: the folder holds the Library's first
+#   map ("Map options" names every map row's menu; the first is Placentia Bay
+#   from pdf-overlays, run 38979337220). Any map will do: an empty folder
+#   cannot be shared.
 # - Shared folders are apart from team mode: no team, no second phone.
 # - Theme through subflows/set-theme.yaml (Dark, then back to System).
 # - Cleans up: the share is stopped and the folder deleted, so the map is
