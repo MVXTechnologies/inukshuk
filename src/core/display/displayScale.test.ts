@@ -9,6 +9,8 @@ import {
   effectiveScreenDp,
   hitSlopFor,
   isDisplayScale,
+  MIN_TEXT_SP,
+  scaleFontSize,
   normalizeDisplayScale,
   scaleFont,
   scaleSheet,
@@ -126,8 +128,9 @@ describe('scaleStyle', () => {
       top: 10,
     };
     expect(scaleStyle(s, 0.5)).toEqual({
-      fontSize: 8,
-      lineHeight: 11,
+      // 16 → 8 is under the 9 sp floor; the leading keeps the 22/16 ratio.
+      fontSize: 9,
+      lineHeight: 12.5,
       letterSpacing: 0.5,
       paddingHorizontal: 8,
       marginTop: -2,
@@ -202,5 +205,37 @@ describe('effectiveScreenDp', () => {
     expect(effectiveScreenDp(360, 0.6)).toBe(600);
     expect(effectiveScreenDp(360, 0)).toBe(360);
     expect(effectiveScreenDp(360, NaN)).toBe(360);
+  });
+});
+
+describe('the 9 sp text floor', () => {
+  it('text shrinks but stops at 9 sp', () => {
+    expect(MIN_TEXT_SP).toBe(9);
+    expect(scaleFontSize(16, 0.6)).toBe(9.5);
+    expect(scaleFontSize(12, 0.6)).toBe(9);
+    expect(scaleFontSize(11, 0.7)).toBe(9);
+    expect(scaleFontSize(13, 0.8)).toBe(10.5);
+  });
+
+  it('text designed under 9 keeps its own size, never grows to the floor', () => {
+    expect(scaleFontSize(8, 0.6)).toBe(8);
+    expect(scaleFontSize(8, 1.5)).toBe(12);
+  });
+
+  it('a held-up size keeps its line height ratio', () => {
+    expect(scaleStyle({ fontSize: 12, lineHeight: 16 }, 0.6)).toEqual({
+      fontSize: 9,
+      lineHeight: 12,
+    });
+    expect(scaleStyle({ fontSize: 20, lineHeight: 26 }, 0.6)).toEqual({
+      fontSize: 12,
+      lineHeight: 15.5,
+    });
+  });
+
+  it.each(DISPLAY_SCALES.map((v) => [v]))('no 12 sp text drops under 9 at %p %%', (v) => {
+    for (const fs of [12, 12.5, 13, 14, 16]) {
+      expect(scaleFontSize(fs, displayScaleFactor(v))).toBeGreaterThanOrEqual(9);
+    }
   });
 });

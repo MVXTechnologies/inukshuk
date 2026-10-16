@@ -22,6 +22,19 @@ export const DISPLAY_SCALES = [60, 70, 80, 90, 100, 110, 120, 130, 140, 150] as 
 export type DisplayScale = (typeof DISPLAY_SCALES)[number];
 export const DEFAULT_DISPLAY_SCALE: DisplayScale = 100;
 
+/**
+ * The smallest text the Display size draws (sp, owner 2026-10-16): text
+ * shrinks with the setting but stops here. Text designed smaller than this
+ * (a badge digit) is never scaled below its own size.
+ */
+export const MIN_TEXT_SP = 9;
+
+/** The size text designed at `fontSize` draws at `factor`, held at the floor. */
+export function scaleFontSize(fontSize: number, factor: number): number {
+  const scaled = scaleSize(fontSize, factor);
+  return Math.max(scaled, Math.min(fontSize, MIN_TEXT_SP));
+}
+
 /** Android's 48 dp minimum touch target (iOS asks 44 pt; 48 satisfies both). */
 export const MIN_TOUCH = 48;
 
@@ -152,6 +165,17 @@ export function scaleStyle<T extends object>(style: T, factor: number): T {
     if (typeof value === 'number' && key === 'letterSpacing') {
       // Tracking is sub-dp; half-dp rounding would erase it.
       out[key] = Math.round(value * factor * 100) / 100;
+    } else if (typeof value === 'number' && key === 'fontSize') {
+      out[key] = scaleFontSize(value, factor);
+    } else if (typeof value === 'number' && key === 'lineHeight') {
+      // Leading follows the text: when the floor held the size up, the line
+      // keeps the design's ratio to it instead of clipping the glyphs.
+      const fs = (style as { fontSize?: unknown }).fontSize;
+      const scaled = scaleSize(value, factor);
+      out[key] =
+        typeof fs === 'number' && fs > 0
+          ? Math.max(scaled, Math.round(scaleFontSize(fs, factor) * (value / fs) * 2) / 2)
+          : scaled;
     } else if (typeof value === 'number' && SCALED_KEYS.has(key)) {
       const scaled = scaleSize(value, factor);
       out[key] =
