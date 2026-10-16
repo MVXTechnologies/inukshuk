@@ -21,39 +21,48 @@ What it does, and does not do:
   in the code. The client IP is a rate-limit key and is otherwise reduced to
   an opaque in-memory tag. CI enforces this (`worker/gates.mjs`).
 
-It runs in its **own free Cloudflare account**, separate from the tiles Worker,
-so relay load can never use up the basemap's daily request allowance.
+It runs in the **company Cloudflare account**, as its own Worker next to the
+tiles Worker, at **https://rtc.mvxtechnologies.com** (custom domain). The
+security review (R-OPS-1) asked for a separate free account so that relay
+load could never use up the basemap's daily request allowance; the owner
+decided on one account (2026-10-16) because that risk no longer holds:
+
+- **Workers Paid:** the account has no free-plan daily request cap for relay
+  traffic to exhaust.
+- **A separate Worker:** its own script, routes, Durable Objects, secrets and
+  deploy job (`rtc` environment); a fault or a redeploy of one does not touch
+  the other.
+- **Kill switches and budgets:** `RTC_ENABLED` and `TURN_ENABLED` close the
+  relay or TURN at once, and TURN minting has a daily budget and stops at 80 %
+  of the monthly allowance (below).
 
 ## Owner checklist (one time)
 
 Nothing here can be done by an agent: every step needs the owner's own
 sign-in. Keep every value below out of the repository, issues and chats.
 
-1. **Create the account.** A new, free Cloudflare account dedicated to the
-   relay, with a company address you control. Turn on two-factor
-   authentication, and add a notification for Worker deployments
+1. **The account.** The company Cloudflare account (the tiles Worker's), with
+   two-factor authentication on and a notification for Worker deployments
    (Notifications → Workers).
-2. **Choose the host.** Either the account's `*.workers.dev` subdomain, or a
-   custom hostname (a domain in this account, then uncomment `routes` in
-   `worker/wrangler.toml`). The phones sign the exact host they connect to, so
-   the app's relay host and this host must match. The app expects
-   **`rtc.mvxtechnologies.com`** (`RTC_HOST` in `src/data/rtcRelay.ts`, one
-   line to change, like `TILE_HOST`; a build can override it with
-   `RTC_RELAY_HOST`).
+2. **The host.** `rtc.mvxtechnologies.com`, a custom domain in the company
+   zone (`routes` in `worker/wrangler.toml`). The phones sign the exact host
+   they connect to, so it must match the app's `RTC_HOST`
+   (`src/data/rtcRelay.ts`, one line to change, like `TILE_HOST`; a build can
+   override it with `RTC_RELAY_HOST`).
 3. **Create the TURN key.** Dashboard → Realtime → TURN Server → Create. Note
    the **key id** and the **API token** it shows once.
 4. **Create two API tokens** (My Profile → API Tokens → Create Custom Token):
    - **Deploy token** for CI: Account → _Workers Scripts: Edit_; Account →
-     _Account Settings: Read_. Restrict it to the relay account only. Add a
-     zone permission (_Workers Routes: Edit_) only if you use a custom host.
+     _Account Settings: Read_, and the zone permission _Workers Routes: Edit_
+     (the custom domain). Restrict it to the company account.
    - **Analytics token** for the Worker's usage check: Account → _Account
-     Analytics: Read_, relay account only.
+     Analytics: Read_, company account only.
    - Also note the **account id** (dashboard sidebar).
 5. **Set the Worker secrets** from `infra/rtc/worker` (after `npm ci`), each
    one prompts for the value:
 
    ```sh
-   npx wrangler login            # into the relay account, not the tiles one
+   npx wrangler login            # into the company account
    npx wrangler secret put TURN_KEY_ID
    npx wrangler secret put TURN_KEY_API_TOKEN
    npx wrangler secret put CF_ACCOUNT_ID
@@ -93,6 +102,11 @@ All in `[vars]` of `worker/wrangler.toml`; change, merge, and CI redeploys. In
 an emergency, edit the variable in the dashboard (Workers → inukshuk-rtc →
 Settings → Variables): it applies at once, and the next deploy restores the
 file's value.
+
+`TURN_ENABLED` stays `1` in the file. Until the TURN key exists (checklist
+step 3), it is `0` in the dashboard of the deployed Worker; since a deploy
+restores the file's `1`, set it to `0` again after a deploy until then (the
+Worker refuses TURN anyway without its key secrets).
 
 | Variable                    | Default | Effect                                                        |
 | --------------------------- | ------- | ------------------------------------------------------------- |
