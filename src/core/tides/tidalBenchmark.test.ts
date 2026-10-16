@@ -8,7 +8,13 @@ import {
   type GeodeticFilter,
 } from '@core/geodetic/filter';
 import { parseGeodeticFeature } from '@core/geodetic/record';
-import { buildTidalLabelLayer, parseTidalHeight, tidalCardRow, tidalIcon } from './tidalBenchmark';
+import {
+  buildTidalLabelLayer,
+  parseTidalHeight,
+  tidalCardRow,
+  tidalCredit,
+  tidalIcon,
+} from './tidalBenchmark';
 
 // KV0584 (Battery NO 3): NGS NAVD88 3.431; CO-OPS sheet MLLW 4.277 / MHW 2.834 (2012-11-20).
 const KV0584 = {
@@ -63,7 +69,20 @@ describe('tidal benchmarks in the geodetic layer', () => {
     );
     expect(card.chips[0]).toEqual({ label: 'Tidal benchmark', tone: 'tidal' });
     expect(card.credit).toContain('NOAA/NOS/CO-OPS');
-    expect(card.credit).toContain('Not for navigation');
+    // NOAA asks for credit only: no navigation notice (#764).
+    expect(card.credit).not.toMatch(/navigation/i);
+  });
+
+  it('keeps "Not for navigation" only for a CHS tide source (its licence requires it)', () => {
+    const chs = parseTidalHeight({ ...KV0584, cs: 'ca-chs:03248' });
+    expect(chs && tidalCredit(chs)).toBe(
+      'Contains data of the Canadian Hydrographic Service (DFO), fetched live from IWLS · Not for navigation',
+    );
+    const noaa = parseTidalHeight(KV0584);
+    expect(noaa && tidalCredit(noaa)).toBe('NOAA/NOS/CO-OPS');
+    const kv = parseTidalHeight({ ...KV0584, cs: 'no-kartverket:BGO' });
+    expect(kv && tidalCredit(kv)).toBe('© Kartverket · CC BY 4.0');
+    expect(noaa && tidalCredit({ ...noaa, station: 'xx-unknown:1' })).toBe('');
   });
 
   it('says when the join could not be cross-checked', () => {

@@ -19,7 +19,9 @@
  * heights, and no CD-derived orthometric value is ever shown.
  */
 import type { SymbolLayerSpecification } from '@maplibre/maplibre-react-native';
+import { NOT_FOR_NAVIGATION } from './card';
 import { cdKind, TIDE_CATALOG, type TideSource } from './catalog';
+import { CHS_SOURCE } from './chs';
 import palette from './palette.json';
 
 export interface TidalHeight {
@@ -157,8 +159,14 @@ export function tidalCardRow(t: TidalHeight): { label: string; lines: TidalLine[
   return { label: 'Chart datum', lines };
 }
 
-/** The card footer's extra credit for a tidal benchmark. */
+/**
+ * The card footer's extra credit for a tidal benchmark: its tide source's
+ * credit, and "Not for navigation" only where that source's licence requires
+ * it (CHS, clause 10); NOAA, Kartverket, SHOM and JMA ask for credit only (#764).
+ */
 export function tidalCredit(t: TidalHeight): string {
-  const s = tidalSource(t);
-  return `${s ? `${s.attribution} · ` : ''}Not for navigation`;
+  if (t.station.startsWith(`${CHS_SOURCE.key}:`)) {
+    return `${CHS_SOURCE.attribution} · ${NOT_FOR_NAVIGATION}`;
+  }
+  return tidalSource(t)?.attribution ?? '';
 }
