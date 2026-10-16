@@ -30,6 +30,7 @@ import {
   trailSubtitle,
 } from '@core/library/trailViewText';
 import { numberNotesOnTrack, orderNotes } from '@core/library/notes';
+import { peekStats, type TrailSheet } from '@core/library/trailSheet';
 import { padBbox } from '@core/geo/terrain';
 import type { TrackPoint } from '@core/models';
 import * as storage from '@data/storage';
@@ -44,7 +45,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Image, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Appbar,
@@ -82,6 +83,8 @@ import { OverviewTab } from './trailView/OverviewTab';
 import { TimelineTab, type TimelineItem } from './trailView/TimelineTab';
 import { SplitsTab } from './trailView/SplitsTab';
 import { TRAIL_ACTION_BAR_H, TrailActionBar, type TrailAction } from './trailView/TrailActionBar';
+import { SheetGrabber, TrailPeek, useSheetDrag } from './trailView/TrailSheet';
+import { palette } from '@ui/tokens';
 import { mapAlongPoints, photosOnAxis } from '@core/photos/axis';
 import { isNotePhoto } from '@core/photos/model';
 import { combineTrailPhotos, notePhotosOnTrail } from '@core/photos/notePhotos';
@@ -207,6 +210,9 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const [addingPhotos, setAddingPhotos] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
+  // #740: the tabs fold into a peek (stats + profile) and the map fills the screen.
+  const [sheet, setSheet] = useState<TrailSheet>('full');
+  const sheetDrag = useSheetDrag(sheet, setSheet);
 
   const fileUri = track?.fileUri;
   const bbox = track?.stats.bbox;
@@ -632,6 +638,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
   }
 
   const s = profileStats ?? track.stats;
+  // Trimming needs the full sheet (its slider and buttons live there).
+  const folded = sheet === 'peek' && trimRange === null;
   const categoryName = findCategory(track.category, customCategories)?.name ?? null;
   // "Hike · 35 photos · Sunday, September 27 · 9:12 AM → 12:54 PM": the
   // count goes early so a long date/time line truncates the times, not it.
@@ -708,7 +716,14 @@ export function Trail3DGLScreen({ trackId }: Props) {
     <View style={styles.fill}>
       {/* The map keeps a fixed height at the top (board C2): switching tabs
           or scrolling the content below never shrinks or hides it. */}
-      <View style={[styles.mapBox, { height: MAP_H + insets.top, paddingTop: insets.top }]}>
+      <View
+        style={[
+          styles.mapBox,
+          folded ? styles.fill : { height: MAP_H + insets.top },
+          { paddingTop: insets.top },
+        ]}
+        testID="trail-map-box"
+      >
         {points && points.length > 0 ? (
           // Mount the map only once points are loaded — a MapLibre GeoJSON
           // source created with empty data doesn't reliably pick up a later
@@ -811,7 +826,21 @@ export function Trail3DGLScreen({ trackId }: Props) {
         )}
       </View>
 
-      {points && (
+      {points && folded && (
+        <TrailPeek
+          stats={peekStats(s, timing, units)}
+          series={chartSeries}
+          cursorDistanceM={scrub?.distanceM ?? null}
+          onScrub={scrubTo}
+          dots={ownPhotosAlong.filter((p) => !p.photo.hidden).map((p) => p.distanceM)}
+          onUnfold={() => setSheet('full')}
+          handlers={sheetDrag.handlers}
+          offset={sheetDrag.offset}
+          bottom={insets.bottom + TRAIL_ACTION_BAR_H}
+          color={palette.ochre}
+        />
+      )}
+      {points && !folded && (
         <>
           {trimRange ? (
             <View style={styles.trimBody}>
@@ -856,7 +885,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
               </View>
             </View>
           ) : (
-            <>
+            <Animated.View style={[styles.fill, { transform: [{ translateY: sheetDrag.offset }] }]}>
+              <SheetGrabber onFold={() => setSheet('peek')} handlers={sheetDrag.handlers} />
               <TrailTabBar tabs={TRAIL_VIEW_TABS} active={tab} onChange={selectTab} />
               <ScrollView
                 style={styles.fill}
@@ -937,7 +967,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
                   />
                 )}
               </ScrollView>
-            </>
+            </Animated.View>
           )}
         </>
       )}

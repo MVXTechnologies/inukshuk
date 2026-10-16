@@ -43,6 +43,8 @@ interface Props {
   guides?: readonly { distanceM: number; fromX?: number; strong?: boolean }[];
   /** Drawn between the title row and the plot, as wide as the plot (the photo lane). */
   above?: ReactNode;
+  /** Just the plot: no title row, no card padding (the trail view's folded peek, #740). */
+  bare?: boolean;
   /** The plot's width, once laid out. */
   onWidth?: (width: number) => void;
 }
@@ -95,6 +97,7 @@ export function TrailChart({
   dots = NONE,
   guides = NONE,
   above,
+  bare = false,
   onWidth,
 }: Props) {
   const t = useSchemeTokens();
@@ -207,16 +210,18 @@ export function TrailChart({
   });
 
   return (
-    <View style={[styles.card, { backgroundColor: t.surface }]} testID={testID}>
-      <View style={styles.head}>
-        <Text style={[styles.title, { color: t.ink }]}>{title}</Text>
-        <Text
-          style={[styles.value, { color: t.ink }]}
-          testID={testID ? `${testID}-value` : undefined}
-        >
-          {valueText}
-        </Text>
-      </View>
+    <View style={[bare ? null : styles.card, { backgroundColor: t.surface }]} testID={testID}>
+      {!bare && (
+        <View style={styles.head}>
+          <Text style={[styles.title, { color: t.ink }]}>{title}</Text>
+          <Text
+            style={[styles.value, { color: t.ink }]}
+            testID={testID ? `${testID}-value` : undefined}
+          >
+            {valueText}
+          </Text>
+        </View>
+      )}
       {above}
       <GestureDetector gesture={scrub}>
         <View
