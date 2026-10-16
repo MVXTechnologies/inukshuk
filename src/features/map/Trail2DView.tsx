@@ -19,7 +19,7 @@ import {
   type MapRef,
   Marker,
 } from '@maplibre/maplibre-react-native';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { VECTOR_BASEMAP_ENABLED } from '@core/features/flags';
 import { vectorBasemapOption } from '@data/basemapTiles';
@@ -27,7 +27,16 @@ import { useTheme } from 'react-native-paper';
 import { buildOsmStyle } from './mapStyle';
 import { toLngLatBounds } from './geojson';
 import { NoteNumberBadge } from './components/NoteNumberBadge';
+import { NotePhotoPin } from './components/NotePhotoPin';
+import { useNoteSprites } from './hooks/useNoteSprites';
 import { useTiltRelief } from './hooks/useTiltRelief';
+import { pinScaleFactor } from '@core/map/pinScale';
+import {
+  NOTE_BADGE_DP,
+  notePhotoPinLayout,
+  notePinHitRadius,
+  notePinKind,
+} from '@core/photos/notePins';
 
 export function Trail2DView({
   points,
@@ -120,6 +129,27 @@ export function Trail2DView({
     [points, notes, segmentStarts],
   );
 
+  // #742: a note with a photo is its photo's circle with the number on its
+  // top-right edge (the circle grows with the zoom like the trail photos,
+  // the badge follows Pin size); a note without one, its plain pin.
+  const spriteFor = useNoteSprites(notes);
+  const pinScale = pinScaleFactor(useSettingsStore((s) => s.pinScale));
+  // Quarter-zoom steps: the circles follow a pinch without a render per frame.
+  const [zoomStep, setZoomStep] = useState(15);
+  const onZoom = useCallback((zoom: number) => {
+    if (!Number.isFinite(zoom)) return;
+    const step = Math.round(zoom * 4) / 4;
+    setZoomStep((cur) => (cur === step ? cur : step));
+  }, []);
+  const photoPinLayout = useMemo(
+    () => notePhotoPinLayout(zoomStep, pinScale),
+    [zoomStep, pinScale],
+  );
+  const noteKinds = useMemo(
+    () => numberedNotes.map((n) => notePinKind(n.note, spriteFor)),
+    [numberedNotes, spriteFor],
+  );
+
   // Scrub marker (see MapScreen's inspect-marker: same shape and colours).
   const scrubFeature = useMemo(
     () =>
@@ -164,7 +194,6 @@ export function Trail2DView({
   // pins: <Marker onPress> doesn't fire on Android, and a Pressable child
   // proved unreliable across devices too. The tap's pixel point is compared
   // against each pin projected through the real camera.
-  const NOTE_HIT_PX = 48;
   /** The note pin under a screen point, if any (null mid-teardown too). */
   const noteAt = useCallback(
     async (point: [number, number]): Promise<string | null> => {
@@ -172,7 +201,7 @@ export function Trail2DView({
       if (!map || numberedNotes.length === 0) return null;
       const [px, py] = point;
       let bestId: string | null = null;
-      let bestD = NOTE_HIT_PX;
+      let bestD = Infinity;
       try {
         const pts = await Promise.all(
           numberedNotes.map((n) => map.project([n.longitude, n.latitude])),
@@ -181,7 +210,9 @@ export function Trail2DView({
           const p = pts[i];
           if (!p) continue;
           const d = Math.hypot(px - p[0], py - p[1]);
-          if (d < bestD) {
+          const reach =
+            noteKinds[i]?.kind === 'photo' ? photoPinLayout.hitRadius : notePinHitRadius(pinScale);
+          if (d < reach && d < bestD) {
             bestD = d;
             bestId = numberedNotes[i]!.note.id;
           }
@@ -191,7 +222,7 @@ export function Trail2DView({
       }
       return bestId;
     },
-    [numberedNotes],
+    [numberedNotes, noteKinds, photoPinLayout, pinScale],
   );
   const onMapPress = useCallback(
     async (e: { nativeEvent?: { point?: [number, number] } }) => {
@@ -238,7 +269,11 @@ export function Trail2DView({
       touchPitch
       onDidFinishLoadingMap={fitToTrail}
       onDidFinishLoadingStyle={tilt.onStyleLoaded}
-      onRegionDidChange={(e) => tilt.onSettledPitch(e.nativeEvent.pitch)}
+      onRegionIsChanging={(e) => onZoom(e.nativeEvent.zoom)}
+      onRegionDidChange={(e) => {
+        tilt.onSettledPitch(e.nativeEvent.pitch);
+        onZoom(e.nativeEvent.zoom);
+      }}
       onPress={onMapPress}
     >
       {/* The photo stacks' count pills and ring: one registration, never moved. */}
@@ -297,16 +332,23 @@ export function Trail2DView({
       {/* Numbered note pins. Markers (RN views), not a symbol layer: the raster
           style declares no glyphs endpoint, so MapLibre text would not render.
           Visual only — taps land through onMapPress's hit-test above. */}
-      {numberedNotes.map((n) => (
-        <Marker
-          key={n.note.id}
-          id={`trail-2d-note-${n.note.id}`}
-          lngLat={[n.longitude, n.latitude]}
-          anchor="center"
-        >
-          <NoteNumberBadge num={n.num} />
-        </Marker>
-      ))}
+      {numberedNotes.map((n, i) => {
+        const kind = noteKinds[i];
+        return (
+          <Marker
+            key={n.note.id}
+            id={`trail-2d-note-${n.note.id}`}
+            lngLat={[n.longitude, n.latitude]}
+            anchor="center"
+          >
+            {kind?.kind === 'photo' ? (
+              <NotePhotoPin sprite={kind.sprite} num={n.num} layout={photoPinLayout} />
+            ) : (
+              <NoteNumberBadge num={n.num} size={NOTE_BADGE_DP * pinScale} />
+            )}
+          </Marker>
+        );
+      })}
     </Map>
   );
 }
