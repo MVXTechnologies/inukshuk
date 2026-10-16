@@ -56,6 +56,8 @@ function formatLabel(item: CatalogItem): string {
 }
 
 export function CatalogDetailScreen({ id }: { id: string }) {
+  // #760: drawings sized in dp follow the Display size.
+  const { sz: dsz } = useDisplayScale();
   const { sz } = useDisplayScale();
 
   const styles = useScaledStyles(stylesSheet);
@@ -169,7 +171,7 @@ export function CatalogDetailScreen({ id }: { id: string }) {
             thumbnailUrl={item.thumbnailUrl}
             seed={item.id}
             width={width}
-            height={PREVIEW_HEIGHT}
+            height={dsz(PREVIEW_HEIGHT)}
           />
           <Pressable
             onPress={() => router.back()}

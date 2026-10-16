@@ -24,7 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Rect, Text as SvgText } from 'react-native-svg';
 
 import { ActivityChips, Segmented, StatsCard } from './StatsControls';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const METRICS: { value: ReviewMetric; label: string }[] = [
@@ -208,6 +208,9 @@ function CalendarHeatmap({
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const [width, setWidth] = useState(0);
+  // #760: drawn on a 100 % canvas scaled to the Display size (viewBox), so
+  // every coordinate, font and stroke below scales with it.
+  const { factor: chartF } = useDisplayScale();
   const scroller = useRef<ScrollView>(null);
   const { cell, contentWidth, offsetX } = heatmapStrip({
     year,
@@ -224,25 +227,29 @@ function CalendarHeatmap({
   );
   // Open on the most recent weeks; again when the year (or the card) changes.
   useEffect(() => {
-    if (width > 0) scroller.current?.scrollTo({ x: offsetX, animated: false });
-  }, [width, offsetX, year]);
+    if (width > 0) scroller.current?.scrollTo({ x: offsetX * chartF, animated: false });
+  }, [width, offsetX, year, chartF]);
   return (
     <View
       accessible
       accessibilityLabel={accessibilityLabel}
       accessibilityHint="Scrolls sideways through the year"
-      onLayout={(e: LayoutChangeEvent) => setWidth(Math.floor(e.nativeEvent.layout.width))}
-      style={{ height: width > 0 ? height : 120 }}
+      onLayout={(e: LayoutChangeEvent) => setWidth(Math.floor(e.nativeEvent.layout.width / chartF))}
+      style={{ height: (width > 0 ? height : 120) * chartF }}
     >
       {width > 0 && (
         <ScrollView
           ref={scroller}
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentOffset={{ x: offsetX, y: 0 }}
+          contentOffset={{ x: offsetX * chartF, y: 0 }}
           testID="year-heatmap-strip"
         >
-          <Svg width={contentWidth} height={height}>
+          <Svg
+            width={contentWidth * chartF}
+            height={height * chartF}
+            viewBox={`0 0 ${contentWidth} ${height}`}
+          >
             {monthStarts.map((col, m) => (
               <SvgText
                 key={m}

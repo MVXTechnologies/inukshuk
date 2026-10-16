@@ -88,6 +88,35 @@ export function teamPillLeft(chrome: MapChrome, factor: number): number {
   return teamPillSpansLeft(factor) ? chrome.edgeInset : chrome.laneInset;
 }
 
+/** A camera fit's edge padding, px. */
+export interface EdgePadding {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+/**
+ * How much room the map chrome takes at a Display size, relative to 100 %:
+ * the top lane's inset (edge inset, button, gap) at the size over its 76 dp.
+ * Camera paddings follow it, so a fitted shape clears the scaled buttons.
+ */
+export function chromeScale(factor: number): number {
+  return factor === 1 ? 1 : mapChromeAt(factor).laneInset / MAP_LANE_INSET;
+}
+
+/** A camera fit's padding, designed at 100 %, at the Display size (#760). */
+export function cameraPadding(p: EdgePadding, factor: number): EdgePadding {
+  if (factor === 1) return p;
+  const k = chromeScale(factor);
+  return {
+    top: Math.round(p.top * k),
+    right: Math.round(p.right * k),
+    bottom: Math.round(p.bottom * k),
+    left: Math.round(p.left * k),
+  };
+}
+
 /** The `right` that centres a box `width` wide on the column's axis. */
 export function onColumnRight(chrome: MapChrome, width: number): number {
   return chrome.columnAxis - width / 2;

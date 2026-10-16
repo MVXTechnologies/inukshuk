@@ -107,15 +107,18 @@ export function WaypointIconPickerPage({
     };
   }, [searching, results, favorites, recents]);
 
+  // #760: the rows' heights at the Display size (the scaled sheet's own values).
+  const headerH = (styles.header.height as number | undefined) ?? HEADER_H;
+  const rowH = (styles.row.height as number | undefined) ?? ROW_H;
   const offsets = useMemo(() => {
     const out: number[] = [];
     let y = 0;
     for (const r of rows) {
       out.push(y);
-      y += r.kind === 'header' ? HEADER_H : ROW_H;
+      y += r.kind === 'header' ? headerH : rowH;
     }
     return out;
-  }, [rows]);
+  }, [rows, headerH, rowH]);
 
   const jump = useCallback(
     (id: string) => {
@@ -237,7 +240,7 @@ export function WaypointIconPickerPage({
         keyExtractor={(r) => r.key}
         renderItem={renderRow}
         getItemLayout={(_, index) => ({
-          length: rows[index]?.kind === 'header' ? HEADER_H : ROW_H,
+          length: rows[index]?.kind === 'header' ? headerH : rowH,
           offset: offsets[index] ?? 0,
           index,
         })}

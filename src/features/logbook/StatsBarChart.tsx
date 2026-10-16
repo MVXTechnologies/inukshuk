@@ -10,7 +10,7 @@ import { Text, useTheme } from '@ui/paper';
 import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg';
 
 import { StatsCard } from './StatsControls';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * The Statistics bar chart, following the period: day by day (Week), week by
@@ -59,6 +59,9 @@ export function StatsBarChart({
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const [width, setWidth] = useState(0);
+  // #760: drawn on a 100 % canvas scaled to the Display size (viewBox), so
+  // every coordinate, font and stroke below scales with it.
+  const { factor: chartF } = useDisplayScale();
   const perUnit = distanceUnitMeters(units);
   const axis = tightAxis(Math.max(0, ...bars.map((b) => b.distanceM / perUnit)));
   const top = axis.max;
@@ -85,10 +88,12 @@ export function StatsBarChart({
         accessibilityLabel={
           empty ? `${TITLE[period]}: no activities` : `${TITLE[period]}. ${spoken}`
         }
-        onLayout={(e: LayoutChangeEvent) => setWidth(Math.round(e.nativeEvent.layout.width))}
+        onLayout={(e: LayoutChangeEvent) =>
+          setWidth(Math.round(e.nativeEvent.layout.width / chartF))
+        }
       >
         {width > 0 && (
-          <Svg width={width} height={CHART_H}>
+          <Svg width={width * chartF} height={CHART_H * chartF} viewBox={`0 0 ${width} ${CHART_H}`}>
             {axis.ticks.map((v) => (
               <Line
                 key={v}

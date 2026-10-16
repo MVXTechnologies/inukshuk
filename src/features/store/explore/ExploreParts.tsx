@@ -150,6 +150,8 @@ export const MapCard = memo(function MapCard({
   external?: boolean;
   onPress: () => void;
 }) {
+  // #760: drawings sized in dp follow the Display size.
+  const { sz: dsz } = useDisplayScale();
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -164,8 +166,8 @@ export const MapCard = memo(function MapCard({
         {bbox !== undefined ? (
           <FootprintThumb
             bbox={bbox}
-            width={CARD_WIDTH}
-            height={CARD_IMAGE_HEIGHT}
+            width={dsz(CARD_WIDTH)}
+            height={dsz(CARD_IMAGE_HEIGHT)}
             position={position}
             marker={marker}
           />
@@ -173,8 +175,8 @@ export const MapCard = memo(function MapCard({
           <MapPreview
             thumbnailUrl={thumbnailUrl}
             seed={id}
-            width={CARD_WIDTH}
-            height={CARD_IMAGE_HEIGHT}
+            width={dsz(CARD_WIDTH)}
+            height={dsz(CARD_IMAGE_HEIGHT)}
           />
         )}
         {distance !== null && (

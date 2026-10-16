@@ -43,7 +43,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
-import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale, DisplayScaleProvider } from '@ui/displayScale';
 
 /**
  * The tip button, bottom-right of the Map only (#476). Opens Support
@@ -381,7 +381,35 @@ function StoneHeart({ t, p }: GlyphProps) {
  * the mug and fades. With the mascot bubble up the mug gets a face: two oval
  * eyes appear, blink, then close into happy arcs with a small smile.
  */
-function CoffeeSteam({ t, p, f, faceOn }: GlyphProps) {
+function CoffeeSteam(props: GlyphProps) {
+  const styles = useScaledStyles(stylesSheet);
+  // #760: the mug's puffs, heart and face are laid out in its 100 % box
+  // (MUG_LAYOUT); the whole drawing is scaled as one to the Display size.
+  const { factor } = useDisplayScale();
+  if (factor === 1) return <CoffeeSteamDrawing {...props} />;
+  const box = MUG_LAYOUT.box;
+  const offset = (box * factor - box) / 2;
+  return (
+    <View style={styles.glyphBox}>
+      <View
+        style={{
+          position: 'absolute',
+          width: box,
+          height: box,
+          left: offset,
+          top: offset,
+          transform: [{ scale: factor }],
+        }}
+      >
+        <DisplayScaleProvider factor={1}>
+          <CoffeeSteamDrawing {...props} />
+        </DisplayScaleProvider>
+      </View>
+    </View>
+  );
+}
+
+function CoffeeSteamDrawing({ t, p, f, faceOn }: GlyphProps) {
   const styles = useScaledStyles(stylesSheet);
 
   const ink = t.support.onAccent;

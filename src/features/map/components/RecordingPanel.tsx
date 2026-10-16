@@ -82,6 +82,8 @@ function splitUnit(text: string): { value: string; unit: string } {
  * keep their labels (Stop now needs a hold: flows use longPressOn).
  */
 export function RecordingPanel(props: Props) {
+  // #760: drawings sized in dp follow the Display size.
+  const { sz: dsz } = useDisplayScale();
   const { sz } = useDisplayScale();
 
   const styles = useScaledStyles(stylesSheet);
@@ -533,7 +535,7 @@ export function RecordingPanel(props: Props) {
             >
               <Icon
                 source={paused ? 'play' : 'pause'}
-                size={compact ? 20 : 22}
+                size={dsz(compact ? 20 : 22)}
                 color={theme.colors.onPrimary}
               />
               <Text

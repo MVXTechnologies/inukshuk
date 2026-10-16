@@ -107,7 +107,12 @@ import { useFollowTrail } from './nav/useFollowTrail';
 import { useNavigationStore } from '@state/navigationStore';
 import { DestinationMarkerPin } from './components/DestinationMarkerPin';
 import { MapCreditsButton, MapCreditsSheet } from './components/MapCredits';
-import { MAP_EDGE_INSET, MAP_LANE_INSET, teamPillSpansLeft } from '@core/map/mapChrome';
+import {
+  MAP_EDGE_INSET,
+  MAP_LANE_INSET,
+  chromeScale,
+  teamPillSpansLeft,
+} from '@core/map/mapChrome';
 import { mapCredits } from '@core/map/mapCredits';
 import { bareTapAfterFocus } from '@core/map/mapTap';
 import { centreCursorPoint } from '@core/map/centreCursor';
@@ -1602,11 +1607,13 @@ export function MapScreen() {
     if (!inspectId || !inspectPoints || !bbox) return;
     setFollowUser(false);
     const bounds = toLngLatBounds(bbox);
+    // #760: the chrome-clearing parts follow the Display size.
+    const cs = chromeScale(displayFactor);
     const padding = {
-      top: insets.top + 80,
-      left: 40,
-      right: 40,
-      bottom: (inspectPanelHeight ?? INSPECT_PANEL_H_ESTIMATE) + INSPECT_PANEL_PAD,
+      top: insets.top + Math.round(80 * cs),
+      left: Math.round(40 * cs),
+      right: Math.round(40 * cs),
+      bottom: (inspectPanelHeight ?? INSPECT_PANEL_H_ESTIMATE) + Math.round(INSPECT_PANEL_PAD * cs),
     };
     const fit = () => cameraRef.current?.fitBounds(bounds, { duration: 600, padding });
     // Capture the camera as it stood BEFORE this selection-driven fit — but
@@ -2684,7 +2691,7 @@ export function MapScreen() {
           const centerPx = cardCameraCenterPx({
             featurePx: [px[0], px[1]],
             mapSize: size,
-            visibleTop: insets.top + MAP_TOP_CHROME_PX,
+            visibleTop: insets.top + Math.round(MAP_TOP_CHROME_PX * chromeScale(displayFactor)),
             visibleBottom: cardTop,
           });
           if (centerPx === null) return;
@@ -2700,7 +2707,7 @@ export function MapScreen() {
         }
       })();
     },
-    [insets.top, setFollowUser],
+    [insets.top, setFollowUser, displayFactor],
   );
 
   const onMapPress = useCallback(

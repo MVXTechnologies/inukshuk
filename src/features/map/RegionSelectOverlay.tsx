@@ -26,7 +26,7 @@ import { Button, Icon, SegmentedButtons, Surface, Text, useTheme } from '@ui/pap
 
 import { RegionPreviewThumb } from './RegionPreviewThumb';
 import { useMapBottomInset } from './useMapBottomInset';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -121,6 +121,8 @@ export function RegionSelectOverlay({
   onCancel,
   variant = 'download',
 }: Props): ReactElement {
+  // #760: drawings sized in dp follow the Display size.
+  const { sz: dsz } = useDisplayScale();
   const styles = useScaledStyles(stylesSheet);
 
   const theme = useTheme();
@@ -555,7 +557,7 @@ export function RegionSelectOverlay({
                       bbox={geo?.bbox ?? null}
                       basemap={layer.key}
                       tileUrl={tileUrl}
-                      size={THUMB}
+                      size={dsz(THUMB)}
                     />
                     <View
                       style={[

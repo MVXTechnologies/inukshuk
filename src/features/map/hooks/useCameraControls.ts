@@ -1,5 +1,7 @@
 import { zoomForVisibleWidth } from '@core/geo/zoomForVisibleWidth';
 import { cameraRequestStep } from '@core/map/cameraRequest';
+import { cameraPadding } from '@core/map/mapChrome';
+import { useDisplayFactor } from '@ui/displayScale';
 import type { CameraTarget } from '@core/search/camera';
 import type { BoundingBox } from '@core/models';
 import type { CameraRef, MapRef } from '@maplibre/maplibre-react-native';
@@ -36,6 +38,8 @@ export function useCameraControls({
    */
   ready?: boolean;
 }) {
+  // #760: fit paddings clear the map chrome at the Display size.
+  const displayFactor = useDisplayFactor();
   const followUser = useMapStore((s) => s.followUser);
   const setFollowUser = useMapStore((s) => s.setFollowUser);
   const focusBounds = useMapStore((s) => s.focusBounds);
@@ -59,7 +63,10 @@ export function useCameraControls({
     if (step !== 'run' || focusBounds === null) return;
     cameraRef.current?.fitBounds(toLngLatBounds(focusBounds), {
       duration: 600,
-      padding: focusPadding ?? { top: 60, right: 60, bottom: 220, left: 60 },
+      padding: cameraPadding(
+        focusPadding ?? { top: 60, right: 60, bottom: 220, left: 60 },
+        displayFactor,
+      ),
     });
     setFocusBounds(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -107,7 +114,7 @@ export function useCameraControls({
     if (target.kind === 'bounds') {
       cameraRef.current?.fitBounds(target.bbox, {
         duration: 800,
-        padding: { top: 120, right: 48, bottom: 96, left: 48 },
+        padding: cameraPadding({ top: 120, right: 48, bottom: 96, left: 48 }, displayFactor),
       });
     } else {
       cameraRef.current?.flyTo({ center: target.center, zoom: target.zoom, duration: 800 });
@@ -119,7 +126,7 @@ export function useCameraControls({
     setFollowUser(false);
     cameraRef.current?.fitBounds(toLngLatBounds(bbox), {
       duration: 600,
-      padding: { top: 48, right: 48, bottom: 48, left: 48 },
+      padding: cameraPadding({ top: 48, right: 48, bottom: 48, left: 48 }, displayFactor),
     });
   };
 

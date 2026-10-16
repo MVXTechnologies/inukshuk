@@ -57,6 +57,8 @@ function Print() {
  * default for every PDF map; a map overrides it from its Library ⋮ menu.
  */
 export function PdfMapsPanel({ onBack }: { onBack: () => void }) {
+  // #760: drawings sized in dp follow the Display size.
+  const { sz: dsz } = useDisplayScale();
   const { sz } = useDisplayScale();
 
   const styles = useScaledStyles(stylesSheet);
@@ -119,9 +121,9 @@ export function PdfMapsPanel({ onBack }: { onBack: () => void }) {
               bbox={bbox}
               basemap="map"
               tileUrl={tileUrl}
-              size={SAMPLE_H - 2}
+              size={dsz(SAMPLE_H) - 2}
               width={sampleW - 2}
-              height={SAMPLE_H - 2}
+              height={dsz(SAMPLE_H) - 2}
               radius={sz(9)}
             />
             {/* The white left on the paper at this stop. */}

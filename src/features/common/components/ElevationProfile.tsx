@@ -26,7 +26,7 @@ import Svg, {
   Stop,
   Text as SvgText,
 } from 'react-native-svg';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /** Height of the plot area (the tilted x-tick band hangs below it). */
 const CHART_HEIGHT = 140;
@@ -164,6 +164,9 @@ export function ElevationProfile({
     [points, segmentStarts],
   );
   const [width, setWidth] = useState(0);
+  // #760: drawn on a 100 % canvas scaled to the Display size (viewBox), so
+  // every coordinate, font and stroke below scales with it.
+  const { factor: chartF } = useDisplayScale();
   const [scrub, setScrub] = useState<number | null>(null);
   const [scrubAt, setScrubAt] = useState<TrackPointAt | null>(null);
   // Series visibility (item 7): mountain / shoe / heart, all on by default.
@@ -315,7 +318,7 @@ export function ElevationProfile({
 
   const ticks = useMemo(() => distanceTicks(totalDistanceM), [totalDistanceM]);
 
-  const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
+  const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width / chartF);
 
   // Drive scrubbing through a PanResponder. It claims the gesture on touch and
   // refuses to yield it (onPanResponderTerminationRequest=false) while blocking
@@ -325,7 +328,7 @@ export function ElevationProfile({
     const onTouch = (e: GestureResponderEvent) => {
       const plot = width - axisLeft - AXIS_RIGHT;
       if (plot <= 0) return;
-      const ratio = (e.nativeEvent.locationX - axisLeft) / plot;
+      const ratio = (e.nativeEvent.locationX / chartF - axisLeft) / plot;
       const res = scrubProfileAtRatio(points, samples, ratio, segmentStarts);
       if (!res) return;
       setScrub(res.sampleIndex);
@@ -349,7 +352,7 @@ export function ElevationProfile({
       onPanResponderRelease: endScrub,
       onPanResponderTerminate: endScrub,
     });
-  }, [width, samples, points, segmentStarts, onScrub, axisLeft]);
+  }, [width, samples, points, segmentStarts, onScrub, axisLeft, chartF]);
 
   // Guard every index read: `scrub` indexes a PREVIOUS render's samples.
   const active = scrub === null ? null : (samples[scrub] ?? null);
@@ -462,7 +465,7 @@ export function ElevationProfile({
         testID="elevation-profile-chart"
       >
         {width > 0 && (
-          <Svg width={width} height={svgH}>
+          <Svg width={width * chartF} height={svgH * chartF} viewBox={`0 0 ${width} ${svgH}`}>
             <Defs>
               <LinearGradient id="elevFill" x1="0" y1="0" x2="0" y2="1">
                 <Stop offset="0" stopColor={lineColor} stopOpacity={0.35} />

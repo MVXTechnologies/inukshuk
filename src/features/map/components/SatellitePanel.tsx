@@ -28,6 +28,8 @@ const RING = 3;
  * right says "Base map in use", or offers "Use" when it is not.
  */
 export function SatellitePanel({ onBack }: { onBack: () => void }) {
+  // #760: drawings sized in dp follow the Display size.
+  const { sz: dsz } = useDisplayScale();
   const { sz } = useDisplayScale();
 
   const styles = useScaledStyles(stylesSheet);
@@ -76,9 +78,9 @@ export function SatellitePanel({ onBack }: { onBack: () => void }) {
           bbox={bbox}
           basemap="satellite"
           tileUrl={tileUrl}
-          size={STRIP_H - 2 * RING}
+          size={dsz(STRIP_H) - 2 * RING}
           width={stripW - 2 * RING}
-          height={STRIP_H - 2 * RING}
+          height={dsz(STRIP_H) - 2 * RING}
           radius={sz(11)}
           // Four tiles across, one zoom pair deeper: sharp at the strip's width.
           columns={4}

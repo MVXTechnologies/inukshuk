@@ -10,7 +10,7 @@ import { Icon, Text } from '@ui/paper';
 import { CursorGlyph } from '../components/CenterCursor';
 import { WaypointPinView } from '../waypoints/WaypointPinView';
 import { glyphIcon } from './glyphs';
-import { useDisplayFactor, useScaledStyles } from '@ui/displayScale';
+import { useDisplayFactor, useScaledStyles, useDisplayScale } from '@ui/displayScale';
 import { scaleFontSize } from '@core/display/displayScale';
 
 export interface StripFieldProps {
@@ -148,6 +148,8 @@ export const StripField = memo(function StripField({
  * Decorative: the cell's label names it.
  */
 function SubjectIcon({ subject, color }: { subject: StripSubject; color: string }) {
+  // #760: drawings sized in dp follow the Display size.
+  const { sz: dsz } = useDisplayScale();
   const styles = useScaledStyles(stylesSheet);
 
   const kind =
@@ -166,7 +168,7 @@ function SubjectIcon({ subject, color }: { subject: StripSubject; color: string 
           testIDPrefix="strip-subject-cursor"
         />
       ) : subject.pin !== undefined ? (
-        <WaypointPinView icon={subject.pin.icon} color={subject.pin.color} diameter={PIN_DP} />
+        <WaypointPinView icon={subject.pin.icon} color={subject.pin.color} diameter={dsz(PIN_DP)} />
       ) : (
         <Icon source={glyphIcon(subject.glyph)} size={14} color={color} />
       )}

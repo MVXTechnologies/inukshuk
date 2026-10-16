@@ -58,6 +58,8 @@ export function usePreviewBbox(): BoundingBox | null {
  * (never a bare 'Map', which the tab bar's Map tab already owns).
  */
 export function BaseMapCards({ onOpenSatellite }: { onOpenSatellite: () => void }) {
+  // #760: drawings sized in dp follow the Display size.
+  const { sz: dsz } = useDisplayScale();
   const { sz } = useDisplayScale();
 
   const styles = useScaledStyles(stylesSheet);
@@ -89,9 +91,9 @@ export function BaseMapCards({ onOpenSatellite }: { onOpenSatellite: () => void 
                   bbox={bbox}
                   basemap={t.key}
                   tileUrl={tileUrl}
-                  size={PREVIEW_H - 2 * RING}
+                  size={dsz(PREVIEW_H) - 2 * RING}
                   width={cardW - 2 * RING}
-                  height={PREVIEW_H - 2 * RING}
+                  height={dsz(PREVIEW_H) - 2 * RING}
                   radius={sz(11)}
                 />
                 {selected && (

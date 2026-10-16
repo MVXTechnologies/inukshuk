@@ -41,7 +41,7 @@ import Svg, {
 } from 'react-native-svg';
 import { subscribeHeadingMotion } from '../headingMotion';
 import { weatherChrome } from '../weather/weatherChrome';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /** The tape's height (owner 2026-10-13: a linear compass, ~44 dp). */
 export const NAV_COMPASS_H = 44;
@@ -114,6 +114,9 @@ export const NavCompass = memo(function NavCompass({
 
   const t = useSchemeTokens();
   const [width, setWidth] = useState(0);
+  // #760: the tape is laid out in 100 % units (width / factor) and drawn on a
+  // canvas scaled to the Display size; its translate is in real px.
+  const { factor: chartF } = useDisplayScale();
   const [compassDeg, setCompassDeg] = useState<number | null>(null);
   const [course, setCourse] = useState<CourseSample>({ speedMps: 0, courseDeg: null });
   const courseRef = useRef(createCourseTracker());
@@ -126,10 +129,10 @@ export const NavCompass = memo(function NavCompass({
   // The strip's offset, written per display frame: a NATIVE animated value,
   // so a write moves the view on the UI thread with no React render at all.
   const stripX = useAnimatedValue(0, { useNativeDriver: true });
-  const geometryRef = useRef({ cx, pxPerDeg });
+  const geometryRef = useRef({ cx: cx * chartF, pxPerDeg: pxPerDeg * chartF });
   useEffect(() => {
-    geometryRef.current = { cx, pxPerDeg };
-  }, [cx, pxPerDeg]);
+    geometryRef.current = { cx: cx * chartF, pxPerDeg: pxPerDeg * chartF };
+  }, [cx, pxPerDeg, chartF]);
   /** The display heading last drawn (continuous), to re-place the strip on a resize. */
   const drawnRef = useRef<number | null>(null);
 
@@ -179,8 +182,8 @@ export const NavCompass = memo(function NavCompass({
   useEffect(() => {
     const at = cogDeg ?? drawnRef.current;
     if (at === null) return;
-    stripX.setValue(tapeStripTranslatePx(at, cx, pxPerDeg));
-  }, [cogDeg, cx, pxPerDeg, stripX]);
+    stripX.setValue(tapeStripTranslatePx(at, cx * chartF, pxPerDeg * chartF));
+  }, [cogDeg, cx, pxPerDeg, stripX, chartF]);
 
   // The scale: drawn once per size and scheme, never per heading.
   const ticks = useMemo(
@@ -295,7 +298,7 @@ export const NavCompass = memo(function NavCompass({
           shadowColor: palette.shadow,
         },
       ]}
-      onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
+      onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width / chartF)}
       accessible
       accessibilityLabel={`Navigation compass. ${distance}, ${detail}. ${following ? (status.spoken ?? status.text) : rightText}`}
       testID="nav-compass"
@@ -314,9 +317,12 @@ export const NavCompass = memo(function NavCompass({
             <Animated.View
               testID="nav-compass-strip"
               pointerEvents="none"
-              style={[styles.strip, { width: stripW, transform: [{ translateX: stripX }] }]}
+              style={[
+                styles.strip,
+                { width: stripW * chartF, transform: [{ translateX: stripX }] },
+              ]}
             >
-              <Svg width={stripW} height={H}>
+              <Svg width={stripW * chartF} height={H * chartF} viewBox={`0 0 ${stripW} ${H}`}>
                 {ticks}
                 {labels}
                 {trailOnTape &&
@@ -346,7 +352,13 @@ export const NavCompass = memo(function NavCompass({
                   })}
               </Svg>
             </Animated.View>
-            <Svg width={tapeW} height={H} style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Svg
+              width={tapeW * chartF}
+              height={H * chartF}
+              viewBox={`0 0 ${tapeW} ${H}`}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            >
               <Defs>
                 <LinearGradient id="navTapeFade" x1="0" y1="0" x2="1" y2="0">
                   <Stop offset="0" stopColor={t.map.chrome} stopOpacity={1} />

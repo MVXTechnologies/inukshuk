@@ -43,7 +43,7 @@ import { Icon, Text } from '@ui/paper';
 import { useTeamMapFocus } from '../map/teamMapFocus';
 import { ProgressRing } from './parts';
 import { useHold } from './useHold';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 const AGE_TICK_MS = 30_000;
 
@@ -436,6 +436,8 @@ function HoldResolve({
   onResolve: () => void;
   testID: string;
 }) {
+  // #760: drawings sized in dp follow the Display size.
+  const { sz: dsz } = useDisplayScale();
   const styles = useScaledStyles(stylesSheet);
 
   const [hint, setHint] = useState(false);
@@ -459,7 +461,7 @@ function HoldResolve({
       <View style={styles.holdRing}>
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           <ProgressRing
-            size={HOLD_RING}
+            size={dsz(HOLD_RING)}
             stroke={3}
             fraction={hold.fraction}
             color={ink}
