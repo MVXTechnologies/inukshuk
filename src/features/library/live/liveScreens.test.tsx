@@ -13,14 +13,20 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LiveActivityScreen } from './LiveActivityScreen';
 import { LivePeopleScreen } from './LivePeopleScreen';
 import { LiveTrashScreen } from './LiveTrashScreen';
+import { FolderInviteScreen } from './FolderInviteScreen';
 
 const GID = 'g'.repeat(22);
 
+const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: 'g'.repeat(22) }),
-  useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
+  useRouter: () => ({ back: jest.fn(), push: mockPush }),
 }));
 jest.mock('@features/common/useScreenSheet', () => ({ useScreenSheet: jest.fn() }));
+const mockInvite = jest.fn();
+jest.mock('@data/sync/libraryPort', () => ({
+  appLibraryBridge: () => ({ groups: { invite: mockInvite } }),
+}));
 
 const mockService = {
   activity: jest.fn(),
@@ -63,13 +69,6 @@ function folder(over: Partial<LiveFolder> = {}): LiveFolder {
         role: 'member',
         isMe: false,
         pending: false,
-      },
-      {
-        id: 'lea',
-        name: 'Léa Pelletier',
-        detail: 'Joins when Julie’s phone is online',
-        isMe: false,
-        pending: true,
       },
     ],
     peopleSummary: '2 can edit',
@@ -173,7 +172,11 @@ describe.each([
 
   it("People: a manager opens a person's sub-panel; others only read", async () => {
     await show(<LivePeopleScreen />);
-    expect(screen.getByText('Joins when Julie’s phone is online')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('live-people-invite'));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/shared/[id]/invite',
+      params: { id: GID },
+    });
     await fireEvent.press(screen.getByText('Julie Tremblay'));
     await fireEvent.press(screen.getByTestId('live-person-view'));
     expect(mockService.setRole).toHaveBeenCalledWith(GID, 'ju', 'guest');
@@ -185,6 +188,7 @@ describe.each([
   it('People: a member cannot open anyone', async () => {
     mockFolders = [folder({ canManage: false, isOwner: false, myRole: 'member' })];
     await show(<LivePeopleScreen />);
+    expect(screen.queryByTestId('live-people-invite')).toBeNull();
     await fireEvent.press(screen.getByText('Julie Tremblay'));
     expect(screen.queryByTestId('live-person-sheet')).toBeNull();
   });
@@ -203,5 +207,34 @@ describe.each([
     expect(screen.getByText('Deleted by Noé · 5 h')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('live-trash-restore'));
     expect(mockService.restore).toHaveBeenCalledWith(GID, 'lit', 'w2');
+  });
+
+  it('the folder’s own invite: a QR, the link, and its options remake it', async () => {
+    mockInvite.mockReturnValue({
+      token: {},
+      payload: 'AQIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      qrPayload: 'AQIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    });
+    await show(<FolderInviteScreen />);
+    expect(screen.getByText('Invite to Gaspésie 2026')).toBeTruthy();
+    expect(screen.getByTestId('folder-invite-qr')).toBeTruthy();
+    expect(mockInvite).toHaveBeenLastCalledWith(GID, {
+      expiry: '48h',
+      uses: 5,
+      role: 'member',
+      approve: 'any',
+    });
+    await fireEvent.press(screen.getByTestId('folder-invite-role'));
+    await fireEvent.press(screen.getByTestId('folder-invite-role-guest'));
+    expect(mockInvite).toHaveBeenLastCalledWith(GID, expect.objectContaining({ role: 'guest' }));
+    expect(screen.getByTestId('folder-invite-link')).toBeTruthy();
+    expect(screen.getByTestId('folder-invite-sms')).toBeTruthy();
+  });
+
+  it('the invite screen says when this phone cannot invite', async () => {
+    mockInvite.mockReturnValue('not-allowed');
+    await show(<FolderInviteScreen />);
+    expect(screen.getByText('Only a manager of the folder can invite people.')).toBeTruthy();
+    expect(screen.queryByTestId('folder-invite-qr')).toBeNull();
   });
 });

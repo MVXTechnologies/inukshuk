@@ -9,6 +9,7 @@
 import { defaultExtensionPrefs } from '@core/extensions/prefs';
 import { appStoreLinks } from '@core/links/appStore';
 import { toB64u } from '@core/team/bytes';
+import { encodeInvite } from '@core/team/invite';
 import { nodeCrypto } from '@core/team/testing/nodeCrypto';
 import { lifetimeMs } from '@core/teamui/lifetime';
 import { resetAppTeamServiceForTests } from '@data/team/appTeam';
@@ -236,10 +237,30 @@ describe('Joining over the internet', () => {
     expect(screen.getByText('Letting you in')).toBeTruthy();
   });
 
+  it.each(THEMES)(
+    'a shared folder’s invite joins a folder, not a team (dark: %s)',
+    async (dark) => {
+      const token = {
+        teamId: `${'F'.repeat(21)}A`,
+        seed: new Uint8Array(16).fill(7),
+        expiresAt: Date.now() + 3_600_000,
+        app: 'lib' as const,
+      };
+      mockParams = { t: encodeInvite(token, 'link') };
+      await render(wrap(<JoinScreen />, dark));
+      expect(screen.getByTestId('folder-join-name')).toBeTruthy();
+      expect(screen.getByText('You have an invite to a shared folder.')).toBeTruthy();
+      expect(
+        screen.getByText('People in the folder see this name next to your changes.'),
+      ).toBeTruthy();
+      expect(screen.queryByText(/your position is shared/)).toBeNull();
+    },
+  );
+
   it('an invite from a newer app asks for the update', async () => {
     const b = new Uint8Array(38);
     b[0] = 1;
-    b[1] = 2; // a shared folder's flag (#712)
+    b[1] = 4; // a flag this version does not know
     mockParams = { t: toB64u(b) };
     await render(wrap(<JoinScreen />));
     expect(screen.getByText('This invite needs a newer Inukshuk')).toBeTruthy();

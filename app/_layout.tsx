@@ -195,6 +195,7 @@ export default function RootLayout() {
                     <Stack.Screen name="shared/[id]/activity" />
                     <Stack.Screen name="shared/[id]/people" />
                     <Stack.Screen name="shared/[id]/trash" />
+                    <Stack.Screen name="shared/[id]/invite" />
                   </Stack>
                   <ImportFeedbackSnackbar />
                   <PdfRecoverySnackbar />

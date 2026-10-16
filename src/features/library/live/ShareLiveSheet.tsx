@@ -1,3 +1,9 @@
+import {
+  INVITE_EXPIRY_PRESETS,
+  INVITE_USE_PRESETS,
+  type InviteExpiryId,
+  type InviteUses,
+} from '@core/teamui/invites';
 import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
@@ -6,26 +12,32 @@ import { Icon, Text, useTheme } from 'react-native-paper';
 
 import { LibrarySheet, SheetRow, sheetStyles } from '../selection/LibrarySheet';
 
-/** One of my teams, as the sheet lists it. */
-export interface ShareTeam {
-  id: string;
-  name: string;
-  people: number;
+/** What Share live starts with: who the invite makes, and how long and for how many it works. */
+export interface ShareLiveChoice {
+  canEdit: boolean;
+  expiry: InviteExpiryId;
+  uses: InviteUses;
 }
 
-export type ShareWith = { team: string } | { newGroup: true };
+export const DEFAULT_SHARE: ShareLiveChoice = { canEdit: true, expiry: '48h', uses: 5 };
+
+/** "Works 48 hours · up to 5 people". */
+export function inviteLine(c: Pick<ShareLiveChoice, 'expiry' | 'uses'>): string {
+  const preset = INVITE_EXPIRY_PRESETS.find((p) => p.id === c.expiry);
+  const who = c.uses === 1 ? 'one person' : `up to ${c.uses} people`;
+  return `Works ${preset?.label ?? ''} · ${who}`;
+}
 
 /**
- * Share live (#712, G10 mockup 4): with one of my teams (its people are added
- * at once, and whoever joins it later) or a new group (QR invite); everyone
- * added can edit, or only view. Reached from the Share sheet's "Share live".
+ * Share live (#712, revised mockup: a shared folder is its own group, apart
+ * from team mode): what the people you invite can do (Edit by default, or
+ * Only view) and how the invite works, then "Share and invite", which opens
+ * the folder's own invite (QR or link).
  */
 export function ShareLiveSheet({
   visible,
   focused,
   subtitle,
-  teams,
-  allowNewGroup = false,
   busy,
   onStart,
   onClose,
@@ -34,28 +46,15 @@ export function ShareLiveSheet({
   focused: boolean;
   /** "Gaspésie 2026 · and anything added later", or the item's name. */
   subtitle: string;
-  teams: readonly ShareTeam[];
-  /** Offer "New group" (QR invite); off until the invite flow takes a shared folder. */
-  allowNewGroup?: boolean;
   busy: boolean;
-  onStart: (choice: { with: ShareWith; canEdit: boolean }) => void;
+  onStart: (choice: ShareLiveChoice) => void;
   onClose: () => void;
 }) {
   const t = useSchemeTokens();
   const theme = useTheme();
-  const [pick, setPick] = useState<string | null>(null);
-  const [canEdit, setCanEdit] = useState(true);
-  const chosen = pick ?? teams[0]?.id ?? 'new';
-  const radio = (on: boolean) => (
-    <Icon
-      source={on ? 'radiobox-marked' : 'radiobox-blank'}
-      size={24}
-      color={on ? theme.colors.primary : t.inkMuted}
-    />
-  );
-  const detail = (text: string) => (
-    <Text style={[sheetStyles.detail, { color: t.inkMuted }]}>{text}</Text>
-  );
+  const [choice, setChoice] = useState<ShareLiveChoice>(DEFAULT_SHARE);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const set = (patch: Partial<ShareLiveChoice>) => setChoice((c) => ({ ...c, ...patch }));
   return (
     <LibrarySheet
       visible={visible}
@@ -65,42 +64,15 @@ export function ShareLiveSheet({
       onClose={onClose}
       testID="library-share-live-sheet"
     >
-      <Text style={[styles.label, { color: t.inkMuted }]}>WITH</Text>
-      {teams.map((team) => (
-        <SheetRow
-          key={team.id}
-          accent={chosen === team.id}
-          icon={<Icon source="account-group" size={24} color={t.ink} />}
-          label={team.name}
-          detail={detail(
-            `Team · ${team.people} ${team.people === 1 ? 'person' : 'people'} · and who joins later`,
-          )}
-          trailing={radio(chosen === team.id)}
-          onPress={() => setPick(team.id)}
-          accessibilityLabel={`With ${team.name}`}
-          testID={`share-live-team-${team.id}`}
-        />
-      ))}
-      {allowNewGroup && (
-        <SheetRow
-          accent={chosen === 'new'}
-          icon={<Icon source="qrcode" size={24} color={t.ink} />}
-          label="New group"
-          detail={detail('Invite people with a QR code')}
-          trailing={radio(chosen === 'new')}
-          onPress={() => setPick('new')}
-          testID="share-live-new-group"
-        />
-      )}
-      <Text style={[styles.label, { color: t.inkMuted }]}>THEY CAN</Text>
+      <Text style={[styles.label, { color: t.inkMuted }]}>PEOPLE YOU INVITE CAN</Text>
       <View style={[styles.seg, { borderColor: t.outline }]} accessibilityRole="radiogroup">
         {[
-          { on: canEdit, label: 'Edit', value: true },
-          { on: !canEdit, label: 'Only view', value: false },
+          { on: choice.canEdit, label: 'Edit', value: true },
+          { on: !choice.canEdit, label: 'Only view', value: false },
         ].map((o, i) => (
           <Pressable
             key={o.label}
-            onPress={() => setCanEdit(o.value)}
+            onPress={() => set({ canEdit: o.value })}
             accessibilityRole="radio"
             accessibilityState={{ selected: o.on }}
             testID={`share-live-role-${o.value ? 'edit' : 'view'}`}
@@ -117,10 +89,40 @@ export function ShareLiveSheet({
           </Pressable>
         ))}
       </View>
+      <SheetRow
+        icon={<Icon source="clock-outline" size={22} color={t.ink} />}
+        label="Invite"
+        detail={
+          <Text style={[sheetStyles.detail, { color: t.inkMuted }]}>{inviteLine(choice)}</Text>
+        }
+        trailing={
+          <Icon source={inviteOpen ? 'chevron-up' : 'chevron-right'} size={24} color={t.inkMuted} />
+        }
+        onPress={() => setInviteOpen((o) => !o)}
+        testID="share-live-invite-options"
+      />
+      {inviteOpen && (
+        <View style={styles.options}>
+          <Chips
+            options={INVITE_EXPIRY_PRESETS.map((p) => ({ id: p.id, label: p.label }))}
+            value={choice.expiry}
+            onChange={(expiry) => set({ expiry })}
+            testIDPrefix="share-live-expiry"
+          />
+          <Chips
+            options={INVITE_USE_PRESETS.map((n) => ({
+              id: n,
+              label: n === 1 ? 'One person' : `${n} people`,
+            }))}
+            value={choice.uses}
+            onChange={(uses) => set({ uses })}
+            testIDPrefix="share-live-uses"
+          />
+        </View>
+      )}
       <Pressable
         onPress={() => {
-          if (busy) return;
-          onStart({ with: chosen === 'new' ? { newGroup: true } : { team: chosen }, canEdit });
+          if (!busy) onStart(choice);
         }}
         accessibilityRole="button"
         accessibilityState={{ disabled: busy }}
@@ -134,11 +136,53 @@ export function ShareLiveSheet({
         {busy ? (
           <ActivityIndicator color={theme.colors.onPrimary} accessibilityLabel="Sharing" />
         ) : (
-          <Icon source="sync" size={20} color={theme.colors.onPrimary} />
+          <Icon source="qrcode" size={20} color={theme.colors.onPrimary} />
         )}
-        <Text style={[styles.startLabel, { color: theme.colors.onPrimary }]}>Start sharing</Text>
+        <Text style={[styles.startLabel, { color: theme.colors.onPrimary }]}>Share and invite</Text>
       </Pressable>
     </LibrarySheet>
+  );
+}
+
+/** A row of choice chips (wrapping: nothing clips at 360 dp). */
+export function Chips<T extends string | number>({
+  options,
+  value,
+  onChange,
+  testIDPrefix,
+}: {
+  options: readonly { id: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+  testIDPrefix: string;
+}) {
+  const t = useSchemeTokens();
+  const theme = useTheme();
+  return (
+    <View style={styles.chips} accessibilityRole="radiogroup">
+      {options.map((o) => {
+        const on = o.id === value;
+        return (
+          <Pressable
+            key={String(o.id)}
+            onPress={() => onChange(o.id)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: on }}
+            testID={`${testIDPrefix}-${o.id}`}
+            style={[
+              styles.chip,
+              { borderColor: t.outline },
+              on && {
+                backgroundColor: theme.colors.secondaryContainer,
+                borderColor: theme.colors.secondaryContainer,
+              },
+            ]}
+          >
+            <Text style={[styles.chipLabel, { color: t.ink }]}>{o.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -156,6 +200,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     minHeight: 44,
     marginHorizontal: 20,
+    marginBottom: space.xs,
     borderWidth: 1,
     borderRadius: 22,
     overflow: 'hidden',
@@ -169,6 +214,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.xs,
   },
   segLabel: { fontSize: 14, fontWeight: '700', flexShrink: 1 },
+  options: { gap: space.sm, paddingHorizontal: 20, paddingBottom: space.xs },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
+  chip: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    justifyContent: 'center',
+  },
+  chipLabel: { fontSize: 13.5, fontWeight: '700' },
   start: {
     minHeight: 48,
     borderRadius: 24,

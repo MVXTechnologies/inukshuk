@@ -3,7 +3,7 @@ import type { Role } from '@core/team/roles';
 import { GnssScreenFrame, SectionLabel } from '@features/extensions/gnss/GnssScreenFrame';
 import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Icon, Text, useTheme } from 'react-native-paper';
@@ -24,6 +24,7 @@ export function LivePeopleScreen() {
   const [person, setPerson] = useState<PersonRow | null>(null);
   const people = folder?.people ?? [];
   const live = liveService();
+  const router = useRouter();
   return (
     <GnssScreenFrame title="People" testID="live-people-screen">
       {folder !== undefined && (
@@ -58,6 +59,23 @@ export function LivePeopleScreen() {
           </Pressable>
         );
       })}
+      {folder?.canManage === true && (
+        <Pressable
+          onPress={() => router.push({ pathname: '/shared/[id]/invite', params: { id: groupId } })}
+          accessibilityRole="button"
+          testID="live-people-invite"
+          style={[styles.row, styles.invite, { borderTopColor: t.outlineVariant }]}
+        >
+          <View style={[styles.avatar, { backgroundColor: t.surfaceVariant }]}>
+            <Icon source="qrcode" size={22} color={t.ink} />
+          </View>
+          <View style={styles.text}>
+            <Text style={[styles.name, { color: t.ink }]}>Invite people</Text>
+            <Text style={[sheetStyles.detail, { color: t.inkMuted }]}>QR code or link</Text>
+          </View>
+          <Icon source="chevron-right" size={24} color={t.inkMuted} />
+        </Pressable>
+      )}
       <PersonSheet
         person={person}
         folderName={folder?.name ?? ''}
@@ -173,4 +191,9 @@ const styles = StyleSheet.create({
   avatarText: { fontSize: 13, fontWeight: '800' },
   text: { flex: 1, minWidth: 0 },
   name: { fontSize: 16, lineHeight: 21, fontWeight: '700' },
+  invite: {
+    borderTopWidth: StyleSheet.hairlineWidth * 2,
+    marginTop: space.sm,
+    paddingTop: space.sm,
+  },
 });

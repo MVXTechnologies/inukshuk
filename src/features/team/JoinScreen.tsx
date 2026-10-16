@@ -4,6 +4,10 @@
  * Then my name, the search for a teammate's phone on this network (with the
  * hotspot fallback: the hotspot's likely addresses, or a typed one), and the
  * six-digit safety code to compare out loud before the team is kept.
+ *
+ * A shared folder's invite (#712, flag bit 1) runs the same steps for the
+ * folder: it lands in the Library, never as a team (shared folders are apart
+ * from team mode, owner 2026-10-16).
  */
 import { hotspotCandidates, MESH_DEFAULT_PORT } from '@core/mesh/hotspot';
 import type { InviteToken } from '@core/team/invite';
@@ -16,6 +20,8 @@ import { installExtension } from '@features/extensions/actions';
 import { setExtensionPrefs, useExtensionPrefs } from '@features/extensions/prefs';
 import { ensureTeamNotifications } from '@data/team/teamNotifications';
 import { reportError } from '@lib/errorReporting';
+import { appLibraryBridge } from '@data/sync/libraryPort';
+import { refreshLive } from '@features/library/live/useLive';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -54,6 +60,9 @@ export function JoinScreen() {
     [params.t],
   );
   const token = picked === undefined ? fromLink : picked;
+  // A shared folder's invite (or a folder join under way): the folder's words, the Library's flow.
+  const folder = (token?.app ?? teamService()?.join?.token.app) === 'lib';
+  const word = folder ? 'folder' : 'team';
   const [newer, setNewer] = useState(() =>
     params.t !== undefined ? inviteNeedsUpdate(params.t) : false,
   );
@@ -64,11 +73,12 @@ export function JoinScreen() {
   const now = useNow(1000);
 
   // A link can arrive before the extension is installed: install it (free,
-  // and the user just asked to join a team).
+  // and the user just asked to join a team). A folder is not team mode.
   useEffect(() => {
+    if (folder) return;
     if (installedAt === 0) installExtension('team');
     else if (!show) setExtensionPrefs('team', { show: true });
-  }, [installedAt, show]);
+  }, [installedAt, show, folder]);
 
   const service = teamService();
   if (service === null) {
@@ -79,13 +89,18 @@ export function JoinScreen() {
     );
   }
 
-  const already = token !== null && teams.some((x) => x.teamId === token.teamId);
+  const already =
+    token !== null &&
+    (teams.some((x) => x.teamId === token.teamId) ||
+      service.host.libraries.some((x) => x.teamId === token.teamId));
   const expired = token !== null && token.expiresAt < now;
 
   const start = async () => {
     if (token === null) return;
     try {
-      await service.startJoin(token, myName);
+      const groups = appLibraryBridge()?.groups;
+      if (folder && groups !== undefined) await groups.startJoin(token, myName);
+      else await service.startJoin(token, myName);
       useTeamStore.getState().refresh();
     } catch (e) {
       reportError(e, 'team-join-start');
@@ -97,6 +112,17 @@ export function JoinScreen() {
     useTeamStore.getState().refresh();
   };
   const confirm = async (compared = true) => {
+    const groups = appLibraryBridge()?.groups;
+    if (folder && groups !== undefined) {
+      // The folder goes to the Library, never to the team screens.
+      const r = await groups.confirmJoin(compared);
+      useTeamStore.getState().refresh();
+      refreshLive();
+      appLibraryBridge()?.schedule();
+      if (typeof r === 'string') Alert.alert('Not joined', 'The folder did not admit this phone.');
+      else router.replace('/library');
+      return;
+    }
     const r = await service.confirmJoin(compared);
     useTeamStore.getState().refresh();
     if (typeof r === 'string') Alert.alert('Not joined', 'The team did not admit this phone.');
@@ -108,7 +134,7 @@ export function JoinScreen() {
   const mismatch = () =>
     Alert.alert(
       'Codes don’t match',
-      'Someone may be pretending to be your team. This phone forgets the team; ask the admin to remove the extra member and send you a new invite.',
+      `Someone may be pretending to be your ${word}. This phone forgets the ${word}; ask the person who shared it to remove the extra member and send you a new invite.`,
       [{ text: 'OK', onPress: () => void cancel() }],
     );
 
@@ -177,12 +203,21 @@ export function JoinScreen() {
       return info ? hotspotCandidates(info).slice(0, 3) : [];
     })();
     return (
-      <TeamScreenFrame title="Joining…" testID="team-join-searching">
+      <TeamScreenFrame
+        title="Joining…"
+        testID={folder ? 'folder-join-searching' : 'team-join-searching'}
+      >
         <View style={styles.steps}>
           <Step state="done" title="Invite checked" />
           <Step
             state={join.phase === 'connecting' ? 'done' : 'busy'}
-            title={join.phase === 'connecting' ? 'Team found' : 'Looking for the team'}
+            title={
+              join.phase === 'connecting'
+                ? folder
+                  ? 'Folder found'
+                  : 'Team found'
+                : `Looking for the ${word}`
+            }
             line={
               join.phase === 'connecting'
                 ? join.via === 'internet'
@@ -195,10 +230,16 @@ export function JoinScreen() {
             testID="team-join-step-found"
           />
           <Step state={join.phase === 'connecting' ? 'busy' : 'todo'} title="Letting you in" />
-          <Step state="todo" title="Catching up" line="Trails, pins and messages" />
+          <Step
+            state="todo"
+            title="Catching up"
+            line={folder ? 'Trails, waypoints, areas and maps' : 'Trails, pins and messages'}
+          />
         </View>
         <Text variant="bodySmall" style={{ color: t.inkVariant }}>
-          A teammate’s Inukshuk must be open, nearby or online.
+          {folder
+            ? 'Inukshuk must be open on the phone of someone in the folder, nearby or online.'
+            : 'A teammate’s Inukshuk must be open, nearby or online.'}
         </Text>
         {(slow || join.hint !== null) && (
           <>
@@ -262,8 +303,8 @@ export function JoinScreen() {
   if (token !== null) {
     return (
       <TeamScreenFrame
-        title="Join a team"
-        testID="team-join-name"
+        title={folder ? 'Join a shared folder' : 'Join a team'}
+        testID={folder ? 'folder-join-name' : 'team-join-name'}
         footer={
           <>
             <Button mode="text" onPress={() => setToken(null)}>
@@ -281,29 +322,33 @@ export function JoinScreen() {
         }
       >
         <Text variant="bodyLarge" style={{ color: t.ink }}>
-          You have an invite to a team.
+          {folder ? 'You have an invite to a shared folder.' : 'You have an invite to a team.'}
         </Text>
         <Text variant="bodySmall" style={{ color: t.inkVariant }}>
           Works until {new Date(token.expiresAt).toLocaleString()}
         </Text>
-        {already && <Note tone="warn">You’re already in this team.</Note>}
+        {already && <Note tone="warn">{`You’re already in this ${word}.`}</Note>}
         {expired && <Note tone="warn">This invite has expired. Ask for a new one.</Note>}
         <TextInput
           returnKeyType="done"
           mode="outlined"
-          label="Your name in the team"
+          label={`Your name in the ${word}`}
           value={myName}
           onChangeText={setMyName}
           maxLength={40}
           testID="team-join-myname"
         />
         <HelperText type="info" style={styles.helper}>
-          Teammates see this name next to your messages and position.
+          {folder
+            ? 'People in the folder see this name next to your changes.'
+            : 'Teammates see this name next to your messages and position.'}
         </HelperText>
-        <Note icon="shield-lock-outline">
-          Joining shares nothing until you choose to: your position is shared only when you turn
-          sharing on.
-        </Note>
+        {!folder && (
+          <Note icon="shield-lock-outline">
+            Joining shares nothing until you choose to: your position is shared only when you turn
+            sharing on.
+          </Note>
+        )}
       </TeamScreenFrame>
     );
   }

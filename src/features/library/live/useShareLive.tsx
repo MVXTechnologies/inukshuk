@@ -10,26 +10,17 @@ import type { LiveFolder } from '@data/sync/liveFolders';
 import { appTeamService } from '@data/team/appTeam';
 import { useLibraryStore } from '@state/libraryStore';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import type { LiveTarget } from '../selection/useLibrarySelection';
 import { LeaveDialog, SharedFolderSheet, StopDialog } from './SharedFolderSheet';
-import { ShareLiveSheet, type ShareTeam } from './ShareLiveSheet';
+import { ShareLiveSheet, type ShareLiveChoice } from './ShareLiveSheet';
 import { refreshLive, rootShare, rowNoteOf, useLiveFolders } from './useLive';
 
-/** The teams the Share live sheet offers (active, writable). */
-function myTeams(): ShareTeam[] {
-  const service = appTeamService();
-  if (service === null) return [];
-  const out: ShareTeam[] = [];
-  for (const r of service.teams) {
-    const s = service.host.open(r.teamId);
-    if (s === undefined) continue;
-    const v = s.view();
-    if (!v.active || v.readOnly) continue;
-    out.push({ id: r.teamId, name: v.name || r.name, people: v.activeCount });
-  }
-  return out;
+/** My name in a new shared folder: the one I last used in a group, else "Me". */
+function myName(): string {
+  const records = appTeamService()?.host.allRecords ?? [];
+  return records.find((r) => r.myName)?.myName ?? 'Me';
 }
 
 export function useShareLive(args: {
@@ -47,7 +38,6 @@ export function useShareLive(args: {
   const [sheet, setSheet] = useState<string | null>(null);
   const [leaving, setLeaving] = useState<LiveFolder | null>(null);
   const [stopping, setStopping] = useState<LiveFolder | null>(null);
-  const teams = useMemo(() => (target === null ? [] : myTeams()), [target]);
   const { showSnack } = args;
 
   // A folder a teammate shared appears: say so once.
@@ -69,8 +59,6 @@ export function useShareLive(args: {
     if (appLibraryBridge() === null) return undefined;
     const shared = rootShare(list, t.kind, t.id);
     if (shared !== undefined) return { label: 'Shared live', detail: shared.subtitle };
-    // Shared with one of my teams: none, no row.
-    if (myTeams().length === 0) return undefined;
     return {
       label: 'Share live',
       detail:
@@ -86,29 +74,29 @@ export function useShareLive(args: {
     else setTarget(t);
   };
 
-  const start = async (choice: {
-    with: { team: string } | { newGroup: true };
-    canEdit: boolean;
-  }) => {
+  const start = async (choice: ShareLiveChoice) => {
     const bridge = appLibraryBridge();
     if (bridge === null || target === null) return;
     setBusy(true);
-    // Interim until the revised Share live panel lands (owner OK pending): my name
-    // from my teams, else "Me"; the invite step comes with the new panel.
-    const options = { myName: appTeamService()?.teams[0]?.myName ?? 'Me' };
     try {
+      const options = { myName: myName() };
       const r =
         target.kind === 'folder'
           ? await bridge.shareFolder(target.id, options)
           : await bridge.shareItem(target.kind, target.id, options);
       if (typeof r === 'string') showSnack('Could not start sharing');
       else {
-        const team =
-          'team' in choice.with
-            ? teams.find((x) => x.id === (choice.with as { team: string }).team)
-            : undefined;
-        showSnack(team !== undefined ? `Shared live with ${team.name}` : 'Shared live');
         refreshLive();
+        // Its own invite next (QR or link).
+        router.push({
+          pathname: '/shared/[id]/invite',
+          params: {
+            id: r.teamId,
+            role: choice.canEdit ? 'member' : 'guest',
+            expiry: choice.expiry,
+            uses: String(choice.uses),
+          },
+        });
       }
     } finally {
       setBusy(false);
@@ -129,7 +117,6 @@ export function useShareLive(args: {
         visible={target !== null}
         focused={args.focused}
         subtitle={subtitleOf(target)}
-        teams={teams}
         busy={busy}
         onStart={(c) => void start(c)}
         onClose={() => {

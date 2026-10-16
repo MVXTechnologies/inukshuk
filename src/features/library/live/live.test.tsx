@@ -52,7 +52,7 @@ function folder(over: Partial<LiveFolder> = {}): LiveFolder {
     myRole: 'owner',
     isOwner: true,
     canManage: true,
-    subtitle: 'Live with Chic-Chocs crew · yours',
+    subtitle: 'Live · yours',
     toReview: 1,
     changesToday: 5,
     trashCount: 2,
@@ -63,31 +63,30 @@ function folder(over: Partial<LiveFolder> = {}): LiveFolder {
 }
 
 describe.each(THEMES)('Share live screens (%s)', (_name, theme) => {
-  it('Share live: a team by default, Edit by default, Only view on request', async () => {
+  it('Share live: no team to pick; Edit by default, Only view and invite options on request', async () => {
     const onStart = jest.fn();
     await show(
       <ShareLiveSheet
         visible
         focused
         subtitle="Gaspésie 2026 · and anything added later"
-        teams={[
-          { id: 't1', name: 'Chic-Chocs crew', people: 6 },
-          { id: 't2', name: 'Famille', people: 3 },
-        ]}
         busy={false}
         onStart={onStart}
         onClose={jest.fn()}
       />,
       theme,
     );
-    expect(screen.getByText('Team · 6 people · and who joins later')).toBeTruthy();
-    expect(screen.queryByTestId('share-live-new-group')).toBeNull();
+    expect(screen.queryByText(/Team ·/)).toBeNull();
+    expect(screen.getByText('Works 48 hours · up to 5 people')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('share-live-start'));
-    expect(onStart).toHaveBeenLastCalledWith({ with: { team: 't1' }, canEdit: true });
-    await fireEvent.press(screen.getByTestId('share-live-team-t2'));
+    expect(onStart).toHaveBeenLastCalledWith({ canEdit: true, expiry: '48h', uses: 5 });
     await fireEvent.press(screen.getByTestId('share-live-role-view'));
+    await fireEvent.press(screen.getByTestId('share-live-invite-options'));
+    await fireEvent.press(screen.getByTestId('share-live-expiry-7d'));
+    await fireEvent.press(screen.getByTestId('share-live-uses-1'));
+    expect(screen.getByText('Works 7 days · one person')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('share-live-start'));
-    expect(onStart).toHaveBeenLastCalledWith({ with: { team: 't2' }, canEdit: false });
+    expect(onStart).toHaveBeenLastCalledWith({ canEdit: false, expiry: '7d', uses: 1 });
   });
 
   it("the folder's own sheet: Stop sharing for its owner, Leave for others", async () => {
