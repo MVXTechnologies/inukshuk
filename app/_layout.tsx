@@ -30,6 +30,7 @@ import { resolveTheme } from '@ui/theme';
 import { useAndroidImmersive } from '@ui/useAndroidImmersive';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { startLibrarySync } from '@data/sync/libraryPort';
 import { useEffect } from 'react';
 import { AppState, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -75,7 +76,10 @@ export default function RootLayout() {
     // loop — missing RECEIVE_BOOT_COMPLETED) left the OS location task
     // registered, stop it before the next GPS fix can kill the process.
     cleanupBackgroundLocationAtLaunch().catch((err) => reportError(err, 'bg-task-cleanup'));
-    hydrateLibrary().catch((err) => reportError(err, 'library-hydrate'));
+    hydrateLibrary()
+      // Share live (#712) reads and writes the Library: only once it is loaded.
+      .then(() => startLibrarySync())
+      .catch((err) => reportError(err, 'library-hydrate'));
     hydrateSettings().catch((err) => reportError(err, 'settings-hydrate'));
     hydrateStrava().catch((err) => reportError(err, 'strava-hydrate'));
     hydrateImports().catch((err) => reportError(err, 'imports-hydrate'));
@@ -186,6 +190,10 @@ export default function RootLayout() {
                     <Stack.Screen name="team/pin/[owner]/[id]" />
                     <Stack.Screen name="team/member/[id]" />
                     <Stack.Screen name="team/trail/[owner]/[id]" />
+                    {/* Share live (#712): a shared folder's Activity, People and trash. */}
+                    <Stack.Screen name="shared/[id]/activity" />
+                    <Stack.Screen name="shared/[id]/people" />
+                    <Stack.Screen name="shared/[id]/trash" />
                   </Stack>
                   <ImportFeedbackSnackbar />
                   <PdfRecoverySnackbar />

@@ -63,6 +63,14 @@ interface ShareTarget {
   subtitle: string;
   plan: SharePlan;
   sizeNote?: string;
+  /** A folder or a single item: what "Share live" (#712) would share. */
+  live?: LiveTarget;
+}
+
+/** What Share live (#712) shares: a Library folder, or one item. */
+export interface LiveTarget {
+  kind: 'folder' | 'track' | 'waypoint' | 'area' | 'map';
+  id: string;
 }
 
 export interface LibrarySelectionArgs {
@@ -80,6 +88,10 @@ export interface LibrarySelectionArgs {
   requestRenameFolder: (folder: { id: string; name: string }) => void;
   /** Items just moved into a folder (null: out of folders): show where they landed. */
   onMoved: (folderId: string | null) => void;
+  /** The Share sheet's "Share live" row for a folder or one item (#712); none: no row. */
+  liveRow?: (target: LiveTarget) => { label: string; detail: string } | undefined;
+  /** "Share live" was tapped (the Share sheet closes first). */
+  onShareLive?: (target: LiveTarget) => void;
 }
 
 /** The select-mode tick's length (Android): a light tap, not a buzz. */
@@ -298,6 +310,7 @@ export function useLibrarySelection(args: LibrarySelectionArgs) {
     (
       sel: Pick<ResolvedSelection, 'maps' | 'tracks' | 'waypoints' | 'areas' | 'refs'>,
       folderName: string | null,
+      folderId?: string,
     ) => {
       const plan = sharePlan({ ...sel, folderName, lang: args.creditLang });
       if (plan === null) return;
@@ -327,7 +340,14 @@ export function useLibrarySelection(args: LibrarySelectionArgs) {
         title = w ? 'Share waypoint' : 'Share area';
         subtitle = w?.label ?? a?.name ?? '';
       }
-      setShareTarget({ title, subtitle, plan, sizeNote });
+      const [one] = sel.refs;
+      const live: LiveTarget | undefined =
+        folderId !== undefined
+          ? { kind: 'folder', id: folderId }
+          : n === 1 && one !== undefined
+            ? { kind: one.kind, id: one.id }
+            : undefined;
+      setShareTarget({ title, subtitle, plan, sizeNote, ...(live ? { live } : {}) });
     },
     [args.creditLang, args.units],
   );
@@ -341,6 +361,22 @@ export function useLibrarySelection(args: LibrarySelectionArgs) {
       ),
     [openShare],
   );
+
+  const { liveRow, onShareLive } = args;
+  const liveRowOf = (target: ShareTarget | null) => {
+    const live = target?.live;
+    if (live === undefined || liveRow === undefined || onShareLive === undefined) return undefined;
+    const row = liveRow(live);
+    if (row === undefined) return undefined;
+    return {
+      ...row,
+      onPress: () => {
+        setShareTarget(null);
+        exit();
+        onShareLive(live);
+      },
+    };
+  };
 
   const shareBytes = useMemo(
     () => (shareTarget === null ? 0 : planBytes(shareTarget.plan)),
@@ -469,7 +505,7 @@ export function useLibrarySelection(args: LibrarySelectionArgs) {
   const onAction = (id: string) => {
     reason.dismiss();
     if (folder !== null && folderContents !== null) {
-      if (id === 'share') openShare(folderContents, folder.name);
+      if (id === 'share') openShare(folderContents, folder.name, folder.id);
       else if (id === 'show') toggleShown(folderContents);
       else if (id === 'rename') requestRenameFolder({ id: folder.id, name: folder.name });
       else if (id === 'delete') deleteFolder();
@@ -551,6 +587,7 @@ export function useLibrarySelection(args: LibrarySelectionArgs) {
         bytes={shareBytes}
         sizeNote={shareTarget?.sizeNote}
         busy={sharing}
+        live={liveRowOf(shareTarget)}
         onSend={() => void send()}
         onClose={() => {
           if (!sharing) setShareTarget(null);

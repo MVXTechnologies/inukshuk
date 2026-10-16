@@ -92,6 +92,8 @@ import { ImportSheet } from '../import/ImportSheet';
 import { activityImportMessage, pickAndImportActivityFiles } from './importActivities';
 import { pickAndImportMaps } from './importMap';
 import { itemCount, refKey, type ItemRef } from '@core/library/selection';
+import { JoiningFolders } from './live/JoiningFolders';
+import { useShareLive } from './live/useShareLive';
 import { useLibrarySelection } from './selection/useLibrarySelection';
 import { NameDialog } from './NameDialog';
 import { DragGhost } from './DragGhost';
@@ -600,6 +602,7 @@ export function LibraryScreen() {
       title={title}
       count={count}
       first={first}
+      live={folderId === undefined ? undefined : liveHeader(folderId)}
       collapsed={collapsed[key] === true}
       onToggle={() => toggleSection(key)}
       onLongPress={folderId === undefined ? undefined : () => sel.longPressFolder(folderId)}
@@ -609,6 +612,20 @@ export function LibraryScreen() {
       highlighted={dropTarget !== undefined && dragging !== null && dragHovered === dropTarget}
     />
   );
+
+  const liveHeader = (folderId: string) => {
+    const shared = live.folderShare(folderId);
+    if (shared === undefined) return undefined;
+    return {
+      line: shared.line.text,
+      tone: shared.line.tone,
+      faces: shared.faces,
+      onMenu: () => live.openSheet(shared.groupId),
+    };
+  };
+  /** A row's Share live caption: "Renamed by Julie · 2 h", or "Live with …" for a shared item. */
+  const liveNote = (kind: 'track' | 'waypoint' | 'area' | 'map', id: string): string | undefined =>
+    live.note(kind, id)?.text ?? live.itemShare(kind, id)?.subtitle;
 
   const moveToFolderItems = (
     kind: 'map' | 'track' | 'waypoint' | 'area',
@@ -972,7 +989,7 @@ export function LibraryScreen() {
         testID={`library-row-waypoint-${w.id}`}
         name={w.label}
         detail={preview !== null ? `Waypoint · ${preview}` : 'Waypoint'}
-        caption={shortDate(w.createdAt, nowMs)}
+        caption={liveNote('waypoint', w.id) ?? shortDate(w.createdAt, nowMs)}
         photoUri={w.photoUri}
         glyph={waypointIconGlyph(w.icon)}
         accessibilityLabel={
@@ -1079,7 +1096,9 @@ export function LibraryScreen() {
         leading={dragHandle({ kind: 'area', id: a.id, label: a.name })}
         name={a.name}
         detail={preview !== null ? `${size} · ${preview}` : size}
-        caption={[shortDate(a.createdAt, nowMs), ...(a.tags ?? [])].join(' · ')}
+        caption={
+          liveNote('area', a.id) ?? [shortDate(a.createdAt, nowMs), ...(a.tags ?? [])].join(' · ')
+        }
         color={a.color}
         photoUri={a.photoUris?.[0]}
         accessibilityLabel={
@@ -1152,7 +1171,16 @@ export function LibraryScreen() {
   // Select mode (#711): hold a row (or a folder's header) to select it; the
   // action bar replaces the tab bar. Selection logic: @core/library/selection.
   const pendingScrollRef = useRef<string | null>(null);
+  // Share live (#712): shared folders' headers, row notes, sheets and dialogs.
+  const live = useShareLive({
+    focused: isFocused,
+    showSnack,
+    itemsIn: (folderId) =>
+      [...maps, ...tracks, ...waypoints, ...areas].filter((x) => x.folderId === folderId).length,
+  });
   const sel = useLibrarySelection({
+    liveRow: live.liveRow,
+    onShareLive: live.onShareLive,
     items,
     focused: isFocused,
     units,
@@ -1245,6 +1273,7 @@ export function LibraryScreen() {
             selecting={sel.selecting}
             selected={sel.keys.has(`track:${t.id}`)}
             flash={sel.flashKeys.has(`track:${t.id}`)}
+            note={liveNote('track', t.id)}
             menuOpen={menuTrackId === t.id}
             elevation={expanded ? (elevationPreview ?? null) : undefined}
             grip={grip}
@@ -1458,6 +1487,7 @@ export function LibraryScreen() {
           ListHeaderComponent={
             <>
               <ImportJobCard />
+              <JoiningFolders folders={live.joining} />
               {/* Once a year, behind SUPPORT_NUDGE_ENABLED (off): renders nothing otherwise. */}
               {!organizing && <SupportNudgeCard />}
               {organizing && !hasFolders && (
@@ -1499,6 +1529,7 @@ export function LibraryScreen() {
       />
 
       {sel.overlay}
+      {live.overlay}
 
       <Portal>
         <NameDialog

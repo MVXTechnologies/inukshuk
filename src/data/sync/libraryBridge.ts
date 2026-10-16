@@ -118,7 +118,6 @@ export interface LibraryPort {
   subscribe(fn: () => void): () => void;
 }
 
-
 type ItemKind = Exclude<LocalKind, 'folder'>;
 
 /** What the Library screen needs to mark shared items (#712 row markers). */
@@ -139,7 +138,7 @@ export class LibraryBridge {
   private readonly listeners = new Set<() => void>();
 
   constructor(
-    private readonly groups: LibraryGroups,
+    readonly groups: LibraryGroups,
     private readonly port: LibraryPort,
     private readonly disk: BridgeDisk,
     private readonly options: { debounceMs?: number; now?: () => number } = {},

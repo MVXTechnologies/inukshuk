@@ -20,6 +20,7 @@ import {
   type LibraryPort,
 } from './libraryBridge';
 import { LibraryGroups, type DismissedStore } from './libraryGroups';
+import { LiveFolders } from './liveFolders';
 
 export const libraryStorePort: LibraryPort = {
   snapshot: () => useLibraryStore.getState(),
@@ -120,9 +121,23 @@ export function appLibraryBridge(): LibraryBridge | null {
 }
 
 /** Start Share live once the Library has hydrated (the app root calls it). */
+let started = false;
+
 export function startLibrarySync(): void {
+  if (started) return;
   const b = appLibraryBridge();
   const service = appTeamService();
   if (b === null || service === null) return;
+  started = true;
   b.start((fn) => service.subscribe(fn));
+}
+
+let live: LiveFolders | null | undefined;
+
+/** What the Share live screens read and do (null where team mode is unavailable). */
+export function appLiveFolders(): LiveFolders | null {
+  if (live !== undefined) return live;
+  const b = appLibraryBridge();
+  live = b === null ? null : new LiveFolders(b, b.groups);
+  return live;
 }

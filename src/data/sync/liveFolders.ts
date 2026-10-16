@@ -73,6 +73,8 @@ export interface LiveFolder {
   canManage: boolean;
   /** "Live with Chic-Chocs crew · yours" / "· from Julie". */
   subtitle: string;
+  /** Who shared a folder this phone is joining. */
+  sharedBy?: string;
   toReview: number;
   changesToday: number;
   trashCount: number;
@@ -161,6 +163,7 @@ export class LiveFolders {
         isOwner: false,
         canManage: false,
         subtitle: `From ${from}`,
+        sharedBy: from,
         toReview: 0,
         changesToday: 0,
         trashCount: 0,
