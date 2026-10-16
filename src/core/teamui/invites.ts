@@ -4,6 +4,7 @@
  * PM-decided default (spec §15 #1): **48 h, single use, member, any member
  * may admit**. Pure.
  */
+import { fromB64u } from '@core/team/bytes';
 import { decodeInvite, DEFAULT_INVITE_BASE, inviteLink, type InviteToken } from '@core/team/invite';
 
 const HOUR = 3600_000;
@@ -69,6 +70,25 @@ export function parseAnyInvite(text: string): InviteToken | undefined {
   if (query?.[1] !== undefined) return decodeInvite(query[1]);
   const hash = trimmed.lastIndexOf('#');
   return decodeInvite(hash >= 0 ? trimmed.slice(hash + 1) : trimmed);
+}
+
+/**
+ * Whether text that is not an invite this version reads is one from a newer
+ * app (a version above 1, or flag bits this version doesn't know: a shared
+ * folder's invite, #712): the join screen then asks for the update instead
+ * of calling it "not an invite".
+ */
+export function inviteNeedsUpdate(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length === 0 || trimmed.length > 600 || parseAnyInvite(trimmed) !== undefined)
+    return false;
+  const query = /[?&]t=([A-Za-z0-9_-]+)/.exec(trimmed);
+  const hash = trimmed.lastIndexOf('#');
+  const payload = query?.[1] ?? (hash >= 0 ? trimmed.slice(hash + 1) : trimmed);
+  const bytes = fromB64u(payload);
+  // A whole header: version, flags, team id, seed, expiry.
+  if (bytes === undefined || bytes.length < 2 + 16 + 16 + 4) return false;
+  return bytes[0]! > 1 || (bytes[0] === 1 && (bytes[1]! & ~1) !== 0);
 }
 
 /** One SMS segment where possible: the name, then the link. */

@@ -357,6 +357,26 @@ export class PathManager {
     this.evaluateAll();
   }
 
+  /** Whether the phone is in use for the internet now (`setOnline`). */
+  get isOnline(): boolean {
+    return this.online;
+  }
+
+  /**
+   * A group's own rooms: `ready` when this phone is in one (the relay reached,
+   * the pill's cloud), `failing` when reaching the relay failed, else `trying`
+   * (the 0–30 s jitter, a connect in progress) or `none`.
+   */
+  roomState(groupId: string): 'ready' | 'failing' | 'trying' | 'none' {
+    let out: 'failing' | 'trying' | 'none' = 'none';
+    for (const e of this.rooms.values()) {
+      if (e.invite || e.groupId !== groupId) continue;
+      if (e.client.state === 'ready') return 'ready';
+      out = e.client.failing ? 'failing' : out === 'failing' ? out : 'trying';
+    }
+    return out;
+  }
+
   /** Per peer: the primary path and what each path is doing (the Connection sheet, G7). */
   status(): PeerPathStatus[] {
     const now = this.now();

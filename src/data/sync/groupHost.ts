@@ -30,6 +30,7 @@ import { memberIdOf } from '@core/team/ids';
 import type { InviteToken } from '@core/team/invite';
 import type { Role } from '@core/team/roles';
 import type { TeamAlert } from '@core/teamui/alerts';
+import type { OpenLink, PathView } from '@core/teamui/links';
 import { cleanName, nameText, SYS_PROFILE, systemMessage } from '@core/teamui/system';
 import { addBreadcrumb, reportError } from '@lib/errorReporting';
 
@@ -98,6 +99,16 @@ export interface HostHooks {
   onDrawAlert(alert: SessionDrawAlert, groupId: string): void;
   /** Whether the screens show this group (alerts and receipts are for it only). */
   foreground(groupId: string): boolean;
+}
+
+/** One group's internet for the screens (`GroupHost.groupNet`). */
+export interface GroupNetView {
+  capable: boolean;
+  online: boolean;
+  /** The group's own room (`PathManager.roomState`). */
+  room: 'ready' | 'failing' | 'trying' | 'none';
+  links: OpenLink[];
+  paths: PathView[];
 }
 
 /** One group, as a list shows it (design §5.5 `GroupSummary`). */
@@ -216,6 +227,32 @@ export class GroupHost implements SessionNet {
   /** Per peer: which path carries sync, and what each path is doing (G7's Connection sheet). */
   internetStatus(): PeerPathStatus[] {
     return this.paths?.status() ?? [];
+  }
+
+  /**
+   * One group's internet, as the screens show it (G7): whether this build can,
+   * whether the phone is in its room, the open links that carry it and what
+   * the path manager is doing per member.
+   */
+  groupNet(groupId: string): GroupNetView {
+    const links: OpenLink[] = [];
+    for (const l of this.links()) {
+      if (l.state === 'open' && l.identity !== undefined && l.groups.includes(groupId))
+        links.push({ member: l.identity, path: l.path });
+    }
+    const paths: PathView[] = this.internetStatus().map((p) => ({
+      member: p.member,
+      primary: p.primary,
+      signalling: p.signalling,
+      connecting: Object.values(p.paths).some((s) => s === 'connecting'),
+    }));
+    return {
+      capable: this.paths !== null,
+      online: this.paths?.isOnline ?? false,
+      room: this.paths?.roomState(groupId) ?? 'none',
+      links,
+      paths,
+    };
   }
 
   /** Run the path decisions now (tests; the manager ticks by itself otherwise). */

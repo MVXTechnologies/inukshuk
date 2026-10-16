@@ -1464,6 +1464,10 @@ export class TeamSession {
   /** Invites a removal just cancelled (R-INV-3), for the admin's one banner; cleared by the screen. */
   revokedNotice: { count: number; name: string; at: number } | null = null;
 
+  dismissRevokedNotice(): void {
+    this.revokedNotice = null;
+  }
+
   /** Tell the admins I deleted the team from this phone (they should remove me). */
   announceLeave(): void {
     if (this.guardWrite() !== null) return;

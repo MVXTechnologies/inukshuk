@@ -111,6 +111,11 @@ export class RoomClient {
 
   constructor(private readonly o: RoomClientOptions) {}
 
+  /** The last attempt to reach the relay failed (it is retrying with a backoff). */
+  get failing(): boolean {
+    return this.failures > 0 && this.state !== 'ready';
+  }
+
   get roomId(): string {
     return this.o.room.roomId;
   }
