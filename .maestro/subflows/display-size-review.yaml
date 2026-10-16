@@ -1,0 +1,78 @@
+# Subflow of team-draw.yaml: Display size (#760) review screenshots at
+# ${SIZE} (small or large; its segment is display-size-${SIZE_ID}), named
+# review-size-${SIZE}-<settings|library|map|team>-${THEME}.png and
+# uploaded by e2e.yml. Starts and ends on the map in team mode. Each shot
+# first asserts the element it shows; nothing here asserts the look itself.
+# subflows/set-display-size.yaml sets a size without shots (the reset).
+appId: com.inukshuk.app
+---
+# Settings → App settings → Display size: pick the size, see it applied.
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Settings'
+    timeout: 15000
+- tapOn: 'Settings'
+- extendedWaitUntil:
+    visible: 'App settings.*'
+    timeout: 15000
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Keep screen awake.*'
+          commands:
+            - tapOn: 'App settings.*'
+      - extendedWaitUntil:
+          visible: 'Keep screen awake.*'
+          timeout: 5000
+- scrollUntilVisible:
+    element:
+      id: 'display-size-${SIZE_ID}'
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    id: 'display-size-${SIZE_ID}'
+- extendedWaitUntil:
+    visible:
+      id: 'display-size-${SIZE_ID}'
+      checked: true
+    timeout: 5000
+- assertVisible: 'Display size'
+- takeScreenshot: review-size-${SIZE}-settings-${THEME}
+- tapOn: 'Back'
+# The Library, at that size.
+- extendedWaitUntil:
+    visible: 'Settings'
+    timeout: 10000
+- assertVisible: 'Library'
+- takeScreenshot: review-size-${SIZE}-library-${THEME}
+# The map with the team pill, its chips and the SOS on the rail's column.
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: 'team-bar-pill'
+    timeout: 15000
+- assertVisible:
+    id: 'team-sos-button'
+- takeScreenshot: review-size-${SIZE}-map-${THEME}
+# The team panel.
+- tapOn:
+    id: 'team-bar-pill'
+- extendedWaitUntil:
+    visible:
+      id: 'team-panel'
+    timeout: 5000
+- assertVisible:
+    id: 'team-panel-status'
+- takeScreenshot: review-size-${SIZE}-team-${THEME}
+- tapOn:
+    id: 'team-panel-close'
+- extendedWaitUntil:
+    visible:
+      id: 'team-bar-pill'
+    timeout: 5000

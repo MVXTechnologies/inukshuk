@@ -1,0 +1,45 @@
+# Subflow: set the Display size (#760) to the segment display-size-${SIZE_ID}
+# (0.85 Small, 1 Default, 1.15 Large) in Settings → App settings, then come
+# back to the map. Starts and ends on the Map tab.
+appId: com.inukshuk.app
+---
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Settings'
+    timeout: 15000
+- tapOn: 'Settings'
+- extendedWaitUntil:
+    visible: 'App settings.*'
+    timeout: 15000
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Keep screen awake.*'
+          commands:
+            - tapOn: 'App settings.*'
+      - extendedWaitUntil:
+          visible: 'Keep screen awake.*'
+          timeout: 5000
+- scrollUntilVisible:
+    element:
+      id: 'display-size-${SIZE_ID}'
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    id: 'display-size-${SIZE_ID}'
+- extendedWaitUntil:
+    visible:
+      id: 'display-size-${SIZE_ID}'
+      checked: true
+    timeout: 5000
+- tapOn: 'Back'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 15000

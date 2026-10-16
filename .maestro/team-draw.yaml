@@ -7,7 +7,9 @@
 # Then the owner's review screenshots (#756/#757), light and dark
 # (subflows/team-review.yaml): the team pill and its chips with the SOS
 # button, the panel, the task list, the long-press grid, drawing mode with
-# its Shape and Time panels; after leaving, the normal-mode long-press card.
+# its Shape and Time panels; the Display size at Small and Large (#760,
+# subflows/display-size-review.yaml: settings, library, map, team), reset to
+# Default; after leaving, the normal-mode long-press card.
 # The theme goes back to System at the end.
 #
 # First of the team shard, on the shard's fresh emulator; it does not clear
@@ -224,14 +226,48 @@ appId: com.inukshuk.app
     file: subflows/team-review.yaml
     env:
       THEME: light
+# Display size (#760): Small then Large, light, in team mode.
+- runFlow:
+    file: subflows/display-size-review.yaml
+    env:
+      SIZE: small
+      SIZE_ID: '0.85'
+      THEME: light
+- runFlow:
+    file: subflows/display-size-review.yaml
+    env:
+      SIZE: large
+      SIZE_ID: '1.15'
+      THEME: light
 - runFlow:
     file: subflows/set-theme.yaml
     env:
       NEXT: Dark
 - runFlow:
+    file: subflows/set-display-size.yaml
+    env:
+      SIZE_ID: '1'
+- runFlow:
     file: subflows/team-review.yaml
     env:
       THEME: dark
+- runFlow:
+    file: subflows/display-size-review.yaml
+    env:
+      SIZE: small
+      SIZE_ID: '0.85'
+      THEME: dark
+- runFlow:
+    file: subflows/display-size-review.yaml
+    env:
+      SIZE: large
+      SIZE_ID: '1.15'
+      THEME: dark
+# Back to Default for everything after.
+- runFlow:
+    file: subflows/set-display-size.yaml
+    env:
+      SIZE_ID: '1'
 # Leave the team (it is deleted from this phone): the panel's Manage team.
 - tapOn:
     id: 'team-bar-pill'
