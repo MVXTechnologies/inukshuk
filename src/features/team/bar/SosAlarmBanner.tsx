@@ -8,16 +8,17 @@
  * Sound: no audio player ships in this binary, so the alarm re-posts the
  * SOS notification under the same id (the system plays the "Team SOS"
  * tone each time, its system banner hidden while this one is up) every
- * {@link RESOUND_MS}, for at most {@link ALARM_MAX_MS}; the vibration repeats
- * natively for the same span. Both stop on Acknowledge, on resolve, or when
- * the banner unmounts. A plain absolutely positioned View: never a Paper
+ * {@link RESOUND_MS}, the tone's own 8 s length: F → D → F → D with no gap
+ * and no overlap (the tone ends in 0.15 s of silence, slack for timer
+ * jitter). The vibration repeats natively. Both go on until Acknowledge (or
+ * Navigate), a resolve, or the banner unmounting; never on a timeout. A plain absolutely positioned View: never a Paper
  * Portal on this spontaneous path (paper-portal-touch-swallow).
  */
 import { metres } from '@core/teamui/field';
 import { compassPoint, shortAge } from '@core/teamui/positions';
 import { distanceText } from '@core/teamui/teamBar';
 import { initialBearingDeg } from '@core/geo/geomath';
-import { notifyTeam, SOS_VIBRATION } from '@data/team/teamNotifications';
+import { notifyTeam, SOS_TONE_MS, SOS_VIBRATION } from '@data/team/teamNotifications';
 import { useNavigationStore } from '@state/navigationStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useTeamStore } from '@state/teamStore';
@@ -29,10 +30,8 @@ import { AppState, Pressable, StyleSheet, Vibration, View } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-/** How often the tone sounds again (the tone is ~2 s). */
-export const RESOUND_MS = 8_000;
-/** The alarm stops sounding and vibrating after this; the banner stays. */
-export const ALARM_MAX_MS = 2 * 60_000;
+/** How often the tone sounds again: exactly its length, so it loops seamlessly. */
+export const RESOUND_MS = SOS_TONE_MS;
 
 export function SosAlarmBanner() {
   const t = useSchemeTokens();
@@ -57,13 +56,12 @@ export function SosAlarmBanner() {
 
   useEffect(() => {
     if (entity === null) return;
-    const started = Date.now();
     const pattern = SOS_VIBRATION;
     Vibration.vibrate(pattern, true);
     const id = setInterval(() => {
       setNow(Date.now());
       const a = useTeamStore.getState().sosAlarm;
-      if (a === null || Date.now() - started >= ALARM_MAX_MS) {
+      if (a === null) {
         clearInterval(id);
         Vibration.cancel();
         return;

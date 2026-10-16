@@ -46,6 +46,9 @@ jest.mock('@data/team/teamNotifications', () => ({
   dismissTeamNotification: async () => undefined,
   setInAppAlarm: () => undefined,
   SOS_VIBRATION: [0, 900],
+  armSos: () => undefined,
+  silenceSos: () => undefined,
+  SOS_TONE_MS: 8_000,
 }));
 jest.mock('@lib/errorReporting', () => ({ addBreadcrumb: jest.fn(), reportError: jest.fn() }));
 jest.mock('react-native-safe-area-context', () => ({
