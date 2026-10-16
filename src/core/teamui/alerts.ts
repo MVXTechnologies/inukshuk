@@ -270,7 +270,10 @@ function taskAlert(
 /**
  * One SOS alarm per raiser per this long while their SOS stays open (a
  * resync, a re-send): more within it only update the banner. A resolve ends
- * the window, so an SOS raised after it always rings.
+ * the window, so an SOS raised after it always rings: whoever resolved it
+ * (the raiser, an admin on another phone, or this phone), however it got
+ * here (#752: a resolve made on THIS phone never comes back as an alert, so
+ * the window also ends when the SOS it rang for is no longer open).
  */
 export const SOS_ALARM_WINDOW_MS = 5 * 60_000;
 
@@ -285,10 +288,15 @@ export const TASK_ALERT_WINDOW_MS = 60_000;
 export class TaskAlertThrottle {
   private readonly bursts = new Map<string, { start: number; count: number }>();
 
-  /** Per raiser: their last SOS alarm (when, and which write). */
-  private readonly alarms = new Map<string, { at: number; key: string }>();
+  /** Per raiser: their last SOS alarm (when, which write, and which SOS). */
+  private readonly alarms = new Map<string, { at: number; key: string; entity?: string }>();
 
-  admit(alert: TeamAlert, now: number): TeamAlert {
+  /**
+   * @param sosOpen Whether an SOS (`sos:<owner>:<id>`) is open in the merged
+   *   data now. The session passes it, so the window ends with the SOS it
+   *   rang for, whatever path the resolve took (#752).
+   */
+  admit(alert: TeamAlert, now: number, sosOpen?: (entity: string) => boolean): TeamAlert {
     if (alert.kind === 'sos' && alert.sosPhase === 'resolve') {
       // Resolved: the raiser's next SOS is a new emergency, never a repeat.
       this.alarms.delete(alert.author);
@@ -300,9 +308,17 @@ export class TaskAlertThrottle {
       // resolve alert then: the merged record is open again); the same
       // write synced twice does not.
       const fresh = alert.sosPhase === 'reopen' && last?.key !== alert.key;
-      if (!fresh && last !== undefined && now - last.at < SOS_ALARM_WINDOW_MS)
+      // The SOS it rang for was resolved since (here or anywhere): a new one.
+      const ended =
+        last?.entity !== undefined &&
+        last.entity !== alert.entity &&
+        sosOpen !== undefined &&
+        !sosOpen(last.entity);
+      if (!fresh && !ended && last !== undefined && now - last.at < SOS_ALARM_WINDOW_MS)
         return { ...alert, level: 'badge' };
-      this.alarms.set(alert.author, { at: now, key: alert.key });
+      const next: { at: number; key: string; entity?: string } = { at: now, key: alert.key };
+      if (alert.entity !== undefined) next.entity = alert.entity;
+      this.alarms.set(alert.author, next);
       return alert;
     }
     if (alert.kind !== 'task') return alert;

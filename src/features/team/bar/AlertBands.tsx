@@ -1,12 +1,15 @@
 /**
  * The active SOS / gather band (#708, mockup a–d): a state everyone sees
  * until it is resolved or ended, on the Map (in the bar's column), the Team
- * screen and the strip area; never on other tabs.
+ * screen and the strip area; never on other tabs. On the map only an SOS
+ * has a band (`scope="map"`, #743): a gather is the team pill's amber "!"
+ * and the team panel's gather sub-panel.
  *
  * - Others' SOS (red): "SOS · Julie Tremblay" / "640 m NE · 2 min",
  *   Navigate and Centre (an admin: Resolve). A tap on the words centres.
- * - My SOS: "Your SOS is active" / "3 of 5 received · 1 min", Resolve,
- *   confirmed inline ("Resolve for everyone?").
+ * - My SOS: "Your SOS is active" / "3 of 5 received · 1 min", Resolve.
+ *   Resolving takes the same 2 s hold as raising (#748): the ring fills,
+ *   "Let go", and letting go resolves for everyone; a tap does nothing.
  * - A gather (amber, dark ink): "Gather · Lac-Delage" (unnamed: "Gather
  *   point") / "1.2 km · by Noé" (its creator: "By you · 3 of 5 received"),
  *   Navigate; its creator (or an admin) End, confirmed inline. A tap on its
@@ -24,6 +27,7 @@ import {
   bandModel,
   bandStack,
   gatherEtas,
+  mapBandAlerts,
   type ActiveAlert,
   type BandAction,
 } from '@core/teamui/alertBands';
@@ -37,6 +41,8 @@ import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'rea
 import { Icon, Text } from 'react-native-paper';
 
 import { useTeamMapFocus } from '../map/teamMapFocus';
+import { ProgressRing } from './parts';
+import { useHold } from './useHold';
 
 const AGE_TICK_MS = 30_000;
 
@@ -47,6 +53,11 @@ export interface AlertBandsProps {
   onCentre?: (latitude: number, longitude: number) => void;
   /** `strip`: one compact line, no expansion (the strip area). */
   variant?: 'full' | 'strip';
+  /**
+   * `map`: SOS bands only (#743: a gather shows as the team pill's "!" and
+   * in the team panel, never as a band on the map). `all` (the Team hub).
+   */
+  scope?: 'all' | 'map';
   style?: StyleProp<ViewStyle>;
 }
 
@@ -69,9 +80,11 @@ export function AlertBands({
   onNavigate,
   onCentre,
   variant = 'full',
+  scope = 'all',
   style,
 }: AlertBandsProps) {
-  const alerts = useActiveAlerts();
+  const every = useActiveAlerts();
+  const alerts = useMemo(() => (scope === 'map' ? mapBandAlerts(every) : every), [every, scope]);
   const [expanded, setExpanded] = useState(false);
   // Ages move on every 30 s (one render of this leaf; none of the map).
   const [now, setNow] = useState(() => Date.now());
@@ -148,8 +161,9 @@ function Band({
     setConfirm(false);
   };
 
+  // Only a gather's End is confirmed inline; an SOS is resolved by a hold (#748).
   if (confirm) {
-    const verb = sos ? 'Resolve' : 'End';
+    const verb = 'End';
     return (
       <View
         style={[styles.band, { backgroundColor: bg, borderColor: t.team.mapHalo }, shadow]}
@@ -207,8 +221,19 @@ function Band({
             testID={`${id}-centre`}
           />
         );
+      case 'resolve':
+        return (
+          <HoldResolve
+            key={a}
+            bg={bg}
+            ink={ink}
+            mine={alert.mine}
+            onResolve={finish}
+            testID={`${id}-resolve`}
+          />
+        );
       default: {
-        const verb = a === 'resolve' ? 'Resolve' : 'End';
+        const verb = 'End';
         return (
           <Pressable
             key={a}
@@ -369,6 +394,90 @@ function GatherEtaList({
   );
 }
 
+/** How long "Hold" stays reworded after a short tap, ms. */
+const HOLD_HINT_MS = 2500;
+
+/**
+ * Resolve, by the same hold as raising (#748): a round button in a ring
+ * that fills over 2 s, a tick each second, "Let go" once armed; letting go
+ * resolves for everyone. A short tap only says to hold. TalkBack and
+ * VoiceOver users double-tap and hold, or use the "Resolve for everyone"
+ * action.
+ */
+function HoldResolve({
+  bg,
+  ink,
+  mine,
+  onResolve,
+  testID,
+}: {
+  bg: string;
+  ink: string;
+  mine: boolean;
+  onResolve: () => void;
+  testID: string;
+}) {
+  const [hint, setHint] = useState(false);
+  useEffect(() => {
+    if (!hint) return;
+    const id = setTimeout(() => setHint(false), HOLD_HINT_MS);
+    return () => clearTimeout(id);
+  }, [hint]);
+  const hold = useHold({ onFire: onResolve, onShort: () => setHint(true) });
+  const under =
+    hold.phase === 'armed'
+      ? 'Let go'
+      : hold.phase === 'holding'
+        ? `${hold.secondsLeft} s`
+        : hint
+          ? 'Hold 2 s'
+          : 'Resolve';
+  const what = mine ? 'your SOS' : 'the SOS';
+  return (
+    <View style={styles.hold} testID={`${testID}-hold`}>
+      <View style={styles.holdRing}>
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <ProgressRing
+            size={HOLD_RING}
+            stroke={3}
+            fraction={hold.fraction}
+            color={ink}
+            track={`${ink}4D`}
+          />
+        </View>
+        <Pressable
+          onPressIn={hold.down}
+          onPressOut={hold.up}
+          style={[styles.holdButton, { backgroundColor: ink }]}
+          accessibilityRole="button"
+          accessibilityLabel={
+            hold.phase === 'armed'
+              ? `Let go to resolve ${what} for everyone`
+              : `Resolve ${what}. Hold for two seconds`
+          }
+          accessibilityHint="Touch and hold"
+          accessibilityState={{ busy: hold.phase !== 'idle' }}
+          accessibilityActions={[{ name: 'longpress', label: 'Resolve for everyone' }]}
+          onAccessibilityAction={(e) => {
+            if (e.nativeEvent.actionName === 'longpress') onResolve();
+          }}
+          testID={testID}
+        >
+          <Icon source="check-bold" size={20} color={bg} />
+        </Pressable>
+      </View>
+      <Text
+        style={[styles.holdLabel, { color: ink }]}
+        allowFontScaling={false}
+        accessible={false}
+        testID={`${testID}-label`}
+      >
+        {under}
+      </Text>
+    </View>
+  );
+}
+
 function Round({
   icon,
   label,
@@ -399,6 +508,8 @@ function Round({
     </Pressable>
   );
 }
+
+const HOLD_RING = 42;
 
 const shadow = {
   shadowColor: palette.shadow,
@@ -444,6 +555,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   ghost: { backgroundColor: 'rgba(255,255,255,0.2)' },
+  hold: { alignItems: 'center', minWidth: 52 },
+  holdRing: {
+    width: HOLD_RING,
+    height: HOLD_RING,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  holdButton: {
+    width: HOLD_RING - 10,
+    height: HOLD_RING - 10,
+    borderRadius: (HOLD_RING - 10) / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  holdLabel: { marginTop: -2, fontSize: 10.5, lineHeight: 13, fontWeight: '800' },
   textButton: {
     minHeight: 38,
     borderRadius: 19,

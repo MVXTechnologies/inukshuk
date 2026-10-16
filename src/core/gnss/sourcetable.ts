@@ -242,6 +242,18 @@ export function rankMountpoints(
 }
 
 /**
+ * The caster's own spelling of `mountpoint` when the two differ only in
+ * case ("QUEBEC_RTCM3X" for "Quebec_RTCM3x"); null when it is listed as
+ * typed, or not at all. Mountpoints are case-sensitive.
+ */
+export function caseVariant(streams: readonly SourceStream[], mountpoint: string): string | null {
+  const want = mountpoint.trim();
+  if (streams.some((s) => s.mountpoint === want)) return null;
+  const lower = want.toLowerCase();
+  return streams.find((s) => s.mountpoint.toLowerCase() === lower)?.mountpoint ?? null;
+}
+
+/**
  * Single-base RTK degrades with baseline length (≈ 1 ppm + ~1 cm): beyond
  * ~35 km a fixed solution becomes unreliable for L1/L2 rovers. Used to warn,
  * not to block.

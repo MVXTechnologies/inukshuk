@@ -4,6 +4,7 @@ import { useTeamSheet } from '@features/team/map/teamMode';
 import { useEffect, useRef } from 'react';
 import { BackHandler } from 'react-native';
 
+import { useOverlapChooser } from './overlap/overlapChooser';
 import { useWaypointClusterSheet } from './waypoints/waypointTap';
 
 /** One thing open on the map that Android Back closes. */
@@ -50,7 +51,8 @@ export function useMapBack(active: boolean, layers: readonly BackLayer[]): void 
 
 /**
  * The map's store-held cards, for `useMapBack`: the team's card or menu, a
- * tapped team point, a photo's card, a cluster's list. Read here so the map
+ * tapped team point, a photo's card, a cluster's list, the overlap chooser
+ * (#745). Read here so the map
  * screen does not subscribe to them itself.
  */
 export function useStoreBackLayers(): BackLayer[] {
@@ -58,10 +60,12 @@ export function useStoreBackLayers(): BackLayer[] {
   const teamHit = useTeamMapSelection((s) => s.hit !== null);
   const photo = usePhotoCard((s) => s.target !== null);
   const cluster = useWaypointClusterSheet((s) => s.keys !== null);
+  const overlap = useOverlapChooser((s) => s.hits !== null);
   return [
     { open: teamSheet, close: () => useTeamSheet.getState().close() },
     { open: teamHit, close: () => useTeamMapSelection.getState().select(null) },
     { open: photo, close: () => usePhotoCard.getState().close() },
     { open: cluster, close: () => useWaypointClusterSheet.getState().close() },
+    { open: overlap, close: () => useOverlapChooser.getState().close() },
   ];
 }

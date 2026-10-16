@@ -1,4 +1,5 @@
 import { canSave, canUndo, drawHelp, drawHint, exitNeedsConfirm } from '@core/draw/editor';
+import { terrainLngLat } from '../hooks/useTerrainLines';
 import {
   boundsOfVertices,
   isSelfIntersecting,
@@ -101,6 +102,8 @@ const DISCARD_CONFIRM_MS = 3500;
 
 export interface MapDrawingOptions {
   mapRef: RefObject<MapRef | null>;
+  /** The 3D terrain's view while it draws (null in 2D): points land on the relief (#735). */
+  terrainView?: number | null;
   showSnack: (message: string) => void;
   units: Units;
   /** Top inset of the screen (status bar), for the chips/hint lane. */
@@ -118,6 +121,10 @@ export interface MapDrawing {
   ownsBottom: boolean;
   viewAreaId: string | null;
   closeAreaCard: () => void;
+  /** Open an area's card (a row of the overlap chooser, #745). */
+  openAreaCard: (areaId: string) => void;
+  /** The areas drawn on the map (the one being edited is the tool's). */
+  shownAreas: readonly Area[];
   startRoute: () => void;
   startArea: () => void;
   /** "Draw" in the "+" menu: the Route / Area chooser. */
@@ -142,6 +149,7 @@ export interface MapDrawing {
 
 export function useMapDrawing({
   mapRef,
+  terrainView = null,
   showSnack,
   units,
   topInset,
@@ -472,6 +480,8 @@ export function useMapDrawing({
 
   const unproject = useCallback(
     async (x: number, y: number): Promise<LngLat | null> => {
+      const onRelief = terrainLngLat(terrainView, x, y);
+      if (onRelief !== null) return onRelief;
       try {
         const ll = await mapRef.current?.unproject([x, y]);
         return ll ? [ll[0], ll[1]] : null;
@@ -479,7 +489,7 @@ export function useMapDrawing({
         return null;
       }
     },
-    [mapRef],
+    [mapRef, terrainView],
   );
   const lastMoveAt = useRef(0);
   const onGripMove = (x: number, y: number) => {
@@ -931,11 +941,7 @@ export function useMapDrawing({
       {state !== null && state.kind === 'route' && routeSaveOpen && (
         <SaveRouteSheet
           initialName={editedTrack?.name ?? `Route ${tracks.filter((t) => t.plan).length + 1}`}
-          initialCategory={
-            editedTrack?.category && editedTrack.category !== 'navigation'
-              ? editedTrack.category
-              : null
-          }
+          initialCategory={editedTrack?.category}
           summary={`${compactDistance(distanceM, units)} · ${climb}`}
           estimateFor={estimateFor}
           saving={savingRoute}
@@ -993,6 +999,8 @@ export function useMapDrawing({
     ownsBottom: active || chooserOpen || areaEditor !== null || viewArea !== null,
     viewAreaId,
     closeAreaCard: () => setViewAreaId(null),
+    openAreaCard: setViewAreaId,
+    shownAreas,
     startRoute,
     startArea,
     openChooser,

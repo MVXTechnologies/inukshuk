@@ -1,9 +1,11 @@
 import { overlayAnchor } from '@core/map/layerSlots';
+import { groupLines } from '@core/terrain3d/lineGroups';
 import { trailMarkers } from '@core/trails/stages';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import type { ShownTrail } from '@state/longTrailsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useMemo } from 'react';
+import { useTerrainLineGroup, useTerrainView } from '../hooks/useTerrainLines';
 
 /**
  * Stage joins stay small at a continental zoom (the Appalachian Trail's eleven
@@ -73,6 +75,40 @@ export function ShownTrailLayers({ shown }: { shown: ShownTrail }) {
       ],
     };
   }, [detail]);
+
+  // #735: the same lines on the 3D terrain (the stage over the trail).
+  const view = useTerrainView();
+  const terrainLines = useMemo(
+    () =>
+      view === null
+        ? null
+        : groupLines(
+            'shownTrail',
+            [
+              { geometry: line.geometry },
+              ...(stageLine !== null
+                ? [
+                    {
+                      geometry: stageLine.geometry,
+                      color: t.explore.trailStage,
+                      width: 7,
+                      order: 1,
+                    },
+                  ]
+                : []),
+            ],
+            {
+              color: t.explore.trail,
+              halo: t.explore.trailHalo,
+              haloOpacity: 0.9,
+              width: 5,
+              haloAdd: 5,
+              order: 0,
+            },
+          ),
+    [view, line, stageLine, t.explore.trail, t.explore.trailHalo, t.explore.trailStage],
+  );
+  useTerrainLineGroup('shownTrail', terrainLines);
 
   return (
     <>

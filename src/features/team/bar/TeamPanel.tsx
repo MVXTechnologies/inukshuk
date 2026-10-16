@@ -2,7 +2,12 @@
  * The team panel (#707, mockup "Tap the pill"): it drops from the pill and
  * is the team's home on the map.
  *
- * - Actions: Chat (unread), Rally here, Draw, and my status (primary).
+ * - While a gather is active, the panel opens on it (#743, mockup 5): who
+ *   called it, where it is from me, Go, End (its creator or an admin), and
+ *   every member's distance and ETA (`GatherPanel`). The map has no gather
+ *   band any more; the pill's amber "!" leads here.
+ * - Actions: Chat (unread), Rally here, Draw, and my status (primary): the
+ *   map keeps no chip row for them (#743).
  * - Members, live first and nearest first (`panelMembers`); each row opens
  *   that teammate's card on the map (Message, Navigate to, Centre), or their
  *   page when their position is unknown.
@@ -31,6 +36,8 @@ import { useTeamMapSelection } from '../map/TeamMapOverlay';
 import { useTeamSheet } from '../map/teamMode';
 import { useTeamPick } from '../map/TeamPick';
 import { openPeers, teamSyncLine } from '../syncLine';
+import { useActiveAlerts } from './AlertBands';
+import { GatherPanel } from './GatherPanel';
 import { BandAvatar, FaceStack, myPosition } from './parts';
 import { usePendingAlert } from './pendingAlert';
 import { useTeamBarSummary } from './TeamStatusBar';
@@ -39,11 +46,14 @@ export function TeamPanel({
   top,
   here,
   focused = true,
+  onNavigate,
 }: {
   top: number;
   here: { latitude: number; longitude: number } | null;
   /** The map screen is in front: Back closes the panel only then. */
   focused?: boolean;
+  /** The gather's Go (#743). */
+  onNavigate?: (latitude: number, longitude: number) => void;
 }) {
   const t = useSchemeTokens();
   const units = useSettingsStore((s) => s.units);
@@ -57,6 +67,7 @@ export function TeamPanel({
   const meshRunning = useTeamStore((s) => s.meshRunning);
   const statuses = useTeamStore((s) => s.statuses);
   const unread = useTeamStore(selectChatUnread);
+  const gather = useActiveAlerts().find((a) => a.kind === 'gather');
   const me = view?.me;
   const myOpenTasks = useTeamStore(
     (s) => s.tasks.filter((x) => !x.done && x.assignee === me).length,
@@ -185,6 +196,16 @@ export function TeamPanel({
           </Pressable>
         </View>
 
+        {gather && (
+          <GatherPanel
+            alert={gather}
+            here={here}
+            onGo={(lat, lng) => {
+              close();
+              onNavigate?.(lat, lng);
+            }}
+          />
+        )}
         <View style={[styles.acts, { borderBottomColor: t.outlineVariant }]}>
           {actions.map(([icon, label, run, id, count]) => (
             <Act key={id} icon={icon} label={label} onPress={run} testID={id} count={count} />
@@ -198,7 +219,10 @@ export function TeamPanel({
           />
         </View>
 
-        <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+        <ScrollView
+          style={[styles.list, gather && styles.listUnderGather]}
+          contentContainerStyle={styles.listContent}
+        >
           {summary.solo ? (
             <Row
               icon="account-plus"
@@ -468,6 +492,8 @@ const styles = StyleSheet.create({
   },
   badgeText: { fontSize: 10.5, fontWeight: '900' },
   list: { maxHeight: 330 },
+  /** The gather takes the top of the panel: the members' list gives way. */
+  listUnderGather: { maxHeight: 168 },
   listContent: { paddingBottom: 4 },
   sec: {
     flexDirection: 'row',

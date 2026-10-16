@@ -3,8 +3,10 @@ import { midpointHandles, type MidpointHandle } from '@core/draw/geometry';
 import type { DrawKind } from '@core/draw/editor';
 import { halfwayAlong, type LegView } from '@core/draw/legs';
 import type { LngLat } from '@core/models';
+import { groupLines, type GroupFeature } from '@core/terrain3d/lineGroups';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useMemo } from 'react';
+import { useTerrainLineGroup, useTerrainView } from '../hooks/useTerrainLines';
 
 /**
  * The shape being drawn (#502 route / #503 area), as MapView children: the
@@ -139,6 +141,41 @@ export function DrawLayers({
     () => JSON.stringify(drawShapeGeoJson(kind, shown, selected, legs, mids, scrubAt)),
     [kind, shown, selected, legs, mids, scrubAt],
   );
+  // #735: the shape's lines on the 3D terrain, live as it is drawn (solid
+  // there: the scene draws no dashes; a failed leg keeps its warning colour).
+  const view = useTerrainView();
+  const terrainLines = useMemo(() => {
+    if (view === null) return null;
+    const features: GroupFeature[] = [];
+    for (const f of drawShapeGeoJson(kind, shown, null, legs, []).features as {
+      geometry: { type: string; coordinates: number[][] };
+      properties: { role?: string; leg?: string };
+    }[]) {
+      if (f.properties.role !== 'line' || f.geometry.type !== 'LineString') continue;
+      features.push({
+        geometry: { type: 'LineString', coordinates: f.geometry.coordinates },
+        color: f.properties.leg === 'failed' ? warnColor : color,
+      });
+    }
+    return kind === 'route'
+      ? groupLines('drawing', features, {
+          color,
+          halo,
+          haloOpacity: 1,
+          width: 4.5,
+          haloAdd: 3.5,
+          order: 0,
+        })
+      : groupLines('drawing', features, {
+          color,
+          halo,
+          haloOpacity: 0,
+          width: 2.5,
+          haloAdd: 0,
+          order: 0,
+        });
+  }, [view, kind, shown, legs, color, halo, warnColor]);
+  useTerrainLineGroup('drawing', terrainLines);
   const shape =
     kind === 'route'
       ? [

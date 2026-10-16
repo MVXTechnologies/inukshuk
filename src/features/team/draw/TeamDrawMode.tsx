@@ -38,6 +38,7 @@ import { ActionSnackbar } from '@features/common/ActionSnackbar';
 import { useScreenSheet } from '@features/common/useScreenSheet';
 import { BOTTOM_LAYER } from '@features/map/bottomLayers';
 import { MapCreditsButton } from '@features/map/components/MapCredits';
+import { terrainLngLat, useTerrainView } from '@features/map/hooks/useTerrainLines';
 import type { CameraRef, MapRef } from '@maplibre/maplibre-react-native';
 import { useWaypointClusterSheet } from '@features/map/waypoints/waypointTap';
 import { useMapStore } from '@state/mapStore';
@@ -221,6 +222,12 @@ function DrawModeBody({
 
   const gesture = useRef(new DrawGesture());
   const view = useRef<Viewport | null>(null);
+  // The 3D terrain's view (#735), read by the camera sync (an effect keeps it fresh).
+  const terrainView = useTerrainView();
+  const terrainViewRef = useRef(terrainView);
+  useEffect(() => {
+    terrainViewRef.current = terrainView;
+  }, [terrainView]);
   const size = useRef({ width: 0, height: 0 });
   const pinch = useRef<Pinch | null>(null);
   const stroke = useRef<StrokeBuilder | null>(null);
@@ -250,13 +257,17 @@ function DrawModeBody({
     try {
       const vs = await mapRef.current?.getViewState();
       if (!vs) return;
+      // In 3D (#735) the pen lands on the relief: each touch point is
+      // unprojected onto the drawn terrain, and the map keeps its tilt.
+      const tv = terrainViewRef.current;
       view.current = {
         center: [vs.center[0], vs.center[1]],
         zoom: vs.zoom,
         bearing: vs.bearing,
         ...size.current,
+        ...(tv !== null ? { toGeo: (s: ScreenPt) => terrainLngLat(tv, s[0], s[1]) } : {}),
       };
-      if (vs.pitch > 0.5) {
+      if (tv === null && vs.pitch > 0.5) {
         cameraRef.current?.easeTo({
           center: [vs.center[0], vs.center[1]],
           pitch: 0,

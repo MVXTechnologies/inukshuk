@@ -1,6 +1,6 @@
 import { CASTER_PRESETS, frameLabel, presetById, type CorrectionFrame } from '@core/gnss/casters';
 import { activeProfile, newProfile, profileProblem, type NtripProfile } from '@core/gnss/config';
-import { rankMountpoints, type RankedStream } from '@core/gnss/sourcetable';
+import { isRtcm3, rankMountpoints, type RankedStream } from '@core/gnss/sourcetable';
 import { gnssSecrets } from '@data/gnss/credentials';
 import { ntripSocketFactory } from '@data/gnss/ntripSocket';
 import { newId } from '@data/storage';
@@ -123,7 +123,9 @@ export function GnssCorrectionsScreen() {
       setMounts(
         here
           ? rankMountpoints(table.streams, here.lat, here.lon, 30)
-          : table.streams.slice(0, 30).map((s) => ({ stream: s, distanceKm: null, usable: true })),
+          : table.streams
+              .slice(0, 30)
+              .map((s) => ({ stream: s, distanceKm: null, usable: isRtcm3(s) })),
       );
     } catch (e) {
       setMountError(e instanceof Error ? e.message : String(e));
@@ -219,6 +221,7 @@ export function GnssCorrectionsScreen() {
               <Chip
                 key={p.id}
                 mode="outlined"
+                style={styles.chip}
                 selected={p.id === draft.id}
                 onPress={() => {
                   setDraft(p);
@@ -266,37 +269,40 @@ export function GnssCorrectionsScreen() {
         </Text>
       )}
 
-      <TextInput
-        mode="outlined"
-        returnKeyType="done"
-        label="Caster"
-        value={draft.host}
-        onChangeText={(host) => set({ host })}
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="url"
-        testID="gnss-caster-host"
-      />
       <View style={styles.pair}>
         <TextInput
           mode="outlined"
           returnKeyType="done"
+          label="Caster"
+          value={draft.host}
+          onChangeText={(host) => set({ host })}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          testID="gnss-caster-host"
+          style={styles.flex}
+        />
+        <TextInput
+          mode="outlined"
+          returnKeyType="done"
           label="Port"
+          testID="gnss-caster-port"
           value={String(draft.port)}
           onChangeText={(v) => set({ port: Number(v.replace(/\D/g, '')) || 0 })}
           keyboardType="number-pad"
-          style={styles.flex}
-        />
-        <SegmentedButtons
-          style={styles.flex}
-          value={String(draft.version)}
-          onValueChange={(v) => set({ version: v === '1' ? 1 : 2 })}
-          buttons={[
-            { value: '1', label: 'NTRIP 1' },
-            { value: '2', label: 'NTRIP 2' },
-          ]}
+          style={styles.port}
         />
       </View>
+      {/* Its own full-width row: beside the port, two 76 dp-minimum segments
+          overflowed a 320 dp screen and cut "NTRIP 1" / "NTRIP 2" (#751). */}
+      <SegmentedButtons
+        value={String(draft.version)}
+        onValueChange={(v) => set({ version: v === '1' ? 1 : 2 })}
+        buttons={[
+          { value: '1', label: 'NTRIP 1', accessibilityLabel: 'NTRIP version 1' },
+          { value: '2', label: 'NTRIP 2', accessibilityLabel: 'NTRIP version 2' },
+        ]}
+      />
       <View style={styles.pair}>
         <TextInput
           mode="outlined"
@@ -339,7 +345,7 @@ export function GnssCorrectionsScreen() {
           testID="gnss-mountpoint"
           value={draft.mountpoint}
           onChangeText={(mountpoint) => set({ mountpoint })}
-          autoCapitalize="characters"
+          autoCapitalize="none"
           autoCorrect={false}
           style={styles.flex}
         />
@@ -397,11 +403,11 @@ export function GnssCorrectionsScreen() {
             variant="bodySmall"
             style={{ color: draft.needsGga && !draft.ggaConsent ? t.status.gpsWeak : t.inkVariant }}
           >
-            {draft.needsGga
-              ? draft.ggaConsent
-                ? 'This mountpoint needs it · your position goes to the caster every 10 s'
-                : 'This network mountpoint needs your position to send corrections'
-              : 'Only network (VRS) mountpoints need it · never sent otherwise'}
+            {draft.ggaConsent
+              ? 'Your position goes to the caster every 10 s'
+              : draft.needsGga
+                ? 'This network mountpoint needs your position to send corrections'
+                : 'Network (VRS) mountpoints need it, and some casters wait for it'}
           </Text>
         </View>
         <Switch
@@ -451,6 +457,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   pair: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  port: { width: 96 },
+  chip: { maxWidth: '100%' },
   loadButton: { alignSelf: 'center' },
   mount: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 56 },
   dim: { opacity: 0.5 },

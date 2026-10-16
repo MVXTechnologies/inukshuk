@@ -1,7 +1,7 @@
 import { drapeStyle, type DrapeStyleInput } from '@core/terrain3d/drapeStyle';
 import { TERRAIN_MAX_PITCH_DEG } from '@core/terrain3d/morph';
 import { packLook, terrainLook, type TerrainBasemap } from '@core/terrain3d/look';
-import { nameFieldsFor, packLabelTheme, type TerrainLineSpec } from '@core/terrain3d/sceneInput';
+import { nameFieldsFor, packLabelTheme } from '@core/terrain3d/sceneInput';
 import type { TiltRelief } from '@core/map/tiltRelief';
 import { reportError } from '@lib/errorReporting';
 import { nativeTerrain, type NativeTerrainConfig } from '@lib/nativeTerrain';
@@ -200,25 +200,14 @@ export function useNativeTerrain(o: NativeTerrainOptions): NativeTerrainBinding 
 }
 
 /**
- * The 3D scene's trails (lifted onto the terrain) and location marker, sent
- * once per change. `lines` should keep its identity between renders.
+ * The 3D scene's location marker, sent once per change. (The lines lifted
+ * onto the terrain go per overlay: useTerrainLineGroup, #735.)
  */
 export function useNativeTerrainScene(
   viewTag: number | null,
-  lines: readonly TerrainLineSpec[],
   puck: { lng: number; lat: number } | null,
 ): void {
   const module = nativeTerrain();
-  // Trails and the location marker: once per change (never per frame).
-  useEffect(() => {
-    if (viewTag === null || module === null || module.setLines === undefined) return;
-    try {
-      module.setLines(viewTag, [...lines]);
-    } catch (e) {
-      reportError(e, 'terrain3d-lines');
-    }
-  }, [lines, viewTag, module]);
-
   const puckLng = puck?.lng ?? null;
   const puckLat = puck?.lat ?? null;
   useEffect(() => {

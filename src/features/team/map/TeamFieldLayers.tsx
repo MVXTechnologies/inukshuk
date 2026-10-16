@@ -1,14 +1,18 @@
 /** SOS and rally on the live map: MapView children (the map module only). */
 import { liveLayerAnchor } from '@core/map/liveLayerOrder';
+import { selectionHighlight } from '@core/map/selectionHighlight';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
+import { useMapStore } from '@state/mapStore';
 import { useTeamStore } from '@state/teamStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { FeatureCollection } from 'geojson';
 import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import { AppState } from 'react-native';
+import { useTheme } from 'react-native-paper';
 import { useReducedMotion } from 'react-native-reanimated';
 
 import { teamLabelFont } from './TeamMapLayers';
+import { useTeamSheet } from './teamMode';
 import { useTrailEdit } from './TrailEditor';
 
 /**
@@ -291,7 +295,11 @@ function AlertPulse({
   );
 }
 
-/** Team trails: their lines; the edited one's points; "editing" cues. */
+/**
+ * Team trails: their lines; the edited one's points; "editing" cues. The
+ * trail whose spot card is up (a tap on it) wears the selection highlight
+ * (#747): the same glow and bright casing as a selected trail on the map.
+ */
 export function useTeamTrailLayers(glyphs: string | undefined): ReactElement[] {
   const t = useSchemeTokens();
   const trails = useTeamStore((s) => s.teamTrails);
@@ -299,6 +307,12 @@ export function useTeamTrailLayers(glyphs: string | undefined): ReactElement[] {
   const view = useTeamStore((s) => s.view);
   const edit = useTrailEdit();
   const font = teamLabelFont(glyphs);
+  const spotKey = useTeamSheet((s) =>
+    s.sheet?.kind === 'spot' && s.sheet.team ? `${s.sheet.team.owner}:${s.sheet.team.id}` : null,
+  );
+  const { dark } = useTheme();
+  const satellite = useMapStore((s) => s.basemap === 'satellite');
+  const hl = selectionHighlight(satellite ? 'imagery' : dark ? 'night' : 'paper');
   const json = useMemo(() => {
     if (view === null) return '';
     const byId = new Map(view.members.map((m) => [m.id, m]));
@@ -309,7 +323,14 @@ export function useTeamTrailLayers(glyphs: string | undefined): ReactElement[] {
       features.push({
         type: 'Feature',
         geometry: { type: 'LineString', coordinates: tr.vertices.map((v) => [v.lng, v.lat]) },
-        properties: { kind: 'line', owner: tr.owner, trail: tr.id, name: tr.name, color },
+        properties: {
+          kind: 'line',
+          owner: tr.owner,
+          trail: tr.id,
+          name: tr.name,
+          color,
+          sel: key === spotKey ? 1 : 0,
+        },
       });
       const who = [...editors]
         .filter(([m, k]) => k === key && m !== view.me)
@@ -334,18 +355,35 @@ export function useTeamTrailLayers(glyphs: string | undefined): ReactElement[] {
           });
     }
     return JSON.stringify({ type: 'FeatureCollection', features });
-  }, [trails, editors, view, edit.trail, edit.selected, t.team.bubbleNew]);
+  }, [trails, editors, view, edit.trail, edit.selected, t.team.bubbleNew, spotKey]);
   const data = useMemo(() => (json ? (JSON.parse(json) as FeatureCollection) : null), [json]);
   if (data === null || data.features.length === 0) return [];
+  const sel = ['==', ['get', 'sel'], 1];
   return [
     <GeoJSONSource key="team-trl" id="team-trl" data={data}>
+      <Layer
+        id="team-trl-glow"
+        beforeId={liveLayerAnchor('team-trl-glow')}
+        type="line"
+        filter={['all', ['==', ['get', 'kind'], 'line'], sel] as never}
+        layout={{ 'line-join': 'round', 'line-cap': 'round' }}
+        paint={{
+          'line-color': hl.glow.color,
+          'line-width': hl.glow.width,
+          'line-opacity': hl.glow.opacity,
+          'line-blur': hl.glow.blur,
+        }}
+      />
       <Layer
         id="team-trl-casing"
         beforeId={liveLayerAnchor('team-trl-casing')}
         type="line"
         filter={['==', ['get', 'kind'], 'line'] as never}
         layout={{ 'line-join': 'round', 'line-cap': 'round' }}
-        paint={{ 'line-color': t.team.mapPaper, 'line-width': 7 }}
+        paint={{
+          'line-color': ['case', sel, hl.casing.color, t.team.mapPaper] as never,
+          'line-width': ['case', sel, hl.casing.width, 7] as never,
+        }}
       />
       <Layer
         id={TEAM_TRAIL_LINE}
@@ -353,7 +391,10 @@ export function useTeamTrailLayers(glyphs: string | undefined): ReactElement[] {
         type="line"
         filter={['==', ['get', 'kind'], 'line'] as never}
         layout={{ 'line-join': 'round', 'line-cap': 'round' }}
-        paint={{ 'line-color': ['get', 'color'] as never, 'line-width': 4 }}
+        paint={{
+          'line-color': ['get', 'color'] as never,
+          'line-width': ['case', sel, hl.line.width, 4] as never,
+        }}
       />
       <Layer
         id="team-trl-vertex"

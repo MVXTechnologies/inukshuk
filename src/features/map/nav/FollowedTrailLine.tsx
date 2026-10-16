@@ -1,8 +1,10 @@
 import { liveLayerAnchor } from '@core/map/liveLayerOrder';
+import { groupLines } from '@core/terrain3d/lineGroups';
 import type { LineLayerSpecification } from '@maplibre/maplibre-gl-style-spec';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useMemo } from 'react';
+import { useTerrainLineGroup, useTerrainView } from '../hooks/useTerrainLines';
 
 type LinePaint = NonNullable<LineLayerSpecification['paint']>;
 type LineLayout = NonNullable<LineLayerSpecification['layout']>;
@@ -35,6 +37,23 @@ export function FollowedTrailLine({ path }: { path: [number, number][][] }) {
     () => ({ 'line-color': followedTrail, 'line-width': 4.5 }),
     [followedTrail],
   );
+  // #735: the same line on the 3D terrain.
+  const view = useTerrainView();
+  const terrainLines = useMemo(
+    () =>
+      view === null
+        ? null
+        : groupLines('followedTrail', [{ geometry: data.geometry }], {
+            color: followedTrail,
+            halo: followedTrailCasing,
+            haloOpacity: 0.85,
+            width: 4.5,
+            haloAdd: 3.5,
+            order: 0,
+          }),
+    [view, data, followedTrail, followedTrailCasing],
+  );
+  useTerrainLineGroup('followedTrail', terrainLines);
   return (
     <GeoJSONSource id="followed-trail" data={data}>
       <Layer

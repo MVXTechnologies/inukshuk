@@ -1,7 +1,15 @@
 import { exchange, MIN, T0 } from '@core/team/testing/fixtures';
 import { crew } from '@core/teamdraw/testUtils';
 
-import { activeEntities, alertChannel, AlertLedger, rallyEntity, sosEntity } from './alertLedger';
+import {
+  activeEntities,
+  alertChannel,
+  AlertLedger,
+  RALLY_BUZZ_GAP_MS,
+  rallyEntity,
+  RallyBuzzGate,
+  sosEntity,
+} from './alertLedger';
 import { alertContext, alertFor, type TeamAlert } from './alerts';
 import { teamRally, teamSos } from './field';
 
@@ -120,5 +128,19 @@ describe('rally routing (#708)', () => {
     );
     expect(a).toMatchObject({ kind: 'sos', entity: `sos:${eve.id}:s1` });
     expect(alertChannel(a!)).toBe('sos');
+  });
+});
+
+describe('RallyBuzzGate (#743)', () => {
+  it('one buzz per raiser per minute; raisers apart; a clock set back never mutes', () => {
+    const g = new RallyBuzzGate();
+    expect(g.admit('noe', T0)).toBe(true);
+    expect(g.admit('noe', T0 + 10_000)).toBe(false);
+    expect(g.admit('julie', T0 + 10_000)).toBe(true);
+    expect(g.admit('noe', T0 + RALLY_BUZZ_GAP_MS - 1)).toBe(false);
+    expect(g.admit('noe', T0 + RALLY_BUZZ_GAP_MS)).toBe(true);
+    // The phone's clock jumped back: buzz rather than stay silent for an hour.
+    expect(g.admit('julie', T0 - 60 * MIN)).toBe(true);
+    expect(new RallyBuzzGate(0).admit('noe', T0)).toBe(true);
   });
 });

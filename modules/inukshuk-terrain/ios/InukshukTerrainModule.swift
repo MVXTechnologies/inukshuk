@@ -29,6 +29,10 @@ struct BenchStep: Record {
 /// that is native (INKTerrainController: shared C++ engine + Metal).
 public final class InukshukTerrainModule: Module {
   private var controllers: [Int: INKTerrainController] = [:]
+  // #735: the same controllers for the JS thread (unproject is synchronous: the pen
+  // calls it per touch move); the engine's unproject is thread-safe.
+  private let jsLock = NSLock()
+  private var jsControllers: [Int: INKTerrainController] = [:]
 
   public func definition() -> ModuleDefinition {
     Name("InukshukTerrain")
@@ -46,6 +50,9 @@ public final class InukshukTerrainModule: Module {
         let mapView = INKTerrainController.findMapView(in: host),
         let controller = INKTerrainController(mapView: mapView)
       else { return false }
+      self.jsLock.lock()
+      self.jsControllers.removeValue(forKey: viewTag)
+      self.jsLock.unlock()
       self.controllers.removeValue(forKey: viewTag)?.detach()
       let ok = controller.attach(
         withLook: config.look.map { NSNumber(value: $0) },
@@ -59,6 +66,9 @@ public final class InukshukTerrainModule: Module {
         controller.setLabelInsetsTop(
           config.labelInsets.first ?? 0, bottom: config.labelInsets.dropFirst().first ?? 0)
         self.controllers[viewTag] = controller
+        self.jsLock.lock()
+        self.jsControllers[viewTag] = controller
+        self.jsLock.unlock()
       }
       return ok
     }.runOnQueue(.main)
@@ -87,6 +97,23 @@ public final class InukshukTerrainModule: Module {
       }
     }
 
+    // #735: one overlay's lines (a group), the others untouched.
+    Function("setLineGroup") { (viewTag: Int, group: Int, lines: [TerrainLine]) in
+      let dicts: [[String: Any]] = lines.map { ["id": $0.id, "coords": $0.coords, "style": $0.style] }
+      DispatchQueue.main.async {
+        self.controllers[viewTag]?.setLines(dicts, group: Int32(group))
+      }
+    }
+
+    // #735: lng, lat of the drawn 3D terrain under a view point (pt); nil off the terrain.
+    // Synchronous, on the JS thread: the pen unprojects each new touch point.
+    Function("unproject") { (viewTag: Int, x: Double, y: Double) -> [Double]? in
+      self.jsLock.lock()
+      let c = self.jsControllers[viewTag]
+      self.jsLock.unlock()
+      return c?.unprojectX(x, y: y)?.map { $0.doubleValue }
+    }
+
     Function("setPuck") { (viewTag: Int, visible: Bool, lng: Double, lat: Double) in
       DispatchQueue.main.async {
         self.controllers[viewTag]?.setPuckVisible(visible, lng: lng, lat: lat)
@@ -100,6 +127,9 @@ public final class InukshukTerrainModule: Module {
     }
 
     AsyncFunction("detach") { (viewTag: Int) in
+      self.jsLock.lock()
+      self.jsControllers.removeValue(forKey: viewTag)
+      self.jsLock.unlock()
       self.controllers.removeValue(forKey: viewTag)?.detach()
     }.runOnQueue(.main)
 

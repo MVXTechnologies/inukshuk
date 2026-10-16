@@ -77,6 +77,8 @@ export const LIVE_LAYER_ORDER = [
   // shared waypoints, chat/task marks, then teammates.
   'team-rally-area',
   'team-rally-edge',
+  // A tapped team trail's glow (#747), under its casing.
+  'team-trl-glow',
   'team-trl-casing',
   'team-trl-line',
   'team-trl-vertex',

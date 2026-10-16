@@ -150,3 +150,156 @@ export function fixOf(kind: FixKind, over: Partial<GnssFix> = {}): GnssFix {
     ...over,
   };
 }
+
+// ---- a fake NTRIP caster ---------------------------------------------------------------------
+
+/**
+ * The single stream a Leica GR30 acting as caster lists (its public
+ * sourcetable, 2026-10-16): mixed-case name, empty carrier / lat / lon /
+ * nmea / solution fields, Basic auth.
+ */
+export const GR30_STR = 'STR;Quebec_RTCM3x;MRNF;RTCM 3.x MSM4;;;GPS_GLO_GAL_BDS;;;;;;;;;B;;;none';
+
+/**
+ * How a fake caster answers.
+ * - `gr30`: a Leica GR30 receiver acting as caster. It answers EVERY request,
+ *   Ntrip/2.0 included, in v1: `SOURCETABLE 200 OK` with `Content-Length:89`
+ *   (no space after the colon), `ICY 200 OK` before the stream, and its
+ *   sourcetable for an unknown mountpoint.
+ * - `gr30-icy-headers`: the same, with header lines and a blank line after
+ *   `ICY 200 OK` (other receiver casters do this).
+ * - `v2`: a strict NTRIP 2.0 caster: HTTP/1.1 replies, chunked transfer.
+ */
+export type CasterDialect = 'gr30' | 'gr30-icy-headers' | 'v2';
+
+export interface FakeCasterOptions {
+  dialect: CasterDialect;
+  mountpoint: string;
+  user: string;
+  pass: string;
+  /** STR lines (default: the GR30's). */
+  str?: readonly string[];
+  /** Send no reply to a stream request until a GGA has come in (some VRS casters). */
+  waitForGga?: boolean;
+}
+
+function concatAscii(a: string, b: Uint8Array, c: string): Uint8Array {
+  const x = asciiToBytes(a);
+  const z = asciiToBytes(c);
+  const out = new Uint8Array(x.length + b.length + z.length);
+  out.set(x, 0);
+  out.set(b, x.length);
+  out.set(z, x.length + b.length);
+  return out;
+}
+
+/**
+ * A caster as a pure byte machine: `receive(request bytes)` returns what it
+ * sends back; `data(rtcm)` frames correction bytes in its dialect. Like the
+ * real GR30 it never looks at the request's NTRIP version.
+ */
+export class FakeCaster {
+  /** GGA sentences the client uploaded, in order. */
+  readonly ggas: string[] = [];
+  /** The parsed request (null until its header block is complete). */
+  request: { line: string; headers: Record<string, string> } | null = null;
+  streaming = false;
+  private buf = '';
+  private replied = false;
+
+  constructor(private readonly o: FakeCasterOptions) {}
+
+  get server(): string {
+    return this.o.dialect === 'v2' ? 'Fake NTRIP 2 Caster/2.0' : 'GR30 4.83.342/1.0';
+  }
+
+  sourcetableBody(): string {
+    const str = this.o.str ?? [GR30_STR];
+    return `${str.join('\r\n')}\r\nENDSOURCETABLE\r\n`;
+  }
+
+  receive(bytes: Uint8Array): Uint8Array {
+    this.buf += String.fromCharCode(...bytes);
+    if (this.request === null) {
+      const end = this.buf.indexOf('\r\n\r\n');
+      if (end < 0) return new Uint8Array(0);
+      const lines = this.buf.slice(0, end).split('\r\n');
+      this.buf = this.buf.slice(end + 4);
+      const headers: Record<string, string> = {};
+      for (const l of lines.slice(1)) {
+        const c = l.indexOf(':');
+        headers[l.slice(0, c).trim().toLowerCase()] = l.slice(c + 1).trim();
+      }
+      this.request = { line: lines[0] ?? '', headers };
+    }
+    this.takeGgas();
+    if (this.replied) return new Uint8Array(0);
+    const mount = /^GET \/(\S*) HTTP\/1\.[01]$/.exec(this.request.line)?.[1];
+    if (mount === undefined) return this.reply(this.status(400, 'Bad Request'));
+    if (mount === '') return this.reply(this.sourcetable());
+    if (mount !== this.o.mountpoint) {
+      // v1 casters answer an unknown mountpoint with their sourcetable.
+      return this.reply(
+        this.o.dialect === 'v2' ? this.status(404, 'Not Found') : this.sourcetable(),
+      );
+    }
+    const auth = this.request.headers.authorization ?? '';
+    const expected = Buffer.from(`${this.o.user}:${this.o.pass}`).toString('base64');
+    if (auth !== `Basic ${expected}`) return this.reply(this.status(401, 'Unauthorized'));
+    if (this.o.waitForGga && this.ggas.length === 0 && !this.request.headers['ntrip-gga'])
+      return new Uint8Array(0);
+    this.streaming = true;
+    if (this.o.dialect === 'v2')
+      return this.reply(
+        'HTTP/1.1 200 OK\r\nNtrip-Version: Ntrip/2.0\r\nServer: Fake NTRIP 2 Caster/2.0\r\n' +
+          'Content-Type: gnss/data\r\nTransfer-Encoding: chunked\r\nCache-Control: no-store\r\n\r\n',
+      );
+    if (this.o.dialect === 'gr30-icy-headers')
+      return this.reply(
+        `ICY 200 OK\r\nServer: ${this.server}\r\nDate: Fri, 16 Oct 2026 12:00:00 GMT\r\n\r\n`,
+      );
+    return this.reply('ICY 200 OK\r\n');
+  }
+
+  /** Correction bytes as this caster puts them on the wire. */
+  data(rtcm: Uint8Array): Uint8Array {
+    if (this.o.dialect !== 'v2') return rtcm;
+    return concatAscii(`${rtcm.length.toString(16)}\r\n`, rtcm, '\r\n');
+  }
+
+  private takeGgas(): void {
+    for (let eol = this.buf.indexOf('\n'); eol >= 0; eol = this.buf.indexOf('\n')) {
+      const line = this.buf.slice(0, eol).replace(/\r$/, '');
+      this.buf = this.buf.slice(eol + 1);
+      if (line.startsWith('$')) this.ggas.push(line);
+    }
+  }
+
+  private sourcetable(): string {
+    const body = this.sourcetableBody();
+    if (this.o.dialect === 'v2') {
+      return (
+        'HTTP/1.1 200 OK\r\nNtrip-Version: Ntrip/2.0\r\nServer: Fake NTRIP 2 Caster/2.0\r\n' +
+        'Content-Type: gnss/sourcetable\r\nTransfer-Encoding: chunked\r\n\r\n' +
+        `${body.length.toString(16)}\r\n${body}\r\n0\r\n\r\n`
+      );
+    }
+    return (
+      `SOURCETABLE 200 OK\r\nServer: ${this.server}\r\nContent-Type: text/plain\r\n` +
+      `Content-Length:${body.length}\r\n\r\n${body}`
+    );
+  }
+
+  private status(code: number, text: string): string {
+    const v2 = this.o.dialect === 'v2';
+    const proto = v2 ? 'HTTP/1.1' : 'HTTP/1.0';
+    const ntrip = v2 ? 'Ntrip-Version: Ntrip/2.0\r\n' : '';
+    const auth = code === 401 ? `WWW-Authenticate:Basic realm="/${this.o.mountpoint}"\r\n` : '';
+    return `${proto} ${code} ${text}\r\n${ntrip}Server: ${this.server}\r\n${auth}Content-Length:0\r\n\r\n`;
+  }
+
+  private reply(s: string): Uint8Array {
+    this.replied = true;
+    return asciiToBytes(s);
+  }
+}

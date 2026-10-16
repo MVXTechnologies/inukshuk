@@ -1413,6 +1413,431 @@ static void testDrapeArming() {
   CHECK(eng.stats().drapeCancelled == before + 1);
 }
 
+/** A drape whose level 0 carries its own key (the fake GPU below reads it back). */
+static std::vector<uint8_t> keyedChain(uint64_t key, int& levels) {
+  std::vector<uint8_t> px(8 * 8 * 4, 0);
+  std::memcpy(px.data(), &key, 8);
+  return buildMipChain(px.data(), 8, levels);
+}
+
+/**
+ * #732 / #720: the engine's drape slots under hostile interleavings — late,
+ * duplicated and sibling deliveries, drops of queued renders, a small slot
+ * budget (evictions), rotation, a pan, back to 2D and up again, style resets;
+ * both orders. A fake GPU records which drape each slot holds: every drawn
+ * tile must sample its own drape or an ancestor's, with that ancestor's window.
+ */
+static void testDrapeSlotsUnderInterleavings() {
+  g_cases++;
+  for (int seed = 1; seed <= 8; seed++) {
+    std::mt19937 rng(seed);
+    struct Job {
+      int z, x, y;
+      uint32_t gen;
+    };
+    std::deque<Job> queue;
+    std::vector<std::pair<double, Job>> running;
+    std::vector<DemId> imgReq;
+    std::vector<DemId> demReq;
+    Engine eng([&](int z, int x, int y) { demReq.push_back({z, x, y}); },
+               [&](int z, int x, int y) { imgReq.push_back({z, x, y}); }, [] {}, 32);
+    const bool fifo = seed % 2 == 0;
+    LookParams lp;
+    if (fifo) lp.debugFlags = Engine::kDebugDrapeFifo;
+    eng.setLook(lp);
+    const int slots = 24 + (seed % 3) * 20;
+    eng.setDrape(true, slots);
+    std::map<int, uint64_t> gpu;  // slot -> key held
+    const double lng = 7.7491, lat = 46.0207, zoom = 13.5, w = 412, h = 892;
+    int bad = 0;
+    long samples = 0;
+    for (double t = 1000; t < 30000; t += 16) {
+      const double a = std::clamp((t - 1000) / 600, 0.0, 1.0);
+      double pitch = 60 * (std::cos((a + 1) * kPi) / 2 + 0.5);
+      double bearing = 20 + (t > 5000 ? std::min(1.0, (t - 5000) / 3000) * 200 : 0);
+      double pan = t > 12000 ? std::min(1.0, (t - 12000) / 2000) * 0.02 : 0;
+      if (t > 20000 && t < 21000) pitch = 10;  // back to 2D and up again
+      FrameInput in;
+      in.P = refProjection(lng + pan, lat, zoom, pitch, bearing, w, h);
+      in.width = w;
+      in.height = h;
+      in.zoom = zoom;
+      in.lat = lat;
+      in.lng = lng + pan;
+      in.bearingDeg = bearing;
+      in.pitchDeg = pitch;
+      in.timeMs = t;
+      if (t == 1000 + 16 * 3) eng.armActivation();
+      // Deliveries: finished blocks (siblings included), sometimes twice, sometimes late.
+      for (size_t i = 0; i < running.size();) {
+        if (running[i].first > t) {
+          i++;
+          continue;
+        }
+        const Job j = running[i].second;
+        for (int dy = 0; dy < 2; dy++)
+          for (int dx = 0; dx < 2; dx++) {
+            int levels = 0;
+            auto c = keyedChain(demKey64({j.z, j.x + dx, j.y + dy}), levels);
+            eng.onImageryLevels(j.z, j.x + dx, j.y + dy, c, 8, levels, j.gen);
+            if (std::uniform_int_distribution<int>(0, 9)(rng) == 0)
+              eng.onImageryLevels(j.z, j.x + dx, j.y + dy, c, 8, levels, j.gen);  // a duplicate render
+          }
+        running.erase(running.begin() + static_cast<long>(i));
+      }
+      for (const auto& d : demReq) {
+        std::vector<float> hs(kDemSize * kDemSize, 1500.f);
+        eng.onDemHeights(d.z, d.x, d.y, std::move(hs));
+      }
+      demReq.clear();
+      if (std::uniform_int_distribution<int>(0, 400)(rng) == 0) eng.resetImagery();  // a style change
+      const FrameOutput out = eng.frame(in);
+      eng.drainBakes(5);
+      for (const auto& u : out.imageryUploads) {
+        uint64_t key = 0;
+        std::memcpy(&key, u.pixels->data(), 8);
+        gpu[u.slot] = key;
+      }
+      for (const auto& d : out.tiles) {
+        const int z = static_cast<int>(d.key >> 58);
+        const int x = static_cast<int>((d.key >> 29) & ((1u << 29) - 1));
+        const int y = static_cast<int>(d.key & ((1u << 29) - 1));
+        auto check = [&](int slot, const float* win, const char* which) {
+          if (slot < 0) return;
+          samples++;
+          const uint64_t held = gpu.count(slot) ? gpu[slot] : ~0ull;
+          const int hz = static_cast<int>(held >> 58);
+          const DemWindow ww = demWindowAt({z, x, y, 0}, hz);
+          const bool ok = held != ~0ull && hz <= z && demKey64(ww.dem) == held &&
+                          std::abs(ww.offsetX - win[0]) < 1e-6 && std::abs(ww.offsetY - win[1]) < 1e-6 &&
+                          std::abs(ww.scale - win[2]) < 1e-6;
+          if (!ok && bad++ < 3)
+            std::printf("  seed %d t=%.0f tile %d/%d/%d %s slot %d holds z%d (%llx)\n", seed, t, z, x, y, which,
+                        slot, hz, static_cast<unsigned long long>(held));
+        };
+        check(d.imgB, d.winB, "B");
+        if (d.imgBlend < 1) check(d.imgA, d.winA, "A");
+      }
+      for (const auto& d : imgReq) queue.push_back({d.z, d.x, d.y, eng.imageryGeneration()});
+      imgReq.clear();
+      while (running.size() < 3 && !queue.empty()) {
+        size_t best = 0;
+        int bestRank = -1;
+        for (size_t i = 0; i < queue.size();) {
+          const int r = eng.drapeRank(queue[i].z, queue[i].x, queue[i].y);
+          if (r < 0 || queue[i].gen != eng.imageryGeneration()) {
+            eng.onImageryCancelled(queue[i].z, queue[i].x, queue[i].y, queue[i].gen);
+            queue.erase(queue.begin() + static_cast<long>(i));
+            continue;
+          }
+          if (bestRank < 0 || r < bestRank) {
+            bestRank = r;
+            best = i;
+          }
+          i++;
+        }
+        if (queue.empty()) break;
+        const Job j = queue[best];
+        queue.erase(queue.begin() + static_cast<long>(best));
+        const int x0 = j.x / 2 * 2, y0 = j.y / 2 * 2;
+        for (size_t i = 0; i < queue.size();) {
+          if (queue[i].z == j.z && queue[i].x / 2 * 2 == x0 && queue[i].y / 2 * 2 == y0)
+            queue.erase(queue.begin() + static_cast<long>(i));
+          else
+            i++;
+        }
+        std::uniform_real_distribution<double> latency(100, 1500);
+        running.push_back({t + latency(rng), {j.z, x0, y0, j.gen}});
+      }
+    }
+    CHECK(samples > 1000);
+    CHECK(bad == 0);
+  }
+}
+
+// ---- drape snapshot guard (#732) -------------------------------------------------------
+/**
+ * A model of MapLibre's static-mode snapshotter, reused for job after job
+ * (maplibre-native android-v13.6.1): Map::Impl::onDidFinishRenderingFrame
+ * fulfils whatever still request is pending on any full frame, and
+ * SnapshotterRenderer stores the image of every full frame while its last
+ * update carried a still request. Images are pixel samples of the camera.
+ */
+struct StillSnapshotterModel {
+  using Image = std::optional<std::vector<uint32_t>>;
+  std::deque<int> updates;            // camera updates on their way to the renderer thread
+  int rendererCamera = -1;
+  bool rendererStillRequest = false;  // SnapshotterRenderer::hasPendingStillImageRequest
+  Image stillImage;                   // SnapshotterRenderer::stillImage
+  std::function<void(Image)> request; // Map::Impl::stillImageRequest
+  std::deque<bool> notifications;     // onDidFinishRenderingFrame(Full) on its way to the map thread
+
+  static std::vector<uint32_t> pixels(int cam) {
+    std::vector<uint32_t> px(256);
+    for (size_t i = 0; i < px.size(); i++) px[i] = static_cast<uint32_t>(cam) * 2654435761u + static_cast<uint32_t>(i);
+    return px;
+  }
+  /** Map thread: jumpTo + renderStill (the update carries the still request). */
+  void renderStill(int cam, std::function<void(Image)> cb) {
+    request = std::move(cb);
+    updates.push_back(cam);
+  }
+  /** Renderer thread: the next update arrives. */
+  void applyUpdate() {
+    if (updates.empty()) return;
+    rendererCamera = updates.front();
+    updates.pop_front();
+    rendererStillRequest = true;
+  }
+  /** Renderer thread: a full frame of its current camera. */
+  void renderFullFrame() {
+    if (rendererStillRequest) stillImage = pixels(rendererCamera);
+    notifications.push_back(true);
+  }
+  /** Map thread: a full-frame notification fulfils the pending still request, whichever it is. */
+  void deliverNotification() {
+    if (notifications.empty()) return;
+    notifications.pop_front();
+    if (!request) return;
+    auto r = std::move(request);
+    request = nullptr;
+    Image img = std::move(stillImage);
+    stillImage.reset();
+    r(std::move(img));
+  }
+};
+
+/** The platform pump on one reused snapshotter: blocks 1 then 2; `guarded` = #732's check. */
+static std::map<int, std::vector<uint32_t>> runSnapshotRace(bool guarded, int& rerenders) {
+  StillSnapshotterModel s;
+  std::map<int, std::vector<uint32_t>> delivered;
+  bool hasPrev = false;
+  uint64_t prevFp = 0, prevBlock = 0;
+  rerenders = 0;
+  std::function<void(int, bool)> start = [&](int block, bool retried) {
+    s.renderStill(block, [&, block, retried](StillSnapshotterModel::Image img) {
+      const uint64_t fp = img ? sampleFingerprint(img->data(), img->size()) : 0;
+      const bool ok = img && (!guarded || acceptDrapeSnapshot(hasPrev, prevFp, prevBlock, fp,
+                                                              static_cast<uint64_t>(block), retried));
+      if (!ok) {
+        rerenders++;
+        start(block, true);  // rendered again
+        return;
+      }
+      hasPrev = true;
+      prevFp = fp;
+      prevBlock = static_cast<uint64_t>(block);
+      delivered[block] = *img;
+      if (block == 1) start(2, false);  // the pump reuses the idle snapshotter at once
+    });
+  };
+  start(1, false);
+  s.applyUpdate();
+  s.renderFullFrame();      // block 1 fully rendered
+  s.deliverNotification();  // → block 1 delivered; block 2 requested on the same snapshotter
+  s.renderFullFrame();      // a late resource re-renders block 1's camera before block 2's update arrives
+  s.deliverNotification();  // that notification meets block 2's request
+  for (int i = 0; i < 3; i++) {
+    s.applyUpdate();
+    s.renderFullFrame();
+    s.deliverNotification();
+  }
+  return delivered;
+}
+
+static void testDrapeSnapshotGuard() {
+  g_cases++;
+  // The interleaving: unguarded, block 2 gets block 1's image (the floating slab).
+  int rerenders = 0;
+  auto raw = runSnapshotRace(false, rerenders);
+  CHECK(raw.count(2) == 1);
+  if (raw.count(2)) CHECK(raw[2] == StillSnapshotterModel::pixels(1));
+  // Guarded: the repeat is rejected once and block 2 renders again, correctly.
+  auto fixed = runSnapshotRace(true, rerenders);
+  CHECK(fixed.count(1) == 1 && fixed.count(2) == 1);
+  if (fixed.count(1)) CHECK(fixed[1] == StillSnapshotterModel::pixels(1));
+  if (fixed.count(2)) CHECK(fixed[2] == StillSnapshotterModel::pixels(2));
+  CHECK(rerenders == 1);
+  // The rule: a first result, the same block again, a retry, a new image — accepted.
+  CHECK(acceptDrapeSnapshot(false, 0, 0, 7, 1, false));
+  CHECK(acceptDrapeSnapshot(true, 7, 1, 7, 1, false));
+  CHECK(acceptDrapeSnapshot(true, 7, 1, 7, 2, true));  // open water really looks the same
+  CHECK(acceptDrapeSnapshot(true, 7, 1, 8, 2, false));
+  CHECK(!acceptDrapeSnapshot(true, 7, 1, 7, 2, false));
+  // Fingerprints: equal images match, one changed sample or the size changes them.
+  std::vector<uint8_t> img(64 * 32 * 4, 0);
+  for (size_t i = 0; i < img.size(); i++) img[i] = static_cast<uint8_t>(i * 31);
+  const uint64_t a = rgbaFingerprint(img.data(), 64, 32, 64 * 4);
+  CHECK(a == rgbaFingerprint(img.data(), 64, 32, 64 * 4));
+  std::vector<uint8_t> other = img;
+  other[(static_cast<size_t>(16) * 64 + 32) * 4] ^= 0x40;  // a sampled pixel (row 16, column 32)
+  CHECK(rgbaFingerprint(other.data(), 64, 32, 64 * 4) != a);
+  CHECK(rgbaFingerprint(img.data(), 32, 64, 32 * 4) != a);
+  CHECK(rgbaFingerprint(nullptr, 64, 32, 64 * 4) == 0);
+}
+
+// ---- lines and drawing in 3D (#735) ---------------------------------------------------
+static void testTerrainUnproject() {
+  g_cases++;
+  const double lng = 7.7491, lat = 46.0207, zoom = 13.5, w = 412, h = 892;
+  const Mat4 P = refProjection(lng, lat, zoom, 60, 20, w, h);
+  const auto invP = invert(P);
+  CHECK(invP.has_value());
+  if (!invP) return;
+  // Flat relief: the same point as the ground plane.
+  for (const auto& ndc : {std::array<double, 2>{0, 0}, std::array<double, 2>{0.4, -0.6}}) {
+    const auto flat = rayTerrainHit(*invP, ndc[0], ndc[1], [](double, double) { return std::optional<double>(0); });
+    const auto ground = groundAtNdc(*invP, ndc[0], ndc[1]);
+    CHECK(flat.has_value() && ground.has_value());
+    if (flat && ground) {
+      CHECK_NEAR(flat->first, ground->first, 0.05);
+      CHECK_NEAR(flat->second, ground->second, 0.05);
+    }
+  }
+  // Raised relief (a 300 m plateau) is met before the flat ground: nearer the eye.
+  const auto eye = eyeFromProjection(P);
+  const auto ground = groundAtNdc(*invP, 0, 0);
+  const auto plateau =
+      rayTerrainHit(*invP, 0, 0, [](double, double) { return std::optional<double>(300); });
+  CHECK(eye.has_value() && ground.has_value() && plateau.has_value());
+  if (eye && ground && plateau)
+    CHECK(std::hypot(plateau->first - (*eye)[0], plateau->second - (*eye)[1]) <
+          std::hypot(ground->first - (*eye)[0], ground->second - (*eye)[1]) - 10);
+  // The sky: steeply tilted, the top of the screen looks above the horizon and meets nothing.
+  const auto invSteep = invert(refProjection(lng, lat, zoom, 85, 20, w, h));
+  CHECK(invSteep.has_value());
+  if (invSteep)
+    CHECK(!rayTerrainHit(*invSteep, 0, 0.999, [](double, double) { return std::optional<double>(0); })
+               .has_value());
+
+  // The engine: a point projected from the drawn relief comes back from unproject.
+  std::vector<DemId> req;
+  Engine eng([&](int z, int x, int y) { req.push_back({z, x, y}); }, nullptr, [] {});
+  CHECK(!eng.unproject(w / 2, h / 2).has_value());  // nothing drawn yet
+  auto relief = [](const DemId& d) {
+    std::vector<float> hs(kDemSize * kDemSize);
+    for (int j = 0; j < kDemSize; j++)
+      for (int i = 0; i < kDemSize; i++) {
+        const double mx = (d.x + (i + 0.5) / kDemSize) / std::pow(2.0, d.z);
+        const double my = (d.y + (j + 0.5) / kDemSize) / std::pow(2.0, d.z);
+        hs[j * kDemSize + i] = static_cast<float>(1600 + 900 * std::sin(mx * 9000) * std::cos(my * 7000));
+      }
+    return hs;
+  };
+  FrameInput in;
+  in.P = P;
+  in.width = w;
+  in.height = h;
+  in.zoom = zoom;
+  in.lat = lat;
+  in.lng = lng;
+  in.bearingDeg = 20;
+  in.pitchDeg = 60;
+  in.timeMs = 1000;
+  FrameOutput out;
+  for (int round = 0; round < 60; round++) {
+    for (const auto& d : req) eng.onDemHeights(d.z, d.x, d.y, relief(d));
+    req.clear();
+    eng.drainBakes();
+    in.timeMs += 16;
+    out = eng.frame(in);
+  }
+  CHECK(out.active);
+  const double ws = worldSize(zoom);
+  int checked = 0;
+  for (const auto& sp : {std::array<double, 2>{w / 2, h / 2}, std::array<double, 2>{w * 0.3, h * 0.7},
+                         std::array<double, 2>{w * 0.8, h * 0.55}}) {
+    const auto m = eng.unproject(sp[0], sp[1]);
+    CHECK(m.has_value());
+    if (!m) continue;
+    // Re-project the hit at its displayed height: the same screen point.
+    const auto hh = eng.heightAt((*m)[0], (*m)[1], kDemMaxZoom);
+    CHECK(hh.has_value());
+    if (!hh) continue;
+    const Vec4 c = transform(P, {(*m)[0] * ws, (*m)[1] * ws, (*hh - out.hRef) * out.exaggeration * out.ramp, 1});
+    CHECK(c[3] > 0);
+    CHECK_NEAR((c[0] / c[3] * 0.5 + 0.5) * w, sp[0], 1.0);
+    CHECK_NEAR((0.5 - c[1] / c[3] * 0.5) * h, sp[1], 1.0);
+    // ...and it differs from MapLibre's flat-ground answer (the bug of drawing on a flat map).
+    const auto flat = groundAtNdc(*invP, sp[0] / w * 2 - 1, 1 - sp[1] / h * 2);
+    if (flat && std::abs(*hh - out.hRef) > 50)
+      CHECK(std::hypot(flat->first - (*m)[0] * ws, flat->second - (*m)[1] * ws) > 1);
+    checked++;
+  }
+  CHECK(checked == 3);
+
+  // Lines: the same points and style again keep the lifted line (no re-lift, same version).
+  std::vector<Pt> pts{{lngToMercX(lng - 0.01), latToMercY(lat)}, {lngToMercX(lng + 0.01), latToMercY(lat)}};
+  LineStyle st;
+  eng.setPolyline(7, pts, st);
+  in.timeMs += 16;
+  out = eng.frame(in);
+  CHECK(out.lines.size() == 1);
+  const uint32_t v1 = out.lines.empty() ? 0 : out.lines[0].version;
+  eng.setPolyline(7, pts, st);
+  in.timeMs += 500;
+  out = eng.frame(in);
+  CHECK(!out.lines.empty() && out.lines[0].version == v1);
+  st.width = 6;  // a new style re-lifts
+  eng.setPolyline(7, pts, st);
+  in.timeMs += 500;
+  out = eng.frame(in);
+  CHECK(!out.lines.empty() && out.lines[0].version != v1);
+
+  // The line lies on the surface drawn there (the mesh of the drawn tile), not
+  // on the finer DEM: a far tile's coarse mesh no longer swallows it.
+  std::vector<Pt> across;
+  for (int i = 0; i <= 40; i++) {
+    const double t = i / 40.0;
+    across.push_back({lngToMercX(lng - 0.05 + 0.1 * t), latToMercY(lat + 0.02 + 0.04 * t)});
+  }
+  eng.setPolyline(8, across, LineStyle{});
+  for (int i = 0; i < 4; i++) {
+    in.timeMs += 300;
+    eng.drainBakes();
+    out = eng.frame(in);
+  }
+  const LineDraw* drawn = nullptr;
+  for (const auto& l : out.lines)
+    if (l.id == 8) drawn = &l;
+  CHECK(drawn != nullptr);
+  int onSurface = 0, sampled = 0;
+  double worst = 0;
+  if (drawn) {
+    const auto& v = *drawn->vertices;
+    for (size_t k = 0; k + 8 <= v.size(); k += 8 * 6) {
+      const double mx = across[0][0] + v[k], my = across[0][1] + v[k + 1];
+      // The finest drawn tile with a mesh at this point.
+      const DrawTile* tile = nullptr;
+      int tz = -1;
+      for (const auto& d : out.tiles) {
+        if (!d.attributes) continue;
+        const int z = static_cast<int>(d.key >> 58);
+        const int x = static_cast<int>((d.key >> 29) & ((1u << 29) - 1));
+        const int y = static_cast<int>(d.key & ((1u << 29) - 1));
+        const double n = std::ldexp(1.0, z);
+        if (static_cast<int>(mx * n) == x && static_cast<int>(my * n) == y && z > tz) {
+          tile = &d;
+          tz = z;
+        }
+      }
+      if (!tile) continue;
+      const int N = eng.meshGrid();
+      std::vector<float> hTo(static_cast<size_t>((N + 1) * (N + 1)));
+      for (size_t g = 0; g < hTo.size(); g++) hTo[g] = (*tile->attributes)[g * kAttributesPerVertex + 1];
+      const double n = std::ldexp(1.0, tz);
+      const int x = static_cast<int>(mx * n), y = static_cast<int>(my * n);
+      const double expected = surfaceAt(N, hTo, mx * n - x, my * n - y);
+      worst = std::max(worst, std::abs(v[k + 2] - expected));
+      onSurface += std::abs(v[k + 2] - expected) < 0.05;
+      sampled++;
+    }
+  }
+  CHECK(sampled > 20);
+  CHECK(onSurface == sampled);
+  if (onSurface != sampled) std::printf("line off the drawn surface by up to %.2f m\n", worst);
+}
+
 int main(int argc, char** argv) {
   const std::string path = argc > 1 ? argv[1] : "fixtures/parity.json";
   std::ifstream f(path);
@@ -1432,6 +1857,9 @@ int main(int argc, char** argv) {
   testDrapeOrderCore();
   testDrapeSchedule();
   testDrapeArming();
+  testDrapeSnapshotGuard();
+  testDrapeSlotsUnderInterleavings();
+  testTerrainUnproject();
   std::printf("terrain C++ tests: %d cases, %d checks, %d failures\n", g_cases, g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;
 }

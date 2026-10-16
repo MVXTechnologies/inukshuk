@@ -242,6 +242,10 @@ class Engine {
   static constexpr double kRefSettleMs = 350;
   /** Unrequested drape textures (block siblings) kept CPU-side, waiting to be wanted. */
   static constexpr size_t kMaxUnwantedImagery = 48;
+  /** #735: lines follow the drawn surfaces again at most this often (ms)... */
+  static constexpr double kLineReliftMs = 250;
+  /** ...and lift at most this many densified points a frame (the rest next frame). */
+  static constexpr size_t kLiftPointsPerFrame = 40000;
   /**
    * Drape/imagery requests outstanding (#720). The platform renders them in
    * the engine's current order (drapeRank) and drops those no longer wanted,
@@ -314,6 +318,7 @@ class Engine {
    */
   void setLabels(std::vector<LabelData> labels, bool keepMissing = false);
   static constexpr double kLabelKeepMs = 4000;
+  /** A trail/route/drawing lifted onto the terrain; the same points and style again cost nothing (#735). */
   void setPolyline(int id, std::vector<Pt> mercPoints, const LineStyle& style);
   void removePolyline(int id);
   void setPuck(bool visible, double mercX, double mercY);
@@ -331,6 +336,12 @@ class Engine {
 
   EngineStats stats() const;
   std::optional<double> heightAt(double mercX, double mercY, int maxZoom) const;
+  /**
+   * #735: the mercator point of the drawn terrain under a screen point
+   * (logical px, the last drawn frame's camera and relief); nullopt when
+   * nothing is drawn or the point is sky. Any thread.
+   */
+  std::optional<Pt> unproject(double screenX, double screenY) const;
 
   /** Test hook: wait for queued bakes to finish (bounded). */
   void drainBakes(int timeoutMs = 2000);
@@ -404,6 +415,7 @@ class Engine {
     LineStyle style;
     uint32_t version = 0;
     uint32_t liftedDemGen = UINT32_MAX;
+    uint64_t liftedSurface = 0;  // #735: the drawn surfaces it was lifted onto
     double liftedAt = -1e300;
     double originX = 0, originY = 0;
     std::shared_ptr<const std::vector<float>> vertices;
@@ -498,6 +510,13 @@ class Engine {
   double lastMoveMs_ = -1e300;
   std::atomic<size_t> demBudget_{kDemBudgetBytes};
   double lastTimeMs_ = -1;
+  // #735: the last drawn frame's camera and relief, for unproject (viewMutex_).
+  struct DrawnView {
+    Mat4 invP{};
+    double width = 0, height = 0, worldSize = 0, hRef = 0, heightScale = 0;
+  };
+  mutable std::mutex viewMutex_;
+  std::optional<DrawnView> drawnView_;
   std::atomic<bool> armRequested_{false};
   double armUntilMs_ = -1e300;  // render thread
   // #720 milestones (render thread).

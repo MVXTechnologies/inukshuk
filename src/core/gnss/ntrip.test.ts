@@ -207,19 +207,14 @@ describe('response', () => {
 
 describe('GGA upload', () => {
   const base = {
-    nmeaRequired: true,
     consent: true,
     lastSentMs: null,
     nowMs: 100_000,
     havePosition: true,
   };
 
-  it('sends only what the caster needs, with consent, at the interval', () => {
+  it('sends only with consent, with a position, at the interval', () => {
     expect(ggaDecision(base)).toEqual({ send: true });
-    expect(ggaDecision({ ...base, nmeaRequired: false })).toEqual({
-      send: false,
-      reason: 'not-required',
-    });
     expect(ggaDecision({ ...base, consent: false })).toEqual({ send: false, reason: 'no-consent' });
     expect(ggaDecision({ ...base, havePosition: false })).toEqual({
       send: false,
@@ -250,9 +245,7 @@ describe('GGA upload', () => {
       ageS: 1.2,
     });
     expect(
-      s.startsWith(
-        '$GPGGA,130507.25,4648.18000000,N,07113.02000000,W,4,07,0.8,60.123,M,0.000,M,1.2,*',
-      ),
+      s.startsWith('$GPGGA,130507.25,4648.180000,N,07113.020000,W,4,07,0.8,60.1,M,0.0,M,1.2,*'),
     ).toBe(true);
     const r = parseNmea(s);
     if (!r.ok || r.msg.type !== 'GGA') throw new Error();
@@ -270,7 +263,7 @@ describe('GGA upload', () => {
     });
     expect(e).toContain(',S,');
     // minutes that round to 60 carry into the degrees
-    expect(e).toContain('18000.00000000,E');
+    expect(e).toContain('18000.000000,E');
     expect(parseNmea(e).ok).toBe(true);
   });
 });

@@ -39,6 +39,12 @@ export interface Camera {
 export interface Viewport extends Camera {
   width: number;
   height: number;
+  /**
+   * Where a screen point lands on the ground when that is not the flat map:
+   * the 3D terrain's relief (#735). Null (off the terrain) falls back to the
+   * flat projection.
+   */
+  toGeo?: (s: ScreenPt) => Pt | null;
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -81,6 +87,11 @@ function worldOffset(sx: number, sy: number, bearing: number): [number, number] 
   const c = Math.cos(b);
   const s = Math.sin(b);
   return [sx * c - sy * s, sx * s + sy * c];
+}
+
+/** The ground under screen position `s`: the relief's (`toGeo`), else the flat map's. */
+export function onGround(s: ScreenPt, v: Viewport): Pt {
+  return v.toGeo?.(s) ?? unproject(s, v);
 }
 
 /** The point under screen position `s`. */
@@ -161,7 +172,7 @@ export function buildStroke(
   const last = pts[pts.length - 1];
   if (first === undefined || last === undefined || pts.length < 2) return null;
   if (gestureLengthDp(tool, pts) < minDp) return null;
-  const at = (s: ScreenPt) => unproject(s, view);
+  const at = (s: ScreenPt) => onGround(s, view);
   const base = { id, sh: tool, style };
   switch (tool) {
     case 'free':
@@ -272,7 +283,7 @@ export class StrokeBuilder {
       const s = pts[i];
       /* istanbul ignore if -- unreachable: i < pts.length */
       if (s === undefined) break;
-      const g = unproject(s, view);
+      const g = onGround(s, view);
       this.unprojected++;
       const prevS = i > 0 ? pts[i - 1] : undefined;
       const prevG = this.geo[this.geo.length - 1];

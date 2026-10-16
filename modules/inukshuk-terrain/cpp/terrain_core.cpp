@@ -129,6 +129,37 @@ std::optional<std::pair<double, double>> groundAtNdc(const Mat4& invP, double nd
                         (*nearP)[1] + ((*farP)[1] - (*nearP)[1]) * s);
 }
 
+std::optional<std::pair<double, double>> rayTerrainHit(
+    const Mat4& invP, double ndcX, double ndcY,
+    const std::function<std::optional<double>(double, double)>& surfaceZ, int steps,
+    double farFactor) {
+  auto nearP = dehomogenize(transform(invP, {ndcX, ndcY, -1, 1}));
+  auto farP = dehomogenize(transform(invP, {ndcX, ndcY, 1, 1}));
+  if (!nearP || !farP || steps < 1) return std::nullopt;
+  const Vec3 a = *nearP;
+  const Vec3 d{(*farP)[0] - a[0], (*farP)[1] - a[1], (*farP)[2] - a[2]};
+  auto above = [&](double s) {
+    const double x = a[0] + d[0] * s, y = a[1] + d[1] * s, z = a[2] + d[2] * s;
+    return z - surfaceZ(x, y).value_or(0.0);
+  };
+  double prevS = 0;
+  if (above(0) <= 0) return std::nullopt;  // the near plane is already under the surface
+  for (int i = 1; i <= steps; i++) {
+    const double s = farFactor * i / steps;
+    const double v = above(s);
+    if (v <= 0) {
+      double lo = prevS, hi = s;
+      for (int k = 0; k < 40; k++) {
+        const double mid = 0.5 * (lo + hi);
+        (above(mid) > 0 ? lo : hi) = mid;
+      }
+      return std::make_pair(a[0] + d[0] * hi, a[1] + d[1] * hi);
+    }
+    prevS = s;
+  }
+  return std::nullopt;
+}
+
 // ---- frustum -----------------------------------------------------------------
 
 namespace {
@@ -896,6 +927,42 @@ std::vector<DemId> orderDrapeRequests(std::vector<DrapeCandidate> candidates, do
   for (const auto& k : keyed)
     if (seen.insert(demKey64(k.id)).second) out.push_back(k.id);
   return out;
+}
+
+// ---- drape snapshot guard (#732) ----------------------------------------------------
+
+uint64_t sampleFingerprint(const uint32_t* samples, size_t count) {
+  uint64_t h = 1469598103934665603ull;
+  for (size_t i = 0; i < count; i++) {
+    for (int b = 0; b < 4; b++) {
+      h ^= (samples[i] >> (8 * b)) & 0xffu;
+      h *= 1099511628211ull;
+    }
+  }
+  return h;
+}
+
+uint64_t rgbaFingerprint(const uint8_t* rgba, int width, int height, size_t stride) {
+  if (!rgba || width <= 0 || height <= 0) return 0;
+  std::vector<uint32_t> samples;
+  samples.reserve(kFingerprintGrid * kFingerprintGrid + 1);
+  samples.push_back(static_cast<uint32_t>(width) * 65536u + static_cast<uint32_t>(height));
+  for (int j = 0; j < kFingerprintGrid; j++) {
+    const int y = static_cast<int>((j + 0.5) * height / kFingerprintGrid);
+    for (int i = 0; i < kFingerprintGrid; i++) {
+      const int x = static_cast<int>((i + 0.5) * width / kFingerprintGrid);
+      const uint8_t* p = rgba + static_cast<size_t>(y) * stride + static_cast<size_t>(x) * 4;
+      samples.push_back(static_cast<uint32_t>(p[0]) | static_cast<uint32_t>(p[1]) << 8 |
+                        static_cast<uint32_t>(p[2]) << 16 | static_cast<uint32_t>(p[3]) << 24);
+    }
+  }
+  return sampleFingerprint(samples.data(), samples.size());
+}
+
+bool acceptDrapeSnapshot(bool hasPrevious, uint64_t previousFingerprint, uint64_t previousBlock,
+                         uint64_t fingerprint, uint64_t block, bool retried) {
+  if (retried || !hasPrevious) return true;
+  return fingerprint != previousFingerprint || block == previousBlock;
 }
 
 }  // namespace inukshuk::terrain

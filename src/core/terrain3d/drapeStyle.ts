@@ -170,7 +170,16 @@ export function drapeStyle<S extends DrapeStyleInput>(style: S, o: DrapeStyleOpt
   }
   const sources = style.sources;
   if (typeof sources !== 'object' || sources === null) return { ...style, layers };
-  const all = sources as Record<string, Record<string, unknown>>;
+  // #734: only the sources the kept layers draw from. MapLibre's snapshotter
+  // fails the whole drape when any source of its style fails to load, so a
+  // source left behind by a removed layer (the names' admin-1 labels) took
+  // every 3D drape down with it in an outage of its host.
+  const used = new Set<string>();
+  for (const layer of layers) if (typeof layer.source === 'string') used.add(layer.source);
+  let all = sources as Record<string, Record<string, unknown>>;
+  if (Object.keys(all).some((id) => !used.has(id))) {
+    all = Object.fromEntries(Object.entries(all).filter(([id]) => used.has(id)));
+  }
   let next: Record<string, Record<string, unknown>> | null = null;
   const resize = (id: string | undefined, size: number | undefined, type: string) => {
     if (id === undefined || size === undefined) return;
@@ -181,5 +190,6 @@ export function drapeStyle<S extends DrapeStyleInput>(style: S, o: DrapeStyleOpt
   resize(o.demSourceId, o.demTileSize, 'raster-dem');
   resize(o.rasterSourceId, o.rasterTileSize, 'raster');
   if (next !== null) return { ...style, sources: next, layers };
+  if (all !== sources) return { ...style, sources: all, layers };
   return { ...style, layers };
 }

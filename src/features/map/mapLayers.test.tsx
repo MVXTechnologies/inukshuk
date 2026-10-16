@@ -11,6 +11,7 @@ import {
   lineOutlineFor,
   SLOPE_LAYER,
   TRACKS_LINES_LAYERS,
+  highlightedTrailLayers,
   pdfDetailLayer,
   pdfOverviewLayer,
   tiltReliefLayer,
@@ -31,6 +32,11 @@ import {
   heatPassStrength,
   rgba,
 } from '@core/heat/heatStyle';
+import {
+  HIGHLIGHT_CASING_W,
+  HIGHLIGHT_LINE_W,
+  selectionHighlight,
+} from '@core/map/selectionHighlight';
 import { expression, validateStyleMin } from '@maplibre/maplibre-gl-style-spec';
 import { stoneScheme } from './stoneScheme';
 
@@ -88,14 +94,13 @@ describe('hoisted map layers', () => {
         ['tracks-lines-layer-casing', 'tracks-lines-layer'],
       ],
       [
-        `TRACKS_LINES_LAYERS.${tone}.hidden`,
-        TRACKS_LINES_LAYERS[tone].hidden,
-        ['tracks-lines-layer-casing', 'tracks-lines-layer'],
-      ],
-      [
         `FOCUSED_TRAIL_LAYERS.${tone}`,
         FOCUSED_TRAIL_LAYERS[tone],
-        ['focused-trail-line-layer-casing', 'focused-trail-line-layer'],
+        [
+          'focused-trail-line-layer-glow',
+          'focused-trail-line-layer-casing',
+          'focused-trail-line-layer',
+        ],
       ],
     ]),
     ['HEAT_LAYERS.imagery.glow', HEAT_LAYERS.imagery.glow, ['tracks-heat-glow']],
@@ -179,8 +184,9 @@ describe('overlay layers sit below the position puck (#332) in their slots (#492
     ['HEAT_LAYERS.paper.glow', HEAT_LAYERS.paper.glow, TRAILS_ANCHOR],
     ['HEAT_LAYERS.imagery.lines', HEAT_LAYERS.imagery.lines, TRAILS_ANCHOR],
     ['TRACKS_LINES_LAYERS.imagery.shown', TRACKS_LINES_LAYERS.imagery.shown, TRAILS_ANCHOR],
-    ['TRACKS_LINES_LAYERS.night.hidden', TRACKS_LINES_LAYERS.night.hidden, TRAILS_ANCHOR],
+    ['TRACKS_LINES_LAYERS.night.shown', TRACKS_LINES_LAYERS.night.shown, TRAILS_ANCHOR],
     ['FOCUSED_TRAIL_LAYERS.paper', FOCUSED_TRAIL_LAYERS.paper, TRAILS_ANCHOR],
+    ['FOCUSED_TRAIL_LAYERS.night', FOCUSED_TRAIL_LAYERS.night, TRAILS_ANCHOR],
     ['INSPECT_MARKER_LAYER', INSPECT_MARKER_LAYER, TRAILS_ANCHOR],
     ['LIVE_TRAIL_LAYERS', LIVE_TRAIL_LAYERS, TRAILS_ANCHOR],
     ['CONTOUR_LAYERS.plain.minor', CONTOUR_LAYERS.plain.minor, CONTOURS_ANCHOR],
@@ -267,11 +273,7 @@ describe('line outlines (#492)', () => {
   it.each(['paper', 'night', 'imagery'] as const)(
     '%s: trail lines draw over a wider casing in the outline colour, same filter',
     (tone) => {
-      for (const set of [
-        TRACKS_LINES_LAYERS[tone].shown,
-        TRACKS_LINES_LAYERS[tone].hidden,
-        FOCUSED_TRAIL_LAYERS[tone],
-      ]) {
+      for (const set of [TRACKS_LINES_LAYERS[tone].shown]) {
         const [casing, line] = layers(set);
         expect(casing?.props.id).toBe(`${line?.props.id}-casing`);
         expect(casing?.props.paint['line-color']).toBe(LINE_OUTLINE[tone].color);
@@ -284,6 +286,45 @@ describe('line outlines (#492)', () => {
       }
     },
   );
+
+  // #747 (option 1, bright casing): the selected trail over a white casing
+  // and a soft cyan glow, the other trails still drawn under it.
+  it.each(['paper', 'night', 'imagery'] as const)(
+    '%s: the selected trail is a 5 dp line on a 9 dp casing in a cyan glow',
+    (tone) => {
+      const [glow, casing, line] = layers(FOCUSED_TRAIL_LAYERS[tone]);
+      const spec = selectionHighlight(tone);
+      expect(glow?.props.paint).toEqual({
+        'line-color': spec.glow.color,
+        'line-width': spec.glow.width,
+        'line-opacity': spec.glow.opacity,
+        'line-blur': spec.glow.blur,
+      });
+      expect(casing?.props.paint).toEqual({
+        'line-color': spec.casing.color,
+        'line-width': HIGHLIGHT_CASING_W,
+      });
+      expect(line?.props.paint).toEqual({
+        'line-color': ['get', 'color'],
+        'line-width': HIGHLIGHT_LINE_W,
+      });
+      const style = {
+        version: 8,
+        sources: { sel: { type: 'geojson', data: EMPTY } },
+        layers: layers(FOCUSED_TRAIL_LAYERS[tone])
+          .map((l) => ({ ...l.props, source: 'sel' }))
+          .map(({ beforeId: _b, ...l }: Record<string, unknown>) => l),
+      };
+      expect(validateStyleMin(style as never)).toEqual([]);
+    },
+  );
+
+  it('keeps every other trail drawn while one is selected (no hidden set)', () => {
+    for (const tone of ['paper', 'night', 'imagery'] as const) {
+      expect(Object.keys(TRACKS_LINES_LAYERS[tone])).toEqual(['shown']);
+    }
+    expect(highlightedTrailLayers('x', 'paper')).toHaveLength(3);
+  });
 
   it.each(['paper', 'night', 'imagery'] as const)(
     '%s: heat lines draw over a casing that widens and fades with them',

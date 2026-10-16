@@ -8,12 +8,14 @@
  * (a swipe up does nothing). Above the keyboard while typing, on both platforms.
  * A plain themed View (paper-surface-ios-flex-collapse).
  */
+import { pendingAsTrackPhotos } from '@core/photos/capture';
 import type { TrackPhoto } from '@core/photos/model';
 import { isNotePhoto } from '@core/photos/model';
 import { photoEditFailureMessage } from '@core/photos/status';
 import { PhotoTeamComments } from '@features/team/PhotoTeamComments';
 import { formatDistanceMarker } from '@core/format';
 import { useLibraryStore } from '@state/libraryStore';
+import { useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useTeamStore } from '@state/teamStore';
 import { photosEditable, useTrailPhotosStore } from '@state/trailPhotosStore';
@@ -21,7 +23,7 @@ import { KeyboardLifted, useKeyboardHeight } from '@ui/components/KeyboardLifted
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import * as Sharing from 'expo-sharing';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -41,9 +43,17 @@ import { formatPhotoWhen } from './photoText';
 import { photoFileUri } from './photoUri';
 import { shareablePhotoUri, UnshareablePhotoError, type ShareablePhoto } from './sharePhoto';
 
+/**
+ * Whose photo the card shows: one of my trails' (its own photos, and its
+ * note photos as `note:<noteId>`, #741), a teammate's, or one taken during
+ * the recording in progress (its circle on the live map, #741).
+ */
 export type PhotoCardTarget =
   | { kind: 'own'; trackId: string; photoId: string }
-  | { kind: 'team'; owner: string; trackId: string; photoId: string };
+  | { kind: 'team'; owner: string; trackId: string; photoId: string }
+  | { kind: 'recording'; photoId: string };
+
+const NOTE_PREFIX = 'note:';
 
 export const usePhotoCard = create<{
   target: PhotoCardTarget | null;
@@ -80,6 +90,24 @@ export function PhotoBottomCard({ dockStyle }: { dockStyle?: StyleProp<ViewStyle
   const teamPhoto = useTeamStore((s) =>
     target ? s.photos.find((p) => p.id === target.photoId) : undefined,
   );
+  // A note's photo (the Charts photo lane lists them too): read from the note.
+  const note = useLibraryStore((s) =>
+    target?.kind === 'own' && target.photoId.startsWith(NOTE_PREFIX)
+      ? s.tracks
+          .find((tr) => tr.id === target.trackId)
+          ?.notes?.find((n) => n.id === target.photoId.slice(NOTE_PREFIX.length))
+      : undefined,
+  );
+  // A photo of the recording in progress, and its number in it ("Photo 3").
+  const recPhotos = useRecorderStore((s) => s.photos);
+  const recIndex =
+    target?.kind === 'recording' ? recPhotos.findIndex((p) => p.id === target.photoId) : -1;
+  const recPhoto = recIndex >= 0 ? recPhotos[recIndex] : undefined;
+  // The recording was saved or discarded (or the photo removed): its card goes.
+  const recGone = target?.kind === 'recording' && recPhoto === undefined;
+  useEffect(() => {
+    if (recGone) usePhotoCard.getState().close();
+  }, [recGone]);
   const threads = useTeamStore((s) => s.photoThreads);
 
   // Above the keyboard on both platforms (KeyboardLifted); shorter while it
@@ -98,7 +126,7 @@ export function PhotoBottomCard({ dockStyle }: { dockStyle?: StyleProp<ViewStyle
       }),
     [],
   );
-  if (target === null) return null;
+  if (target === null || recGone) return null;
   const photo: Pick<TrackPhoto, 'caption' | 'takenAt'> & {
     uri: string | null;
     alongM: number | null;
@@ -109,12 +137,26 @@ export function PhotoBottomCard({ dockStyle }: { dockStyle?: StyleProp<ViewStyle
         uri: photoFileUri(own.thumb),
         alongM: own.distanceM,
       }
-    : {
-        caption: teamPhoto?.caption ?? undefined,
-        takenAt: teamPhoto?.takenAt ?? undefined,
-        uri: teamPhoto?.thumbUri ?? null,
-        alongM: null,
-      };
+    : note
+      ? {
+          caption: note.text.trim() || undefined,
+          takenAt: undefined,
+          uri: note.photoUri ?? null,
+          alongM: note.distanceM,
+        }
+      : recPhoto
+        ? {
+            caption: `Photo ${recIndex + 1}`,
+            takenAt: recPhoto.takenAt,
+            uri: photoFileUri(recPhoto.thumb),
+            alongM: recPhoto.distanceM,
+          }
+        : {
+            caption: teamPhoto?.caption ?? undefined,
+            takenAt: teamPhoto?.takenAt ?? undefined,
+            uri: teamPhoto?.thumbUri ?? null,
+            alongM: null,
+          };
   const said = threads.get(target.photoId) ?? [];
   const sub = [
     photo.takenAt ? formatPhotoWhen(photo.takenAt) : null,
@@ -175,6 +217,13 @@ export function PhotoBottomCard({ dockStyle }: { dockStyle?: StyleProp<ViewStyle
             editable={photosEditable(ownStatus) && !isNotePhoto(own)}
           />
         )}
+        {target.kind === 'recording' && recPhoto && (
+          <OwnPhotoActions
+            trackId={null}
+            photo={pendingAsTrackPhotos([recPhoto], 'recording')[0]!}
+            editable={false}
+          />
+        )}
         <ScrollView
           ref={scrollRef}
           // Newest last, like a chat: the latest comment and the reply box
@@ -192,18 +241,23 @@ export function PhotoBottomCard({ dockStyle }: { dockStyle?: StyleProp<ViewStyle
   );
 }
 
-/** My own photo: Caption (inline), Share, Hide from the map, Remove. */
+/**
+ * My own photo: Caption (inline), Share, Hide from the map, Remove. A photo
+ * of the recording in progress (`trackId` null) has no caption or hidden
+ * state yet: Share and Remove only.
+ */
 function OwnPhotoActions({
   trackId,
   photo,
   editable,
 }: {
-  trackId: string;
+  trackId: string | null;
   photo: TrackPhoto;
   editable: boolean;
 }) {
   const t = useSchemeTokens();
   const trackName = useLibraryStore((s) => s.tracks.find((x) => x.id === trackId)?.name);
+  const recording = trackId === null;
   const [captioning, setCaptioning] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -222,6 +276,7 @@ function OwnPhotoActions({
   const saveCaption = () => {
     const caption = captioning ?? '';
     setCaptioning(null);
+    if (trackId === null) return;
     void run('save the caption', () =>
       useTrailPhotosStore.getState().editPhoto(trackId, photo.id, { caption }),
     );
@@ -245,7 +300,9 @@ function OwnPhotoActions({
   const remove = () =>
     Alert.alert(
       'Remove photo',
-      `Remove this photo from "${trackName ?? 'the trail'}"? Inukshuk's copy is deleted. The photo in your phone's library is not touched.`,
+      `Remove this photo from ${
+        recording ? 'the recording' : `"${trackName ?? 'the trail'}"`
+      }? Inukshuk's copy is deleted. The photo in your phone's library is not touched.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -253,8 +310,10 @@ function OwnPhotoActions({
           style: 'destructive',
           onPress: () => {
             usePhotoCard.getState().close();
-            void run('remove the photo', () =>
-              useTrailPhotosStore.getState().removePhoto(trackId, photo.id),
+            void run('remove the photo', async () =>
+              trackId === null
+                ? useRecorderStore.getState().removePhoto(photo.id)
+                : useTrailPhotosStore.getState().removePhoto(trackId, photo.id),
             );
           },
         },
@@ -313,27 +372,29 @@ function OwnPhotoActions({
   return (
     <View style={styles.actionsWrap}>
       <View style={styles.actions}>
-        {action(
-          'pencil-outline',
-          'Caption',
-          () => setCaptioning(photo.caption ?? ''),
-          'photo-card-caption',
-          editable,
-        )}
+        {!recording &&
+          action(
+            'pencil-outline',
+            'Caption',
+            () => setCaptioning(photo.caption ?? ''),
+            'photo-card-caption',
+            editable,
+          )}
         {action('share-variant', 'Share', () => void share(), 'photo-card-share')}
-        {action(
-          photo.hidden ? 'eye-outline' : 'eye-off-outline',
-          photo.hidden ? 'Show' : 'Hide',
-          () =>
-            void run(photo.hidden ? 'show the photo' : 'hide the photo', () =>
-              useTrailPhotosStore
-                .getState()
-                .editPhoto(trackId, photo.id, { hidden: !photo.hidden }),
-            ),
-          'photo-card-hide',
-          editable,
-        )}
-        {action('trash-can-outline', 'Remove', remove, 'photo-card-remove', editable)}
+        {trackId !== null &&
+          action(
+            photo.hidden ? 'eye-outline' : 'eye-off-outline',
+            photo.hidden ? 'Show' : 'Hide',
+            () =>
+              void run(photo.hidden ? 'show the photo' : 'hide the photo', () =>
+                useTrailPhotosStore
+                  .getState()
+                  .editPhoto(trackId, photo.id, { hidden: !photo.hidden }),
+              ),
+            'photo-card-hide',
+            editable,
+          )}
+        {action('trash-can-outline', 'Remove', remove, 'photo-card-remove', editable || recording)}
       </View>
       {error !== null && (
         <Text variant="bodySmall" style={{ color: t.status.gpsLostInk }}>

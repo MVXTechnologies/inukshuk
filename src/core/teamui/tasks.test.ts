@@ -3,11 +3,16 @@ import type { TeamTask } from '@core/team/tasks';
 import { distanceToLine, unseenCount } from './pins';
 import {
   anchorInfo,
+  dueLabel,
+  DUE_STEP_MIN,
   filterCounts,
   filterTasks,
   groupTasks,
   hasTaskCommand,
+  inOneHour,
   parseTaskCommand,
+  pickStart,
+  shiftDue,
   tasksFromSource,
 } from './tasks';
 import type { MemberRow } from './view';
@@ -43,6 +48,7 @@ const task = (extra: Partial<TeamTask>): TeamTask => ({
   id: 't',
   owner: 'me',
   title: 'x',
+  notes: '',
   assignee: 'alex',
   due: null,
   anchor: null,
@@ -207,5 +213,39 @@ describe('anchorInfo', () => {
       at: [5, 6],
     });
     expect(anchorInfo({ kind: 'trail', owner: 'me', id: 'z' }, look).at).toBeNull();
+  });
+});
+
+describe('due times on screen (#746)', () => {
+  // Local wall times: the labels are the phone's own clock, in any zone.
+  const at = (d: number, h: number, m = 0) => new Date(2026, 9, d, h, m).getTime();
+  const now = at(16, 9, 41); // Fri Oct 16, 09:41
+
+  it('today, tomorrow, yesterday, this week, then the date', () => {
+    expect(dueLabel(at(16, 16), now)).toBe('Today 16:00');
+    expect(dueLabel(at(16, 0, 5), now)).toBe('Today 00:05');
+    expect(dueLabel(at(17, 8, 30), now)).toBe('Tomorrow 08:30');
+    expect(dueLabel(at(15, 18), now)).toBe('Yesterday 18:00');
+    expect(dueLabel(at(18, 9), now)).toBe('Sun 09:00');
+    expect(dueLabel(at(22, 9), now)).toBe('Thu 09:00');
+    expect(dueLabel(at(23, 9), now)).toBe('Oct 23 09:00');
+    expect(dueLabel(at(10, 9), now)).toBe('Oct 10 09:00');
+    expect(dueLabel(new Date(2027, 0, 2, 7, 0).getTime(), now)).toBe('Jan 2 07:00');
+  });
+
+  it('"In 1 h" to the minute; "Pick…" starts at the set time or the next full hour', () => {
+    expect(inOneHour(now + 40_000)).toBe(at(16, 10, 42));
+    expect(pickStart(null, now)).toBe(at(16, 11));
+    expect(pickStart(at(17, 8), now)).toBe(at(17, 8));
+  });
+
+  it('steps by days (same clock time) and by 15 min, never into the past', () => {
+    expect(shiftDue(at(16, 16), { days: 1 }, now)).toBe(at(17, 16));
+    expect(shiftDue(at(16, 16), { minutes: DUE_STEP_MIN }, now)).toBe(at(16, 16, 15));
+    expect(shiftDue(at(16, 16), { minutes: -DUE_STEP_MIN }, now)).toBe(at(16, 15, 45));
+    // Snaps an odd minute onto the grid.
+    expect(shiftDue(at(16, 10, 42), { minutes: DUE_STEP_MIN }, now)).toBe(at(16, 11));
+    expect(shiftDue(at(16, 16), { days: -1 }, now)).toBe(at(16, 16));
+    expect(shiftDue(at(16, 9, 50), { minutes: -DUE_STEP_MIN }, now)).toBe(at(16, 9, 50));
   });
 });

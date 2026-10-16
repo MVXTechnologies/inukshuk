@@ -52,6 +52,20 @@ appId: com.inukshuk.app
 - assertVisible: 'Photos and waypoints'
 # The 2D/3D toggle is gone (#480) — its labels must not come back.
 - assertNotVisible: 'Switch to (2D|3D) view'
+# #740: the tabs fold into a peek (stats + profile) and the map fills the
+# screen; the action bar stays; the chevron unfolds them again. Taps on the
+# grabber and the chevron (a11y labels), not drags: a swipe's start point
+# depends on the emulator's screen size.
+- tapOn: 'Fold the details'
+- extendedWaitUntil:
+    visible: 'Show the details'
+    timeout: 5000
+- assertNotVisible: 'Photos and waypoints'
+- assertVisible: 'Export'
+- tapOn: 'Show the details'
+- extendedWaitUntil:
+    visible: 'Photos and waypoints'
+    timeout: 5000
 # The layers menu carries the two base maps (Relief retired, #484). Assert
 # the choices, then dismiss without picking one. ("Map" is not asserted: it
 # would also match the tab bar's Map tab.)

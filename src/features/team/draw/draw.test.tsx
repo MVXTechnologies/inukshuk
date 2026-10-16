@@ -76,6 +76,7 @@ jest.mock('@data/storage', () => ({
 }));
 const mockNotify = jest.fn(async (_n: unknown) => undefined);
 jest.mock('@data/team/teamNotifications', () => ({
+  buzzRally: () => undefined,
   notifyTeam: (n: unknown) => mockNotify(n),
   onTeamNotificationTap: () => () => undefined,
   dismissTeamNotification: async () => undefined,

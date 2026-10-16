@@ -122,7 +122,10 @@ describe('drapeStyle DEM detail', () => {
       dem: { type: 'raster-dem', tiles: ['x'], tileSize: 256 },
       vec: { type: 'vector', tiles: ['y'] },
     },
-    layers: [],
+    layers: [
+      { id: 'relief', type: 'hillshade', source: 'dem' },
+      { id: 'roads', type: 'line', source: 'vec' },
+    ],
   };
   it('lowers the declared DEM tile size (deeper DEM in the drape)', () => {
     const d = drapeStyle(withDem, { demSourceId: 'dem', demTileSize: 128 });
@@ -138,6 +141,53 @@ describe('drapeStyle DEM detail', () => {
     expect(drapeStyle(withDem, { demSourceId: 'nope', demTileSize: 128 }).sources).toBe(
       withDem.sources,
     );
+  });
+});
+
+describe('drapeStyle sources (#734)', () => {
+  const full: DrapeStyleInput = {
+    sources: {
+      dem: { type: 'raster-dem', tiles: ['x'], tileSize: 256 },
+      vec: { type: 'vector', tiles: ['y'] },
+      admin1: { type: 'vector', tiles: ['https://labels.example/{z}/{x}/{y}'] },
+      tilt: { type: 'raster-dem', tiles: ['t'] },
+      spare: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+    },
+    layers: [
+      { id: 'bg', type: 'background' },
+      { id: 'relief', type: 'hillshade', source: 'dem' },
+      { id: 'roads', type: 'line', source: 'vec' },
+      { id: 'peaks', type: 'symbol', source: 'vec' },
+      { id: 'admin1-names', type: 'symbol', source: 'admin1' },
+      { id: 'hillshade-tilt', type: 'hillshade', source: 'tilt' },
+      { id: 'hidden', type: 'fill', source: 'spare', layout: { visibility: 'none' } },
+    ],
+  };
+
+  it('keeps only the sources the draped layers draw from', () => {
+    const d = drapeStyle(full, {
+      dropLayerIds: ['hillshade-tilt'],
+      demSourceId: 'dem',
+      demTileSize: 128,
+    });
+    const sources = d.sources as Record<string, Record<string, unknown>>;
+    expect(Object.keys(sources).sort()).toEqual(['dem', 'vec']);
+    expect(sources.dem?.tileSize).toBe(128);
+    // No orphans either way: every source is drawn from, every layer's source exists.
+    const drawn = new Set(d.layers.map((l) => l.source).filter((s) => typeof s === 'string'));
+    expect([...drawn].sort()).toEqual(Object.keys(sources).sort());
+    // The live style is left untouched.
+    expect(Object.keys(full.sources as object)).toHaveLength(5);
+  });
+
+  it('prunes without any resize too, and keeps the same object when nothing is dropped', () => {
+    const d = drapeStyle(full, { dropLayerIds: ['hillshade-tilt'] });
+    expect(Object.keys(d.sources as object).sort()).toEqual(['dem', 'vec']);
+    const lean: DrapeStyleInput = {
+      sources: { vec: { type: 'vector', tiles: ['y'] } },
+      layers: [{ id: 'roads', type: 'line', source: 'vec' }],
+    };
+    expect(drapeStyle(lean).sources).toBe(lean.sources);
   });
 });
 
@@ -177,7 +227,10 @@ describe('drapeStyle raster detail', () => {
       osm: { type: 'raster', tiles: ['s'], tileSize: 362 },
       dem: { type: 'raster-dem', tiles: ['d'], tileSize: 256 },
     },
-    layers: [],
+    layers: [
+      { id: 'imagery', type: 'raster', source: 'osm' },
+      { id: 'relief', type: 'hillshade', source: 'dem' },
+    ],
   };
   it('reads the imagery source deeper, alongside the DEM', () => {
     const d = drapeStyle(withRaster, {

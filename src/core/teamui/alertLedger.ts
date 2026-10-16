@@ -40,6 +40,31 @@ export function activeEntities(
   return out;
 }
 
+/** The shortest gap between two in-app rally buzzes from one raiser (#743). */
+export const RALLY_BUZZ_GAP_MS = 60_000;
+
+/**
+ * The in-app rally buzz (#743): with the app open, a new rally point
+ * vibrates the phone as an SOS does (the system notification alone left it
+ * silent in the foreground). On top of the ledger's limits (once per rally
+ * point, never my own), one raiser buzzes this phone at most once per
+ * {@link RALLY_BUZZ_GAP_MS}: a teammate moving the rally point three times
+ * in a minute is one buzz, not three.
+ */
+export class RallyBuzzGate {
+  private readonly last = new Map<string, number>();
+
+  constructor(private readonly gapMs = RALLY_BUZZ_GAP_MS) {}
+
+  /** Whether `author`'s rally may buzz at `now` (and, if so, it counts from now). */
+  admit(author: string, now: number): boolean {
+    const prev = this.last.get(author);
+    if (prev !== undefined && now - prev < this.gapMs && now >= prev) return false;
+    this.last.set(author, now);
+    return true;
+  }
+}
+
 export interface Routed {
   channel: AlertChannel;
   /** The notification's identifier: the entity for SOS and rally (so it can be cleared). */

@@ -230,6 +230,7 @@ describe('team and pointing-line layers', () => {
         'team-rally-edge',
         'team-rally-dot',
         'team-rally-label',
+        'team-trl-glow',
         'team-trl-casing',
         'team-trl-vertex',
         'team-trl-who',

@@ -1133,6 +1133,36 @@ JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeArm
   (*handle(h))->engine->armActivation();
 }
 
+JNIEXPORT jdoubleArray JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeUnproject(JNIEnv* env, jclass,
+                                                                                              jlong h, jdouble x,
+                                                                                              jdouble y) {
+  const auto m = (*handle(h))->engine->unproject(x, y);
+  if (!m) return nullptr;
+  jdoubleArray out = env->NewDoubleArray(2);
+  const jdouble v[2] = {(*m)[0], (*m)[1]};
+  env->SetDoubleArrayRegion(out, 0, 2, v);
+  return out;
+}
+
+JNIEXPORT jlong JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeSampleFingerprint(JNIEnv* env, jclass,
+                                                                                               jintArray samples) {
+  if (!samples) return 0;
+  const jsize n = env->GetArrayLength(samples);
+  std::vector<uint32_t> buf(static_cast<size_t>(n));
+  env->GetIntArrayRegion(samples, 0, n, reinterpret_cast<jint*>(buf.data()));
+  return static_cast<jlong>(sampleFingerprint(buf.data(), buf.size()));
+}
+
+JNIEXPORT jboolean JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeAcceptDrapeSnapshot(
+    JNIEnv*, jclass, jboolean hasPrevious, jlong previousPrint, jlong previousBlock, jlong print, jlong block,
+    jboolean retried) {
+  return acceptDrapeSnapshot(hasPrevious == JNI_TRUE, static_cast<uint64_t>(previousPrint),
+                             static_cast<uint64_t>(previousBlock), static_cast<uint64_t>(print),
+                             static_cast<uint64_t>(block), retried == JNI_TRUE)
+             ? JNI_TRUE
+             : JNI_FALSE;
+}
+
 /** A drape tile: size² RGBA8 (level 0); the mip chain is built here, off the render thread. */
 JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeOnDrapeData(
     JNIEnv* env, jclass, jlong h, jint z, jint x, jint y, jbyteArray rgba, jint size, jint generation) {

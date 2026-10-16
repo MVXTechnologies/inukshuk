@@ -21,8 +21,13 @@ import type { DrawShape } from '@core/teamdraw/view';
 import { drawingSummary } from '@data/team/teamDraw';
 import { useTeamDrawStore } from './teamDrawStore';
 import { appTeamService } from '@data/team/appTeam';
-import { activeEntities, AlertLedger } from '@core/teamui/alertLedger';
-import { dismissTeamNotification, notifyTeam, setInAppAlarm } from '@data/team/teamNotifications';
+import { activeEntities, AlertLedger, RallyBuzzGate } from '@core/teamui/alertLedger';
+import {
+  buzzRally,
+  dismissTeamNotification,
+  notifyTeam,
+  setInAppAlarm,
+} from '@data/team/teamNotifications';
 import type { MeshLinkStatus } from '@data/team/meshLink';
 import type { TeamRecord } from '@data/team/teamDisk';
 import type { JoinState } from '@data/team/teamJoin';
@@ -113,6 +118,13 @@ interface TeamStore extends TeamSnapshot {
 
 /** One phone alert per SOS / rally point, cleared on resolve (#708). */
 const ledger = new AlertLedger();
+/** The in-app rally buzz, at most once a minute per raiser (#743). */
+let rallyBuzz = new RallyBuzzGate();
+
+/** Tests: forget who buzzed when. */
+export function resetRallyBuzzForTests(): void {
+  rallyBuzz = new RallyBuzzGate();
+}
 
 /** Clear what was resolved or ended: its notification, and the alarm if it was this one. */
 function settleAlerts(): void {
@@ -276,6 +288,9 @@ export function wireTeamStore(): TeamService | null {
         return;
       }
       if (routed !== null && routed.channel === 'rally') {
+        // In the app too, as an SOS does (#743); never over a sounding SOS alarm.
+        if (useTeamStore.getState().sosAlarm === null && rallyBuzz.admit(alert.author, Date.now()))
+          buzzRally();
         void notifyTeam({
           title: alert.text.startsWith('Gather · ') ? alert.text : `Gather · ${authorName}`,
           body: `${authorName} calls everyone there · ${teamName}`,

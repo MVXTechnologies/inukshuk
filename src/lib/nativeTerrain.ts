@@ -55,6 +55,17 @@ interface NativeTerrainModule {
   update(viewTag: number, config: NativeTerrainConfig): void;
   /** Replaces the whole set of lines lifted onto the terrain. */
   setLines?(viewTag: number, lines: TerrainLineSpec[]): void;
+  /**
+   * #735: replaces one overlay's lines (`group`, @core/terrain3d/lineGroups),
+   * leaving the other overlays' untouched.
+   */
+  setLineGroup?(viewTag: number, group: number, lines: TerrainLineSpec[]): void;
+  /**
+   * #735: lng, lat of the drawn 3D terrain under a view point (logical px);
+   * null off the terrain (the sky) or while 3D draws nothing. Synchronous (the
+   * pen unprojects each new touch point; a ray march, well under a millisecond).
+   */
+  unproject?(viewTag: number, x: number, y: number): [number, number] | null;
   setPuck?(viewTag: number, visible: boolean, lng: number, lat: number): void;
   /**
    * The style (JSON) the terrain drapes per tile — the 2D map without its

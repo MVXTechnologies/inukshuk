@@ -21,6 +21,7 @@ const task = (id: string, extra: Partial<TeamTask> = {}): TeamTask => ({
   id,
   owner: 'me',
   title: 'Flag the detour with ribbons',
+  notes: '',
   assignee: 'alex',
   due: null,
   anchor: { kind: 'photo', owner: 'me', id: 'p5' },

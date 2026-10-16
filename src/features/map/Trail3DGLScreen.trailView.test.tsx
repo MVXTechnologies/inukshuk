@@ -9,11 +9,13 @@ import { useOnMapTrailStore } from '@state/onMapTrailStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
+import { StyleSheet } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Trail3DGLScreen } from './Trail3DGLScreen';
+import { TRAIL_ACTION_BAR_H } from './trailView/TrailActionBar';
 import { clearOutingAnalysisCache } from './trailView/useOutingAnalysis';
 
 /**
@@ -325,4 +327,58 @@ it('follows the trail from the bar (#678): drawn on the map, compass guiding', a
   // One navigation at a time: the destination pin goes.
   expect(useNavigationStore.getState().destination).toBeNull();
   expect(mockNavigate).toHaveBeenCalledWith('/');
+});
+
+// E2E 38868794687 (photos-viewer, photos-review): the tabs scrolled on UNDER
+// the sticky action bar, so a photo card in the Overview strip read as on
+// screen while the bar took the tap — the photo card never opened. The tabs
+// end above the bar; nothing tappable is ever behind it.
+it('ends the tabs above the action bar, so nothing under it reads as on screen', async () => {
+  seed(true);
+  await mount();
+  const tabs = StyleSheet.flatten(screen.getByTestId('trail-tabs').props.style);
+  expect(tabs.marginBottom).toBe(TRAIL_ACTION_BAR_H);
+  const content = StyleSheet.flatten(
+    screen.getByTestId('trail-tab-content').props.contentContainerStyle,
+  );
+  expect(content.paddingBottom).toBeLessThan(TRAIL_ACTION_BAR_H);
+});
+
+// #740 (option 1, pull-down sheet): fold the tabs into a peek — the stats and
+// a scrubbable profile — so the map fills the screen; the action bar stays.
+it('folds the tabs into a peek and back, the map filling the screen', async () => {
+  seed(true);
+  await mount();
+  const mapBox = () => StyleSheet.flatten(screen.getByTestId('trail-map-box').props.style);
+  expect(mapBox().height).toBe(290);
+
+  await act(async () => fireEvent.press(screen.getByTestId('trail-sheet-fold')));
+  expect(screen.queryByTestId('trail-tab-content')).toBeNull();
+  expect(screen.getByTestId('trail-peek')).toBeTruthy();
+  expect(mapBox().flex).toBe(1);
+  expect(mapBox().height).toBeUndefined();
+  // Stats in the peek, the action bar still there.
+  expect(within(screen.getByTestId('trail-peek')).getByText(/ km$/)).toBeTruthy();
+  expect(within(screen.getByTestId('trail-peek')).getByText(/^\+\d+ m$/)).toBeTruthy();
+  expect(screen.getByTestId('trail-action-bar')).toBeTruthy();
+
+  // The peek's profile drives the cursor (and the map readout).
+  await act(async () =>
+    fireEvent(screen.getByLabelText('Elevation chart'), 'layout', {
+      nativeEvent: { layout: { width: 300, height: 56 } },
+    }),
+  );
+  await act(async () =>
+    fireGestureHandler(getByGestureTestId('peek-elevation-scrub'), [
+      { state: State.BEGAN, x: 150, y: 20 },
+      { state: State.ACTIVE, x: 150, y: 20 },
+      { state: State.END, x: 150, y: 20 },
+    ]),
+  );
+  expect(screen.getByTestId('map-readout')).toBeTruthy();
+
+  await act(async () => fireEvent.press(screen.getByTestId('trail-sheet-unfold')));
+  expect(screen.queryByTestId('trail-peek')).toBeNull();
+  expect(screen.getByTestId('trail-tab-content')).toBeTruthy();
+  expect(mapBox().height).toBe(290);
 });

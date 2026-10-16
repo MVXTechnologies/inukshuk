@@ -51,6 +51,19 @@ std::optional<Vec3> eyeFromProjection(const Mat4& P);
 std::optional<std::pair<double, double>> groundAtNdc(const Mat4& invP, double ndcX, double ndcY,
                                                      double groundZ = 0.0);
 
+/**
+ * #735: where the ray through an NDC point first meets the drawn terrain
+ * (world px x, y). `surfaceZ(x, y)` gives the displayed height there in P's z
+ * units ((h − hRef) × heightScale; nullopt = unknown, taken as 0). Marches
+ * from the near plane to `farFactor` × the far plane (the terrain reaches past
+ * MapLibre's flat-map far plane), then bisects the first crossing. Nullopt
+ * when the ray never meets it (the sky).
+ */
+std::optional<std::pair<double, double>> rayTerrainHit(
+    const Mat4& invP, double ndcX, double ndcY,
+    const std::function<std::optional<double>(double, double)>& surfaceZ, int steps = 512,
+    double farFactor = 4.0);
+
 // ---- frustum -----------------------------------------------------------------
 struct Aabb {
   double minX, minY, minZ, maxX, maxY, maxZ;
@@ -388,5 +401,25 @@ struct DrapeCandidate {
  * their earliest place.
  */
 std::vector<DemId> orderDrapeRequests(std::vector<DrapeCandidate> candidates, double coarseAfter);
+
+// ---- drape snapshot guard (#732) ----------------------------------------------------
+/** FNV-1a over pixel samples (any 32-bit pixel format, the same one per platform). */
+uint64_t sampleFingerprint(const uint32_t* samples, size_t count);
+/** sampleFingerprint over a grid of kFingerprintGrid² pixels of an RGBA8 image (rows `stride` bytes). */
+constexpr int kFingerprintGrid = 64;
+uint64_t rgbaFingerprint(const uint8_t* rgba, int width, int height, size_t stride);
+/**
+ * Whether a reused snapshotter's result really is the block it was asked
+ * for (#732). MapLibre's still renderer keeps the image of every full frame,
+ * and any late "fully rendered" notification fulfils whatever still request is
+ * pending (map_impl.cpp onDidFinishRenderingFrame): a second full frame of
+ * the previous camera can complete the next request at once, with the
+ * previous block's image — a 2×2 patch of the wrong place on the terrain,
+ * then on disk. Such an image repeats the snapshotter's previous result
+ * exactly: rejected once (rendered again); a block that really looks the same
+ * (open water) is accepted on its retry.
+ */
+bool acceptDrapeSnapshot(bool hasPrevious, uint64_t previousFingerprint, uint64_t previousBlock,
+                         uint64_t fingerprint, uint64_t block, bool retried);
 
 }  // namespace inukshuk::terrain

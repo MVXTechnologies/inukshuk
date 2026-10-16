@@ -206,6 +206,9 @@ import { MoveWaypointLayers } from './waypoints/MoveWaypointLayers';
 import { MoveWaypointOverlay } from './waypoints/MoveWaypointOverlay';
 import { pinAtPoint, toPinInputs, visiblePinKey } from './waypoints/pinHit';
 import { WaypointClusterSheet } from './waypoints/WaypointClusterSheet';
+import { OverlapChooserSheet } from './overlap/OverlapChooserSheet';
+import { overlapAtTap } from './overlap/overlapAtTap';
+import { useOverlapChooser } from './overlap/overlapChooser';
 import {
   openWaypointCluster,
   useWaypointClusterSheet,
@@ -266,10 +269,12 @@ import {
   VECTOR_CONTOURS_SOURCE,
 } from './mapStyle';
 import { useNativeTerrain, useNativeTerrainScene } from './hooks/useNativeTerrain';
+import { terrainLngLat, useTerrainLineGroup } from './hooks/useTerrainLines';
+import { useTerrainViewStore } from '@state/terrainViewStore';
 import { useViewToggle } from './hooks/useViewToggle';
 import type { DrapeStyleInput } from '@core/terrain3d/drapeStyle';
 
-import { sceneLines, type TerrainLineSpec } from '@core/terrain3d/sceneInput';
+import { groupLines } from '@core/terrain3d/lineGroups';
 import { useTerrainQa } from './hooks/useTerrainQa';
 import { usePdfBench } from './hooks/usePdfBench';
 import { PDF_BENCH } from '@lib/pdfBenchProbe';
@@ -335,7 +340,6 @@ const MAP_TOP_CHROME_PX = 60;
 const NO_IDS: readonly string[] = [];
 
 /** Stable empty line set for the 3D scene (2D, or nothing to draw). */
-const NO_TERRAIN_LINES: readonly TerrainLineSpec[] = [];
 
 const TRAIL_REBUILD_MS = 1000;
 const TRAIL_REBUILD_POINTS = 5;
@@ -728,10 +732,15 @@ export function MapScreen() {
   // Which trail is "selected": a tap-selected heat spot (the carousel) wins,
   // otherwise whichever trail is open in the inspect panel. Its geometry is
   // loaded even when its trace is hidden (the heatmap itself no longer loads
-  // the library's, #500), so its highlight can be drawn.
+  // the library's, #500), so its highlight can be drawn. In team mode a
+  // trail tap opens the spot card instead: that trail is highlighted while
+  // the card is up (#747).
+  const teamSpotTrackId = useTeamSheet((s) =>
+    s.sheet?.kind === 'spot' ? (s.sheet.trackId ?? null) : null,
+  );
   const focusedTrackId = heatSelection
     ? (heatSelection.trackIds[heatSelection.focusedIdx] ?? null)
-    : inspectId;
+    : (inspectId ?? teamSpotTrackId);
   const trackHeat = useTrackHeat(
     tracks,
     drawnTrackIds,
@@ -1109,6 +1118,14 @@ export function MapScreen() {
     // The satellite basemap's raster source ('osm' in buildOsmStyle).
     imagerySourceId: basemap === 'satellite' ? 'osm' : undefined,
   });
+  // The 3D terrain's view while it draws (null in 2D): its lines, taps and pen (#735).
+  const terrainView = terrain3d.active ? terrain3d.viewTag : null;
+  const terrainViewRef = useRef(terrainView);
+  useEffect(() => {
+    terrainViewRef.current = terrainView;
+    useTerrainViewStore.getState().setViewTag(terrainView);
+  }, [terrainView]);
+  useEffect(() => () => useTerrainViewStore.getState().setViewTag(null), []);
   useEffect(() => {
     terrainTagRef.current = terrain3d.viewTag;
   }, [terrain3d.viewTag]);
@@ -1204,6 +1221,13 @@ export function MapScreen() {
     () => (recPhotoSession === null ? [] : pendingAsTrackPhotos(recPhotos, recPhotoSession)),
     [recPhotos, recPhotoSession],
   );
+  const recCardPhotoId = usePhotoCard((s) =>
+    s.target?.kind === 'recording' ? s.target.photoId : null,
+  );
+  const openRecordingPhoto = useCallback((ids: string[]) => {
+    const first = ids[0];
+    if (first) usePhotoCard.getState().show({ kind: 'recording', photoId: first });
+  }, []);
 
   // #90 — location lost mid-recording: auto-pause, but only on a SUSTAINED
   // loss (debounced in the hook; transient watch re-subscription and the
@@ -1776,6 +1800,7 @@ export function MapScreen() {
   }, [inspect]);
   const drawing = useMapDrawing({
     mapRef,
+    terrainView,
     showSnack,
     units,
     topInset: insets.top,
@@ -2098,15 +2123,19 @@ export function MapScreen() {
   // to `lngLat` — reading the event there killed every coordinate route while
   // the bubble or any pin was on screen (2026-09-28).
   const handleMapPress = useCallback(
-    async ({ point, lngLat: lngLatArr }: MapPress) => {
+    async ({ point, lngLat: flatLngLat }: MapPress) => {
+      // In 3D the tap lands on the relief, not on MapLibre's flat ground (#735).
+      const lngLatArr = terrainLngLat(terrainViewRef.current, point[0], point[1]) ?? flatLngLat;
       // A photo circle under this tap (#587) handed its action over just
       // before this press bubbled here; taken now so a later tap never runs it.
       const photoTap = photoTapRef.current;
       photoTapRef.current = null;
       const map = mapRef.current;
       if (!map) return;
-      // Any tap closes the waypoint cluster list (#685); a cluster tap reopens it.
+      // Any tap closes the waypoint cluster list (#685) and the overlap
+      // chooser (#745); a tap on a cluster / an overlap reopens them.
       useWaypointClusterSheet.getState().close();
+      useOverlapChooser.getState().close();
       // #232 — the chip's action row already took this touch (see
       // chipTouchAtRef); the map must not act on it a second time.
       if (Date.now() - chipTouchAtRef.current < CHIP_ACTION_TOUCH_MS) return;
@@ -2409,16 +2438,15 @@ export function MapScreen() {
       // opens the carousel (and a single non-hot tap opens inspect for a
       // shown trail) regardless of the current visibility mode/folder
       // filters/activeTrackIds; see useTrackHeat.
+      // The finger's tolerance: at least TRAIL_HIT_PX, and the whole visible
+      // heat glow when the heatmap is on.
+      const fingerM = lngLatArr
+        ? Math.max(TRAIL_HIT_PX, heatOn ? heatTapRadiusPx(scaleAt?.zoom ?? 16) : 0) *
+          (metersPerPixel(scaleAt?.zoom ?? 16, lngLatArr[1]) ?? 0)
+        : 0;
       const at =
         lngLatArr && showTrackOverlays
-          ? trackHeat.heatAt(
-              { lng: lngLatArr[0], lat: lngLatArr[1] },
-              // The finger's tolerance: at least TRAIL_HIT_PX, and the whole
-              // visible heat glow when the heatmap is on.
-              Math.max(TRAIL_HIT_PX, heatOn ? heatTapRadiusPx(scaleAt?.zoom ?? 16) : 0) *
-                (metersPerPixel(scaleAt?.zoom ?? 16, lngLatArr[1]) ?? 0),
-              heatOn,
-            )
+          ? trackHeat.heatAt({ lng: lngLatArr[0], lat: lngLatArr[1] }, fingerM, heatOn)
           : { trackIds: [], hot: false };
       // Team signal mode: a trail is a place to signal from, never its
       // profile or focus (owner 2026-10-07).
@@ -2434,7 +2462,23 @@ export function MapScreen() {
         });
         return;
       }
-      if (lngLatArr && at.hot && at.trackIds.length >= 2) {
+      // A hot spot on the heatmap opens its carousel. Anything else under the
+      // finger (#745): trails whose line is within its width (the heat grid's
+      // ±50 m candidates, refined) and the areas holding the tap. One is
+      // selected; two or more (crossing trails, a trail in an area, nested
+      // areas) open the chooser — two trails used to select nothing.
+      const heatSpot = lngLatArr !== null && heatOn && at.hot && at.trackIds.length >= 2;
+      const pick =
+        lngLatArr && !heatSpot
+          ? overlapAtTap(
+              [lngLatArr[0], lngLatArr[1]],
+              fingerM,
+              at.trackIds,
+              trackHeat.lineFor,
+              drawingRef.current.shownAreas,
+            )
+          : null;
+      if (lngLatArr && heatSpot) {
         drawingRef.current.closeAreaCard();
         inspect(null); // opening the carousel hides the inspect panel
         setHeatSelection({
@@ -2442,10 +2486,20 @@ export function MapScreen() {
           trackIds: at.trackIds,
           focusedIdx: 0,
         });
-      } else if (at.trackIds.length === 1) {
+      } else if (pick?.kind === 'choose') {
+        drawingRef.current.closeAreaCard();
+        setHeatSelection(null);
+        inspect(null);
+        setPointAt(null);
+        setViewWp(null);
+        setForecastAt(null);
+        setExtensionHit(null);
+        useOverlapChooser.getState().open(pick.hits);
+        return;
+      } else if (pick?.kind === 'one' && pick.hit.kind === 'trail') {
         drawingRef.current.closeAreaCard();
         setHeatSelection(null); // a single-trail tap hides the carousel
-        inspect(at.trackIds[0] ?? null);
+        inspect(pick.hit.id);
       } else {
         // Leaving a focused trail or route (its panel or the heat carousel
         // up) by tapping the map elsewhere (2.1.1, owner): the tap ONLY
@@ -2468,16 +2522,19 @@ export function MapScreen() {
           setFollowUser(true);
           return;
         }
-        // A drawn area under the tap (#503) opens its card — ahead of the
-        // point chip, behind every pin, trail and heat spot (a trail inside
-        // an area stays tappable). A second tap on the same area closes the
+        // A drawn area alone under the tap (#503) opens its card — ahead of
+        // the point chip, behind every pin and heat spot; with a trail too,
+        // the chooser above asked. A second tap on the same area closes the
         // card and falls through to the chip.
-        if (lngLatArr && drawingRef.current.onAreaTap([lngLatArr[0], lngLatArr[1]])) {
+        const areaId = pick?.kind === 'one' && pick.hit.kind === 'area' ? pick.hit.id : null;
+        if (areaId !== null && drawingRef.current.viewAreaId !== areaId) {
+          drawingRef.current.openAreaCard(areaId);
           setPointAt(null);
           setViewWp(null);
           setForecastAt(null);
           return;
         }
+        drawingRef.current.closeAreaCard();
         // Point-chip tap (wave A item 7, widened by wave D §D1/D-5),
         // slotted between the dot route and plain deselect: a bare tap
         // drops the readout chip at the tapped spot; a tap ON the chip (or
@@ -2608,9 +2665,9 @@ export function MapScreen() {
   const initialCenter = resolveInitialCenter(location, lastKnownPosition);
 
   // Which trail is "selected": a tap-selected heat spot (the carousel) wins,
-  // otherwise whichever trail is open in the inspect panel. When ANY trail is
-  // selected, every other trail is hidden outright (not dimmed) via the lines
-  // layer's filter below — see item 1's selection-visibility rule.
+  // otherwise whichever trail is open in the inspect panel. The 2D map keeps
+  // the other trails drawn around its highlight (#747); the 3D scene below
+  // still draws the selected one alone.
   const hasSelection = heatSelection !== null || inspectId !== null;
 
   // The focused trail's own geometry, looked up independent of shown-trail
@@ -2624,62 +2681,62 @@ export function MapScreen() {
     [focusedTrackId, trackHeat],
   );
 
-  // The 3D scene's own trails (lifted onto the relief): the shown trails (or
-  // only the focused one, as in 2D), and the live recording on top.
-  const terrainLines = useMemo(() => {
-    if (!terrain3d.active) return NO_TERRAIN_LINES;
+  // The 3D scene's own trails (lifted onto the relief, #735: one group each):
+  // the shown trails (or only the focused one, as in 2D), the live recording
+  // on top. The other line overlays hand theirs in themselves.
+  const lineBase = useMemo(() => {
     const outline = LINE_OUTLINE[lineOutline];
-    const base = {
+    return {
       color: mapColors.trail,
       halo: outline.color,
       haloOpacity: outline.opacity,
       haloAdd: outline.widthAdd,
     };
-    const shown =
-      showTrackOverlays && trackHeat.lines && !hasSelection
-        ? sceneLines(
+  }, [lineOutline]);
+  const terrainTrails = useMemo(
+    () =>
+      terrainView !== null && showTrackOverlays && trackHeat.lines && !hasSelection
+        ? groupLines(
+            'trails',
             trackHeat.lines.features.map((f) => ({
               geometry: f.geometry,
               color: f.properties.color,
             })),
-            { ...base, width: 3, order: 0 },
-            0,
+            { ...lineBase, width: 3, order: 0 },
           )
-        : [];
-    const focus = focusLine
-      ? sceneLines(
-          [{ geometry: focusLine.geometry, color: focusLine.properties.color }],
-          { ...base, width: 4, order: 1 },
-          1_000_000,
-        )
-      : [];
-    const live = trailFeature
-      ? sceneLines(
-          [{ geometry: trailFeature.geometry }],
-          {
+        : null,
+    [terrainView, showTrackOverlays, trackHeat.lines, hasSelection, lineBase],
+  );
+  const terrainFocus = useMemo(
+    () =>
+      terrainView !== null && focusLine
+        ? groupLines(
+            'focusedTrail',
+            [{ geometry: focusLine.geometry, color: focusLine.properties.color }],
+            { ...lineBase, width: 4, order: 0 },
+          )
+        : null,
+    [terrainView, focusLine, lineBase],
+  );
+  const terrainRecording = useMemo(
+    () =>
+      terrainView !== null && trailFeature
+        ? groupLines('recording', [{ geometry: trailFeature.geometry }], {
             color: mapColors.trail,
             halo: mapColors.trailCasing,
             haloOpacity: 1,
             width: 5,
             haloAdd: 4,
-            order: 2,
-          },
-          2_000_000,
-        )
-      : [];
-    return [...shown, ...focus, ...live];
-  }, [
-    terrain3d.active,
-    lineOutline,
-    showTrackOverlays,
-    trackHeat.lines,
-    hasSelection,
-    focusLine,
-    trailFeature,
-  ]);
+            order: 0,
+          })
+        : null,
+    [terrainView, trailFeature],
+  );
+  useTerrainLineGroup('trails', terrainTrails);
+  useTerrainLineGroup('focusedTrail', terrainFocus);
+  useTerrainLineGroup('recording', terrainRecording);
   useNativeTerrainScene(
-    terrain3d.active ? terrain3d.viewTag : null,
-    terrainLines,
+    terrainView,
     location ? { lng: location.longitude, lat: location.latitude } : null,
   );
 
@@ -2931,7 +2988,11 @@ export function MapScreen() {
                 void drawingRef.current.onMapLongPress(e.nativeEvent?.point ?? null);
                 return;
               }
-              const lngLat = e.nativeEvent?.lngLat;
+              const pt = e.nativeEvent?.point;
+              // In 3D the press lands on the relief, not on MapLibre's flat ground (#735).
+              const lngLat =
+                (pt ? terrainLngLat(terrainViewRef.current, pt[0], pt[1]) : null) ??
+                e.nativeEvent?.lngLat;
               if (!lngLat) return;
               const at = { longitude: lngLat[0], latitude: lngLat[1] };
               // Move mode (#676): the map is being panned under the pin.
@@ -3247,21 +3308,15 @@ export function MapScreen() {
 
             {/* Trail lines: every shown trail as a thin, clean, category-
               coloured LineString — no glow layer, no width stepping (see
-              useTrackHeat). When a trail is selected (a tap-selected heat
-              spot OR the inspect panel), every trail from THIS shown-trails
-              source is hidden outright (not dimmed) — the focused trail's
-              highlight is drawn by the dedicated "focused-trail" layer just
-              below instead, since a hot-spot selection can point at a
-              trail outside the shown set (heatmap clickability works even
-              with traces hidden). Tapping a "hot" spot routes through
-              onMapPress below to open the HeatPointCarousel; the per-trail
-              onPress this replaced is gone for good — the map-level hit-test
-              (heatAt) is the only way in now. */}
+              useTrackHeat). They stay drawn while a trail is selected
+              (#747): the selected one is lifted out of them by the
+              "focused-trail" highlight just below, which also covers a
+              hot-spot selection outside the shown set (heatmap clickability
+              works even with traces hidden). Taps are hit-tested at the map
+              level (heatAt + the overlap chooser, #745). */}
             {showTrackOverlays && linesJson && (
               <GeoJSONSource id="tracks-lines" data={linesJson}>
-                {hasSelection
-                  ? TRACKS_LINES_LAYERS[lineOutline].hidden
-                  : TRACKS_LINES_LAYERS[lineOutline].shown}
+                {TRACKS_LINES_LAYERS[lineOutline].shown}
               </GeoJSONSource>
             )}
 
@@ -3326,7 +3381,10 @@ export function MapScreen() {
                 id="inspect-marker"
                 data={{
                   type: 'Feature',
-                  geometry: { type: 'Point', coordinates: [markerAt.longitude, markerAt.latitude] },
+                  geometry: {
+                    type: 'Point',
+                    coordinates: [markerAt.longitude, markerAt.latitude],
+                  },
                   properties: {},
                 }}
               >
@@ -3348,8 +3406,18 @@ export function MapScreen() {
                 {LIVE_TRAIL_LAYERS}
               </GeoJSONSource>
             )}
+            {/* The recording's photos (#741): the same tap → photo card as
+              a saved trail's, the tapped one ringed while its card is up. */}
             {liveTrailPhotos.length > 0 && (
-              <TrailPhotoLayers id="rec-live" photos={liveTrailPhotos} />
+              <TrailPhotoLayers
+                id="rec-live"
+                photos={liveTrailPhotos}
+                selectedId={recCardPhotoId}
+                onPhotoPress={openRecordingPhoto}
+                deferPress={deferPhotoPress}
+                getZoom={getMapZoom}
+                zoomTo={zoomMapTo}
+              />
             )}
 
             {/* Waypoint pins (saved standalone ones always; live ones while a
@@ -4092,7 +4160,10 @@ export function MapScreen() {
             fabBottom={teamFabBottom(bottomColumnLift + stripLift, bottomColumnH)}
             panelTop={insets.top + 4}
             snackStyle={liftedSnackbarStyle(bottomColumnLift + stripLift, bottomColumnH)}
-            bandPlace={alertBandPlace({ teamMode: searchSlot === 'team', barShown: teamBarShown })}
+            bandPlace={alertBandPlace({
+              teamMode: searchSlot === 'team',
+              barShown: teamBarShown,
+            })}
             drawChromeTop={drawCreditsSheetBottom(
               insets.bottom,
               recordingPanelUp ? panelHeight : 0,
@@ -4301,6 +4372,24 @@ export function MapScreen() {
               suppressed={viewWaypoint !== null}
               floating={recordingPanelUp}
               onOpen={(pin) => setViewWp({ source: pin.source, id: pin.id })}
+            />
+          </View>
+        )}
+
+        {/* Several trails / areas under one tap (#745): pick one. */}
+        {cardSlotFree && movingWp === null && (
+          <View
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+            pointerEvents="box-none"
+          >
+            <OverlapChooserSheet
+              floating={recordingPanelUp}
+              suppressed={viewWaypoint !== null}
+              onPickTrail={(id) => {
+                setHeatSelection(null);
+                inspect(id);
+              }}
+              onPickArea={(id) => drawingRef.current.openAreaCard(id)}
             />
           </View>
         )}

@@ -23,6 +23,8 @@ export interface LineStyleInput {
   haloAdd: number;
   /** Draw order (higher on top). */
   order: number;
+  /** Line and halo opacity (default 1): a fading team stroke (#735). */
+  opacity?: number;
 }
 
 type Position = readonly number[];
@@ -74,11 +76,11 @@ export function packLineStyle(s: LineStyleInput): number[] {
     c[0],
     c[1],
     c[2],
-    1,
+    s.opacity ?? 1,
     h[0],
     h[1],
     h[2],
-    s.haloOpacity,
+    s.haloOpacity * (s.opacity ?? 1),
     s.width,
     s.width + s.haloAdd,
     s.order,

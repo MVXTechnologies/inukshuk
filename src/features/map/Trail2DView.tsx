@@ -19,15 +19,24 @@ import {
   type MapRef,
   Marker,
 } from '@maplibre/maplibre-react-native';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { StyleSheet } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { VECTOR_BASEMAP_ENABLED } from '@core/features/flags';
 import { vectorBasemapOption } from '@data/basemapTiles';
 import { useTheme } from 'react-native-paper';
 import { buildOsmStyle } from './mapStyle';
 import { toLngLatBounds } from './geojson';
 import { NoteNumberBadge } from './components/NoteNumberBadge';
+import { NotePhotoPin } from './components/NotePhotoPin';
+import { useNoteSprites } from './hooks/useNoteSprites';
 import { useTiltRelief } from './hooks/useTiltRelief';
+import { pinScaleFactor } from '@core/map/pinScale';
+import {
+  NOTE_BADGE_DP,
+  notePhotoPinLayout,
+  notePinHitRadius,
+  notePinKind,
+} from '@core/photos/notePins';
 
 export function Trail2DView({
   points,
@@ -120,6 +129,27 @@ export function Trail2DView({
     [points, notes, segmentStarts],
   );
 
+  // #742: a note with a photo is its photo's circle with the number on its
+  // top-right edge (the circle grows with the zoom like the trail photos,
+  // the badge follows Pin size); a note without one, its plain pin.
+  const spriteFor = useNoteSprites(notes);
+  const pinScale = pinScaleFactor(useSettingsStore((s) => s.pinScale));
+  // Quarter-zoom steps: the circles follow a pinch without a render per frame.
+  const [zoomStep, setZoomStep] = useState(15);
+  const onZoom = useCallback((zoom: number) => {
+    if (!Number.isFinite(zoom)) return;
+    const step = Math.round(zoom * 4) / 4;
+    setZoomStep((cur) => (cur === step ? cur : step));
+  }, []);
+  const photoPinLayout = useMemo(
+    () => notePhotoPinLayout(zoomStep, pinScale),
+    [zoomStep, pinScale],
+  );
+  const noteKinds = useMemo(
+    () => numberedNotes.map((n) => notePinKind(n.note, spriteFor)),
+    [numberedNotes, spriteFor],
+  );
+
   // Scrub marker (see MapScreen's inspect-marker: same shape and colours).
   const scrubFeature = useMemo(
     () =>
@@ -141,19 +171,35 @@ export function Trail2DView({
   // Fit the camera to the trail. Must run once the map is loaded (the camera ref
   // is a no-op before then), so we also call it from onDidFinishLoadingMap — not
   // only from this effect, which fires on mount before the map is ready.
-  const fitToTrail = useCallback(() => {
-    if (!bbox) return;
-    cameraRef.current?.fitBounds(toLngLatBounds(bbox), {
-      duration: 0,
-      // Top clears the floating title card (#511), right the layer rail,
-      // bottom the cursor readout badge.
-      padding: { top: 110, right: 64, bottom: 52, left: 36 },
-    });
-  }, [bbox]);
+  const fitToTrail = useCallback(
+    (duration = 0) => {
+      if (!bbox) return;
+      cameraRef.current?.fitBounds(toLngLatBounds(bbox), {
+        duration,
+        // Top clears the floating title card (#511), right the layer rail,
+        // bottom the cursor readout badge.
+        padding: { top: 110, right: 64, bottom: 52, left: 36 },
+      });
+    },
+    [bbox],
+  );
 
   useEffect(() => {
     fitToTrail();
   }, [fitToTrail]);
+
+  // The map grows or shrinks with the trail view's sheet (#740): the whole
+  // trail is fitted again into the new size.
+  const lastHeight = useRef<number | null>(null);
+  const onBoxLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      const h = e.nativeEvent.layout.height;
+      const prev = lastHeight.current;
+      lastHeight.current = h;
+      if (prev !== null && Math.abs(prev - h) > 1) requestAnimationFrame(() => fitToTrail(350));
+    },
+    [fitToTrail],
+  );
 
   useEffect(() => {
     if (!focus) return;
@@ -164,7 +210,6 @@ export function Trail2DView({
   // pins: <Marker onPress> doesn't fire on Android, and a Pressable child
   // proved unreliable across devices too. The tap's pixel point is compared
   // against each pin projected through the real camera.
-  const NOTE_HIT_PX = 48;
   /** The note pin under a screen point, if any (null mid-teardown too). */
   const noteAt = useCallback(
     async (point: [number, number]): Promise<string | null> => {
@@ -172,7 +217,7 @@ export function Trail2DView({
       if (!map || numberedNotes.length === 0) return null;
       const [px, py] = point;
       let bestId: string | null = null;
-      let bestD = NOTE_HIT_PX;
+      let bestD = Infinity;
       try {
         const pts = await Promise.all(
           numberedNotes.map((n) => map.project([n.longitude, n.latitude])),
@@ -181,7 +226,9 @@ export function Trail2DView({
           const p = pts[i];
           if (!p) continue;
           const d = Math.hypot(px - p[0], py - p[1]);
-          if (d < bestD) {
+          const reach =
+            noteKinds[i]?.kind === 'photo' ? photoPinLayout.hitRadius : notePinHitRadius(pinScale);
+          if (d < reach && d < bestD) {
             bestD = d;
             bestId = numberedNotes[i]!.note.id;
           }
@@ -191,7 +238,7 @@ export function Trail2DView({
       }
       return bestId;
     },
-    [numberedNotes],
+    [numberedNotes, noteKinds, photoPinLayout, pinScale],
   );
   const onMapPress = useCallback(
     async (e: { nativeEvent?: { point?: [number, number] } }) => {
@@ -228,86 +275,99 @@ export function Trail2DView({
   );
 
   return (
-    <Map
-      ref={mapRef}
-      style={styles.fill}
-      mapStyle={style}
-      compass={false}
-      // Two-finger tilt, as on the main map (#480). MapLibre's default, but
-      // explicit: it is now the ONLY way into a 3D-ish view here.
-      touchPitch
-      onDidFinishLoadingMap={fitToTrail}
-      onDidFinishLoadingStyle={tilt.onStyleLoaded}
-      onRegionDidChange={(e) => tilt.onSettledPitch(e.nativeEvent.pitch)}
-      onPress={onMapPress}
-    >
-      {/* The photo stacks' count pills and ring: one registration, never moved. */}
-      <MapImages />
-      <Camera ref={cameraRef} />
-      {tilt.layer}
-      <GeoJSONSource id="trail-2d" data={lineFeature}>
-        {/* Orange route on a paper halo (#511, the explorer's trail ink):
+    <View style={styles.fill} onLayout={onBoxLayout}>
+      <Map
+        ref={mapRef}
+        style={styles.fill}
+        mapStyle={style}
+        compass={false}
+        // Two-finger tilt, as on the main map (#480). MapLibre's default, but
+        // explicit: it is now the ONLY way into a 3D-ish view here.
+        touchPitch
+        onDidFinishLoadingMap={() => fitToTrail()}
+        onDidFinishLoadingStyle={tilt.onStyleLoaded}
+        onRegionIsChanging={(e) => onZoom(e.nativeEvent.zoom)}
+        onRegionDidChange={(e) => {
+          tilt.onSettledPitch(e.nativeEvent.pitch);
+          onZoom(e.nativeEvent.zoom);
+        }}
+        onPress={onMapPress}
+      >
+        {/* The photo stacks' count pills and ring: one registration, never moved. */}
+        <MapImages />
+        <Camera ref={cameraRef} />
+        {tilt.layer}
+        <GeoJSONSource id="trail-2d" data={lineFeature}>
+          {/* Orange route on a paper halo (#511, the explorer's trail ink):
             reads on the map, the hillshade and satellite alike. */}
-        <Layer
-          id="trail-2d-casing"
-          beforeId={TRAIL_LINES_ANCHOR}
-          type="line"
-          layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-          paint={{ 'line-color': tokens.explore.trailHalo, 'line-width': 8, 'line-opacity': 0.9 }}
-        />
-        <Layer
-          id="trail-2d-line"
-          beforeId={TRAIL_LINES_ANCHOR}
-          type="line"
-          layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-          paint={{ 'line-color': tokens.explore.trail, 'line-width': 4.5 }}
-        />
-      </GeoJSONSource>
-
-      {/* Scrub marker: rides the trace as the elevation profile is scrubbed. */}
-      {scrubFeature && (
-        <GeoJSONSource id="trail-2d-scrub" data={scrubFeature}>
           <Layer
-            id="trail-2d-scrub-dot"
-            beforeId={MARKERS_ANCHOR}
-            type="circle"
-            paint={{
-              'circle-radius': 8,
-              'circle-color': tokens.inkVariant,
-              'circle-stroke-width': 3,
-              'circle-stroke-color': tokens.explore.trailHalo,
-            }}
+            id="trail-2d-casing"
+            beforeId={TRAIL_LINES_ANCHOR}
+            type="line"
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            paint={{ 'line-color': tokens.explore.trailHalo, 'line-width': 8, 'line-opacity': 0.9 }}
+          />
+          <Layer
+            id="trail-2d-line"
+            beforeId={TRAIL_LINES_ANCHOR}
+            type="line"
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            paint={{ 'line-color': tokens.explore.trail, 'line-width': 4.5 }}
           />
         </GeoJSONSource>
-      )}
 
-      {/* Trail photos (#587): GL symbols (never RN Markers — hundreds of them). */}
-      {photos && photos.length > 0 && (
-        <TrailPhotoLayers
-          id="trail-2d"
-          photos={photos}
-          selectedId={selectedPhotoId ?? null}
-          onPhotoPress={onPhotosPress}
-          pressGuard={photoPressGuard}
-          getZoom={getZoom}
-          zoomTo={zoomTo}
-        />
-      )}
+        {/* Scrub marker: rides the trace as the elevation profile is scrubbed. */}
+        {scrubFeature && (
+          <GeoJSONSource id="trail-2d-scrub" data={scrubFeature}>
+            <Layer
+              id="trail-2d-scrub-dot"
+              beforeId={MARKERS_ANCHOR}
+              type="circle"
+              paint={{
+                'circle-radius': 8,
+                'circle-color': tokens.inkVariant,
+                'circle-stroke-width': 3,
+                'circle-stroke-color': tokens.explore.trailHalo,
+              }}
+            />
+          </GeoJSONSource>
+        )}
 
-      {/* Numbered note pins. Markers (RN views), not a symbol layer: the raster
+        {/* Trail photos (#587): GL symbols (never RN Markers — hundreds of them). */}
+        {photos && photos.length > 0 && (
+          <TrailPhotoLayers
+            id="trail-2d"
+            photos={photos}
+            selectedId={selectedPhotoId ?? null}
+            onPhotoPress={onPhotosPress}
+            pressGuard={photoPressGuard}
+            getZoom={getZoom}
+            zoomTo={zoomTo}
+          />
+        )}
+
+        {/* Numbered note pins. Markers (RN views), not a symbol layer: the raster
           style declares no glyphs endpoint, so MapLibre text would not render.
           Visual only — taps land through onMapPress's hit-test above. */}
-      {numberedNotes.map((n) => (
-        <Marker
-          key={n.note.id}
-          id={`trail-2d-note-${n.note.id}`}
-          lngLat={[n.longitude, n.latitude]}
-          anchor="center"
-        >
-          <NoteNumberBadge num={n.num} />
-        </Marker>
-      ))}
-    </Map>
+        {numberedNotes.map((n, i) => {
+          const kind = noteKinds[i];
+          return (
+            <Marker
+              key={n.note.id}
+              id={`trail-2d-note-${n.note.id}`}
+              lngLat={[n.longitude, n.latitude]}
+              anchor="center"
+            >
+              {kind?.kind === 'photo' ? (
+                <NotePhotoPin sprite={kind.sprite} num={n.num} layout={photoPinLayout} />
+              ) : (
+                <NoteNumberBadge num={n.num} size={NOTE_BADGE_DP * pinScale} />
+              )}
+            </Marker>
+          );
+        })}
+      </Map>
+    </View>
   );
 }
 

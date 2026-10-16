@@ -1,0 +1,160 @@
+# Overlapping trails and an area under one tap (#745): the chooser, a row
+# selecting a trail, and a tap in the open part of the area selecting it.
+# Takes the screenshots for the light/dark review (run it once per theme).
+#
+# Needs the two crossing GPX imported first — scripts/e2e/overlap-chooser.sh
+# does that (adb push + "Open with" intents) and then runs this flow. They
+# cross at A = (46.8139, -71.2082), the fix the other trail flows use:
+# "Overlap east-west" is timed (an uncategorized activity), "Overlap
+# north-south" is untimed (Navigation), so only one counts for the heatmap
+# and the crossing is never a hot spot (a hot spot keeps its carousel).
+#
+# The flow parks the user on A and follows, so the map's centre is the
+# crossing (heatmap.yaml's idiom), shows the Ungrouped folder on the map,
+# draws an area around the centre, then taps the centre: two trails and the
+# area are under the finger.
+appId: com.inukshuk.app
+tags:
+  - own-location
+---
+- launchApp:
+    permissions:
+      location: allow
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+# The imported trails are Ungrouped: show that folder on the map (heatmap.yaml's
+# guarded Content dialog; the checkbox state is verified through the sheet).
+- retry:
+    maxRetries: 2
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Close overlays'
+          commands:
+            - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Close overlays'
+          timeout: 10000
+      - tapOn: 'Map tab'
+      - extendedWaitUntil:
+          visible: 'Content.*'
+          timeout: 10000
+      - runFlow:
+          when:
+            notVisible: 'Content: 1 folder'
+          commands:
+            - tapOn: 'Content.*'
+            - extendedWaitUntil:
+                visible: 'Show on the map'
+                timeout: 10000
+            - waitForAnimationToEnd:
+                timeout: 3000
+            - tapOn: 'Ungrouped'
+            - tapOn: 'Done'
+            - tapOn: 'Map overlays'
+            - extendedWaitUntil:
+                visible: 'Close overlays'
+                timeout: 10000
+            - tapOn: 'Map tab'
+      - extendedWaitUntil:
+          visible: 'Content: 1 folder'
+          timeout: 10000
+      - tapOn:
+          point: 50%,8%
+- setLocation:
+    latitude: 46.8139
+    longitude: -71.2082
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible:
+              text: 'Locate'
+              selected: true
+          commands:
+            - tapOn: 'Locate'
+      - extendedWaitUntil:
+          visible:
+            text: 'Locate'
+            selected: true
+          timeout: 10000
+- waitForAnimationToEnd:
+    timeout: 5000
+# An area around the centre (the crossing), corners well inside the map view.
+- tapOn: 'Map actions'
+- tapOn: 'Draw'
+- tapOn: 'Area'
+- tapOn:
+    point: 22%,28%
+- tapOn:
+    point: 78%,28%
+- tapOn:
+    point: 78%,62%
+- tapOn:
+    point: 22%,62%
+- tapOn: 'Done'
+- extendedWaitUntil:
+    visible: 'Save area'
+    timeout: 10000
+- tapOn: 'Save area'
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 10000
+- waitForAnimationToEnd:
+    timeout: 3000
+# The crossing: both trails and the area under the finger → the chooser.
+- tapOn:
+    id: 'map-area'
+    retryTapIfNoChange: false
+- extendedWaitUntil:
+    visible: '\d+ here'
+    timeout: 10000
+- assertVisible: 'Overlap east-west.*'
+- assertVisible: 'Overlap north-south.*'
+- assertVisible: 'Area 1.*'
+- takeScreenshot: overlap-chooser
+# A row selects that item: the trail's panel, with its highlight.
+- tapOn: 'Overlap north-south.*'
+- extendedWaitUntil:
+    visible:
+      id: 'trail-inspect-panel'
+    timeout: 10000
+- takeScreenshot: overlap-selected-trail
+# Close the trail, then tap the open part of the area, away from both lines:
+# the area alone, its card. (Where the lines fall on screen depends on the
+# zoom the camera kept, so this last step is not a gate.)
+- tapOn: 'Close trail inspector'
+- extendedWaitUntil:
+    notVisible:
+      id: 'trail-inspect-panel'
+    timeout: 10000
+- tapOn:
+    point: 30%,34%
+- extendedWaitUntil:
+    visible:
+      id: 'area-card'
+    timeout: 10000
+    optional: true
+- takeScreenshot: overlap-area-card
+# Leave no area behind, so the flow can run again (the other theme): open it
+# from the chooser when the open-part tap missed, then hold its Delete.
+- runFlow:
+    when:
+      notVisible:
+        id: 'area-card'
+    commands:
+      - tapOn:
+          id: 'map-area'
+          retryTapIfNoChange: false
+      - tapOn: 'Area 1.*'
+- extendedWaitUntil:
+    visible:
+      id: 'area-card'
+    timeout: 10000
+- longPressOn: 'Delete area'
+- extendedWaitUntil:
+    notVisible:
+      id: 'area-card'
+    timeout: 10000

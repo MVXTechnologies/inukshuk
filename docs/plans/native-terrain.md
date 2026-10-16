@@ -94,6 +94,35 @@ Measured on the arm64 emulator (release, cold caches, 5 runs each, p50/max
 from the press): centre 7.5/9.6 s → 4.0/4.6 s, everything 16.0/18.0 s →
 14.8/17.5 s; with six snapshotters 2.7/3.9 s and 10.9/13.8 s.
 
+Floating slabs (#732, 2026-10-15): a 2×2 patch of the wrong place could
+appear on the terrain (3 of 17 cold emulator runs, every drape order). The
+engine's drape slots are sound (a fake-GPU test checks every drawn tile
+under late, duplicated and dropped renders); the wrong image comes from
+reusing a MapLibre snapshotter: in static mode any "fully rendered"
+notification fulfils whatever still request is pending, and the renderer
+keeps the image of every full frame, so a late second frame of the previous
+camera can complete the next request at once with the previous block's
+image. Both platforms now fingerprint each snapshot and render a block
+again (once) when it repeats its snapshotter's previous block
+(`acceptDrapeSnapshot`); the drape disk cache moved to a new folder (v2) and
+the old one is dropped, since it may hold such images.
+
+Lines and drawing in 3D (#735, 2026-10-16): the terrain is drawn over the
+whole 2D map, so every line overlay must also reach the scene. Only the
+Library's trails, the focused trail and the recording did; now each overlay
+hands its own group (`@core/terrain3d/lineGroups`, `useTerrainLineGroup`,
+native `setLineGroup`): the long trail and its stage, the followed trail and
+its guide, the pointing line and ticks, the route or area being drawn (live),
+the Library's area outlines, teammates' tracks and team drawings (fading,
+selected halo). A change re-sends one group, and the engine keeps an
+unchanged line's lifted vertices. Lines are lifted onto the surface actually
+drawn there (the drawn tile's mesh), not the finest DEM: far tiles' coarse
+meshes had swallowed them in every hollow. Taps, long presses, the route pen
+and the team pen land on the relief through `unproject` (a ray marched
+against the drawn terrain, synchronous on the JS thread); the team pen keeps
+the tilt instead of flattening the map. Not drawn in 3D (2D only): fills,
+dashes, circles (vertex handles, end dots) and symbols.
+
 Open: pin density vs Outmap, contour legibility at very steep slopes,
 drape throughput on low-end GPUs (~350 ms per snapshot on the emulator).
 

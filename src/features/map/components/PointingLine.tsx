@@ -11,6 +11,7 @@ import {
   type PointingLineSettings,
 } from '@core/map/pointingLineSettings';
 import type { LatLng } from '@core/models';
+import { groupLines, type GroupFeature } from '@core/terrain3d/lineGroups';
 import { choosePointingBearing, createCourseTracker, type CourseSample } from '@core/nav';
 import { teamLabelFont } from '@features/team/map/TeamMapLayers';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
@@ -18,6 +19,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { subscribeHeadingMotion } from '../headingMotion';
+import { useTerrainLineGroup, useTerrainView } from '../hooks/useTerrainLines';
 
 /**
  * A heading frame that moves the line less than this is skipped, °: at 500 m
@@ -230,6 +232,30 @@ function LivePointingLine({
         : []),
     ];
   }, [cfg.width, cfg.color, font, mapInk, mapHalo]);
+
+  // #735: the line and its ticks on the 3D terrain (same widths and colours).
+  const view = useTerrainView();
+  const terrainLines = useMemo(() => {
+    if (view === null || data === null) return null;
+    const w = POINTING_LINE_WIDTH_DP[cfg.width];
+    const strokes: GroupFeature[] = [];
+    for (const f of data.features) {
+      if (f.geometry.type !== 'LineString') continue;
+      const kind = f.properties.kind;
+      if (kind === 'line') strokes.push({ geometry: f.geometry, width: w, haloAdd: 2.5 });
+      else if (kind === 'major') strokes.push({ geometry: f.geometry, width: 2, haloAdd: 2.2 });
+      else if (kind === 'tick') strokes.push({ geometry: f.geometry, width: 1.5, haloAdd: 2.2 });
+    }
+    return groupLines('pointingLine', strokes, {
+      color: cfg.color,
+      halo: pointingLineCasing(cfg.color),
+      haloOpacity: 0.9,
+      width: w,
+      haloAdd: 2.5,
+      order: 0,
+    });
+  }, [view, data, cfg.width, cfg.color]);
+  useTerrainLineGroup('pointingLine', terrainLines);
 
   if (data === null) return null;
   return (

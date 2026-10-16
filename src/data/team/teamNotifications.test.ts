@@ -2,7 +2,7 @@
  * The team notification channels and contents (#708), against a fake
  * expo-notifications module.
  */
-import { Platform } from 'react-native';
+import { AppState, Platform, Vibration } from 'react-native';
 
 const mockN = {
   AndroidImportance: { HIGH: 4, MAX: 5 },
@@ -24,9 +24,11 @@ jest.mock('expo-notifications', () => mockN);
 
 // eslint-disable-next-line import/first
 import {
+  buzzRally,
   dismissTeamNotification,
   notifyTeam,
   RALLY_CHANNEL,
+  RALLY_VIBRATION,
   resetTeamNotificationsForTests,
   setInAppAlarm,
   SOS_CHANNEL,
@@ -131,5 +133,29 @@ describe('team notification channels (#708)', () => {
     mockN.dismissNotificationAsync.mockRejectedValueOnce(new Error('gone'));
     await expect(notifyTeam({ title: 't', body: 'b', url: '/' })).resolves.toBeUndefined();
     await expect(dismissTeamNotification('x')).resolves.toBeUndefined();
+  });
+});
+
+describe('the in-app rally buzz (#743)', () => {
+  const setApp = (state: 'active' | 'background') =>
+    Object.defineProperty(AppState, 'currentState', { value: state, configurable: true });
+  afterEach(() => setApp('active'));
+
+  it('vibrates the rally pattern once with the app in front, never in the background', () => {
+    const vibrate = jest.spyOn(Vibration, 'vibrate').mockImplementation(() => undefined);
+    setApp('active');
+    buzzRally();
+    expect(vibrate).toHaveBeenCalledTimes(1);
+    expect(vibrate).toHaveBeenCalledWith(RALLY_VIBRATION);
+    setApp('background');
+    buzzRally();
+    expect(vibrate).toHaveBeenCalledTimes(1);
+    // No vibrator: never throws.
+    setApp('active');
+    vibrate.mockImplementation(() => {
+      throw new Error('no vibrator');
+    });
+    expect(() => buzzRally()).not.toThrow();
+    vibrate.mockRestore();
   });
 });

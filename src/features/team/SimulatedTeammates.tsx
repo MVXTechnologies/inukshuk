@@ -8,6 +8,7 @@ import {
   addBadgeThreads,
   addSimulatedTeammate,
   BADGE_THREADS,
+  simulatedAlert,
   simulatedTeamToJoin,
 } from '@data/team/simulatedTeammates';
 import { teamService, useTeamStore } from '@state/teamStore';
@@ -79,6 +80,22 @@ export function SimulatedTeammates() {
       >
         Comment-badge threads (12, 100)
       </Button>
+      <View style={styles.row}>
+        <Button
+          mode="outlined"
+          onPress={() => simulatedAlert('rally', center())}
+          testID="team-sim-rally"
+        >
+          They call a gather
+        </Button>
+        <Button
+          mode="outlined"
+          onPress={() => simulatedAlert('sos', center())}
+          testID="team-sim-sos"
+        >
+          They raise an SOS
+        </Button>
+      </View>
       {badgesHere && (
         <Text variant="bodySmall" testID="team-sim-badges-done">
           Badge threads synced to this phone
@@ -111,4 +128,5 @@ export function SimulatedTeamToJoin({ onLink }: { onLink: (link: string) => void
 
 const styles = StyleSheet.create({
   box: { borderWidth: 1, borderStyle: 'dashed', borderRadius: 12, padding: 12, gap: 8 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });

@@ -161,8 +161,22 @@ describe('leaving a focused trail by tapping the map (2.1.1)', () => {
     const leave = press.indexOf('bareTapAfterFocus(inspectId !== null || heatSelection !== null)');
     expect(leave).toBeGreaterThan(0);
     expect(leave).toBeLessThan(press.indexOf('await tapHitsUserDot()'));
-    expect(leave).toBeLessThan(press.indexOf('drawingRef.current.onAreaTap('));
+    expect(leave).toBeLessThan(press.indexOf('drawingRef.current.openAreaCard(areaId)'));
     expect(leave).toBeLessThan(press.indexOf('pointChipAfterBareTap(pointAt'));
+  });
+
+  // #745: two trails under the finger used to select nothing; now any two
+  // things there (trails, areas) open the chooser, and the heatmap's hot
+  // spot keeps its carousel.
+  it('routes 2+ trails/areas under the finger to the overlap chooser', () => {
+    const choose = press.indexOf("pick?.kind === 'choose'");
+    expect(choose).toBeGreaterThan(press.indexOf('overlapAtTap('));
+    expect(choose).toBeGreaterThan(press.indexOf('if (lngLatArr && heatSpot)'));
+    expect(choose).toBeLessThan(
+      press.indexOf('bareTapAfterFocus(inspectId !== null || heatSelection !== null)'),
+    );
+    expect(press.slice(choose)).toMatch(/useOverlapChooser\.getState\(\)\.open\(pick\.hits\)/);
+    expect(press).toMatch(/useOverlapChooser\.getState\(\)\.close\(\)/);
   });
 
   it('closes the focus, forgets the camera snapshot and returns: no bubble, no glide back', () => {
@@ -185,4 +199,15 @@ it('the ✕ on a trail selection releases the camera snapshot instead of gliding
   const map = readFileSync(join(__dirname, 'MapScreen.tsx'), 'utf8');
   expect(map).toMatch(/const releaseCameraOnDeselect = selectionCamera\.forget;/);
   expect(map).not.toMatch(/selectionCamera\.restore\b/);
+});
+
+// #741: the recording's photo circles answer a tap like a saved trail's: the
+// photo card, through the map's tap priority (pins and the chip first).
+it('the live recording photos open the photo card and ring the tapped one', () => {
+  const map = readFileSync(join(__dirname, 'MapScreen.tsx'), 'utf8');
+  const live = /<TrailPhotoLayers\s+id="rec-live"[^]*?\/>/.exec(map)?.[0] ?? '';
+  expect(live).toContain('onPhotoPress={openRecordingPhoto}');
+  expect(live).toContain('deferPress={deferPhotoPress}');
+  expect(live).toContain('selectedId={recCardPhotoId}');
+  expect(map).toMatch(/show\(\{ kind: 'recording', photoId: first \}\)/);
 });

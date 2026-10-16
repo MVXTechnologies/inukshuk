@@ -21,10 +21,13 @@ import { overlayAnchor } from '@core/map/layerSlots';
 import { STONE_FONTS_ATKINSON, STONE_FONTS_NOTO } from '@core/map/stoneStyle';
 import { MEMBER_COLORS, memberColor } from '@core/teamui/colors';
 import { teammatesGeoJson } from '@core/teamui/positions';
+import { groupLines } from '@core/terrain3d/lineGroups';
+import type { LineGeometry } from '@core/terrain3d/sceneInput';
 import { STATUS_LABEL } from '@core/teamui/system';
 import type { TeamShares } from '@core/teamui/shares';
 import type { MemberRow } from '@core/teamui/view';
 import { useExtensionPrefs } from '@features/extensions/prefs';
+import { useTerrainLineGroup, useTerrainView } from '@features/map/hooks/useTerrainLines';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useSettingsStore } from '@state/settingsStore';
 import { useTeamStore } from '@state/teamStore';
@@ -252,6 +255,25 @@ export function TeamMapLayers({ glyphs }: { glyphs: string | undefined }) {
     ],
     [paper],
   );
+
+  // #735: teammates' tracks on the 3D terrain too.
+  const terrainView = useTerrainView();
+  const shown = installedAt !== 0 && show && view !== null;
+  const terrainLines = useMemo(
+    () =>
+      terrainView === null || !shown
+        ? null
+        : groupLines(
+            'teamTracks',
+            tracks.features.map((f) => ({
+              geometry: f.geometry as LineGeometry,
+              color: (f.properties as { color?: string } | null)?.color ?? null,
+            })),
+            { color: ink, halo: paper, haloOpacity: 0.8, width: 3, haloAdd: 2, order: 0 },
+          ),
+    [terrainView, shown, tracks, ink, paper],
+  );
+  useTerrainLineGroup('teamTracks', terrainLines);
 
   if (installedAt === 0 || !show || view === null) return null;
 

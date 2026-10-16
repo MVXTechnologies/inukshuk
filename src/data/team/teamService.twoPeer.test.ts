@@ -405,3 +405,63 @@ describe('join diagnostics', () => {
     await s.stopMesh();
   });
 });
+
+describe('editing a task over the mesh (#746)', () => {
+  it('notes travel with the task; the creator edits, the assignee may not, delete reaches both', async () => {
+    const hub = new LoopbackMeshHub();
+    const a = await founded(hub);
+    const { b } = await joined(hub, a, 'Julie');
+    await until(() => names(active(a)).includes('Julie:member'), 'A sees Julie');
+    const julie = active(b).me;
+    expect(
+      active(a).createTask({
+        title: 'Check the bridge at km 4',
+        assignee: julie,
+        anchor: { kind: 'point', lat: 47.07, lng: -70.9 },
+        notes: '  Rotten plank on the left side.‮ ',
+      }),
+    ).toBeNull();
+    await until(
+      () => active(b).tasks()[0]?.notes === 'Rotten plank on the left side.',
+      'notes at B',
+    );
+    const t = active(b).tasks()[0]!;
+    expect(t.title).toBe('Check the bridge at km 4');
+    const edit = {
+      title: t.title,
+      notes: t.notes,
+      assignee: t.assignee,
+      due: t.due,
+      anchor: t.anchor,
+    };
+    // The assignee only ticks it done.
+    expect(active(b).updateTask(t.owner, t.id, { ...edit, title: 'Mine now' })).toBe('not-allowed');
+    expect(active(b).setTaskDone(t.owner, t.id, true)).toBeNull();
+    // Nothing changed: no write at all.
+    const version = active(a).dataVersion;
+    expect(active(a).updateTask(t.owner, t.id, edit)).toBeNull();
+    expect(active(a).dataVersion).toBe(version);
+    const due = Date.now() + 3_600_000;
+    expect(
+      active(a).updateTask(t.owner, t.id, {
+        ...edit,
+        title: 'Fix the bridge at km 4',
+        notes: 'Bring the saw.',
+        due,
+        anchor: null,
+      }),
+    ).toBeNull();
+    await until(() => active(b).tasks()[0]?.notes === 'Bring the saw.', 'edit at B');
+    await until(() => active(b).tasks()[0]?.done === true, 'done at B');
+    expect(active(b).tasks()[0]).toMatchObject({
+      title: 'Fix the bridge at km 4',
+      due,
+      anchor: null,
+    });
+    expect(active(a).updateTask(t.owner, 'nope', edit)).toBe('invalid');
+    expect(active(a).deleteTask(t.owner, t.id)).toBeNull();
+    await until(() => active(b).tasks().length === 0, 'delete at B');
+    await active(a).stopMesh();
+    await active(b).stopMesh();
+  });
+});

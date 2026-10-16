@@ -181,13 +181,15 @@ export function TeamMapOverlay({
           <TrailEditBar style={{}} />
         </KeyboardLifted>
       )}
-      {/* The active SOS / gather in the strip area while the bar's column is
-        away (#708): always, even in Draw mode or with a card up (QA 2.6.1). */}
+      {/* The active SOS in the strip area while the bar's column is away
+        (#708): always, even in Draw mode or with a card up (QA 2.6.1). A
+        gather has no band on the map (#743). */}
       {bandPlace === 'strip' && (
         <AlertBands
           here={here}
           onNavigate={onNavigate}
           variant="strip"
+          scope="map"
           style={[
             styles.stripBand,
             { bottom: strip.bottom, right: strip.right },
@@ -199,7 +201,9 @@ export function TeamMapOverlay({
         <SosButton bottom={pending ? fabBottom + 28 + UNDO_SNACK_LIFT : fabBottom} here={here} />
       )}
       {signal && !drawing && <UndoSnack style={snackStyle} />}
-      {panel && <TeamPanel top={panelTop} here={here} focused={screenFocused} />}
+      {panel && (
+        <TeamPanel top={panelTop} here={here} focused={screenFocused} onNavigate={onNavigate} />
+      )}
       {draft !== null && (
         <KeyboardLifted style={cardStyle} testID="team-card-dock">
           <TeamPinComposer onPinned={(owner, id) => select({ kind: 'pin', owner, id })} />
