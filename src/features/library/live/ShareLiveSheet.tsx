@@ -8,7 +8,8 @@ import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text, TextInput, useTheme } from 'react-native-paper';
+import { cleanName } from '@core/teamui/system';
 
 import { LibrarySheet, SheetRow, sheetStyles } from '../selection/LibrarySheet';
 
@@ -17,6 +18,8 @@ export interface ShareLiveChoice {
   canEdit: boolean;
   expiry: InviteExpiryId;
   uses: InviteUses;
+  /** My display name, asked once when none was ever set. */
+  name?: string;
 }
 
 export const DEFAULT_SHARE: ShareLiveChoice = { canEdit: true, expiry: '48h', uses: 5 };
@@ -38,6 +41,7 @@ export function ShareLiveSheet({
   visible,
   focused,
   subtitle,
+  needsName = false,
   busy,
   onStart,
   onClose,
@@ -46,6 +50,8 @@ export function ShareLiveSheet({
   focused: boolean;
   /** "Gaspésie 2026 · and anything added later", or the item's name. */
   subtitle: string;
+  /** No display name was ever set: ask for one (required) before sharing. */
+  needsName?: boolean;
   busy: boolean;
   onStart: (choice: ShareLiveChoice) => void;
   onClose: () => void;
@@ -54,7 +60,10 @@ export function ShareLiveSheet({
   const theme = useTheme();
   const [choice, setChoice] = useState<ShareLiveChoice>(DEFAULT_SHARE);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [name, setName] = useState('');
   const set = (patch: Partial<ShareLiveChoice>) => setChoice((c) => ({ ...c, ...patch }));
+  const named = cleanName(name);
+  const blocked = busy || (needsName && named === null);
   return (
     <LibrarySheet
       visible={visible}
@@ -64,6 +73,19 @@ export function ShareLiveSheet({
       onClose={onClose}
       testID="library-share-live-sheet"
     >
+      {needsName && (
+        <View style={styles.name}>
+          <TextInput
+            mode="outlined"
+            label="Your name"
+            value={name}
+            onChangeText={setName}
+            maxLength={40}
+            returnKeyType="done"
+            testID="share-live-name"
+          />
+        </View>
+      )}
       <Text style={[styles.label, { color: t.inkMuted }]}>PEOPLE YOU INVITE CAN</Text>
       <View style={[styles.seg, { borderColor: t.outline }]} accessibilityRole="radiogroup">
         {[
@@ -122,15 +144,16 @@ export function ShareLiveSheet({
       )}
       <Pressable
         onPress={() => {
-          if (!busy) onStart(choice);
+          if (blocked) return;
+          onStart(needsName && named !== null ? { ...choice, name: named } : choice);
         }}
         accessibilityRole="button"
-        accessibilityState={{ disabled: busy }}
+        accessibilityState={{ disabled: blocked }}
         testID="share-live-start"
         style={({ pressed }) => [
           styles.start,
           { backgroundColor: theme.colors.primary },
-          (pressed || busy) && styles.pressed,
+          (pressed || blocked) && styles.pressed,
         ]}
       >
         {busy ? (
@@ -215,6 +238,7 @@ const styles = StyleSheet.create({
   },
   segLabel: { fontSize: 14, fontWeight: '700', flexShrink: 1 },
   options: { gap: space.sm, paddingHorizontal: 20, paddingBottom: space.xs },
+  name: { marginHorizontal: 20, marginTop: space.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
   chip: {
     minHeight: 36,

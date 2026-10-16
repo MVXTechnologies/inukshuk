@@ -17,10 +17,10 @@ import { LeaveDialog, SharedFolderSheet, StopDialog } from './SharedFolderSheet'
 import { ShareLiveSheet, type ShareLiveChoice } from './ShareLiveSheet';
 import { refreshLive, rootShare, rowNoteOf, useLiveFolders } from './useLive';
 
-/** My name in a new shared folder: the one I last used in a group, else "Me". */
-function myName(): string {
+/** My name in a new shared folder: the one I last used in a group (none: the panel asks once). */
+function knownName(): string | undefined {
   const records = appTeamService()?.host.allRecords ?? [];
-  return records.find((r) => r.myName)?.myName ?? 'Me';
+  return records.find((r) => r.myName)?.myName;
 }
 
 export function useShareLive(args: {
@@ -79,7 +79,9 @@ export function useShareLive(args: {
     if (bridge === null || target === null) return;
     setBusy(true);
     try {
-      const options = { myName: myName() };
+      const myName = choice.name ?? knownName();
+      if (myName === undefined) return;
+      const options = { myName };
       const r =
         target.kind === 'folder'
           ? await bridge.shareFolder(target.id, options)
@@ -117,6 +119,7 @@ export function useShareLive(args: {
         visible={target !== null}
         focused={args.focused}
         subtitle={subtitleOf(target)}
+        needsName={target !== null && knownName() === undefined}
         busy={busy}
         onStart={(c) => void start(c)}
         onClose={() => {

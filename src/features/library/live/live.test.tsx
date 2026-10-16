@@ -89,6 +89,52 @@ describe.each(THEMES)('Share live screens (%s)', (_name, theme) => {
     expect(onStart).toHaveBeenLastCalledWith({ canEdit: false, expiry: '7d', uses: 1 });
   });
 
+  it('with no display name ever set, asks for one (required) before sharing', async () => {
+    const onStart = jest.fn();
+    await show(
+      <ShareLiveSheet
+        visible
+        focused
+        subtitle="Gaspésie 2026"
+        needsName
+        busy={false}
+        onStart={onStart}
+        onClose={jest.fn()}
+      />,
+      theme,
+    );
+    const field = screen.getByTestId('share-live-name');
+    expect(field.props.value).toBe('');
+    await fireEvent.press(screen.getByTestId('share-live-start'));
+    expect(onStart).not.toHaveBeenCalled();
+    await fireEvent.changeText(field, '   ');
+    await fireEvent.press(screen.getByTestId('share-live-start'));
+    expect(onStart).not.toHaveBeenCalled();
+    await fireEvent.changeText(field, ' Marc ');
+    await fireEvent.press(screen.getByTestId('share-live-start'));
+    expect(onStart).toHaveBeenLastCalledWith({
+      canEdit: true,
+      expiry: '48h',
+      uses: 5,
+      name: 'Marc',
+    });
+  });
+
+  it('with a name already set, does not ask', async () => {
+    await show(
+      <ShareLiveSheet
+        visible
+        focused
+        subtitle="Gaspésie 2026"
+        busy={false}
+        onStart={jest.fn()}
+        onClose={jest.fn()}
+      />,
+      theme,
+    );
+    expect(screen.queryByTestId('share-live-name')).toBeNull();
+  });
+
   it("the folder's own sheet: Stop sharing for its owner, Leave for others", async () => {
     const onStop = jest.fn();
     const onLeave = jest.fn();
