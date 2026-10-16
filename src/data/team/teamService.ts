@@ -1,36 +1,31 @@
 /**
- * Team mode on this phone (#589): the device identity, the teams it is in,
- * the one team whose session runs, and a join in progress. The UI talks to
- * this through `@state/teamStore`; the two-peer tests drive two of these over
- * the loopback hub.
+ * Team mode on this phone (#589), as the screens see it: the teams it is in,
+ * the one the screens show (the "active" team), and a join in progress. The
+ * UI talks to this through `@state/teamStore`; the two-peer tests drive two
+ * of these over the loopback hub.
  *
- * v1 runs one team session at a time (the "active" team): its mesh is the
- * only user of the transport. Switching teams stops one mesh and starts the
- * other.
+ * Since 2.7.0 (G5) this is a façade over the {@link GroupHost}, which keeps
+ * every team loaded and its links carrying every team two phones share. The
+ * active team is a UI concept here: its alerts, drawing alerts and receipts
+ * reach the screens, and the LAN advertises its tag while sync is on
+ * (`TeamSession.startMesh`). Switching teams stops the LAN and the screens
+ * start it again for the new one, as in 2.6.
  */
-import { toB64u, fromB64uLen } from '@core/team/bytes';
-import { createTeam } from '@core/team/actions';
-import { generateDeviceKeys, KEY_BYTES, type DeviceKeys, type TeamCrypto } from '@core/team/crypto';
 import type { InviteToken } from '@core/team/invite';
 import type { TeamAlert } from '@core/teamui/alerts';
-import { cleanName, nameText, SYS_PROFILE, systemMessage } from '@core/teamui/system';
+import { cleanName } from '@core/teamui/system';
 
 import { addBreadcrumb } from '@lib/errorReporting';
 
-import type { MeshTransport } from './meshTransport';
-import { DEFAULT_TEAM_PREFS, type TeamDisk, type TeamRecord } from './teamDisk';
-import { JoinAttempt } from './teamJoin';
-import type { SessionDrawAlert } from './teamDraw';
-import { TeamSession, type ActionError } from './teamSession';
+import { GroupHost, type HostDeps } from '@data/sync/groupHost';
 
-export interface ServiceDeps {
-  c: TeamCrypto;
-  disk: TeamDisk;
-  transport: MeshTransport | null;
-  now?: () => number;
-  /** Re-sync period of open sessions (ms); 0 when tests tick by hand. */
-  tickMs?: number;
-}
+import type { MeshTransport } from './meshTransport';
+import type { TeamRecord } from './teamDisk';
+import type { JoinAttempt } from './teamJoin';
+import type { SessionDrawAlert } from './teamDraw';
+import type { ActionError, TeamSession } from './teamSession';
+
+export type ServiceDeps = HostDeps;
 
 export type ServiceListener = () => void;
 export type AlertListener = (alert: TeamAlert, teamId: string) => void;
@@ -40,20 +35,32 @@ export type DrawAlertListener = (alert: SessionDrawAlert, teamId: string) => voi
 export const FIRST_LINK_WATCH_MS = 30_000;
 
 export class TeamService {
-  private keys: DeviceKeys | null = null;
-  private records: TeamRecord[] = [];
-  private session: TeamSession | null = null;
-  private joining: JoinAttempt | null = null;
-  private joinName = '';
+  /** Every group on this phone and the links between phones. */
+  readonly host: GroupHost;
+  private activeId: string | null = null;
   private readonly listeners = new Set<ServiceListener>();
   private readonly alertListeners = new Set<AlertListener>();
   private readonly drawListeners = new Set<ServiceListener>();
   private readonly drawAlertListeners = new Set<DrawAlertListener>();
-  private loaded: Promise<void> | null = null;
   readonly now: () => number;
 
   constructor(private readonly deps: ServiceDeps) {
-    this.now = deps.now ?? Date.now;
+    this.host = new GroupHost(deps, {
+      onChange: () => this.emit(),
+      onAlert: (alert, teamId) => {
+        if (teamId !== this.activeId) return;
+        for (const fn of [...this.alertListeners]) fn(alert, teamId);
+      },
+      onDraw: (teamId) => {
+        if (teamId === this.activeId) this.emitDraw();
+      },
+      onDrawAlert: (alert, teamId) => {
+        if (teamId !== this.activeId) return;
+        for (const fn of [...this.drawAlertListeners]) fn(alert, teamId);
+      },
+      foreground: (teamId) => teamId === this.activeId,
+    });
+    this.now = this.host.now;
   }
 
   // ── Events ───────────────────────────────────────────────────────────────
@@ -80,7 +87,7 @@ export class TeamService {
     return () => this.drawAlertListeners.delete(fn);
   }
 
-  private emitDraw = (): void => {
+  private emitDraw(): void {
     for (const fn of [...this.drawListeners]) {
       try {
         fn();
@@ -88,9 +95,9 @@ export class TeamService {
         // A UI listener's failure must not break the sync plumbing.
       }
     }
-  };
+  }
 
-  private emit = (): void => {
+  private emit(): void {
     for (const fn of [...this.listeners]) {
       try {
         fn();
@@ -98,27 +105,23 @@ export class TeamService {
         // A UI listener's failure must not break the sync plumbing.
       }
     }
-  };
+  }
 
-  // ── Identity and the team list ───────────────────────────────────────────
+  // ── The team list ────────────────────────────────────────────────────────
 
-  /** Load the team list (the device keys load lazily, on first use). */
+  /** Load the team list and every team (the device keys load on first use). */
   load(): Promise<void> {
-    this.loaded ??= (async () => {
-      this.records = await this.deps.disk.loadTeams();
-      this.emit();
-    })();
-    return this.loaded;
+    return this.host.load();
   }
 
   get teams(): readonly TeamRecord[] {
-    return this.records;
+    return this.host.teams;
   }
 
   /** The team to reopen at launch: the one opened last. */
   get lastOpened(): TeamRecord | null {
     let best: TeamRecord | null = null;
-    for (const r of this.records) {
+    for (const r of this.host.teams) {
       if (best === null || (r.lastOpenedAt ?? r.joinedAt) > (best.lastOpenedAt ?? best.joinedAt))
         best = r;
     }
@@ -126,81 +129,16 @@ export class TeamService {
   }
 
   get active(): TeamSession | null {
-    return this.session;
+    return this.activeId === null ? null : (this.host.open(this.activeId) ?? null);
   }
 
   get join(): JoinAttempt | null {
-    return this.joining;
-  }
-
-  /** This device's keys, created on first team use and kept in the secure store. */
-  private async deviceKeys(): Promise<DeviceKeys> {
-    if (this.keys) return this.keys;
-    const c = this.deps.c;
-    const saved = await this.deps.disk.loadDevice();
-    const sign = saved ? fromB64uLen(saved.sign, KEY_BYTES) : undefined;
-    const box = saved ? fromB64uLen(saved.box, KEY_BYTES) : undefined;
-    if (sign && box) {
-      this.keys = {
-        signSecret: sign,
-        signPublic: c.ed25519.publicKey(sign),
-        boxSecret: box,
-        boxPublic: c.x25519.publicKey(box),
-      };
-      return this.keys;
-    }
-    const fresh = generateDeviceKeys(c);
-    const ok = await this.deps.disk.saveDevice({
-      v: 1,
-      sign: toB64u(fresh.signSecret),
-      box: toB64u(fresh.boxSecret),
-    });
-    // Without a key that survives a relaunch, every team would fork on restart.
-    if (!ok) throw new Error('Could not save the team key in the secure store');
-    this.keys = fresh;
-    return fresh;
-  }
-
-  private saveRecords(): void {
-    this.deps.disk.saveTeams(this.records);
-  }
-
-  private putRecord(record: TeamRecord): void {
-    const i = this.records.findIndex((r) => r.teamId === record.teamId);
-    if (i >= 0) this.records[i] = record;
-    else this.records.push(record);
-    this.records = [...this.records];
-    this.saveRecords();
-  }
-
-  private sessionDeps() {
-    return {
-      c: this.deps.c,
-      disk: this.deps.disk,
-      transport: this.deps.transport,
-      now: this.now,
-      newId: () => toB64u(this.deps.c.randomBytes(9)),
-      onChange: this.emit,
-      onAlert: (alert: TeamAlert) => {
-        const teamId = this.session?.teamId ?? '';
-        for (const fn of [...this.alertListeners]) fn(alert, teamId);
-      },
-      onDraw: this.emitDraw,
-      onDrawAlert: (alert: SessionDrawAlert) => {
-        const teamId = this.session?.teamId ?? '';
-        for (const fn of [...this.drawAlertListeners]) fn(alert, teamId);
-      },
-      ...(this.deps.tickMs !== undefined ? { tickMs: this.deps.tickMs } : {}),
-    };
+    return this.host.join;
   }
 
   /** The network this phone is on (hotspot fallback hints); null without a mesh. */
   networkInfo(): ReturnType<MeshTransport['networkInfo']> | null {
-    try {
-      return this.deps.transport?.networkInfo() ?? null;
-    } catch {
-      return null;
-    }
+    return this.host.networkInfo();
   }
 
   // ── Teams ────────────────────────────────────────────────────────────────
@@ -211,143 +149,82 @@ export class TeamService {
     myName: string;
     lifetimeMs: number;
   }): Promise<TeamSession> {
-    await this.load();
-    const name = cleanName(options.name);
-    const myName = cleanName(options.myName);
-    if (name === null || myName === null) throw new Error('A team and a display name are needed');
-    const keys = await this.deviceKeys();
-    const now = this.now();
-    const team = createTeam(this.deps.c, keys, now, { name, lifetimeMs: options.lifetimeMs });
-    // Genesis to disk before anything else (the chain starts here).
-    this.deps.disk.appendOps(team.teamId, [team.genesis.env]);
-    this.deps.disk.saveCursor(team.teamId, team.writer.cursor);
-    const record: TeamRecord = {
-      teamId: team.teamId,
-      name,
-      myName,
-      joinedAt: now,
-      prefs: { ...DEFAULT_TEAM_PREFS },
-      lastReadAt: 0,
-    };
-    this.putRecord(record);
-    const session = await this.activate(team.teamId);
-    session.replica.addKey(team.key);
-    session.setMyName(myName);
+    const created = await this.host.create(options);
+    const session = await this.activate(created.session.teamId);
+    session.replica.addKey(created.key);
+    session.setMyName(options.myName);
     session.republishIfNewKey();
     return session;
   }
 
-  /** Open a team and make it the active one (stops the previous team's mesh). */
+  /** Show a team (stops the LAN advertising the previous one). */
   async activate(teamId: string): Promise<TeamSession> {
     await this.load();
-    if (this.session?.teamId === teamId) return this.session;
-    const record = this.records.find((r) => r.teamId === teamId);
-    if (record === undefined) throw new Error('Unknown team');
+    const current = this.active;
+    if (current?.teamId === teamId) return current;
+    if (!this.host.teams.some((r) => r.teamId === teamId)) throw new Error('Unknown team');
+    const session = await this.host.ensure(teamId);
     await this.deactivate();
-    const session = await TeamSession.open(this.sessionDeps(), record, await this.deviceKeys());
-    session.onRecordChange = (r) => this.putRecord(r);
-    this.session = session;
+    this.activeId = teamId;
     session.updateRecord({ lastOpenedAt: this.now() });
-    // A team opened or just joined: advertise live drawing (#683) if not yet.
+    // A team opened or just joined: advertise live drawing (#683) and the link mux if not yet.
     session.draw.advertise();
-    if (record.name !== session.view().name) session.updateRecord({ name: session.view().name });
+    if (session.record.name !== session.view().name) {
+      session.updateRecord({ name: session.view().name });
+    }
     this.emit();
     return session;
   }
 
   async deactivate(): Promise<void> {
-    const s = this.session;
-    this.session = null;
+    const s = this.active;
+    this.activeId = null;
     await s?.stopMesh();
     this.emit();
   }
 
   /**
    * Delete a team from this phone: tell the admins (they remove me and rotate
-   * the key), stop its mesh, delete its log. What teammates already have stays
+   * the key), stop its sync, delete its log. What teammates already have stays
    * on their phones; nothing can be wiped remotely.
    */
   async leave(teamId: string): Promise<void> {
     await this.load();
-    if (this.session?.teamId === teamId) {
-      this.session.announceLeave();
+    const s = this.active;
+    if (s?.teamId === teamId) {
+      s.announceLeave();
       // Give the goodbye a moment to reach whoever is connected.
-      this.session.tick();
+      s.tick();
       await this.deactivate();
     }
-    this.deps.disk.deleteTeam(teamId);
-    this.records = this.records.filter((r) => r.teamId !== teamId);
-    this.saveRecords();
+    await this.host.remove(teamId);
     this.emit();
   }
 
   // ── Joining ──────────────────────────────────────────────────────────────
 
-  /** Start joining with an invite; the active team's mesh stops meanwhile. */
+  /** Start joining with an invite; the active team's sync stops meanwhile. */
   async startJoin(token: InviteToken, myName: string): Promise<JoinAttempt> {
     await this.load();
-    const name = cleanName(myName);
-    if (name === null) throw new Error('A display name is needed');
-    if (this.records.some((r) => r.teamId === token.teamId)) throw new Error('already-member');
-    await this.cancelJoin();
+    if (cleanName(myName) === null) throw new Error('A display name is needed');
+    if (this.host.teams.some((r) => r.teamId === token.teamId)) throw new Error('already-member');
+    await this.host.cancelJoin();
     await this.deactivate();
-    const attempt = new JoinAttempt(
-      {
-        c: this.deps.c,
-        disk: this.deps.disk,
-        transport: this.deps.transport,
-        now: this.now,
-        onChange: this.emit,
-        ...(this.deps.tickMs !== undefined ? { tickMs: this.deps.tickMs } : {}),
-      },
-      token,
-      await this.deviceKeys(),
-    );
-    this.joining = attempt;
-    this.joinName = name;
-    await attempt.start();
+    const attempt = await this.host.startJoin(token, myName, this.deps.tickMs);
     this.emit();
     return attempt;
   }
 
   /** Abandon a join (codes didn't match, or the user gave up): its data is deleted. */
-  async cancelJoin(): Promise<void> {
-    const attempt = this.joining;
-    if (attempt === null) return;
-    this.joining = null;
-    await attempt.stop();
-    if (!this.records.some((r) => r.teamId === attempt.teamId)) {
-      this.deps.disk.deleteTeam(attempt.teamId);
-    }
-    this.emit();
+  cancelJoin(): Promise<void> {
+    return this.host.cancelJoin();
   }
 
   /** The codes matched: keep the team, post my name, make it active. */
   async confirmJoin(): Promise<TeamSession | ActionError> {
-    const attempt = this.joining;
-    if (attempt === null || !attempt.admitted) return 'not-member';
-    // Write my name through the join's store (same log, same cursor on disk).
-    attempt.store.track(() => ({
-      result: attempt.replica.write(
-        this.now(),
-        'msg',
-        systemMessage(toB64u(this.deps.c.randomBytes(9)), SYS_PROFILE, nameText(this.joinName)),
-      ),
-      accepted: [],
-    }));
-    this.joining = null;
-    await attempt.stop();
-    const now = this.now();
-    this.putRecord({
-      teamId: attempt.teamId,
-      name: 'Team',
-      myName: this.joinName,
-      joinedAt: now,
-      prefs: { ...DEFAULT_TEAM_PREFS },
-      lastReadAt: 0,
-      ...(attempt.replica.state.sendKeyId ? { profileKeyId: attempt.replica.state.sendKeyId } : {}),
-    });
-    const session = await this.activate(attempt.teamId);
+    const joined = await this.host.confirmJoin();
+    if (typeof joined === 'string') return joined;
+    const session = await this.activate(joined.teamId);
     addBreadcrumb('team join: confirmed, team session opened');
     session.watchFirstLinkMs = FIRST_LINK_WATCH_MS;
     this.emit();

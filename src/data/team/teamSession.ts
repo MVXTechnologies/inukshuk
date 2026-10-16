@@ -1,12 +1,17 @@
 /**
  * One team on this phone, open (#589): the replica restored from disk, every
- * team action, and — while the mesh runs — one sync session per connected
- * teammate. Platform-free apart from the transport it is handed, so the
- * two-peer tests run it over the loopback hub.
+ * team action, and its sync sessions. Since 2.7.0 (G5) every team the phone
+ * is in is open at once inside the `GroupHost`, and the connections belong to
+ * the host's links (`@data/sync/linkHost`), which carry each team as a
+ * channel; this class is the team domain over one group: it reacts to its
+ * sessions' events and pushes its writes through the host
+ * ({@link SessionNet}). Platform-free, so the two-peer tests run it over the
+ * loopback hub.
  *
  * Every write goes replica → disk (`PersistingStore`) → peers, in that order.
  */
-import { lanDiscoveryTag } from '@core/mesh/tag';
+import type { PathKind } from '@core/group/path';
+import type { MeshNetworkInfo } from '@core/mesh/hotspot';
 import { addBreadcrumb, reportError } from '@lib/errorReporting';
 import { createInvite, rotateBody } from '@core/team/actions';
 import type { Json } from '@core/team/canonical';
@@ -17,7 +22,7 @@ import { activeMembers, cutFor } from '@core/team/membership';
 import { sosCoolingDown } from '@core/team/records';
 import { TeamReplica } from '@core/team/replica';
 import type { Audience, GroupLink, Priority, Role } from '@core/team/roles';
-import { SyncSession, type SessionEvent } from '@core/team/sync';
+import type { SessionEvent, SessionOptions, SyncSession } from '@core/team/sync';
 import { alertContext, alertFor, TaskAlertThrottle, type TeamAlert } from '@core/teamui/alerts';
 import { commentsByPhoto, type Said } from '@core/teamui/mapMarks';
 import { teamRally, teamSos, type TeamRally, type TeamSos } from '@core/teamui/field';
@@ -80,18 +85,58 @@ import {
 import { buildTeamView, TEAM_THREAD, unreadCount, type TeamView } from '@core/teamui/view';
 import { isPrivateIPv4, parseIPv4 } from '@core/mesh/hotspot';
 
-import { MeshLink, type MeshLinkStatus } from './meshLink';
-import { MeshSessionHost, type FrameStep } from './meshSessions';
-import type { MeshPeer, MeshTransport } from './meshTransport';
+import type { MeshLinkStatus } from './meshLink';
+import type { MeshStats } from './meshTransport';
 import { PersistingStore } from './persistingStore';
 import { onlyPens, SessionDrawing, type SessionDrawAlert } from './teamDraw';
 import type { TeamDisk, TeamRecord } from './teamDisk';
 
+/** A team's session on one connection, as the host's links report it. */
+export interface NetPeer {
+  connId: string;
+  direction: 'in' | 'out';
+  host: string;
+  session: SyncSession;
+}
+
+/**
+ * What a team sees of the phone's links (`GroupHost`, 2.7.0 G5). The LAN
+ * advertises one team's tag at a time (the active one); every link carries
+ * every team the two phones share.
+ */
+export interface SessionNet {
+  /** Run the LAN advertising this team (stops advertising any other). */
+  start(teamId: string): Promise<void>;
+  /** Stop the LAN if it advertises this team. */
+  stop(teamId: string): Promise<void>;
+  /** Whether the LAN runs advertising this team. */
+  running(teamId: string): boolean;
+  status(teamId: string): MeshLinkStatus | null;
+  manualDials(): string[];
+  dial(teamId: string, host: string, port: number): boolean;
+  /** Re-sync every link now. */
+  tick(): void;
+  /** Push this team's ops on its open sessions (except the connection they came from). */
+  push(teamId: string, ops: readonly SignedOp[], except: string | null): void;
+  peers(teamId: string): NetPeer[];
+  /** Hang up on a member's phone. */
+  closeMember(memberId: string, why: string): void;
+  stats(): MeshStats | null;
+  networkInfo(): MeshNetworkInfo | null;
+}
+
 export interface SessionDeps {
   c: TeamCrypto;
   disk: TeamDisk;
-  transport: MeshTransport | null;
+  /** The host's links; null without a mesh in this build. */
+  net: SessionNet | null;
   now: () => number;
+  /**
+   * Whether this team is the one the screens show (the active team). Alerts,
+   * drawing alerts and receipts are for it only, as in 2.6 (other teams sync
+   * in the background without ringing). Default: always.
+   */
+  foreground?: () => boolean;
   /** A fresh short id (messages, entities, groups). */
   newId: () => string;
   /** Something the UI shows changed. */
@@ -102,8 +147,6 @@ export interface SessionDeps {
   onDraw?: () => void;
   /** A teammate's drawing earned a snackbar or a notification (#683). */
   onDrawAlert?: (alert: SessionDrawAlert) => void;
-  /** Re-sync period for open sessions (ms); 0 in tests that tick by hand. */
-  tickMs?: number;
 }
 
 export interface PeerStatus {
@@ -140,8 +183,6 @@ export type ActionError =
   | 'too-large'
   | 'no-change';
 
-const empty = <E>(): FrameStep<E> => ({ send: [], events: [] });
-
 /** Position ops live this long (the protocol caps ephemeral ops at 24 h). */
 export const POSITION_TTL_S = 6 * 3600;
 
@@ -162,8 +203,6 @@ interface PeerMeta {
 
 export class TeamSession {
   readonly store: PersistingStore;
-  private link: MeshLink | null = null;
-  private host: MeshSessionHost<SessionEvent, SyncSession> | null = null;
   private readonly meta = new Map<string, PeerMeta>();
   /** Teammates whose phone stopped taking live strokes (#683, `SessionOptions.liveStrokeMute`). */
   private readonly liveStrokeMute = new Set<string>();
@@ -663,18 +702,15 @@ export class TeamSession {
   }
 
   peers(): PeerStatus[] {
-    if (this.host === null || this.deps.transport === null) return [];
-    let stats: ReturnType<MeshTransport['stats']> | null = null;
-    try {
-      stats = this.deps.transport.stats();
-    } catch {
-      stats = null;
-    }
-    return this.host.peers().map(({ peer, session }) => {
-      const s = stats?.peers.find((p) => p.peerId === peer.peerId);
-      const m = this.meta.get(peer.peerId);
+    const net = this.deps.net;
+    if (net === null || !net.running(this.teamId)) return [];
+    const stats = net.stats();
+    return net.peers(this.teamId).map((peer) => {
+      const session = peer.session;
+      const s = stats?.peers.find((p) => p.peerId === peer.connId);
+      const m = this.meta.get(peer.connId);
       return {
-        peerId: peer.peerId,
+        peerId: peer.connId,
         memberId: session.peer ?? null,
         direction: peer.direction,
         host: peer.host,
@@ -690,11 +726,11 @@ export class TeamSession {
   }
 
   meshStatus(): MeshLinkStatus | null {
-    return this.link?.status() ?? null;
+    return this.deps.net?.status(this.teamId) ?? null;
   }
 
   get meshRunning(): boolean {
-    return this.link !== null;
+    return this.deps.net?.running(this.teamId) ?? false;
   }
 
   /** Recent link events for diagnostics (kinds and reasons only: no ids, names or addresses). */
@@ -718,13 +754,13 @@ export class TeamSession {
     const ms = this.watchFirstLinkMs;
     this.watchFirstLinkMs = 0;
     setTimeout(() => {
-      if (this.link === null) return; // stopped meanwhile (backgrounded): not this case
+      const status = this.meshStatus();
+      if (status === null) return; // stopped meanwhile (backgrounded): not this case
       if (this.peers().some((p) => p.phase === 'open')) return;
-      const status = this.link.status();
       reportError(
         new Error(
           `Team: no teammate link ${Math.round(ms / 1000)} s after joining ` +
-            `(discovered ${status.discovered}, dials ${this.link.manualDials.length}, ` +
+            `(discovered ${status.discovered}, dials ${this.deps.net?.manualDials().length ?? 0}, ` +
             `local network ${status.localNetwork}; ${this.diag.join(' | ')})`,
         ),
         'team-join-reconnect',
@@ -734,79 +770,59 @@ export class TeamSession {
 
   // ── Mesh ─────────────────────────────────────────────────────────────────
 
+  /** Sync on (foreground or recording): the host's LAN advertises this team. */
   async startMesh(): Promise<void> {
-    const transport = this.deps.transport;
-    if (transport === null || this.link !== null) return;
-    const tag = lanDiscoveryTag(this.teamId, (d) => this.deps.c.sha256(d));
-    this.host = new MeshSessionHost<SessionEvent, SyncSession>(
-      transport,
-      {
-        // The mesh links teammates' phones directly (LAN / hotspot): a
-        // first-party transport, so it may carry live strokes (#683).
-        initiate: (peer) => {
-          this.touch(peer, false);
-          return SyncSession.initiate(this.deps.c, this.store, {
-            now: this.deps.now(),
-            carryLiveStrokes: true,
-            liveStrokeMute: this.liveStrokeMute,
-          });
-        },
-        respond: (peer) => {
-          this.touch(peer, false);
-          return SyncSession.respond(this.deps.c, this.store, {
-            carryLiveStrokes: true,
-            liveStrokeMute: this.liveStrokeMute,
-          });
-        },
-      },
-      (peerId, event, session) => this.onSessionEvent(peerId, event, session),
-      { now: this.deps.now, tickMs: this.deps.tickMs ?? 20_000, label: 'team' },
-    );
-    this.host.start();
-    this.link = new MeshLink(transport, {
-      tag,
-      advertise: true,
-      onChange: () => this.changed(),
-      onDiag: (event) => this.note(event),
-    });
+    const net = this.deps.net;
+    if (net === null || net.running(this.teamId)) return;
     this.note('mesh started');
+    const started = net.start(this.teamId);
     if (this.watchFirstLinkMs > 0) this.armFirstLinkWatch();
-    await this.link.start();
+    await started;
     this.changed();
   }
 
   async stopMesh(): Promise<void> {
-    const link = this.link;
-    const host = this.host;
-    this.link = null;
-    this.host = null;
-    host?.stop('bye');
+    await this.deps.net?.stop(this.teamId);
     this.meta.clear();
-    await link?.stop();
     this.changed();
   }
 
   /** Hotspot fallback: dial a typed address (retries until the mesh stops). */
   dial(host: string, port: number): boolean {
-    return this.link?.dial(host, port) != null;
+    return this.deps.net?.dial(this.teamId, host, port) ?? false;
   }
 
   /** Run the periodic sync now (tests, and after returning to the foreground). */
   tick(): void {
-    this.host?.forEachOpen((s) => s.tick(this.deps.now()));
+    this.deps.net?.tick();
   }
 
-  private touch(peer: MeshPeer, joining: boolean): void {
+  // ── The link layer's view of this group (`GroupEndpoint`) ───────────────
+
+  /** Session options this team adds: live strokes only on the LAN (first party, #683). */
+  sessionOptions(path: PathKind): Partial<SessionOptions> {
+    return path === 'nearby'
+      ? { carryLiveStrokes: true, liveStrokeMute: this.liveStrokeMute }
+      : { liveStrokeMute: this.liveStrokeMute };
+  }
+
+  /** A session of this team started on a connection. */
+  attached(connKey: string): void {
     const now = this.deps.now();
-    const prev = this.meta.get(peer.peerId);
-    this.meta.set(peer.peerId, {
+    const prev = this.meta.get(connKey);
+    this.meta.set(connKey, {
       connectedAt: prev?.connectedAt ?? now,
       lastFrameAt: now,
-      joining: joining || (prev?.joining ?? false),
+      joining: prev?.joining ?? false,
     });
   }
 
-  private onSessionEvent(peerId: string, event: SessionEvent, session: SyncSession): void {
+  decode(op: SignedOp): Json | undefined {
+    return this.replica.decode(op);
+  }
+
+  /** One of this team's sessions changed (the host's links route it here). */
+  onSessionEvent(peerId: string, event: SessionEvent, session: SyncSession): void {
     const meta = this.meta.get(peerId);
     if (meta) meta.lastFrameAt = this.deps.now();
     switch (event.type) {
@@ -823,7 +839,6 @@ export class TeamSession {
           });
           this.joinNotices.splice(5);
         }
-        this.dropDuplicate(peerId, session);
         this.changed();
         return;
       }
@@ -854,46 +869,23 @@ export class TeamSession {
     }
   }
 
-  /**
-   * Two phones that discover each other both dial: keep exactly one link per
-   * pair. Both sides prefer the link the lower member id initiated, so they
-   * agree; among links of the same kind the oldest stays. A joiner's session
-   * is never deduplicated (it may arrive twice — QR hint and discovery — and
-   * closing one mid-admission would only slow the join).
-   */
-  private dropDuplicate(peerId: string, session: SyncSession): void {
-    const host = this.host;
-    const other = session.peer;
-    if (host === null || other === undefined || this.meta.get(peerId)?.joining) return;
-    const twins = host
-      .peers()
-      .filter(
-        (p) =>
-          p.session.peer === other &&
-          p.session.phase === 'open' &&
-          !(this.meta.get(p.peer.peerId)?.joining ?? false),
-      );
-    if (twins.length < 2) return;
-    const lowerIsMe = this.me < other;
-    const preferred = (t: (typeof twins)[number]) =>
-      (t.session.side === 'initiator') === lowerIsMe ? 0 : 1;
-    const age = (t: (typeof twins)[number]) => this.meta.get(t.peer.peerId)?.connectedAt ?? 0;
-    const ranked = [...twins].sort(
-      (a, b) =>
-        preferred(a) - preferred(b) || age(a) - age(b) || (a.peer.peerId < b.peer.peerId ? -1 : 1),
-    );
-    for (const t of ranked.slice(1)) host.close(t.peer.peerId, 'duplicate');
+  private gossip(ops: readonly SignedOp[], except: string | null): void {
+    if (ops.length === 0) return;
+    this.deps.net?.push(this.teamId, ops, except);
   }
 
-  private gossip(ops: readonly SignedOp[], except: string | null): void {
-    if (ops.length === 0 || this.host === null) return;
-    const now = this.deps.now();
-    this.host.forEachOpen((s, peer) => (peer.peerId === except ? empty() : s.push(ops, now)));
+  /** The screens show this team (alerts and receipts are for it). */
+  private get foreground(): boolean {
+    return this.deps.foreground?.() ?? true;
   }
 
   private afterStored(ops: readonly SignedOp[], from: string | null): void {
     if (ops.length === 0) return;
-    if (from !== null && ops.some((op) => op.env.t === 'pen' || op.env.t === 'e.set')) {
+    if (
+      from !== null &&
+      this.foreground &&
+      ops.some((op) => op.env.t === 'pen' || op.env.t === 'e.set')
+    ) {
       for (const a of this.draw.admit(ops)) this.deps.onDrawAlert?.(a);
     }
     if (onlyPens(ops)) {
@@ -905,7 +897,11 @@ export class TeamSession {
     this.dirty = true;
     this.gossip(ops, from);
     if (ops.some((op) => op.env.t === 'pen' || op.env.t === 'e.set')) this.deps.onDraw?.();
-    if (from !== null && ops.some((op) => op.env.t === 'msg' || op.env.t === 'e.set')) {
+    if (
+      from !== null &&
+      this.foreground &&
+      ops.some((op) => op.env.t === 'msg' || op.env.t === 'e.set')
+    ) {
       const now = this.deps.now();
       // The data first: reading it folds anything the replica deferred (an
       // out-of-order batch soon after a refold), which replaces its state. A
@@ -924,7 +920,9 @@ export class TeamSession {
       }
     }
     // A teammate's SOS or rally point just synced: say so (#708).
-    if (from !== null && ops.some((op) => op.env.t === 'e.set')) this.sendOwedReceipts();
+    if (from !== null && this.foreground && ops.some((op) => op.env.t === 'e.set')) {
+      this.sendOwedReceipts();
+    }
     this.changed();
     // A new key (a rotation, or our first key after a join): re-post what the
     // members admitted later can't read otherwise.
@@ -1305,9 +1303,7 @@ export class TeamSession {
     if (!this.accepted(id)) return 'not-allowed';
     const err = this.rotateKey();
     // Their phone may still be connected: it got the removal; now hang up.
-    for (const p of this.host?.peers() ?? []) {
-      if (p.session.peer === memberId) this.host?.close(p.peer.peerId, 'removed');
-    }
+    this.deps.net?.closeMember(memberId, 'removed');
     return err;
   }
 
@@ -1388,11 +1384,11 @@ export class TeamSession {
 
   /** This phone's private LAN address and listening port, for the QR's hint. */
   private netHint(): NetHint | undefined {
-    const transport = this.deps.transport;
-    const port = this.link?.status().port;
-    if (transport === null || port == null) return undefined;
+    const port = this.meshStatus()?.port;
+    const info = this.deps.net?.networkInfo() ?? null;
+    if (info === null || port == null) return undefined;
     try {
-      for (const i of transport.networkInfo().interfaces) {
+      for (const i of info.interfaces) {
         const v = parseIPv4(i.address);
         const host = ipv4Tuple(i.address);
         if (v !== null && host !== null && isPrivateIPv4(v)) return { host, port };

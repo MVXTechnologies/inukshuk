@@ -269,6 +269,13 @@ kind: 0 lk1 hello · 1 ch-open · 2 ch-ok · 3 ch-no · 4 data · 5 ch-close · 
 
 WebRTC and room connections are 2.7+ only, so they speak mux from the first frame.
 
+_As built (G5, `src/data/sync/linkHost.ts`):_
+
+- The dialling side retries `up` after every event batch on a raw link, not only at open: a peer's `lnk` claim that syncs in after the session opened still upgrades that link.
+- Only the **dialling side** of a link opens channels (on `ready`, on every tick, and when a group is added), and only for groups whose log names the peer an active member; a refused group is not asked again on that link. So two opens of one group never cross, and an honest phone never reaches the ten-`ch-no` probing strike. The answering side never opens one (G10's "Joining…" pickup must dial, or this rule must change).
+- One link per pair of phones, deduplicated by link identity with 2.6's rule (the lower member id's dial wins, then the oldest; a joiner's link never).
+- Other carriers join through `LinkHost.attachCarrier(carrier, identityOf)`: mux from the first frame, refused when the rendezvous cannot name the member, closed when the first session authenticates someone else. They outlive the LAN's `stop`.
+
 **What 2.7.0 does _not_ do on the LAN:** advertise several groups at once.
 
 - The phone advertises the tag of its **active team**, as today.
@@ -337,6 +344,8 @@ There is one compat hazard. A 2.6.x phone that scans a _folder_ invite would joi
 - A replica is cheap when idle. Its data view is built only when a feature subscribes or a channel opens.
 - **The active team remains a UI concept** (which team the map shows and whose position I share). It is no longer a transport concept.
 - **Background (honest):** in 2.7.0, background sync covers what does today (the active team while recording or sharing position). Other groups sync while the app is in the foreground. More is open question Q3.
+
+_As built (G5):_ `GroupHost` keeps one `TeamSession` per group (the replica behind its write-ahead store, plus the team domain), all opened at launch, and the links live in `LinkHost` (`src/data/sync/linkHost.ts`) over `MeshCarrier` (`src/data/sync/carriers/meshCarrier.ts`). `TeamService` is a façade: the active team is the one whose alerts, drawing alerts and receipts reach the screens and whose tag the LAN advertises; other groups replicate silently (no alert, no receipt) until shown. The `Carrier` types live in `@core/group/link` (G2), not a `carrier.ts`. The record gains no `app`/`parent` yet: `groups()` reads `gmeta.app` from the replica.
 
 ### 3.4 A folder shared with a team: sub-group or own group?
 
@@ -662,6 +671,7 @@ export interface GroupHandle {
   - These are announced by **capability fields** on the existing `cap` record. `validCapFields` already accepts any non-negative integers. 2.7 writes `{pen:1, v:1, x, lnk:1, rtc:1, blob:1}`, where each value is that feature's protocol version.
   - `capExpiry` is generalised to read a per-capability version (today it hard-codes `v == PEN_PROTOCOL`), keeping the pen semantics.
     - _As built (G1):_ `CAP_SPECS` (`src/core/teamdraw/caps.ts`) names each capability's spoken versions, where its version lives (`pen` keeps `pen: 1` + `v`; every later one writes its version as the flag's value) and whether the claim is also bounded by the flag's own stamp (the rollback rule; true for `rc`, `lnk`, `rtc`, `blob`). A name not in the table is never held. `lnk`/`rtc`/`blob` are read, not advertised (`capBody` is unchanged until G5).
+    - _As built (G5):_ a 2.7 phone writes `advertisedCapBody` = the 2.6 body plus `lnk: 1`, renewed at once over a 2.6 claim (`needsAdvertisedCap`). `capBody` stays the 2.6 body (fixtures and golden logs model older phones with it). `rtc` waits for G6, `blob` for G11.
   - The rollback rule stays: claims expire after 7 days and are renewed on open.
 - **Link version:** `lk1.ver` = 1, with caps listed in the hello. A link with an unknown higher version falls back to the highest common version, or closes without a strike, as the mesh preamble does.
 - **Room protocol:** `/v1/` in the path.
