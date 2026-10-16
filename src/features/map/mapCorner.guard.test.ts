@@ -200,3 +200,14 @@ it('the ✕ on a trail selection releases the camera snapshot instead of gliding
   expect(map).toMatch(/const releaseCameraOnDeselect = selectionCamera\.forget;/);
   expect(map).not.toMatch(/selectionCamera\.restore\b/);
 });
+
+// #741: the recording's photo circles answer a tap like a saved trail's: the
+// photo card, through the map's tap priority (pins and the chip first).
+it('the live recording photos open the photo card and ring the tapped one', () => {
+  const map = readFileSync(join(__dirname, 'MapScreen.tsx'), 'utf8');
+  const live = /<TrailPhotoLayers\s+id="rec-live"[^]*?\/>/.exec(map)?.[0] ?? '';
+  expect(live).toContain('onPhotoPress={openRecordingPhoto}');
+  expect(live).toContain('deferPress={deferPhotoPress}');
+  expect(live).toContain('selectedId={recCardPhotoId}');
+  expect(map).toMatch(/show\(\{ kind: 'recording', photoId: first \}\)/);
+});

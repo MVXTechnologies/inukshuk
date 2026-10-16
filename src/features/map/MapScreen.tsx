@@ -1221,6 +1221,13 @@ export function MapScreen() {
     () => (recPhotoSession === null ? [] : pendingAsTrackPhotos(recPhotos, recPhotoSession)),
     [recPhotos, recPhotoSession],
   );
+  const recCardPhotoId = usePhotoCard((s) =>
+    s.target?.kind === 'recording' ? s.target.photoId : null,
+  );
+  const openRecordingPhoto = useCallback((ids: string[]) => {
+    const first = ids[0];
+    if (first) usePhotoCard.getState().show({ kind: 'recording', photoId: first });
+  }, []);
 
   // #90 — location lost mid-recording: auto-pause, but only on a SUSTAINED
   // loss (debounced in the hook; transient watch re-subscription and the
@@ -3399,8 +3406,18 @@ export function MapScreen() {
                 {LIVE_TRAIL_LAYERS}
               </GeoJSONSource>
             )}
+            {/* The recording's photos (#741): the same tap → photo card as
+              a saved trail's, the tapped one ringed while its card is up. */}
             {liveTrailPhotos.length > 0 && (
-              <TrailPhotoLayers id="rec-live" photos={liveTrailPhotos} />
+              <TrailPhotoLayers
+                id="rec-live"
+                photos={liveTrailPhotos}
+                selectedId={recCardPhotoId}
+                onPhotoPress={openRecordingPhoto}
+                deferPress={deferPhotoPress}
+                getZoom={getMapZoom}
+                zoomTo={zoomMapTo}
+              />
             )}
 
             {/* Waypoint pins (saved standalone ones always; live ones while a
