@@ -15,6 +15,7 @@ import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-han
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Trail3DGLScreen } from './Trail3DGLScreen';
+import { TRAIL_ACTION_BAR_H } from './trailView/TrailActionBar';
 import { clearOutingAnalysisCache } from './trailView/useOutingAnalysis';
 
 /**
@@ -326,6 +327,21 @@ it('follows the trail from the bar (#678): drawn on the map, compass guiding', a
   // One navigation at a time: the destination pin goes.
   expect(useNavigationStore.getState().destination).toBeNull();
   expect(mockNavigate).toHaveBeenCalledWith('/');
+});
+
+// E2E 38868794687 (photos-viewer, photos-review): the tabs scrolled on UNDER
+// the sticky action bar, so a photo card in the Overview strip read as on
+// screen while the bar took the tap — the photo card never opened. The tabs
+// end above the bar; nothing tappable is ever behind it.
+it('ends the tabs above the action bar, so nothing under it reads as on screen', async () => {
+  seed(true);
+  await mount();
+  const tabs = StyleSheet.flatten(screen.getByTestId('trail-tabs').props.style);
+  expect(tabs.marginBottom).toBe(TRAIL_ACTION_BAR_H);
+  const content = StyleSheet.flatten(
+    screen.getByTestId('trail-tab-content').props.contentContainerStyle,
+  );
+  expect(content.paddingBottom).toBeLessThan(TRAIL_ACTION_BAR_H);
 });
 
 // #740 (option 1, pull-down sheet): fold the tabs into a peek — the stats and

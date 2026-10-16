@@ -886,12 +886,25 @@ export function Trail3DGLScreen({ trackId }: Props) {
               </View>
             </View>
           ) : (
-            <Animated.View style={[styles.fill, { transform: [{ translateY: sheetDrag.offset }] }]}>
+            // The tabs end ABOVE the sticky action bar, never under it: content
+            // scrolled behind the bar read as on screen (100 % visible) while
+            // the bar took every tap on it — the photo strip's cards sat right
+            // there once the grabber row pushed the tabs down (E2E 38868794687).
+            <Animated.View
+              style={[
+                styles.fill,
+                {
+                  marginBottom: insets.bottom + TRAIL_ACTION_BAR_H,
+                  transform: [{ translateY: sheetDrag.offset }],
+                },
+              ]}
+              testID="trail-tabs"
+            >
               <SheetGrabber onFold={() => setSheet('peek')} handlers={sheetDrag.handlers} />
               <TrailTabBar tabs={TRAIL_VIEW_TABS} active={tab} onChange={selectTab} />
               <ScrollView
                 style={styles.fill}
-                contentContainerStyle={{ paddingBottom: insets.bottom + TRAIL_ACTION_BAR_H + 24 }}
+                contentContainerStyle={styles.tabContent}
                 testID="trail-tab-content"
               >
                 {tab === 'overview' && (
@@ -1174,6 +1187,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
 const styles = StyleSheet.create({
   photoCardDock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20 },
   fill: { flex: 1 },
+  tabContent: { paddingBottom: 24 },
   pad: { paddingHorizontal: 16 },
   readout: {
     position: 'absolute',
