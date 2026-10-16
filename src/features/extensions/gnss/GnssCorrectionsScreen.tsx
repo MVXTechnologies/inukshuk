@@ -339,7 +339,7 @@ export function GnssCorrectionsScreen() {
           testID="gnss-mountpoint"
           value={draft.mountpoint}
           onChangeText={(mountpoint) => set({ mountpoint })}
-          autoCapitalize="characters"
+          autoCapitalize="none"
           autoCorrect={false}
           style={styles.flex}
         />

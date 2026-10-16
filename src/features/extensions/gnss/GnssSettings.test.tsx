@@ -167,4 +167,12 @@ describe('the receiver sub-screens', () => {
     expect(config.activeProfileId).toBe('new-id');
     expect(JSON.stringify(config)).not.toContain('secret');
   });
+
+  it('corrections: mountpoints are case-sensitive, so the field never forces capitals', async () => {
+    await render(wrap(<GnssCorrectionsScreen />));
+    const field = screen.getByTestId('gnss-mountpoint');
+    expect(field.props.autoCapitalize).toBe('none');
+    await fireEvent.changeText(field, 'levis_rtcm3');
+    expect(screen.getByTestId('gnss-mountpoint').props.value).toBe('levis_rtcm3');
+  });
 });
