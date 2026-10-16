@@ -1,0 +1,132 @@
+# The G7 screens (#705) that need no live relay, each asserted before its
+# review screenshot (review-team-internet-<screen>-${MODE}). Starts and ends
+# on the map, with a team open whose internet switch is on. Used by
+# team-internet.yaml, once in light and once in dark.
+appId: com.inukshuk.app
+---
+# The panel's connection chip → the Connection sheet (the one E2E line).
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: 'team-bar-pill'
+    timeout: 10000
+- tapOn:
+    id: 'team-bar-pill'
+- extendedWaitUntil:
+    visible:
+      id: 'team-panel-connection'
+    timeout: 5000
+- assertVisible: '.*Internet.*'
+- takeScreenshot: review-team-internet-panel-${MODE}
+- tapOn:
+    id: 'team-panel-connection'
+- extendedWaitUntil:
+    visible:
+      id: 'team-connection-card'
+    timeout: 5000
+- assertVisible: '.*End-to-end encrypted, on every path.*'
+- assertVisible:
+    id: 'team-connection-settings'
+- takeScreenshot: review-team-internet-sheet-${MODE}
+# Connection settings → the Connection screen.
+- tapOn:
+    id: 'team-connection-settings'
+- extendedWaitUntil:
+    visible:
+      id: 'team-connection-screen'
+    timeout: 5000
+- assertVisible:
+    id: 'team-internet-switch'
+- assertVisible: 'On for the whole team'
+- assertVisible:
+    id: 'team-always-relay-row'
+- assertVisible:
+    id: 'team-dial-open'
+- takeScreenshot: review-team-internet-connection-${MODE}
+- tapOn: 'Back'
+# Manage team: the Connection row, then an invite that works anywhere.
+- tapOn:
+    id: 'team-bar-pill'
+- tapOn:
+    id: 'team-panel-manage'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 5000
+- scrollUntilVisible:
+    element:
+      id: 'team-connection-row'
+    direction: DOWN
+- assertVisible: '.*Internet \+ nearby.*'
+- takeScreenshot: review-team-internet-hub-${MODE}
+- scrollUntilVisible:
+    element:
+      id: 'team-invite-button'
+    direction: UP
+- tapOn:
+    id: 'team-invite-button'
+- extendedWaitUntil:
+    visible:
+      id: 'team-invite-create'
+    timeout: 5000
+- tapOn:
+    id: 'team-invite-create'
+- extendedWaitUntil:
+    visible:
+      id: 'team-invite-qr'
+    timeout: 5000
+- assertVisible: '.*They can be anywhere.*'
+- assertVisible: '.*in person or on a call.*'
+- takeScreenshot: review-team-internet-invite-${MODE}
+- tapOn:
+    id: 'team-invite-done'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 5000
+- tapOn: 'Back'
+# New team: How phones connect, the internet on by default (then Cancel).
+- runFlow: team-settings-open.yaml
+- scrollUntilVisible:
+    element:
+      id: 'team-create-row'
+    direction: UP
+- tapOn:
+    id: 'team-create-row'
+- extendedWaitUntil:
+    visible:
+      id: 'team-create-screen'
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: 'team-create-internet'
+    direction: DOWN
+- assertVisible: 'Over the internet'
+- takeScreenshot: review-team-internet-create-${MODE}
+- tapOn: 'Cancel'
+# A shared folder's invite (a newer app's): the join screen asks for the update.
+- runFlow: team-settings-open.yaml
+- tapOn:
+    id: 'team-join-row'
+- extendedWaitUntil:
+    visible:
+      id: 'team-join-paste'
+    timeout: 10000
+- tapOn:
+    id: 'team-join-paste'
+- inputText: 'https://inukshuk.mvxtechnologies.com/j#AQIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+- hideKeyboard
+- tapOn:
+    id: 'team-join-paste-go'
+- extendedWaitUntil:
+    visible:
+      id: 'team-join-newer'
+    timeout: 5000
+- assertVisible: 'This invite needs a newer Inukshuk'
+- assertVisible: 'Update'
+- takeScreenshot: review-team-internet-newer-${MODE}
+- tapOn:
+    id: 'team-join-newer-back'
+- tapOn: 'Back'

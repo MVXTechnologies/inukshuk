@@ -1,13 +1,16 @@
 # inukshuk-rtc: rendezvous rooms + TURN credentials for phone-to-phone sync
-# (2.7.0, #705). Deployed to its OWN free Cloudflare account, never the tiles
-# account (security review R-OPS-1): relay load must not take the basemap down.
+# (2.7.0, #705). Deployed to the company Cloudflare account, next to the tiles
+# Worker but as its own Worker (owner decision 2026-10-16, replacing the
+# separate-account plan of review R-OPS-1; why the risk is acceptable:
+# ../README.md). Live at https://rtc.mvxtechnologies.com.
 # Owner checklist: ../README.md. Nothing here is secret.
 name = "inukshuk-rtc"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
 
-# Bind to the relay host once the zone is set up (README step 6):
-# routes = [{ pattern = "rtc.example.org", custom_domain = true }]
+# The relay host, a custom domain in the company zone. Phones sign this exact
+# host into every room entry: it must equal RTC_HOST (src/data/rtcRelay.ts).
+routes = [{ pattern = "rtc.mvxtechnologies.com", custom_domain = true }]
 
 # R-META-2: no Workers Logs at all. Invocation logs would record every
 # /v1/r/<roomId> URL next to the client IP; the code has no log calls either
@@ -43,7 +46,11 @@ crons = ["*/10 * * * *"]
 
 [vars]
 # Kill switches. "0" closes the door: no new room sockets (503) / no TURN
-# credentials (phones fall back to direct connections only).
+# credentials (phones fall back to direct connections only). They stay "1"
+# here. To turn one off: Workers → inukshuk-rtc → Settings → Variables in the
+# dashboard (applies at once), or "0" here and merge (CI redeploys). A deploy
+# restores this file's values, so a dashboard "0" lasts until the next deploy:
+# until the owner creates the TURN key, TURN_ENABLED is "0" in the dashboard.
 RTC_ENABLED = "1"
 TURN_ENABLED = "1"
 # R-TURN-2: credential lifetime, seconds (capped at 900 in code whatever this says).

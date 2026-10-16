@@ -421,5 +421,14 @@ function rallyAlert(
 
 /** Where an SOS notification opens: the map, centred on it. */
 export const sosUrl = (owner: string, id: string) => `/team/sos/${owner}/${id}`;
+/**
+ * An alert link that names its team (`?team=<id>`): an SOS from a team not
+ * on screen rings too (owner 2026-10-16), and opening it switches to that team.
+ */
+export function withTeam(url: string, teamId: string): string {
+  if (!teamId) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}team=${encodeURIComponent(teamId)}`;
+}
+
 /** Where a rally notification opens: the map, centred on it, Navigate ready. */
 export const rallyUrl = (owner: string, id: string) => `/team/rally/${owner}/${id}`;

@@ -16,8 +16,10 @@
  * stop meanwhile), and every team action (`TeamSession`).
  */
 import type { Carrier } from '@core/group/link';
+import { inviteRooms } from '@core/group/invites';
 import { groupMeta, internetOn } from '@core/group/meta';
 import type { PathPolicy } from '@core/group/path';
+import { provisionalJoinOf } from '@core/group/provisional';
 import type { IceServer } from '@core/group/roomProto';
 import type { MeshNetworkInfo } from '@core/mesh/hotspot';
 import { createTeam } from '@core/team/actions';
@@ -28,6 +30,7 @@ import { memberIdOf } from '@core/team/ids';
 import type { InviteToken } from '@core/team/invite';
 import type { Role } from '@core/team/roles';
 import type { TeamAlert } from '@core/teamui/alerts';
+import type { OpenLink, PathView } from '@core/teamui/links';
 import { cleanName, nameText, SYS_PROFILE, systemMessage } from '@core/teamui/system';
 import { addBreadcrumb, reportError } from '@lib/errorReporting';
 
@@ -98,6 +101,16 @@ export interface HostHooks {
   foreground(groupId: string): boolean;
 }
 
+/** One group's internet for the screens (`GroupHost.groupNet`). */
+export interface GroupNetView {
+  capable: boolean;
+  online: boolean;
+  /** The group's own room (`PathManager.roomState`). */
+  room: 'ready' | 'failing' | 'trying' | 'none';
+  links: OpenLink[];
+  paths: PathView[];
+}
+
 /** One group, as a list shows it (design §5.5 `GroupSummary`). */
 export interface GroupSummary {
   id: string;
@@ -162,6 +175,11 @@ export class GroupHost implements SessionNet {
         ...(internet.policy ? { policy: internet.policy } : {}),
         ...(internet.stun ? { stun: internet.stun } : {}),
         ...(internet.evalMs !== undefined ? { evalMs: internet.evalMs } : {}),
+        // R-INV-4: relay only with the members of a team joined provisionally.
+        relayOnlyWith: (member) =>
+          [...this.sessions.values()].some(
+            (s) => s.provisional && s.replica.state.members.get(member)?.status === 'active',
+          ),
         onChange: () => this.hooks.onChange(),
         onDiag: (event) => addBreadcrumb(`team net: ${event}`),
       });
@@ -177,12 +195,16 @@ export class GroupHost implements SessionNet {
     for (const [groupId, s] of this.sessions) {
       const data = s.replica.data(now);
       const meta = groupMeta(data);
+      const net = internetOn(data);
       out.push({
         groupId,
         store: s.store,
-        net: internetOn(data),
+        net,
         ...(meta.parent !== undefined ? { parent: meta.parent } : {}),
         epochKey: s.replica.sendKey()?.key,
+        // Let joiners in through their invites' rooms (G7); a provisional
+        // phone admits nobody (its own log is not vouched for yet).
+        ...(net && !s.provisional ? { invites: inviteRooms(data, s.replica.state, now) } : {}),
       });
     }
     return out;
@@ -209,6 +231,37 @@ export class GroupHost implements SessionNet {
   /** Per peer: which path carries sync, and what each path is doing (G7's Connection sheet). */
   internetStatus(): PeerPathStatus[] {
     return this.paths?.status() ?? [];
+  }
+
+  /**
+   * One group's internet, as the screens show it (G7): whether this build can,
+   * whether the phone is in its room, the open links that carry it and what
+   * the path manager is doing per member.
+   */
+  groupNet(groupId: string): GroupNetView {
+    const links: OpenLink[] = [];
+    for (const l of this.links()) {
+      if (l.state === 'open' && l.identity !== undefined && l.groups.includes(groupId))
+        links.push({ member: l.identity, path: l.path });
+    }
+    const paths: PathView[] = this.internetStatus().map((p) => ({
+      member: p.member,
+      primary: p.primary,
+      signalling: p.signalling,
+      connecting: Object.values(p.paths).some((s) => s === 'connecting'),
+    }));
+    return {
+      capable: this.paths !== null,
+      online: this.paths?.isOnline ?? false,
+      room: this.paths?.roomState(groupId) ?? 'none',
+      links,
+      paths,
+    };
+  }
+
+  /** Joiners' sessions open in this phone's invite rooms (tests, diagnostics). */
+  inviteSessions(): number {
+    return this.paths?.inviteSessions() ?? 0;
   }
 
   /** Run the path decisions now (tests; the manager ticks by itself otherwise). */
@@ -422,6 +475,19 @@ export class GroupHost implements SessionNet {
         now: this.now,
         onChange: () => this.hooks.onChange(),
         ...(tickMs !== undefined ? { tickMs } : {}),
+        ...(this.paths !== null && this.deps.internet !== undefined
+          ? {
+              internet: {
+                host: this.deps.internet.host,
+                ws: this.deps.internet.ws,
+                timers: this.deps.timers ?? globalTimers,
+                ...(this.deps.internet.jitterMs !== undefined
+                  ? { jitterMs: this.deps.internet.jitterMs }
+                  : {}),
+                ...(this.deps.internet.random ? { random: this.deps.internet.random } : {}),
+              },
+            }
+          : {}),
       },
       token,
       await this.deviceKeys(),
@@ -445,19 +511,26 @@ export class GroupHost implements SessionNet {
     this.hooks.onChange();
   }
 
-  /** The codes matched: keep the group, post my name, open its session. */
-  async confirmJoin(): Promise<TeamSession | ActionError> {
+  /**
+   * Keep the group, post my name, open its session. `compared`: the two
+   * people compared the safety code. An internet join without it stays
+   * provisional (R-INV-4) until another member vouches for the log.
+   */
+  async confirmJoin(compared = true): Promise<TeamSession | ActionError> {
     const attempt = this.joining;
     if (attempt === null || !attempt.admitted) return 'not-member';
+    const provisional =
+      !compared && attempt.viaInternet
+        ? provisionalJoinOf(attempt.replica.state, attempt.replica.id)
+        : undefined;
     // Write my name through the join's store (same log, same cursor on disk).
-    attempt.store.track(() => ({
-      result: attempt.replica.write(
+    attempt.writeOwn(() =>
+      attempt.replica.write(
         this.now(),
         'msg',
         systemMessage(toB64u(this.deps.c.randomBytes(9)), SYS_PROFILE, nameText(this.joinName)),
       ),
-      accepted: [],
-    }));
+    );
     this.joining = null;
     await attempt.stop();
     this.putRecord({
@@ -468,6 +541,7 @@ export class GroupHost implements SessionNet {
       prefs: { ...DEFAULT_TEAM_PREFS },
       lastReadAt: 0,
       ...(attempt.replica.state.sendKeyId ? { profileKeyId: attempt.replica.state.sendKeyId } : {}),
+      ...(provisional !== undefined ? { provisional } : {}),
     });
     return this.ensure(attempt.teamId);
   }

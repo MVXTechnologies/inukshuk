@@ -231,7 +231,7 @@ describe('Team mode sub-panel', () => {
     expect(screen.getByLabelText('Your teams')).toBeTruthy();
     expect(screen.getByLabelText('Create a team')).toBeTruthy();
     expect(screen.getByLabelText('Join a team')).toBeTruthy();
-    expect(screen.getByText(/end-to-end encrypted/)).toBeTruthy();
+    expect(screen.getByText(/shared only while you turn sharing on/)).toBeTruthy();
 
     expect(checked('Share my position with the team')).toBe(false);
     await fireEvent.press(screen.getByLabelText('Share my position with the team'));

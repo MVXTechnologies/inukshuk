@@ -38,7 +38,8 @@ import {
   type PathPolicy,
   type PathStatus,
 } from '@core/group/path';
-import { groupRooms, type Room } from '@core/group/rdv';
+import type { InviteRoom } from '@core/group/invites';
+import { deriveRoom, groupRooms, roomDays, type Room } from '@core/group/rdv';
 import { ROOM_BLOB_MAX_PAYLOAD } from '@core/group/roomBlob';
 import {
   decodeRoomPayload,
@@ -49,7 +50,7 @@ import {
 } from '@core/group/roomProto';
 import type { TeamCrypto } from '@core/team/crypto';
 import { RELAY_LIMITS } from '@core/team/ratelimit';
-import { SyncSession, type RtcSignal, type Step, type SyncStore } from '@core/team/sync';
+import { RTC_CAP, SyncSession, type RtcSignal, type Step, type SyncStore } from '@core/team/sync';
 
 import { RtcCarrier, type AttemptEvent, type RtcConn } from './carriers/rtcCarrier';
 import type { RtcModuleLike } from './carriers/rtcModule';
@@ -66,6 +67,8 @@ export interface PathGroup {
   parent?: string;
   /** The current epoch key (its room derives from it, rotating with it). */
   epochKey: Uint8Array | undefined;
+  /** Open invites whose rooms this phone listens in, to let joiners in (G7). */
+  invites?: InviteRoom[];
 }
 
 export interface PathManagerOptions {
@@ -87,9 +90,23 @@ export interface PathManagerOptions {
   stun?: IceServer[];
   /** Period of the decision tick (ms). */
   evalMs?: number;
+  /**
+   * Relay-only with this member (R-INV-4): it shares a group this phone
+   * joined provisionally. Other members keep direct paths.
+   */
+  relayOnlyWith?(member: string): boolean;
   onChange?(): void;
   onDiag?(event: string): void;
 }
+
+/**
+ * A joiner's catch-up through an invite room (design exception, sync-layer
+ * §3.2 "as built G7"): the log only (no position, no stroke), and it ends at
+ * the hand-over — once the joiner's `rtc` claim arrived, so a direct or TURN
+ * link can take over — or at these caps, whichever comes first.
+ */
+export const INVITE_SESSION_MS = 5 * 60_000;
+export const INVITE_SESSION_MAX_BYTES = 2 * 1024 * 1024;
 
 /** Cloudflare's public STUN (no credentials; reveals our public address to Cloudflare only). */
 export const DEFAULT_STUN: IceServer[] = [{ urls: ['stun:stun.cloudflare.com:3478'] }];
@@ -105,6 +122,8 @@ export const RELAY_TIMEOUT_MS = 15_000;
 /** The answering side adds TURN when this many offers came within {@link OFFER_WINDOW_MS}. */
 export const OFFERS_FOR_TURN = 2;
 export const OFFER_WINDOW_MS = 2 * 60_000;
+/** A server clock offset that moved less than this keeps the rooms as they are. */
+export const CLOCK_SLACK_MS = 60_000;
 /** Minted credentials are reused until this long before they expire. */
 const TURN_MARGIN_MS = 60_000;
 
@@ -118,6 +137,8 @@ interface RoomEntry {
   client: RoomClient;
   groupId: string;
   room: Room;
+  /** An invite's room: joiners start sessions here, members only answer them. */
+  invite: boolean;
   /** Handle → when the next session may be started to it (initiator side). */
   retryAt: Map<string, number>;
 }
@@ -130,6 +151,11 @@ interface L0 {
   /** The initiator's first frame goes as a `hello`. */
   helloSent: boolean;
   member: string | undefined;
+  /** A joiner's session in an invite room (full sync, so the joiner gets the log). */
+  invite: boolean;
+  since: number;
+  /** Bytes this phone sent on it (invite sessions are capped). */
+  sent: number;
 }
 
 interface AttemptRec {
@@ -172,6 +198,13 @@ export class PathManager {
   private readonly rtc: RtcCarrier;
   private readonly policy: PathPolicy;
   private online = false;
+  /**
+   * The relay's clock minus ours (ms), once a room told it. Rooms are named
+   * by the UTC day, so a phone whose clock is hours off would wait in the
+   * wrong day's room: once the offset is known, rooms follow the server's day.
+   */
+  private clockOffsetMs: number | undefined;
+  private reroom: unknown = null;
   private detach: (() => void) | null = null;
   private interval: unknown = null;
   private offLinks: (() => void) | null = null;
@@ -188,6 +221,24 @@ export class PathManager {
 
   private now(): number {
     return this.o.now();
+  }
+
+  /** The relay's time (ms): our clock corrected by the last offset a room gave. */
+  serverNow(): number {
+    return this.now() + (this.clockOffsetMs ?? 0);
+  }
+
+  /** A room told the server's time: keep the offset, and re-pick the rooms when it moved. */
+  private learnClock(client: RoomClient): void {
+    const before = this.clockOffsetMs ?? 0;
+    this.clockOffsetMs = client.serverNow() - this.now();
+    if (Math.abs(this.clockOffsetMs - before) < CLOCK_SLACK_MS || this.reroom !== null) return;
+    this.diag('room clock offset');
+    // Not from inside the room's own event: the refresh may stop that room.
+    this.reroom = this.o.timers.setTimeout(() => {
+      this.reroom = null;
+      this.refresh();
+    }, 0);
   }
 
   private diag(event: string): void {
@@ -211,6 +262,8 @@ export class PathManager {
     } else {
       if (this.interval !== null) this.o.timers.clearInterval(this.interval);
       this.interval = null;
+      if (this.reroom !== null) this.o.timers.clearTimeout(this.reroom);
+      this.reroom = null;
       for (const key of [...this.rooms.keys()]) this.dropRoom(key);
       this.rtc.closeAll('offline');
       this.peers.clear();
@@ -229,6 +282,11 @@ export class PathManager {
     this.evaluateAll();
   }
 
+  /** Relay only with this member: the user's choice, or a provisional group with it (R-INV-4). */
+  private relayFor(member: string): boolean {
+    return this.policy.alwaysRelay || (this.o.relayOnlyWith?.(member) ?? false);
+  }
+
   stop(): void {
     this.setOnline(false);
   }
@@ -236,8 +294,8 @@ export class PathManager {
   /** The groups or their switches changed: open and close rooms to match. */
   refresh(): void {
     if (!this.online) return;
-    const want = new Map<string, { group: PathGroup; room: Room }>();
-    const seconds = Math.floor(this.now() / 1000);
+    const want = new Map<string, { group: PathGroup; room: Room; invite: boolean }>();
+    const seconds = Math.floor(this.serverNow() / 1000);
     for (const g of this.o.groups()) {
       if (!g.net || g.parent !== undefined || g.epochKey === undefined) continue;
       try {
@@ -246,18 +304,25 @@ export class PathManager {
           { groupId: g.groupId, epochKey: g.epochKey },
           seconds,
         )) {
-          want.set(room.roomId, { group: g, room });
+          want.set(room.roomId, { group: g, room, invite: false });
+        }
+        for (const inv of g.invites ?? []) {
+          for (const day of roomDays(seconds)) {
+            const room = deriveRoom(this.o.c, inv.ir, day);
+            want.set(room.roomId, { group: g, room, invite: true });
+          }
         }
       } catch {
         // A group id or key of the wrong shape has no room.
       }
     }
     for (const key of [...this.rooms.keys()]) if (!want.has(key)) this.dropRoom(key);
-    for (const [roomId, { group, room }] of want) {
+    for (const [roomId, { group, room, invite }] of want) {
       if (this.rooms.has(roomId)) continue;
       const entry: RoomEntry = {
         groupId: group.groupId,
         room,
+        invite,
         retryAt: new Map(),
         client: new RoomClient({
           c: this.o.c,
@@ -282,13 +347,40 @@ export class PathManager {
     if (!this.online) return;
     this.refresh();
     const now = this.now();
-    for (const s of [...this.l0.values()]) this.handleStep(s, s.session.tick(now));
+    for (const s of [...this.l0.values()]) {
+      this.handleStep(s, s.session.tick(now));
+    }
     for (const [roomId, entry] of this.rooms) {
       const me = entry.client.me;
       if (entry.client.state !== 'ready' || me === undefined) continue;
       for (const h of entry.client.peers) this.maybeInitiate(roomId, entry, h);
     }
     this.evaluateAll();
+  }
+
+  /** Joiners' sessions open in invite rooms now (tests, diagnostics). */
+  inviteSessions(): number {
+    return [...this.l0.values()].filter((s) => s.invite).length;
+  }
+
+  /** Whether the phone is in use for the internet now (`setOnline`). */
+  get isOnline(): boolean {
+    return this.online;
+  }
+
+  /**
+   * A group's own rooms: `ready` when this phone is in one (the relay reached,
+   * the pill's cloud), `failing` when reaching the relay failed, else `trying`
+   * (the 0–30 s jitter, a connect in progress) or `none`.
+   */
+  roomState(groupId: string): 'ready' | 'failing' | 'trying' | 'none' {
+    let out: 'failing' | 'trying' | 'none' = 'none';
+    for (const e of this.rooms.values()) {
+      if (e.invite || e.groupId !== groupId) continue;
+      if (e.client.state === 'ready') return 'ready';
+      out = e.client.failing ? 'failing' : out === 'failing' ? out : 'trying';
+    }
+    return out;
   }
 
   /** Per peer: the primary path and what each path is doing (the Connection sheet, G7). */
@@ -329,6 +421,7 @@ export class PathManager {
     if (entry === undefined) return;
     switch (e.type) {
       case 'ready':
+        this.learnClock(entry.client);
         for (const h of e.peers) this.maybeInitiate(roomId, entry, h);
         break;
       case 'join':
@@ -370,6 +463,8 @@ export class PathManager {
 
   private maybeInitiate(roomId: string, entry: RoomEntry, h: string): void {
     const me = entry.client.me;
+    // In an invite room only joiners start sessions.
+    if (entry.invite) return;
     if (me === undefined || !initiatesTo(me, h) || this.l0.has(this.key(roomId, h))) return;
     if ((entry.retryAt.get(h) ?? 0) > this.now()) return;
     const g = this.group(entry.groupId);
@@ -382,6 +477,9 @@ export class PathManager {
       session,
       helloSent: false,
       member: undefined,
+      invite: false,
+      since: this.now(),
+      sent: 0,
     };
     this.l0.set(this.key(roomId, h), s);
     this.handleStep(s, step);
@@ -393,8 +491,10 @@ export class PathManager {
     const k = this.key(roomId, from);
     let s = this.l0.get(k);
     if (msg.kind === ROOM_KIND.hello) {
-      // The peer starts over (only the higher handle answers one).
-      if (entry.client.me === undefined || initiatesTo(entry.client.me, from)) return;
+      // The peer starts over (only the higher handle answers one; in an
+      // invite room, whoever says hello is a joiner and is answered).
+      if (entry.client.me === undefined) return;
+      if (!entry.invite && initiatesTo(entry.client.me, from)) return;
       if (s !== undefined) s.session.close('restart');
       const g = this.group(entry.groupId);
       if (g === undefined) return;
@@ -402,9 +502,18 @@ export class PathManager {
         roomId,
         handle: from,
         groupId: g.groupId,
-        session: SyncSession.respond(this.o.c, g.store, this.sessionOptions()),
+        session: SyncSession.respond(
+          this.o.c,
+          g.store,
+          entry.invite
+            ? { now: this.now(), limits: ROOM_SESSION_LIMITS, logOnly: true }
+            : this.sessionOptions(),
+        ),
         helloSent: true,
         member: undefined,
+        invite: entry.invite,
+        since: this.now(),
+        sent: 0,
       };
       this.l0.set(k, s);
     }
@@ -417,6 +526,7 @@ export class PathManager {
     for (const frame of step.send) {
       const kind = s.helloSent ? ROOM_KIND.frame : ROOM_KIND.hello;
       s.helloSent = true;
+      s.sent += frame.length;
       // A frame the room can't take ends the session (the counter must stay whole).
       if (entry === undefined || !entry.client.send(s.handle, encodeRoomPayload(kind, frame))) {
         if (s.session.phase !== 'closed') s.session.close('room');
@@ -427,8 +537,18 @@ export class PathManager {
       switch (event.type) {
         case 'open': {
           const now = this.now();
+          if (s.invite) {
+            // An invite room is for joiners only: they get the log, never ICE.
+            if (!event.joining) {
+              this.closeL0(s, 'not-joiner');
+              return;
+            }
+            s.member = event.peer;
+            this.diag('invite room: joiner admitted');
+            break;
+          }
           if (event.joining || this.o.links.memberBans.isBanned(event.peer, now)) {
-            // Joiners use invite rooms (G7); a banned member gets nothing.
+            // Joiners use invite rooms; a banned member gets nothing.
             this.closeL0(s, event.joining ? 'not-member' : 'banned');
             return;
           }
@@ -457,6 +577,23 @@ export class PathManager {
         default:
           break;
       }
+    }
+    if (s.invite && s.session.phase !== 'closed') this.inviteHandover(s);
+  }
+
+  /**
+   * End a joiner's invite-room session as soon as a link can take over (its
+   * `rtc` claim is here), or at its byte or time cap.
+   */
+  private inviteHandover(s: L0): void {
+    const now = this.now();
+    const g = this.group(s.groupId);
+    if (s.member !== undefined && g?.store.canReceive?.(s.member, RTC_CAP, now) === true) {
+      this.closeL0(s, 'handover');
+    } else if (s.sent > INVITE_SESSION_MAX_BYTES) {
+      this.closeL0(s, 'cap');
+    } else if (now - s.since > INVITE_SESSION_MS) {
+      this.closeL0(s, 'done');
     }
   }
 
@@ -550,7 +687,7 @@ export class PathManager {
         p.attempts.delete(a.id);
       }
     }
-    const policy = this.policy.alwaysRelay ? 'relay' : 'direct';
+    const policy = this.relayFor(p.member) ? 'relay' : 'direct';
     const wantsTurn = policy === 'relay' || p.offers.length >= OFFERS_FOR_TURN;
     const placeholder = `pending-${++pendingSeq}`;
     p.attempts.set(placeholder, {
@@ -744,6 +881,7 @@ export class PathManager {
   private evaluate(member: string): void {
     if (!this.online) return;
     const now = this.now();
+    const policy: PathPolicy = { ...this.policy, alwaysRelay: this.relayFor(member) };
     if (this.o.links.memberBans.isBanned(member, now)) {
       this.rtc.closeMember(member, 'banned');
       this.peers.delete(member);
@@ -759,7 +897,7 @@ export class PathManager {
         directAttemptAt: p.directAttemptAt,
         lastDirectTryAt: p.lastDirectTryAt,
       },
-      this.policy,
+      policy,
       now,
     );
     if (d.primary !== p.primary) this.diag(`path ${d.reason} ${d.primary ?? 'none'}`);
@@ -770,7 +908,7 @@ export class PathManager {
         const k = a.state === 'ready' ? a.path : a.policy;
         if (k !== kind) continue;
         // A path still proving itself is never closed for being "connecting".
-        if (a.state !== 'ready' && !(kind === 'direct' && this.policy.alwaysRelay)) continue;
+        if (a.state !== 'ready' && !(kind === 'direct' && policy.alwaysRelay)) continue;
         p.attempts.delete(a.id);
         if (a.state !== 'minting') this.rtc.close(a.id, 'not-needed');
       }

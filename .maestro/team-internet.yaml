@@ -1,0 +1,122 @@
+# Team mode over the internet (#705, G7), the screens that need no live
+# relay, on the loopback build (see team.yaml): New team's internet switch,
+# the team panel's connection chip and the Connection sheet, the Connection
+# screen, Manage team's Connection row, the invite that works anywhere, and
+# a newer app's invite asking for the update. Each is asserted before its
+# review screenshot, in light and in dark (the owner's phone runs dark).
+#
+# In the team shard after team-draw.yaml, before team.yaml (which clears
+# state and must stay last): it creates its own team, leaves it at the end
+# and puts the theme back on System. Settings rows merge title + subtitle on
+# iOS: wildcard regexes (maestro-ios-tap-traps).
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            notifications: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+            notifications: allow
+- tapOn:
+    text: 'Got it'
+    optional: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- setLocation:
+    latitude: 47.4423
+    longitude: -70.5012
+- runFlow:
+    file: subflows/theme.yaml
+    env:
+      THEME: 'Light'
+# Create a team: the internet is on by default.
+- runFlow: subflows/team-settings-open.yaml
+- scrollUntilVisible:
+    element:
+      id: 'team-create-row'
+    direction: UP
+- tapOn:
+    id: 'team-create-row'
+- extendedWaitUntil:
+    visible:
+      id: 'team-create-screen'
+    timeout: 10000
+- tapOn:
+    id: 'team-create-name'
+- inputText: 'Rando Charlevoix'
+- tapOn:
+    id: 'team-create-myname'
+- eraseText: 40
+- inputText: 'Marc'
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: 'team-create-internet'
+    direction: DOWN
+- assertVisible: 'Over the internet'
+- tapOn:
+    id: 'team-create-submit'
+- extendedWaitUntil:
+    visible: '(Allow|Rando Charlevoix)'
+    timeout: 40000
+- runFlow:
+    when:
+      visible: 'Allow'
+    commands:
+      - tapOn: 'Allow'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 15000
+- assertVisible: 'Rando Charlevoix'
+- tapOn: 'Back'
+# Light.
+- runFlow:
+    file: subflows/team-internet-shots.yaml
+    env:
+      MODE: 'light'
+# Dark.
+- runFlow:
+    file: subflows/theme.yaml
+    env:
+      THEME: 'Dark'
+- runFlow:
+    file: subflows/team-internet-shots.yaml
+    env:
+      MODE: 'dark'
+# Leave the team and put the theme back on System.
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- tapOn:
+    id: 'team-bar-pill'
+- tapOn:
+    id: 'team-panel-manage'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 5000
+- scrollUntilVisible:
+    element: 'Leave team'
+    direction: DOWN
+- tapOn: 'Leave team'
+- tapOn: 'Leave'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-hub-screen'
+    timeout: 10000
+- runFlow:
+    file: subflows/theme.yaml
+    env:
+      THEME: 'System'

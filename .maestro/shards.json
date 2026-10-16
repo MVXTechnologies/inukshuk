@@ -41,7 +41,7 @@
       "gnss.yaml",
       "extensions-review.yaml"
     ],
-    "team": ["team-draw.yaml", "team.yaml"],
+    "team": ["team-draw.yaml", "team-internet.yaml", "team.yaml"],
     "team-join": ["team-join.yaml"]
   },
   "requires": {

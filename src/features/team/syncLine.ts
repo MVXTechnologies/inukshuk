@@ -38,3 +38,17 @@ function kb(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} kB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+/** After a link chip (#705): "48 kB in" while connected, else when last seen. */
+export function memberSyncShort(
+  memberId: string,
+  peers: readonly PeerStatus[],
+  lastSeenAt: number | null,
+  now: number,
+): string {
+  const p = openPeers(peers).find((x) => x.memberId === memberId);
+  if (p) return `${kb(p.bytesIn)} in`;
+  if (lastSeenAt === null) return 'Not seen yet';
+  const age = shortAge(now - lastSeenAt);
+  return age === 'now' ? 'just now' : `${age} ago`;
+}

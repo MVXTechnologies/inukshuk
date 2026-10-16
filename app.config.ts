@@ -393,6 +393,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // Worldwide province / state label points (src/data/basemapTiles). Unset
     // = the Pages site's docs/data/admin1-labels-v1.json.
     admin1LabelsUrl: process.env.ADMIN1_LABELS_URL,
+    // Team-over-the-internet relay host (src/data/rtcRelay). Unset = ours
+    // (rtc.mvxtechnologies.com); `none` builds a nearby-only app. Not secret.
+    rtcRelayHost: process.env.RTC_RELAY_HOST,
   },
   updates: {
     // OTA self-correction channel; CI (ota-update.yml) publishes JS-only fixes

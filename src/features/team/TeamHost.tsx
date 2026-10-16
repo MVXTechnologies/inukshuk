@@ -9,12 +9,15 @@
  * - Shares my position, only while I have sharing on (and, by default, only
  *   while recording — owner B9), at my chosen interval: from the recorder's
  *   fixes while recording, else from a foreground location watch.
+ * - Keeps this phone in its teams' internet rooms (#705) under the same
+ *   rule: in use (foreground or recording), never during a join.
  * - Buzzes for `alert`-level team messages (the core's routing: chatter in
  *   a team of more than 30 doesn't buzz).
  */
 import { useExtensionPrefs } from '@features/extensions/prefs';
 import { reportError } from '@lib/errorReporting';
 import { useRecorderStore } from '@state/recorderStore';
+import { useSettingsStore } from '@state/settingsStore';
 import { teamService, useTeamStore, wireTeamStore } from '@state/teamStore';
 import * as Location from 'expo-location';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -71,6 +74,17 @@ export function TeamHost() {
     } else session.stopMesh().catch((e) => reportError(e, 'team-mesh-stop'));
   }, [wantMesh, activeId]);
 
+  // Internet paths (#705): rooms for the teams whose switch is on, only while
+  // the app is in use (R-META-4); "Always use the relay" is this phone's.
+  const internet = internetWanted({ enabled, joining, foreground, recording });
+  const alwaysRelay = useSettingsStore((s) => s.teamAlwaysRelay);
+  useEffect(() => {
+    teamService()?.host.setAlwaysRelay(alwaysRelay);
+  }, [alwaysRelay, loaded]);
+  useEffect(() => {
+    teamService()?.host.setInternetOnline(internet);
+  }, [internet, loaded]);
+
   // Back in the foreground: re-sync at once instead of waiting for the timer.
   useEffect(() => {
     if (foreground) teamService()?.active?.tick();
@@ -86,6 +100,21 @@ export function TeamHost() {
   usePositionSharing(wantMesh, recording, foreground);
   useAlertBuzz();
   return null;
+}
+
+/**
+ * Whether this phone may be in its teams' rooms (R-META-4): team mode on, the
+ * app in use (foreground, or recording in the background), and no join
+ * running (the join owns the transport). Every team, not only the one on
+ * screen: an SOS from any of them must ring (owner 2026-10-16).
+ */
+export function internetWanted(s: {
+  enabled: boolean;
+  joining: boolean;
+  foreground: boolean;
+  recording: boolean;
+}): boolean {
+  return s.enabled && !s.joining && (s.foreground || s.recording);
 }
 
 /** The interval and on/off come from the active team's local prefs. */

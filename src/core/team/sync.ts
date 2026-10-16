@@ -241,6 +241,11 @@ export interface SessionOptions {
    * relay (review §2.9); a peer that sends sync frames anyway is struck.
    */
   signalOnly?: boolean;
+  /**
+   * The log only (a joiner's catch-up through an invite room, 2.7.0 G7): no
+   * ephemeral op (positions, live strokes) is ever sent on this session.
+   */
+  logOnly?: boolean;
 }
 
 /** A frame waiting in a pull-mode outbox: plaintext until the link takes it. */
@@ -471,8 +476,8 @@ export class SyncSession {
     const step = empty();
     if (now !== undefined) this.clock = Math.max(this.clock, now);
     if (this.phase !== 'open' || this.options.signalOnly === true) return step;
-    const fresh = ops.filter(
-      (op) => op.env.sq === 0 || (this.peerVv?.[op.env.au] ?? 0) < op.env.sq,
+    const fresh = ops.filter((op) =>
+      op.env.sq === 0 ? this.options.logOnly !== true : (this.peerVv?.[op.env.au] ?? 0) < op.env.sq,
     );
     let sent = fresh;
     if (this.options.pull === true) {
@@ -872,7 +877,9 @@ export class SyncSession {
     step.events.push({ type: 'open', peer: this.peer!, joining });
     if (this.options.signalOnly === true) return;
     this.sendSealed({ t: 'vv', v: this.store.versionVector() }, step);
-    this.sendOps(this.store.liveEphemeral(now), false, step, LANE_LIVE);
+    if (this.options.logOnly !== true) {
+      this.sendOps(this.store.liveEphemeral(now), false, step, LANE_LIVE);
+    }
   }
 
   // ── Open phase ────────────────────────────────────────────────────────────

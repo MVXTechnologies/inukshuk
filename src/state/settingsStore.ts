@@ -390,6 +390,12 @@ export interface Settings {
   /** The one-time "Add photos from this outing?" after saving a recording (owner Q6). */
   photoPromptAfterSaveShown: boolean;
   /**
+   * Team mode over the internet (#705): every internet path of this phone
+   * goes through the relay, so teammates never see its IP address (per
+   * phone, owner 2026-10-15; off = direct when possible).
+   */
+  teamAlwaysRelay: boolean;
+  /**
    * The waypoint editor's starred and recent icons (#675): favourites first
    * in its quick row and at the top of the icon picker, then the last five
    * picked. Sanitized on read (unknown ids dropped).
@@ -465,6 +471,7 @@ const DEFAULTS: Settings = {
   photoCopySize: DEFAULT_PHOTO_COPY_SIZE,
   includePhotosWhenSharing: false,
   photoPromptAfterSaveShown: false,
+  teamAlwaysRelay: false,
   waypointIcons: EMPTY_WAYPOINT_ICON_PREFS,
   pointingLine: DEFAULT_POINTING_LINE,
   infoStrip: normaliseInfoStripSettings(undefined),
@@ -583,6 +590,7 @@ function snapshot(s: SettingsState): Settings {
     photoCopySize,
     includePhotosWhenSharing,
     photoPromptAfterSaveShown,
+    teamAlwaysRelay,
     waypointIcons,
     pointingLine,
     infoStrip,
@@ -649,6 +657,7 @@ function snapshot(s: SettingsState): Settings {
     photoCopySize,
     includePhotosWhenSharing,
     photoPromptAfterSaveShown,
+    teamAlwaysRelay,
     waypointIcons,
     pointingLine,
     infoStrip,

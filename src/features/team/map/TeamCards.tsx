@@ -26,6 +26,7 @@ import { startEditing } from './TrailEditor';
 import { loadTrackGeometry } from '@data/trackGeometry';
 import { useLibraryStore } from '@state/libraryStore';
 import { useTeamSheet, type TeamSheet } from './teamMode';
+import { ConnectionCard } from './ConnectionCard';
 
 const STATUS_ICON: Record<StatusId, string> = {
   ok: 'check-circle',
@@ -91,7 +92,7 @@ export function Round({
   );
 }
 
-function Card({
+export function Card({
   title,
   sub,
   icon,
@@ -666,6 +667,8 @@ export function TeamSheetCard({
   switch (sheet.kind) {
     case 'status':
       return <StatusCard onClose={close} />;
+    case 'connection':
+      return <ConnectionCard onClose={close} />;
     case 'notify':
       return <NotifyCard at={sheet.at} onClose={close} />;
     case 'spot':

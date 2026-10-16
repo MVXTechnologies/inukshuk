@@ -45,6 +45,8 @@ export function useTeamBarSummary(): TeamBarSummary | null {
   const peers = useTeamStore((s) => s.peers);
   const meshRunning = useTeamStore((s) => s.meshRunning);
   const meshWanted = useTeamStore((s) => s.meshWanted);
+  const net = useTeamStore((s) => s.net);
+  const internet = pillInternet(net);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), CLOCK_MS);
@@ -64,9 +66,66 @@ export function useTeamBarSummary(): TeamBarSummary | null {
       connected,
       meshRunning,
       meshStarting: meshWanted,
+      ...(internet !== undefined ? { internet } : {}),
       now,
     });
-  }, [view, positions, peers, meshRunning, meshWanted, now]);
+  }, [view, positions, peers, meshRunning, meshWanted, internet, now]);
+}
+
+/**
+ * The team's internet for the pill (#705): `up` in the team's room, `down`
+ * when reaching the relay failed; nothing while it is off, not possible in
+ * this build, or still connecting (no amber flash during the 0–30 s jitter).
+ */
+export function pillInternet(
+  net: { on: boolean; capable: boolean; online: boolean; room: string } | null,
+): 'up' | 'down' | undefined {
+  if (net === null || !net.on || !net.capable || !net.online) return undefined;
+  return net.room === 'ready' ? 'up' : net.room === 'failing' ? 'down' : undefined;
+}
+
+/** The pill's glyph and its colour role for a sync state. */
+export function syncGlyph(
+  sync: TeamBarSummary['sync'],
+  internetOn: boolean,
+): {
+  icon: string;
+  tone: 'ok' | 'warn' | 'lost';
+} {
+  switch (sync) {
+    case 'net':
+      return { icon: 'cloud-check-outline', tone: 'ok' };
+    case 'noNet':
+      return { icon: 'cloud-off-outline', tone: 'warn' };
+    case 'lan':
+      return { icon: 'access-point', tone: 'ok' };
+    case 'look':
+      return { icon: 'access-point', tone: 'warn' };
+    default:
+      return { icon: internetOn ? 'cloud-off-outline' : 'access-point-off', tone: 'lost' };
+  }
+}
+
+/** Pill text grows to this much of the system font scale at most (map chrome). */
+export const PILL_FONT_CAP = 1.15;
+
+/** The pill's geometry (its styles use these), for the 360 dp fit checks. */
+export const PILL_INSET = 76;
+const PILL_PAD = 6;
+const PILL_GAP = 8;
+const STATUS_GAP = 3;
+const FACE = 24;
+const FACE_BORDER = 2;
+const CHEVRON = 22;
+export const PILL_GLYPH = 14;
+export const PILL_STATUS_GAP = STATUS_GAP;
+
+/** The width left for the pill's text column with `faces` faces, on a screen `screenDp` wide. */
+export function pillTextRoom(screenDp: number, faces: number): number {
+  const face = FACE + 2 * FACE_BORDER;
+  const overlap = Math.round(FACE * 0.3);
+  const stack = faces === 0 ? 26 : face + (faces - 1) * (face - overlap);
+  return screenDp - 2 * PILL_INSET - 2 * PILL_PAD - stack - 2 * PILL_GAP - CHEVRON;
 }
 
 export function TeamStatusBar({
@@ -81,6 +140,7 @@ export function TeamStatusBar({
 }) {
   const t = useSchemeTokens();
   const summary = useTeamBarSummary();
+  const netOn = useTeamStore((s) => s.net?.on === true && s.net.capable);
   const unread = useTeamStore(selectChatUnread);
   const gather = gatherBadge(useActiveAlerts());
   const panelOpen = useTeamSheet((s) => s.sheet?.kind === 'menu');
@@ -89,13 +149,9 @@ export function TeamStatusBar({
   useEffect(() => () => setHeight(0), [setHeight]);
   if (summary === null) return null;
 
-  const glyph = summary.sync === 'off' ? 'access-point-off' : 'access-point';
+  const { icon: glyph, tone } = syncGlyph(summary.sync, netOn);
   const glyphColor =
-    summary.sync === 'lan'
-      ? t.map.gnssFixed
-      : summary.sync === 'look'
-        ? t.map.gnssWarn
-        : t.map.gnssLost;
+    tone === 'ok' ? t.map.gnssFixed : tone === 'warn' ? t.map.gnssWarn : t.map.gnssLost;
   const offline = summary.sync === 'off' && !summary.solo;
   // The mesh is starting: a neutral word, no count and no alarm colour yet.
   const connecting = summary.sync === 'pending' && !summary.solo;
@@ -123,7 +179,12 @@ export function TeamStatusBar({
               <Icon source="account-plus" size={17} color={t.support.onAccent} />
             </View>
           ) : (
-            <FaceStack faces={summary.faces} size={24} ring={t.map.chrome} />
+            // Offline, the longer status takes two faces' room (360 dp, `pillTextRoom`).
+            <FaceStack
+              faces={offline ? summary.faces.slice(0, 1) : summary.faces}
+              size={24}
+              ring={t.map.chrome}
+            />
           )}
           {unread > 0 && (
             <View
@@ -142,7 +203,11 @@ export function TeamStatusBar({
             </View>
           )}
           <View style={styles.flex}>
-            <Text style={[styles.name, { color: t.map.chromeInk }]} numberOfLines={1}>
+            <Text
+              style={[styles.name, { color: t.map.chromeInk }]}
+              numberOfLines={1}
+              maxFontSizeMultiplier={PILL_FONT_CAP}
+            >
               {summary.name}
             </Text>
             <View style={styles.statusRow}>
@@ -150,6 +215,7 @@ export function TeamStatusBar({
                 <Text
                   style={[styles.status, { color: t.map.chromeInk }, styles.muted]}
                   numberOfLines={1}
+                  maxFontSizeMultiplier={PILL_FONT_CAP}
                   testID="team-bar-status"
                 >
                   {summary.status}
@@ -160,6 +226,7 @@ export function TeamStatusBar({
                   <Text
                     style={[styles.status, { color: t.map.gnssLost }]}
                     numberOfLines={1}
+                    maxFontSizeMultiplier={PILL_FONT_CAP}
                     testID="team-bar-status"
                   >
                     {summary.status}
@@ -167,20 +234,28 @@ export function TeamStatusBar({
                 </>
               ) : (
                 <>
+                  {/* The glyph first, so it is never the part that runs out of room. */}
+                  <View testID={`team-bar-glyph-${summary.sync}`}>
+                    <Icon source={glyph} size={14} color={glyphColor} />
+                  </View>
                   <Text
                     style={[styles.status, styles.strong, { color: t.map.chromeInk }]}
                     numberOfLines={1}
+                    maxFontSizeMultiplier={PILL_FONT_CAP}
                     testID="team-bar-status"
                   >
                     {summary.solo ? summary.status : `${summary.online}/${summary.total}`}
                   </Text>
-                  {!summary.solo && (
-                    <Text style={[styles.status, { color: t.map.chromeInk }, styles.muted]}>
+                  {/* "12/12" leaves no room for the word at 360 dp (`pillTextRoom`). */}
+                  {!summary.solo && `${summary.online}/${summary.total}`.length <= 3 && (
+                    <Text
+                      style={[styles.status, { color: t.map.chromeInk }, styles.muted]}
+                      numberOfLines={1}
+                      maxFontSizeMultiplier={PILL_FONT_CAP}
+                    >
                       online
                     </Text>
                   )}
-                  <Text style={[styles.status, { color: t.map.chromeInk }, styles.muted]}>·</Text>
-                  <Icon source={glyph} size={14} color={glyphColor} />
                 </>
               )}
             </View>
@@ -224,15 +299,15 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   pill: {
     position: 'absolute',
-    left: 76,
-    right: 76,
+    left: PILL_INSET,
+    right: PILL_INSET,
     height: PILL_H,
     borderRadius: PILL_H / 2,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingLeft: 8,
-    paddingRight: 8,
+    gap: PILL_GAP,
+    paddingLeft: PILL_PAD,
+    paddingRight: PILL_PAD,
     shadowOpacity: 0.28,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
@@ -240,7 +315,7 @@ const styles = StyleSheet.create({
   },
   add: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   name: { fontSize: 14, lineHeight: 18, fontWeight: '800' },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: STATUS_GAP },
   status: { fontSize: 12, lineHeight: 15, fontWeight: '700' },
   strong: { fontWeight: '800' },
   muted: { opacity: 0.72 },
@@ -260,8 +335,8 @@ const styles = StyleSheet.create({
   unreadText: { fontSize: 10, lineHeight: 12, fontWeight: '900' },
   bang: {
     position: 'absolute',
-    // The pill's right edge (76) less the overhang.
-    right: 76 - 6,
+    // The pill's right edge less the overhang.
+    right: PILL_INSET - 6,
     width: 24,
     height: 24,
     borderRadius: 12,

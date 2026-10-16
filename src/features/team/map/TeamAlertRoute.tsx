@@ -2,23 +2,43 @@
  * `/team/sos/<owner>/<id>` and `/team/rally/<owner>/<id>` (an SOS or rally
  * notification's link, #708): centre the main map on it — an SOS on its
  * raiser's live position — and leave. Its band on the map carries Navigate.
+ *
+ * `?team=<id>` (2.7.0): the alert came from a team that may not be on
+ * screen (an SOS from any team rings, owner 2026-10-16); that team is shown
+ * first, then the map centres on the alert.
  */
-import { useTeamStore, type TeamSnapshot } from '@state/teamStore';
+import { reportError } from '@lib/errorReporting';
+import { switchToTeam, useTeamStore, type TeamSnapshot } from '@state/teamStore';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useTeamMapFocus } from './teamMapFocus';
 
 export function TeamAlertRoute({ kind }: { kind: 'sos' | 'rally' }) {
   const router = useRouter();
-  const { owner, id } = useLocalSearchParams<{ owner: string; id: string }>();
+  const { owner, id, team } = useLocalSearchParams<{ owner: string; id: string; team?: string }>();
+  // The alert's team on screen first (a no-op when it already is).
+  const [ready, setReady] = useState(team === undefined || team === '');
+  useEffect(() => {
+    if (ready || team === undefined) return;
+    let live = true;
+    switchToTeam(team)
+      .catch((e) => reportError(e, 'team-alert-switch'))
+      .finally(() => {
+        if (live) setReady(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, [ready, team]);
   // One number per selector: a fresh tuple would re-render for ever.
   const lng = useTeamStore((s) => where(s, kind, owner, id)?.[0]);
   const lat = useTeamStore((s) => where(s, kind, owner, id)?.[1]);
   useEffect(() => {
+    if (!ready) return;
     if (lng !== undefined && lat !== undefined) useTeamMapFocus.getState().focus(lng, lat, 16);
     router.replace('/');
-  }, [lng, lat, router]);
+  }, [ready, lng, lat, router]);
   return null;
 }
 

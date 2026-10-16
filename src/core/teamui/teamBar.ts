@@ -18,7 +18,12 @@
 import { formatDistance, type Units } from '@core/format';
 import { ageBand, FRESH_MS, rangeAndBearing, shortAge, type AgeBand } from './positions';
 
-export type SyncState = 'lan' | 'look' | 'pending' | 'off';
+/**
+ * `net`: this phone is in its team's room over the internet (2.7.0, #705);
+ * `noNet`: the team's internet is on but the relay is out of reach, while
+ * nearby phones still sync.
+ */
+export type SyncState = 'net' | 'noNet' | 'lan' | 'look' | 'pending' | 'off';
 
 export interface BarMember {
   id: string;
@@ -47,6 +52,11 @@ export interface BarInputs {
   meshRunning: boolean;
   /** The mesh is wanted (foreground, a team open) but has not started yet. */
   meshStarting?: boolean;
+  /**
+   * The team's internet (#705): `up` when this phone reached its room, `down`
+   * when the switch is on but the relay is out of reach; absent when off.
+   */
+  internet?: 'up' | 'down';
   now: number;
 }
 
@@ -89,6 +99,8 @@ export function memberAgeMs(
 }
 
 const SYNC_WORDS: Record<SyncState, string> = {
+  net: 'syncing over the internet',
+  noNet: 'no internet, syncing nearby',
   lan: 'syncing nearby',
   look: 'looking for teammates',
   pending: 'connecting',
@@ -111,13 +123,15 @@ export function teamBarSummary(i: BarInputs): TeamBarSummary {
   const online = 1 + aged.filter((a) => a.age !== null && a.age <= FRESH_MS).length;
   const total = Math.max(1, active.length);
   const solo = others.length === 0;
-  const sync: SyncState = !i.meshRunning
+  const lanSync: SyncState = !i.meshRunning
     ? i.meshStarting === true
       ? 'pending'
       : 'off'
     : i.connected.size > 0
       ? 'lan'
       : 'look';
+  const sync: SyncState =
+    i.internet === 'up' ? 'net' : i.internet === 'down' && i.connected.size > 0 ? 'noNet' : lanSync;
   const heard = aged.map((a) => a.age).filter((a): a is number => a !== null);
   const offlineMin =
     sync === 'off' && heard.length > 0 ? Math.floor(Math.min(...heard) / 60_000) : null;
@@ -149,6 +163,8 @@ export interface PanelMember {
   ageMs: number | null;
   /** "Live", "Live · 1 min ago", "Last seen 8 min ago", "Lost · 34 min", "Not seen yet". */
   line: string;
+  /** After a link chip (#705), which already says how they are reached: "now", "8 min ago". */
+  short: string;
   /** From me, when both positions are known. */
   distanceM: number | null;
   compass: string | null;
@@ -196,6 +212,7 @@ export function panelMembers(
         band,
         ageMs: age,
         line,
+        short: age === null ? 'Not seen yet' : ago,
         distanceM: rb ? rb.meters : null,
         compass: rb ? rb.compass : null,
         lastPosition: pos !== undefined && band !== 'fresh',

@@ -34,12 +34,12 @@ function world() {
   const schedule = (fn: () => void) => rig.hub.schedule(fn);
   const server = new FakeRoomServer(nodeCrypto, HOST, schedule, rig.now);
   const rtc = new FakeRtcNetwork(schedule);
-  const phone = () =>
+  const phone = (now: () => number = rig.now) =>
     new TeamService({
       c: nodeCrypto,
       disk: new MemoryTeamDisk(),
       transport: rig.hub.createTransport(),
-      now: rig.now,
+      now,
       tickMs: 5_000,
       timers: rig.timers,
       internet: { host: HOST, ws: server.factory, rtc: rtc.module, stun: STUN, jitterMs: 0 },
@@ -65,11 +65,17 @@ function setNet(p: TeamService, on: boolean, now: number): void {
 }
 
 /** Marc and Julie in one team, joined on the LAN, then apart (LAN stopped). */
-async function pair(w: ReturnType<typeof world>, net = true) {
+async function pair(w: ReturnType<typeof world>, net = true, bNow?: () => number) {
   const { rig } = w;
   const a = w.phone();
-  const b = w.phone();
-  await a.createTeam({ name: 'Remote', myName: 'Marc', lifetimeMs: lifetimeMs('14d') });
+  const b = w.phone(bNow);
+  // The switch comes later (below, or by the test), as for a team made before 2.7.0.
+  await a.createTeam({
+    name: 'Remote',
+    myName: 'Marc',
+    lifetimeMs: lifetimeMs('14d'),
+    internet: false,
+  });
   await active(a).startMesh();
   const inv = active(a).createInvite(DEFAULT_INVITE) as CreatedInvite;
   await b.startJoin(parseAnyInvite(webJoinLink(inv.payload))!, 'Julie');
@@ -229,6 +235,19 @@ describe('PathManager: internet paths (G6)', () => {
     await w.run(4_000);
     expect(paths(a)).toEqual(['direct']);
     expect(active(b).soses()).toHaveLength(1);
+  });
+
+  it('meets in the server’s day once a room told the time, whatever this phone’s clock says', async () => {
+    const w = world();
+    let skew = 0;
+    const { a, b } = await pair(w, true, () => w.rig.now() + skew);
+    // Julie's phone falls 15 h behind: its own clock names yesterday's room.
+    skew = -15 * 3_600_000;
+    await online(w, a, b);
+    await w.run(3_000);
+    expect(w.server.rooms()).toHaveLength(1);
+    expect(paths(a)).toEqual(['direct']);
+    expect(paths(b)).toEqual(['direct']);
   });
 
   it('gives a banned member no ICE, and going offline closes every internet path', async () => {
