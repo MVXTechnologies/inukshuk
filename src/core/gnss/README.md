@@ -52,8 +52,12 @@ caster bytes ──► NtripResponseParser (ntrip.ts) ──► RTCM bytes ─�
 - NTRIP: write `buildNtripRequest(...)` after connecting, feed every received
   chunk to `NtripResponseParser.push`, write the returned `data` to the
   receiver as-is (BLE: split to the MTU); upload GGA when `ggaDecision` says
-  so (the receiver's own GGA line, or `buildGga` for UBX-only kits). A head
-  status other than `streaming` ends the session with that reason;
+  so (the user's consent decides, not the sourcetable's often-empty nmea
+  flag; in-band right after the reply, and before it when the caster stays
+  silent). The reply is never matched to the request's version: a Leica GR30
+  answers Ntrip/2.0 requests with `SOURCETABLE 200 OK` / `ICY 200 OK`
+  (fixture: `FakeCaster` in `testUtils.ts`, byte-exact). A head status other
+  than `streaming` ends the session with that reason;
 - the TCP/TLS socket, credential storage (secure store), background buffering
   and the 10 Hz throttle live natively.
 
