@@ -1032,11 +1032,14 @@ static void testEngine() {
     CHECK(!img2.empty());
     std::vector<uint8_t> px(64 * 64 * 4, 200);
     int levels = 0;
+    // Built before the calls: an argument reading `levels` beside one that sets it is
+    // evaluated in an unspecified order (GCC on x86-64: right to left, levels 0).
+    const std::vector<uint8_t> chain64 = buildMipChain(px.data(), 64, levels);
     for (int round = 0; round < 30 && !img2.empty(); round++) {
       auto batch = img2;
       img2.clear();
       for (const auto& d : batch)
-        sc.onImageryLevels(d.z, d.x, d.y, buildMipChain(px.data(), 64, levels), 64, levels, gen);
+        sc.onImageryLevels(d.z, d.x, d.y, chain64, 64, levels, gen);
       so = settle(in, 1);
     }
     int withImg = 0;
@@ -1046,7 +1049,7 @@ static void testEngine() {
     // A stale generation is dropped; a reset frees every slot.
     sc.resetImagery();
     CHECK(sc.imageryGeneration() == gen + 1);
-    sc.onImageryLevels(3, 1, 1, buildMipChain(px.data(), 64, levels), 64, levels, gen);
+    sc.onImageryLevels(3, 1, 1, chain64, 64, levels, gen);
     so = settle(in, 1);
     for (const auto& u : so.imageryUploads) CHECK(u.size == 64);
     // A block sibling nobody asked for waits CPU-side: it never takes a GPU slot.
@@ -1054,7 +1057,7 @@ static void testEngine() {
     const int slotsBefore = sc.stats().imagerySlots;
     const uint32_t gen2 = sc.imageryGeneration();
     for (int i = 0; i < 8; i++)
-      sc.onImageryLevels(17, 1000 + i, 1000, buildMipChain(px.data(), 64, levels), 64, levels, gen2);
+      sc.onImageryLevels(17, 1000 + i, 1000, chain64, 64, levels, gen2);
     so = settle(in, 3);
     CHECK(sc.stats().imagerySlots == slotsBefore);
     for (const auto& u : so.imageryUploads) CHECK(u.slot >= 0);
@@ -1384,9 +1387,10 @@ static void testDrapeArming() {
   // A drape arriving while armed waits: no upload before the ramp.
   std::vector<uint8_t> px(16 * 16 * 4, 90);
   int levels = 0;
+  // Built first: beside `levels` in one call its side effect would land in an unspecified order.
+  const std::vector<uint8_t> chain16 = buildMipChain(px.data(), 16, levels);
   if (!img.empty())
-    eng.onImageryLevels(img.front().z, img.front().x, img.front().y, buildMipChain(px.data(), 16, levels), 16,
-                        levels, eng.imageryGeneration());
+    eng.onImageryLevels(img.front().z, img.front().x, img.front().y, chain16, 16, levels, eng.imageryGeneration());
   in.timeMs += 16;
   out = eng.frame(in);
   CHECK(out.imageryUploads.empty());
