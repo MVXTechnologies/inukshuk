@@ -13,14 +13,15 @@
 import type { PathKind } from '@core/group/path';
 import type { MeshNetworkInfo } from '@core/mesh/hotspot';
 import { addBreadcrumb, reportError } from '@lib/errorReporting';
-import { createInvite, rotateBody } from '@core/team/actions';
+import { addMemberBody, createInvite, rotateBody, targetOf } from '@core/team/actions';
+import { libraryRegistry } from '@core/domains/library';
 import type { Json } from '@core/team/canonical';
 import type { DeviceKeys, TeamCrypto } from '@core/team/crypto';
 import type { SignedOp } from '@core/team/envelope';
 import { encodeInvite, type InviteToken, type NetHint } from '@core/team/invite';
 import { activeMembers, cutFor } from '@core/team/membership';
 import { sosCoolingDown } from '@core/team/records';
-import { TeamReplica } from '@core/team/replica';
+import { TeamReplica, type GroupReplicaOptions } from '@core/team/replica';
 import type { Audience, GroupLink, Priority, Role } from '@core/team/roles';
 import type { SessionEvent, SessionOptions, SyncSession } from '@core/team/sync';
 import { alertContext, alertFor, TaskAlertThrottle, type TeamAlert } from '@core/teamui/alerts';
@@ -245,7 +246,10 @@ export class TeamSession {
       deps.disk.loadCursor(record.teamId),
     ]);
     const now = deps.now();
-    let replica = new TeamReplica(deps.c, record.teamId, keys, saved ?? undefined);
+    // A shared folder folds the library domain (#712); every other group is a team.
+    const options: GroupReplicaOptions =
+      record.app === 'lib' ? { registry: libraryRegistry() } : {};
+    let replica = new TeamReplica(deps.c, record.teamId, keys, saved ?? undefined, options);
     replica.autoRotate = true;
     replica.ingest(envs, now);
     const mine = replica.opsInRange(replica.id, 1, Number.MAX_SAFE_INTEGER);
@@ -255,11 +259,13 @@ export class TeamSession {
         saved && saved.hlc.wall > head.stamp.wall
           ? saved.hlc
           : { wall: head.stamp.wall, counter: head.stamp.counter };
-      replica = new TeamReplica(deps.c, record.teamId, keys, {
-        seq: mine.length,
-        hlc,
-        prev: head.id,
-      });
+      replica = new TeamReplica(
+        deps.c,
+        record.teamId,
+        keys,
+        { seq: mine.length, hlc, prev: head.id },
+        options,
+      );
       replica.ingest(envs, now);
       deps.disk.saveCursor(record.teamId, replica.writer.cursor);
     }
@@ -1265,6 +1271,47 @@ export class TeamSession {
       this.replica.write(this.deps.now(), 'e.set', { k: kind, id, f: fields }),
     );
     return op === undefined ? 'rotation-pending' : null;
+  }
+
+  /**
+   * A data op of another domain (a shared folder's records, #712): written,
+   * persisted and pushed like any other. Returns its op id, or why not
+   * (`not-allowed` when the domain's fold refused it).
+   */
+  writeData(t: 'e.set' | 'e.del', body: Json): string | ActionError {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const op = this.run(() => this.replica.write(this.deps.now(), t, body));
+    if (op === undefined) return 'rotation-pending';
+    return this.applied(op.id) ? op.id : 'not-allowed';
+  }
+
+  /**
+   * Add a member whose keys this phone already knows (a teammate of the team
+   * a folder is shared with, #712): `m.add` with the current key wrapped for
+   * them. No invite, no handshake: their phone picks the group up.
+   */
+  addMember(member: { id: string; x: string; role: Role }): ActionError | null {
+    const blocked = this.guardWrite();
+    if (blocked) return blocked;
+    const existing = this.replica.state.members.get(member.id);
+    if (existing !== undefined) return 'no-change';
+    const key = this.replica.sendKey();
+    if (key === undefined) return 'rotation-pending';
+    const body = addMemberBody(this.deps.c, this.teamId, targetOf(member), member.role, key);
+    return this.accepted(this.control('m.add', body)) ? null : 'not-allowed';
+  }
+
+  /**
+   * The team this group is being picked up through (#712, design §3.4 step
+   * 3): a shared folder this phone learned of from a teammate's `gref` and
+   * whose log does not yet name it an active member. The links then ask a
+   * teammate for it, whichever side dialled (`LinkHost`).
+   */
+  pickupParent(): string | undefined {
+    const parent = this.record.parent;
+    if (this.record.app !== 'lib' || parent === undefined) return undefined;
+    return this.replica.isActiveMember(this.me) ? undefined : parent;
   }
 
   // ── Admin actions ────────────────────────────────────────────────────────

@@ -230,7 +230,18 @@ export class GroupHost implements SessionNet {
     return this.loaded;
   }
 
+  /** The teams (what the team screens list); shared folders are left out. */
   get teams(): readonly TeamRecord[] {
+    return this.records.filter((r) => r.app === undefined);
+  }
+
+  /** Shared folders and items (#712), joined or being picked up. */
+  get libraries(): readonly TeamRecord[] {
+    return this.records.filter((r) => r.app === 'lib');
+  }
+
+  /** Every group record (teams and shared folders). */
+  get allRecords(): readonly TeamRecord[] {
     return this.records;
   }
 
@@ -250,7 +261,7 @@ export class GroupHost implements SessionNet {
       const s = this.sessions.get(r.teamId);
       return {
         id: r.teamId,
-        app: s ? groupMeta(s.replica.data(now)).app : 'team',
+        app: s ? groupMeta(s.replica.data(now)).app : (r.app ?? 'team'),
         name: r.name,
         role: s?.myRole,
         open: s !== undefined,
@@ -308,11 +319,17 @@ export class GroupHost implements SessionNet {
     return p;
   }
 
-  /** Found a team (its genesis on disk, its record kept, its session open). */
+  /**
+   * Found a group (its genesis on disk, its record kept, its session open): a
+   * team, or with `app: 'lib'` a shared folder (#712; `parent` = the team it
+   * is shared with).
+   */
   async create(options: {
     name: string;
     myName: string;
     lifetimeMs: number;
+    app?: 'lib';
+    parent?: string;
   }): Promise<{ session: TeamSession; key: Parameters<TeamSession['replica']['addKey']>[0] }> {
     await this.load();
     const name = cleanName(options.name);
@@ -331,8 +348,21 @@ export class GroupHost implements SessionNet {
       joinedAt: now,
       prefs: { ...DEFAULT_TEAM_PREFS },
       lastReadAt: 0,
+      ...(options.app !== undefined ? { app: options.app } : {}),
+      ...(options.parent !== undefined ? { parent: options.parent } : {}),
     });
     return { session: await this.ensure(team.teamId), key: team.key };
+  }
+
+  /**
+   * Hold a group this phone learned of but has no log for yet (a folder a
+   * teammate shared with the team, #712): an empty replica the links fill
+   * from a teammate's phone. Its session opens at once.
+   */
+  async adopt(record: TeamRecord): Promise<TeamSession> {
+    await this.load();
+    if (!this.records.some((r) => r.teamId === record.teamId)) this.putRecord(record);
+    return this.ensure(record.teamId);
   }
 
   /**

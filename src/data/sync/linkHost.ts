@@ -74,6 +74,12 @@ export interface GroupEndpoint {
   onSessionEvent(connKey: string, event: SessionEvent, session: SyncSession): void;
   /** Decrypt a stored op's body (lane of an SOS record, which the envelope hides). */
   decode(op: SignedOp): Json | undefined;
+  /**
+   * A group this phone is picking up (a folder shared with one of its teams,
+   * #712): the parent team's id while its own log does not yet name this
+   * phone an active member, else undefined.
+   */
+  pickupParent?(): string | undefined;
 }
 
 export interface Timers {
@@ -535,7 +541,8 @@ export class LinkHost {
       maxFrameBytes: conn.maxFrameBytes,
       limits: limitsForPath(conn.path),
       caps: LINK_HELLO_CAPS,
-      groups: () => this.o.groups(),
+      // A group being picked up has no log to answer with: only its own opens carry it.
+      groups: () => this.o.groups().filter((g) => this.pickupParentOf(g) === undefined),
       channelFactory: (req: ChannelRequest) => this.channelFor(link, req),
       bans: this.bans,
       now,
@@ -621,6 +628,8 @@ export class LinkHost {
             this.deliver(link, e.groupId, entry, { type: 'closed', why: e.why });
             link.sessions.delete(e.groupId);
           }
+          // A pickup that ended without making this phone a member: not asked again here.
+          if (this.pickupParentOf(e.groupId) !== undefined) link.refused.add(e.groupId);
           break;
         }
         case 'strike':
@@ -702,21 +711,43 @@ export class LinkHost {
     for (const l of ranked.slice(1)) this.closeLink(l, 'duplicate');
   }
 
+  private pickupParentOf(groupId: string): string | undefined {
+    try {
+      return this.o.group(groupId)?.pickupParent?.();
+    } catch {
+      return undefined;
+    }
+  }
+
   /**
    * The dialling side of a mux link carries every other group the peer is an
    * active member of (by this phone's log); the peer refuses the ones it does
-   * not hold, and those are not asked again on this link. Only the dialling
-   * side asks, so two opens of one group never cross.
+   * not hold, and those are not asked again on this link.
+   *
+   * **Pickups (G10, #712)** are the one exception, on either side: a phone
+   * picking up a folder shared with its team has no log for it yet, so it
+   * cannot know who holds it; it asks any active member of that team, and
+   * never answers an open for it (its `groups` leave it out), so a peer's
+   * crossing open is refused and the two never both open one group. Once its
+   * log names it a member, the folder is an ordinary group again.
    */
   private openChannels(link: HostLink): void {
-    if (link.ended || link.side !== 'initiator' || link.mux.state !== 'open') return;
+    if (link.ended || link.mux.state !== 'open') return;
     const peer = this.identityOf(link);
     if (peer === undefined) return;
     const me = this.o.me();
     for (const groupId of this.o.groups()) {
       if (link.refused.has(groupId) || link.mux.channelOf(groupId) !== undefined) continue;
       const g = this.o.group(groupId);
-      if (g === undefined || !g.store.isActiveMember(peer) || !g.store.isActiveMember(me)) continue;
+      if (g === undefined) continue;
+      const parent = this.pickupParentOf(groupId);
+      if (parent !== undefined) {
+        const team = this.o.group(parent)?.store;
+        if (team?.isActiveMember(peer) === true && team.isActiveMember(me)) link.mux.open(groupId);
+        continue;
+      }
+      if (link.side !== 'initiator') continue;
+      if (!g.store.isActiveMember(peer) || !g.store.isActiveMember(me)) continue;
       link.mux.open(groupId);
     }
   }

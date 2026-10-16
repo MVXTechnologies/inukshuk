@@ -59,6 +59,13 @@ export interface TeamRecord {
   teamNameKeyId?: string;
   /** Newest message time seen per thread (`photo:<id>`, `pin:<id>`): the map's "new" bubbles. */
   seen?: Record<string, number>;
+  /**
+   * What the group is (2.7.0, design §3.3): absent for a team; `lib` for a
+   * shared folder or item (#712), whose replica folds the library domain.
+   */
+  app?: 'lib';
+  /** The team a shared folder was shared with (it rides that team's links). */
+  parent?: string;
 }
 
 /** Device secrets, base64url (the public keys are derived on load). */
