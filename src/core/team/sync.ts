@@ -235,6 +235,12 @@ export interface SessionOptions {
   linkUpgrade?: boolean;
   /** Carry WebRTC signalling (`rtc` frames), only with a peer claiming {@link RTC_CAP}. */
   rtc?: boolean;
+  /**
+   * Authenticate and signal only (the L0 room session, design §2.3/§2.4): no
+   * version vector, no `want`/`ops`, no pushes. The room is never a data
+   * relay (review §2.9); a peer that sends sync frames anyway is struck.
+   */
+  signalOnly?: boolean;
 }
 
 /** A frame waiting in a pull-mode outbox: plaintext until the link takes it. */
@@ -326,6 +332,13 @@ export class SyncSession {
   private outstanding = new Map<string, number>();
   /** Pull mode: when each outstanding request was made or last served an op. */
   private wantProgress = new Map<string, number>();
+  /**
+   * Pull mode: the highest seq asked of this peer per author, kept until the
+   * peer has served through it. A range can complete through another peer
+   * first (a faster path); this peer's copies still on the way answered our
+   * `want` and must not be judged unsolicited (found by the G6 simulator).
+   */
+  private asked = new Map<string, number>();
   /** `want` rounds since the peer's last vector (bounds re-requests while chains re-pin). */
   private wantRounds = 0;
   /** Whether we still need to confirm the peer's membership (we joined before knowing the team). */
@@ -457,7 +470,7 @@ export class SyncSession {
   push(ops: readonly SignedOp[], now?: number, lane: Lane = LANE_LIVE): Step {
     const step = empty();
     if (now !== undefined) this.clock = Math.max(this.clock, now);
-    if (this.phase !== 'open') return step;
+    if (this.phase !== 'open' || this.options.signalOnly === true) return step;
     const fresh = ops.filter(
       (op) => op.env.sq === 0 || (this.peerVv?.[op.env.au] ?? 0) < op.env.sq,
     );
@@ -519,7 +532,9 @@ export class SyncSession {
       this.fail(step, 'upgrade-timeout');
       return step;
     }
-    if (this.phase === 'open') this.sendSealed({ t: 'vv', v: this.store.versionVector() }, step);
+    if (this.phase === 'open' && this.options.signalOnly !== true) {
+      this.sendSealed({ t: 'vv', v: this.store.versionVector() }, step);
+    }
     return step;
   }
 
@@ -846,6 +861,7 @@ export class SyncSession {
   private open(step: Step, joining: boolean, now: number): void {
     this.phase = 'open';
     step.events.push({ type: 'open', peer: this.peer!, joining });
+    if (this.options.signalOnly === true) return;
     this.sendSealed({ t: 'vv', v: this.store.versionVector() }, step);
     this.sendOps(this.store.liveEphemeral(now), false, step, LANE_LIVE);
   }
@@ -908,6 +924,13 @@ export class SyncSession {
     this.recvCounter++;
     const f = parseFrame(plain);
     if (f === undefined) return this.strike(step, 'malformed', now);
+    if (
+      this.options.signalOnly === true &&
+      (f['t'] === 'vv' || f['t'] === 'want' || f['t'] === 'ops')
+    ) {
+      // A signalling session never syncs (the room is no data relay).
+      return this.strike(step, 'protocol', now);
+    }
     switch (f['t']) {
       case 'vv':
         return this.onVv(f, now, step);
@@ -988,9 +1011,10 @@ export class SyncSession {
       // `want`: forget only requests that stopped making progress, or the
       // peer serves the same ranges twice and the late copies arrive
       // unsolicited, over-rate, as strikes (found by the simulator).
-      for (const a of [...this.outstanding.keys()]) {
+      for (const a of new Set([...this.outstanding.keys(), ...this.asked.keys()])) {
         if (now - (this.wantProgress.get(a) ?? -Infinity) > WANT_STALE_MS) {
           this.outstanding.delete(a);
+          this.asked.delete(a);
         }
       }
     } else {
@@ -1025,6 +1049,7 @@ export class SyncSession {
     for (const [a, , to] of ranges) {
       this.outstanding.set(a, to);
       this.wantProgress.set(a, this.clock);
+      if (pull) this.asked.set(a, Math.max(this.asked.get(a) ?? 0, to));
     }
     this.sendSealed({ t: 'want', r: ranges }, step);
   }
@@ -1081,7 +1106,7 @@ export class SyncSession {
         typeof author === 'string' &&
         typeof sq === 'number' &&
         sq >= 1 &&
-        sq <= (this.outstanding.get(author) ?? 0);
+        sq <= Math.max(this.outstanding.get(author) ?? 0, this.asked.get(author) ?? 0);
       const category = categoryOf(String(env?.['t'] ?? ''));
       if (!asked && !this.admit(category, author, now)) {
         // An over-rate live stroke is dropped without a strike: each one holds the
@@ -1128,6 +1153,7 @@ export class SyncSession {
         // falls short (an anchored chain re-pinning: ask again from our new head).
         if ((vv[a] ?? 0) >= to || (served.get(a) ?? 0) >= to) this.outstanding.delete(a);
       }
+      for (const [a, n] of served) if (n >= (this.asked.get(a) ?? 0)) this.asked.delete(a);
       // Ask for the next slice once this round is in (a peer that sends nothing stalls only itself).
       if (this.outstanding.size === 0 && this.wantRounds < MAX_WANT_ROUNDS) {
         this.wantRounds++;

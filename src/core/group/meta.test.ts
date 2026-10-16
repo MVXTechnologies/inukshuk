@@ -11,6 +11,7 @@ import {
   GROUP_RECORD_ID,
   groupMeta,
   groupPlugin,
+  internetOn,
   IRDV,
   NET,
 } from './meta';
@@ -201,5 +202,29 @@ describe('net: the group’s internet switch', () => {
     const adminDel = w.root.write(at(7), 'e.del', { k: NET, id: 'g' })!;
     expect(why(w.root, adminDel.id)).toBeUndefined();
     expect(w.root.data().entities.get('net:g')?.state.deleted).toBeDefined();
+  });
+});
+
+describe('internetOn: is the group’s internet switch on (G6)', () => {
+  it('off by default; on with the admins’ net record or a gmeta flag; off again with inet 0', () => {
+    const { w, rb, sync } = crew();
+    expect(internetOn(w.root.data())).toBe(false);
+    w.root.write(at(1), 'e.set', { k: NET, id: 'g', f: { inet: 1 } });
+    sync(at(2));
+    expect(internetOn(w.root.data())).toBe(true);
+    expect(internetOn(rb.data())).toBe(true);
+    w.root.write(at(3), 'e.set', { k: NET, id: 'g', f: { inet: 0 } });
+    sync(at(4));
+    expect(internetOn(rb.data())).toBe(false);
+    w.root.write(at(5), 'e.set', gmeta({ app: 'lib', v: 1, net: 1 }));
+    sync(at(6));
+    expect(internetOn(rb.data())).toBe(true);
+  });
+
+  it('a deleted net record no longer turns it on', () => {
+    const { w } = crew();
+    w.root.write(at(1), 'e.set', { k: NET, id: 'g', f: { inet: 1 } });
+    w.root.write(at(2), 'e.del', { k: NET, id: 'g' });
+    expect(internetOn(w.root.data())).toBe(false);
   });
 });

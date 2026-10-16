@@ -264,6 +264,30 @@ describe('pull mode (seal on dequeue)', () => {
     expect(a.s.hasPending(LANE_SYNC)).toBe(true);
     expect(strikes(a)).toEqual([]);
   });
+
+  it('a range that completes through another peer first: the late copies were still asked for', () => {
+    const { w, bob } = twoMembers();
+    const limits = { ...RELAY_LIMITS, maxFrameBytes: 4096 };
+    const { a, b } = open(bob, w.root, T0 + MIN, { limits }, { limits });
+    // More messages than the peer's unsolicited budget, served over many small frames.
+    for (let i = 0; i < 2 * RELAY_LIMITS.ops.msg[1]; i++) {
+      w.root.write(T0 + MIN + 1 + i, 'msg', { id: `m${i}`, th: 'team', tx: `note ${i}` });
+    }
+    const at = T0 + 2 * MIN;
+    b.events.push(...b.s.tick(at).events);
+    deliver(b, a, at); // the vector
+    deliver(a, b, at); // Bob's want
+    expect(b.s.pendingFrames).toBeGreaterThan(2);
+    // A faster path delivers everything first…
+    bob.ingest(
+      w.root.log.logged().map((op) => op.env),
+      at,
+    );
+    // …then this peer's answer lands, frame after frame: no strike, nothing lost.
+    deliver(b, a, at);
+    expect(strikes(a)).toEqual([]);
+    expect(bob.versionVector()).toEqual(w.root.versionVector());
+  });
 });
 
 describe('`up`/`upok`: LAN upgrade to link-mux framing (cap-gated)', () => {
@@ -441,6 +465,52 @@ describe('`rtc`: WebRTC signalling inside the session (R-RTC-1/3)', () => {
     ]) {
       expect(ok(bad)).toBeUndefined();
     }
+  });
+});
+
+describe('signal-only sessions: the L0 room is never a data relay', () => {
+  const offer = { k: 'offer' as const, sdp: 'v=0\r\na=fingerprint:sha-256 AB:CD\r\n' };
+  const only: SessionOptions = { rtc: true, signalOnly: true };
+
+  it('authenticates and signals, but sends no vector, want, op or push', () => {
+    const { w, bob } = twoMembers();
+    // Bob lacks a message the root holds: a syncing session would pull it.
+    w.root.write(T0 + 3, 'msg', { id: 'm1', th: 'team', tx: 'hello' });
+    const { a, b } = open(
+      capStore(bob, claimsAll),
+      capStore(w.root, claimsAll),
+      T0 + 5,
+      only,
+      only,
+    );
+    expect(a.s.phase).toBe('open');
+    expect(b.s.phase).toBe('open');
+    // The handshake only: hi1 and hi3 one way, hi2 the other, nothing sealed.
+    expect(a.wire).toHaveLength(2);
+    expect(b.wire).toHaveLength(1);
+    expect(a.s.tick(T0 + 60_000)).toEqual({ send: [], events: [] });
+    expect(b.s.push(w.root.log.logged(), T0 + 60_000)).toEqual({ send: [], events: [] });
+    expect(a.s.pendingFrames + b.s.pendingFrames).toBe(0);
+    expect(bob.versionVector()).not.toEqual(w.root.versionVector());
+    // Signalling still flows.
+    a.s.signal(offer, T0 + 6);
+    settle(a, b, T0 + 6);
+    expect(b.events.filter((x) => x.type === 'rtc')).toHaveLength(1);
+    expect(strikes(a)).toEqual([]);
+    expect(strikes(b)).toEqual([]);
+  });
+
+  it('strikes sync frames from a peer that tries to use the room as a relay', () => {
+    const { w, bob } = twoMembers();
+    const { a, b } = open(capStore(bob, claimsAll), capStore(w.root, claimsAll), T0, only, only);
+    for (const f of [
+      { t: 'vv', v: {} },
+      { t: 'want', r: [[bob.id, 1, 1]] },
+      { t: 'ops', o: [] },
+    ]) {
+      b.events.push(...b.s.receive(sealed(a.s, f), T0).events);
+    }
+    expect(strikes(b)).toEqual(['protocol', 'protocol', 'protocol']);
   });
 });
 

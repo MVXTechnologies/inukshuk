@@ -9,6 +9,7 @@ import {
   channelLimits,
   channelTag,
   decodeHello,
+  DIRECT_LIMITS,
   decodeMuxFrame,
   encodeHello,
   encodeMuxFrame,
@@ -26,6 +27,7 @@ import {
   Pacer,
   PAD_BUCKETS,
   paddedSize,
+  TURN_LIMITS,
   type ChannelRequest,
   type LinkEvent,
   type LinkOptions,
@@ -247,10 +249,18 @@ describe('wire format', () => {
     expect(channelTag(c, 'not base64!', l1, 'sync')).toHaveLength(32);
   });
 
-  it('uses relay budgets on internet paths (R-RL-4) and fits sessions in the carrier', () => {
+  it('uses internet profiles with relay strikes and bans (R-RL-4) and fits sessions in the carrier', () => {
     expect(limitsForPath('nearby')).toBe(LAN_LIMITS);
-    expect(limitsForPath('direct')).toBe(RELAY_LIMITS);
-    expect(limitsForPath('relay')).toBe(RELAY_LIMITS);
+    expect(limitsForPath('direct')).toBe(DIRECT_LIMITS);
+    expect(limitsForPath('relay')).toBe(TURN_LIMITS);
+    // PM decision after G2: 256 KiB/s direct, 128 KiB/s through TURN.
+    expect(DIRECT_LIMITS.bytesPerSec).toBe(256 * 1024);
+    expect(TURN_LIMITS.bytesPerSec).toBe(128 * 1024);
+    for (const l of [DIRECT_LIMITS, TURN_LIMITS]) {
+      expect(l.strikesToBan).toBe(RELAY_LIMITS.strikesToBan);
+      expect(l.banMs).toBe(RELAY_LIMITS.banMs);
+      expect(l.ops).toEqual(RELAY_LIMITS.ops);
+    }
     expect(channelLimits(RELAY_LIMITS, 65536).maxFrameBytes).toBe(65536 - MUX_HEADER_BYTES);
     expect(channelLimits(RELAY_LIMITS, 1 << 20).maxFrameBytes).toBe(RELAY_LIMITS.maxFrameBytes);
   });
@@ -383,6 +393,31 @@ describe('LinkMux: hellos and channels', () => {
     expect(order[0]).toBe('SOS');
     expect(order.slice(1)).toEqual(['c1-a', 'c3-a', 'c1-b', 'c3-b', 'c1-c']);
     expect(a.mux.sentByLane[0]).toBeGreaterThan(0);
+  });
+
+  it('says which lane each frame came from (nextOut), control frames as lane 0', () => {
+    const { a, b } = pair([G1], [G1]);
+    a.mux.open(G1);
+    pump(a, b);
+    const ch = a.channels.get(`${G1}/sync`)!;
+    ch.queue(3, 'bulk');
+    ch.queue(2, 'sync');
+    ch.queue(1, 'live');
+    expect(a.mux.nextLane).toBe(1);
+    const seen: [string, Lane][] = [];
+    for (let o = a.mux.nextOut(T); o !== undefined; o = a.mux.nextOut(T + 60_000)) {
+      seen.push([new TextDecoder().decode(decodeMuxFrame(o.frame)!.payload), o.lane]);
+    }
+    expect(seen).toEqual([
+      ['live', 1],
+      ['sync', 2],
+      ['bulk', 3],
+    ]);
+    expect(a.mux.nextLane).toBeUndefined();
+    // A keepalive (a control frame) is lane 0.
+    a.mux.tick(T + 120_000);
+    expect(a.mux.nextLane).toBe(0);
+    expect(a.mux.nextOut(T + 120_000)?.lane).toBe(0);
   });
 
   it('closes a channel on both sides when its session ends', () => {

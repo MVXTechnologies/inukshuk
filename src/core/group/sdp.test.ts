@@ -1,5 +1,9 @@
 import {
+  allowCandidate,
+  candidateType,
+  filterSdpCandidates,
   normalizeFingerprint,
+  selectedPathKind,
   parseSdpFingerprints,
   sdpFingerprintBinding,
   transportCertificateFingerprint,
@@ -246,5 +250,97 @@ describe('sdpFingerprintBinding (R-RTC-2)', () => {
       ok: false,
       reason: 'not-connected',
     });
+  });
+});
+
+describe('ICE candidate filter (R-RTC-3)', () => {
+  const host = 'candidate:1 1 udp 2122260223 192.168.1.20 54321 typ host generation 0';
+  const mdns = 'candidate:2 1 udp 2122260223 4f2a.local 54321 typ host';
+  const srflx =
+    'candidate:3 1 udp 1686052607 203.0.113.5 4000 typ srflx raddr 192.168.1.20 rport 54321';
+  const relay =
+    'candidate:4 1 udp 41885439 198.51.100.7 3478 typ relay raddr 203.0.113.5 rport 4000';
+
+  it('reads the candidate type, failing closed on junk', () => {
+    expect(candidateType(host)).toBe('host');
+    expect(candidateType(`a=${srflx}`)).toBe('srflx');
+    expect(candidateType(relay)).toBe('relay');
+    for (const bad of [
+      '',
+      'candidate:',
+      'candidate:1 1 udp 1 1.2.3.4 5 kind host',
+      'x typ host',
+      'candidate:1 1 udp 1 1.2.3.4 5 typ magic',
+    ]) {
+      expect(candidateType(bad)).toBeNull();
+    }
+  });
+
+  it('never lets a host candidate out; relay policy keeps TURN only', () => {
+    expect(allowCandidate(host, 'direct')).toBe(false);
+    expect(allowCandidate(mdns, 'direct')).toBe(false);
+    expect(allowCandidate(srflx, 'direct')).toBe(true);
+    expect(allowCandidate(relay, 'direct')).toBe(true);
+    expect(allowCandidate(srflx, 'relay')).toBe(false);
+    expect(allowCandidate(relay, 'relay')).toBe(true);
+    expect(allowCandidate('garbage', 'direct')).toBe(false);
+    expect(allowCandidate('', 'relay')).toBe(true);
+  });
+
+  it('strips refused candidate lines from an SDP, keeping everything else', () => {
+    const sdp = [
+      'v=0',
+      'm=application 9 UDP/DTLS/SCTP webrtc-datachannel',
+      `a=${host}`,
+      `a=${srflx}`,
+      `a=${relay}`,
+      'a=fingerprint:sha-256 AB',
+      '',
+    ].join('\r\n');
+    expect(filterSdpCandidates(sdp, 'direct')).toBe(
+      [
+        'v=0',
+        'm=application 9 UDP/DTLS/SCTP webrtc-datachannel',
+        `a=${srflx}`,
+        `a=${relay}`,
+        'a=fingerprint:sha-256 AB',
+        '',
+      ].join('\r\n'),
+    );
+    expect(filterSdpCandidates(sdp, 'relay')).not.toContain('typ srflx');
+    expect(filterSdpCandidates('v=0\na=' + host + '\n', 'direct')).toBe('v=0\n');
+  });
+});
+
+describe('selectedPathKind', () => {
+  const report = (entries: Record<string, unknown>[]): StatsReport =>
+    new Map(entries.map((e) => [e['id'] as string, e]));
+  const cands = (local: string, remote: string) => [
+    { id: 'L', type: 'local-candidate', candidateType: local },
+    { id: 'R', type: 'remote-candidate', candidateType: remote },
+    { id: 'P', type: 'candidate-pair', localCandidateId: 'L', remoteCandidateId: 'R' },
+  ];
+
+  it('reads the transport’s selected pair: relay when either end is TURN', () => {
+    const t = { id: 'T', type: 'transport', selectedCandidatePairId: 'P' };
+    expect(selectedPathKind(report([t, ...cands('srflx', 'prflx')]))).toBe('direct');
+    expect(selectedPathKind(report([t, ...cands('relay', 'srflx')]))).toBe('relay');
+    expect(selectedPathKind(report([t, ...cands('srflx', 'relay')]))).toBe('relay');
+  });
+
+  it('falls back to a nominated, succeeded pair; null when none or incomplete', () => {
+    const pair = {
+      id: 'P',
+      type: 'candidate-pair',
+      localCandidateId: 'L',
+      remoteCandidateId: 'R',
+      nominated: true,
+      state: 'succeeded',
+    };
+    const [l, r] = cands('relay', 'relay');
+    expect(selectedPathKind(report([l!, r!, pair]))).toBe('relay');
+    expect(selectedPathKind(report([l!, r!, { ...pair, state: 'in-progress' }]))).toBeNull();
+    expect(selectedPathKind(report([l!, pair]))).toBeNull();
+    expect(selectedPathKind(new Map())).toBeNull();
   });
 });

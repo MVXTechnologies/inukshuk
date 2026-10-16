@@ -12,8 +12,8 @@
  * DTLS certificate against the remote description it was given; this is the
  * app-level check that the description it was given is the authenticated one.
  *
- * Pure: no React Native, no WebRTC types. G6 adds the ICE candidate filter
- * (no `host` candidates on the internet path, R-RTC-3) next to this.
+ * Pure: no React Native, no WebRTC types. The ICE candidate filter (no
+ * `host` candidates on the internet path, R-RTC-3) lives here too.
  */
 
 /** A certificate fingerprint: lower-case hash name, upper-case colon-separated hex. */
@@ -136,4 +136,83 @@ export function sdpFingerprintBinding(remoteSdp: string, stats: StatsReport): Fi
     return { ok: false, reason: 'mismatch' };
   }
   return { ok: true, fingerprint: actual };
+}
+
+// ── ICE candidate filter (R-RTC-3) ──────────────────────────────────────────
+
+/** What an internet path may reveal: `direct` = public (srflx) or relay; `relay` = TURN only. */
+export type IcePolicy = 'direct' | 'relay';
+
+export type CandidateType = 'host' | 'srflx' | 'prflx' | 'relay';
+
+const CANDIDATE_TYPES: ReadonlySet<string> = new Set(['host', 'srflx', 'prflx', 'relay']);
+
+/**
+ * The `typ` of an ICE candidate (`candidate:…` or `a=candidate:…`), or null
+ * when it is not a well-formed candidate line (fail closed).
+ */
+export function candidateType(candidate: string): CandidateType | null {
+  const line = candidate.trim().replace(/^a=/, '');
+  if (!line.startsWith('candidate:')) return null;
+  const parts = line.slice('candidate:'.length).split(/\s+/);
+  // foundation component transport priority address port "typ" type …
+  if (parts.length < 8 || parts[6] !== 'typ') return null;
+  const typ = parts[7]!;
+  return CANDIDATE_TYPES.has(typ) ? (typ as CandidateType) : null;
+}
+
+/**
+ * Whether a candidate may be sent or used on an internet path. Never a `host`
+ * candidate (a private LAN address: the mesh covers same-LAN peers), never an
+ * unparseable one; `relay` policy keeps TURN candidates only (R-RTC-6). The
+ * empty candidate (end of candidates) always passes.
+ */
+export function allowCandidate(candidate: string, policy: IcePolicy): boolean {
+  if (candidate.trim() === '') return true;
+  const typ = candidateType(candidate);
+  if (typ === null || typ === 'host') return false;
+  return policy === 'relay' ? typ === 'relay' : true;
+}
+
+/** An SDP with every `a=candidate` line {@link allowCandidate} refuses removed. */
+export function filterSdpCandidates(sdp: string, policy: IcePolicy): string {
+  const eol = sdp.includes('\r\n') ? '\r\n' : '\n';
+  return sdp
+    .split(/\r?\n/)
+    .filter((line) => !line.startsWith('a=candidate:') || allowCandidate(line, policy))
+    .join(eol);
+}
+
+/**
+ * Which internet path a connected peer connection actually uses, from its
+ * stats: the selected candidate pair (the transport's `selectedCandidatePairId`,
+ * else a nominated, succeeded pair) is `relay` when either end is a TURN
+ * candidate, `direct` otherwise. Null when no pair is selected yet.
+ */
+export function selectedPathKind(stats: StatsReport): 'direct' | 'relay' | null {
+  let pair: StatsEntry | undefined;
+  for (const entry of stats.values()) {
+    if (str(entry, 'type') !== 'transport') continue;
+    const id = str(entry, 'selectedCandidatePairId');
+    if (id !== undefined) pair = stats.get(id);
+  }
+  if (pair === undefined) {
+    for (const entry of stats.values()) {
+      if (
+        str(entry, 'type') === 'candidate-pair' &&
+        entry['nominated'] === true &&
+        str(entry, 'state') === 'succeeded'
+      ) {
+        pair = entry;
+        break;
+      }
+    }
+  }
+  if (pair === undefined || str(pair, 'type') !== 'candidate-pair') return null;
+  const types = ['localCandidateId', 'remoteCandidateId'].map((k) => {
+    const id = str(pair, k);
+    return id === undefined ? undefined : str(stats.get(id), 'candidateType');
+  });
+  if (types.some((t) => t === undefined)) return null;
+  return types.includes('relay') ? 'relay' : 'direct';
 }

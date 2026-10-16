@@ -19,6 +19,7 @@ import {
   needsCap,
   PEN_CAP,
   RTC_CAP,
+  RTC_PROTOCOL,
 } from './caps';
 import { PEN_PROTOCOL, validCapFields } from './record';
 import { crew } from './testUtils';
@@ -217,19 +218,24 @@ describe('per-capability versions (2.7.0 sync groups)', () => {
 describe('what a 2.7.0 phone advertises (G5)', () => {
   const at = (n: number) => T0 + n * MIN;
 
-  it('claims lnk on top of the 2.6 record, which stays byte-for-byte what older phones write', () => {
+  it('claims lnk and rtc on top of the 2.6 record, which stays byte-for-byte what older phones write', () => {
     const body = advertisedCapBody('m', at(1));
-    expect(body.f).toEqual({ ...capBody('m', at(1)).f, [LINK_CAP]: LINK_PROTOCOL });
+    expect(body.f).toEqual({
+      ...capBody('m', at(1)).f,
+      [LINK_CAP]: LINK_PROTOCOL,
+      [RTC_CAP]: RTC_PROTOCOL,
+    });
     expect(capBody('m', at(1)).f[LINK_CAP]).toBeUndefined();
+    expect(capBody('m', at(1)).f[RTC_CAP]).toBeUndefined();
     expect(validCapFields(body.f)).toBe(true);
   });
 
-  it('peers read the lnk claim; the rtc claim is not made yet', () => {
+  it('peers read the lnk and rtc claims (G6)', () => {
     const { w, bob, rb, sync } = crew();
     rb.write(at(1), 'e.set', advertisedCapBody(bob.id, at(1)));
     sync(at(2));
     expect(w.root.canReceive(bob.id, LINK_CAP, at(2))).toBe(true);
-    expect(w.root.canReceive(bob.id, RTC_CAP, at(2))).toBe(false);
+    expect(w.root.canReceive(bob.id, RTC_CAP, at(2))).toBe(true);
     expect(hasCap(w.root.data(), bob.id, at(2))).toBe(true);
   });
 
@@ -238,8 +244,12 @@ describe('what a 2.7.0 phone advertises (G5)', () => {
     rb.write(at(1), 'e.set', capBody(bob.id, at(1)));
     expect(needsCap(rb.data(), bob.id, at(2))).toBe(false);
     expect(needsAdvertisedCap(rb.data(), bob.id, at(2))).toBe(true);
-    rb.write(at(3), 'e.set', advertisedCapBody(bob.id, at(3)));
-    expect(needsAdvertisedCap(rb.data(), bob.id, at(4))).toBe(false);
-    expect(needsAdvertisedCap(rb.data(), bob.id, at(3) + CAP_RENEW_MS + 1)).toBe(true);
+    // A G5 build's claim (lnk, no rtc) renews at once too.
+    const { rtc: _rtc, ...g5 } = advertisedCapBody(bob.id, at(3)).f;
+    rb.write(at(3), 'e.set', { k: 'cap', id: bob.id, f: g5 });
+    expect(needsAdvertisedCap(rb.data(), bob.id, at(4))).toBe(true);
+    rb.write(at(5), 'e.set', advertisedCapBody(bob.id, at(5)));
+    expect(needsAdvertisedCap(rb.data(), bob.id, at(6))).toBe(false);
+    expect(needsAdvertisedCap(rb.data(), bob.id, at(5) + CAP_RENEW_MS + 1)).toBe(true);
   });
 });

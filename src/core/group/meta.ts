@@ -150,3 +150,17 @@ export function groupMeta(data: Readonly<TeamData>): GroupMeta {
   if (typeof f['root'] === 'string') out.root = f['root'];
   return out;
 }
+
+export const NET_KEY = recordKey(false, NET, GROUP_RECORD_ID);
+
+/**
+ * Whether the group's internet switch is on (design §6: absent means off):
+ * the admins' `net` record (`inet: 1`), or `net: 1` on the group's `gmeta`
+ * (a library group created with it on, G10). Either turns it on; the `net`
+ * record set to 0 turns off what it alone turned on.
+ */
+export function internetOn(data: Readonly<TeamData>): boolean {
+  const rec = data.entities.get(NET_KEY);
+  if (rec !== undefined && isLive(rec.state) && visibleFields(rec.state)['inet'] === 1) return true;
+  return groupMeta(data).net;
+}

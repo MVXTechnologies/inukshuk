@@ -71,6 +71,13 @@ export interface CarrierConn {
   close(why: string): void;
   /** Nearby only (IP ban); internet bans are by member id ({@link MemberBans}). */
   ban?(ms: number): void;
+  /**
+   * Bytes handed to `send` and not yet on the wire (the native queue). The
+   * link owner keeps it under {@link IN_FLIGHT_BUDGET}; a carrier that can
+   * report it emits `writable` once it falls back under half the budget, or
+   * the owner polls it. Absent: the carrier's own backpressure is all there is.
+   */
+  inFlight?(): number;
 }
 
 export type CarrierEvent =
@@ -127,6 +134,18 @@ export const HELLO_TIMEOUT_MS = 30_000;
 export const PACE_SHARE = 0.5;
 /** Frames of headroom lanes 1–3 leave to lane 0 and control frames: an SOS never waits on pacing. */
 export const URGENT_RESERVE_FRAMES = 2;
+/**
+ * Bytes a link keeps handed to its carrier and not yet on the wire (design
+ * §4.4, shallow native queues): the rest waits as plaintext in the lanes, so
+ * an SOS written behind megabytes of catch-up waits for at most this much.
+ */
+export const IN_FLIGHT_BUDGET = 64 * 1024;
+
+/** One frame for the carrier, with the lane it was served from. */
+export interface OutFrame {
+  frame: Uint8Array;
+  lane: Lane;
+}
 
 /**
  * Send-side pacing that mirrors the receiver's guard (bytes and frames per
@@ -303,9 +322,32 @@ export function channelTag(
   return c.hmacSha256(key, concatBytes(linkId, Uint8Array.of(CLASS_BYTE[cls])));
 }
 
-/** Session limits per path (review R-RL-4): internet paths use the relay budgets. */
+/**
+ * A WebRTC path straight between two phones (PM decision after G2): 256 KiB/s
+ * per peer, paced at half by the sender. Strikes, bans and op budgets are the
+ * relay's (review R-RL-4): the far end is on the internet, not the hut's Wi-Fi.
+ */
+export const DIRECT_LIMITS: PeerLimits = {
+  ...RELAY_LIMITS,
+  bytesPerSec: 256 * 1024,
+  burstBytes: 1024 * 1024,
+  framesPerSec: 40,
+  burstFrames: 120,
+};
+
+/** A WebRTC path through Cloudflare TURN: 128 KiB/s per peer (TURN egress is metered). */
+export const TURN_LIMITS: PeerLimits = {
+  ...RELAY_LIMITS,
+  bytesPerSec: 128 * 1024,
+  burstBytes: 512 * 1024,
+  framesPerSec: 30,
+  burstFrames: 90,
+};
+
+/** Session limits per path (review R-RL-4): the LAN's, or an internet profile. */
 export function limitsForPath(path: PathKind): PeerLimits {
-  return path === 'nearby' ? LAN_LIMITS : RELAY_LIMITS;
+  if (path === 'nearby') return LAN_LIMITS;
+  return path === 'direct' ? DIRECT_LIMITS : TURN_LIMITS;
 }
 
 /**
@@ -578,12 +620,20 @@ export class LinkMux {
    * within a lane. The channel's session seals it only now.
    */
   next(now: number): Uint8Array | undefined {
+    return this.nextOut(now)?.frame;
+  }
+
+  /**
+   * {@link next} with the lane the frame was served from (control frames are
+   * lane 0), for the carrier's `send(frame, lane)`.
+   */
+  nextOut(now: number): OutFrame | undefined {
     for (let attempt = 0; attempt < 4 && this.state !== 'closed'; attempt++) {
       const ctl = this.control[0];
       if (ctl !== undefined) {
         if (!this.pacer.allows(ctl.length, now)) return undefined;
         this.control.shift();
-        return this.sent(ctl, LANE_URGENT, now);
+        return { frame: this.sent(ctl, LANE_URGENT, now), lane: LANE_URGENT };
       }
       const lane = this.scheduler.pick((l) => this.lanePending(l));
       if (lane === undefined) break;
@@ -593,10 +643,17 @@ export class LinkMux {
       }
       const out = this.takeFrom(lane);
       this.scheduler.served(lane, (l) => this.lanePending(l));
-      if (out !== undefined) return this.sent(out, lane, now);
+      if (out !== undefined) return { frame: this.sent(out, lane, now), lane };
     }
     this.reap();
     return undefined;
+  }
+
+  /** The lane {@link nextOut} would serve now (control frames: lane 0), ignoring pacing. */
+  get nextLane(): Lane | undefined {
+    if (this.state === 'closed') return undefined;
+    if (this.control.length > 0) return LANE_URGENT;
+    return this.scheduler.pick((l) => this.lanePending(l));
   }
 
   /**
@@ -617,7 +674,7 @@ export class LinkMux {
   }
 
   /** Frames up to `budgetBytes` (the carrier's shallow native queue). */
-  drain(now: number, budgetBytes = 64 * 1024): Uint8Array[] {
+  drain(now: number, budgetBytes = IN_FLIGHT_BUDGET): Uint8Array[] {
     const out: Uint8Array[] = [];
     let bytes = 0;
     while (bytes < budgetBytes) {
