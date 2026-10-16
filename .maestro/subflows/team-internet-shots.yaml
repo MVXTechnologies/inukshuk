@@ -106,6 +106,12 @@ appId: com.inukshuk.app
 - assertVisible: 'Over the internet'
 - takeScreenshot: review-team-internet-create-${MODE}
 - tapOn: 'Cancel'
+# Cancel goes back to Settings, which has no tab bar: back to Library.
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-create-screen'
+    timeout: 5000
+- tapOn: 'Back'
 # A shared folder's invite (a newer app's): the join screen asks for the update.
 - runFlow: team-settings-open.yaml
 - tapOn:
@@ -129,4 +135,21 @@ appId: com.inukshuk.app
 - takeScreenshot: review-team-internet-newer-${MODE}
 - tapOn:
     id: 'team-join-newer-back'
+- extendedWaitUntil:
+    visible:
+      id: 'team-join-screen'
+    timeout: 5000
+# Join → Settings → Library, then the map (where this subflow ends).
 - tapOn: 'Back'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-join-screen'
+    timeout: 5000
+- tapOn: 'Back'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: 'team-bar-pill'
+    timeout: 10000

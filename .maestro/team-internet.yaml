@@ -7,7 +7,8 @@
 #
 # In the team shard after team-draw.yaml, before team.yaml (which clears
 # state and must stay last): it creates its own team, leaves it at the end
-# and puts the theme back on System. Settings rows merge title + subtitle on
+# and puts the theme back on System (subflows/set-theme.yaml: it starts and
+# ends on the Map tab). Settings rows merge title + subtitle on
 # iOS: wildcard regexes (maestro-ios-tap-traps).
 appId: com.inukshuk.app
 ---
@@ -37,9 +38,9 @@ appId: com.inukshuk.app
     latitude: 47.4423
     longitude: -70.5012
 - runFlow:
-    file: subflows/theme.yaml
+    file: subflows/set-theme.yaml
     env:
-      THEME: 'Light'
+      NEXT: 'Light'
 # Create a team: the internet is on by default.
 - runFlow: subflows/team-settings-open.yaml
 - scrollUntilVisible:
@@ -80,6 +81,8 @@ appId: com.inukshuk.app
       id: 'team-hub-screen'
     timeout: 15000
 - assertVisible: 'Rando Charlevoix'
+# Manage team → Settings → Library: Settings has no tab bar (as in team.yaml).
+- tapOn: 'Back'
 - tapOn: 'Back'
 # Light.
 - runFlow:
@@ -88,9 +91,9 @@ appId: com.inukshuk.app
       MODE: 'light'
 # Dark.
 - runFlow:
-    file: subflows/theme.yaml
+    file: subflows/set-theme.yaml
     env:
-      THEME: 'Dark'
+      NEXT: 'Dark'
 - runFlow:
     file: subflows/team-internet-shots.yaml
     env:
@@ -117,6 +120,6 @@ appId: com.inukshuk.app
       id: 'team-hub-screen'
     timeout: 10000
 - runFlow:
-    file: subflows/theme.yaml
+    file: subflows/set-theme.yaml
     env:
-      THEME: 'System'
+      NEXT: 'System'
