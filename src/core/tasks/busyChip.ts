@@ -30,11 +30,10 @@ export function nextBusyRevealAt(tasks: BusyTasks, now: number): number | null {
   return next;
 }
 
-/** "12/40", "45%", or null when the task has no progress to count. */
+/** "12/40", or null when the task has no progress to count. */
 export function busyProgressText(task: BusyTask): string | null {
   const p = task.progress;
   if (p === undefined || !(p.total > 0)) return null;
-  if (p.percent === true) return `${Math.round(Math.max(0, Math.min(100, p.done)))}%`;
   return `${Math.max(0, Math.min(p.total, p.done))}/${p.total}`;
 }
 
@@ -42,8 +41,7 @@ export function busyProgressText(task: BusyTask): string | null {
 export function busyFraction(task: BusyTask): number | null {
   const p = task.progress;
   if (p === undefined || !(p.total > 0)) return null;
-  const total = p.percent === true ? 100 : p.total;
-  return Math.max(0, Math.min(1, p.done / total));
+  return Math.max(0, Math.min(1, p.done / p.total));
 }
 
 const TITLE: Record<BusyTask['kind'], string> = {

@@ -220,8 +220,12 @@ export function altitudeScaleLabels(max: number, units: Units): [string, string]
   return ['0', `${groupThousands(max)} ${units.elevation}+`];
 }
 
-/** The slider's value label (display units): "800 m+" at the top, else "800–1 150 m". */
+/**
+ * The slider's value label (display units): "Any altitude" with both thumbs
+ * at the ends (no filter), "800 m+" at the top, else "800–1 150 m".
+ */
 export function altitudeSliderValue(lo: number, hi: number, max: number, units: Units): string {
+  if (lo <= 0 && hi >= max) return 'Any altitude';
   return hi >= max
     ? `${groupThousands(lo)} ${units.elevation}+`
     : `${groupThousands(lo)}–${groupThousands(hi)} ${units.elevation}`;

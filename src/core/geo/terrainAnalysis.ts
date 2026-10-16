@@ -129,8 +129,12 @@ export interface SlopePalette {
   lutStepDeg: number;
 }
 
-/** Opacity factor of the faint trace on filtered-out steep ground (#723). */
-export const SLOPE_TRACE_ALPHA = 0.2;
+/**
+ * Opacity factor of the faint trace on filtered-out steep ground (#723): the
+ * approved mockup's ghost (B4 option 2). 0.2 read as a brown wash over whole
+ * valleys on the emulator (2.6.2 QA).
+ */
+export const SLOPE_TRACE_ALPHA = 0.13;
 
 export function slopePalette(minDeg: number, maxDeg = 90, withTrace = false): SlopePalette {
   'worklet';

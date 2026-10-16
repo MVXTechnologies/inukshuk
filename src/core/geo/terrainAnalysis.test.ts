@@ -280,6 +280,11 @@ describe('slope filter: aspect sectors × altitude range × steepness (#723)', (
   }
   const red = SLOPE_BANDS[3]!.rgb;
   const traceA = Math.round(255 * SLOPE_TRACE_ALPHA);
+
+  it('the trace is the mockup’s faint ghost (13 % of a band’s alpha)', () => {
+    expect(SLOPE_TRACE_ALPHA).toBe(0.13);
+    expect(traceA).toBe(33);
+  });
   const alphaAt = (img: { rgba: Uint8Array }, x: number, y: number) =>
     img.rgba[(y * W + x) * 4 + 3]!;
   const run = (d: Float32Array, f: SlopeFilter, lo = 27, hi = 90) =>

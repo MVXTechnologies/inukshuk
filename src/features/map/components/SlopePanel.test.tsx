@@ -114,7 +114,9 @@ describe('Slope page (mockup B2)', () => {
   it('altitude: 0 → highest ground rounded up to 500 m, the top open ("+"), stored in metres', async () => {
     await show(<SlopeSubPanel onBack={noop} />);
     expect(screen.getByText(`1${NBSP}500 m+`)).toBeTruthy(); // the scale's end label
-    expect(screen.getByText('0 m+')).toBeTruthy(); // no filter: the whole scale
+    // No filter: the whole scale reads as such, and the hint/legend say nothing of altitude.
+    expect(screen.getByText('Any altitude')).toBeTruthy();
+    expect(screen.queryByText('0 m+')).toBeNull();
     await a11yAction('Altitude minimum', 'increment');
     expect(filter()).toEqual({ aspectMask: 0xff, minAltM: 10, maxAltM: null });
     expect(screen.getByText('10 m+')).toBeTruthy();

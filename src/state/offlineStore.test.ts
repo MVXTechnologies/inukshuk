@@ -170,28 +170,23 @@ describe('redownload', () => {
   });
 });
 
-it('a download is a busy "Map tiles" task with its percentage until it ends (#721)', async () => {
+it('a download shows only in its own banner, never also in the busy chip (#721)', async () => {
   useBusyTasksStore.setState({ tasks: [] });
-  const seen: string[] = [];
+  const seen: number[] = [];
   (replaceRegionPack as jest.Mock).mockImplementationOnce(
     async (_old: string, _args: unknown, onProgress: (p: number, b: number) => void) => {
-      for (const pct of [0, 12.2, 12.4, 57]) {
+      for (const pct of [0, 57]) {
         onProgress(pct, 5);
-        const t = useBusyTasksStore.getState().tasks;
-        expect(t).toHaveLength(1);
-        seen.push(`${t[0]!.kind} ${t[0]!.subject} ${t[0]!.progress?.done}%`);
+        // The banner's source has it…
+        expect(useOfflineStore.getState().progress?.pct).toBe(pct);
+        // …the chip's registry does not.
+        seen.push(useBusyTasksStore.getState().tasks.length);
       }
     },
   );
   const layer = { basemap: 'map' as const, styleJSON: '{}', minZoom: 8, maxZoom: 14 };
   await useOfflineStore.getState().redownload(region('r', { label: 'Charlevoix' }), layer);
-  expect(seen).toEqual([
-    'tiles Updating Charlevoix 0%',
-    'tiles Updating Charlevoix 12%',
-    'tiles Updating Charlevoix 12%',
-    'tiles Updating Charlevoix 57%',
-  ]);
-  expect(useBusyTasksStore.getState().tasks).toEqual([]);
+  expect(seen).toEqual([0, 0]);
 });
 
 it('remove drops the region, its name and its stamp', async () => {

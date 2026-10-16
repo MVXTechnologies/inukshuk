@@ -11,8 +11,6 @@ export type BusyTaskKind = 'slope' | 'contours' | 'tiles' | 'pdf';
 export interface BusyProgress {
   done: number;
   total: number;
-  /** `done` is a percentage of 100 (a download that reports no count). */
-  percent?: boolean;
 }
 
 export interface BusyTask {

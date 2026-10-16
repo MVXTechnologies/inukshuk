@@ -52,11 +52,6 @@ describe('busy chip', () => {
       'Map tiles 12/40',
     );
     expect(busyChipLabel(t({ id: 'm', kind: 'tiles' }))).toBe('Map tiles');
-    expect(
-      busyChipLabel(
-        t({ id: 'o', kind: 'tiles', progress: { done: 44.6, total: 100, percent: true } }),
-      ),
-    ).toBe('Map tiles 45%');
     expect(busyChipLabel(t({ id: 'p', kind: 'pdf', label: 'p.2', subject: 'Charlevoix' }))).toBe(
       'PDF p.2',
     );

@@ -103,6 +103,13 @@ describe('hint and legend', () => {
     expect(
       slopeLegendText(30, 90, { aspectMask: NNW, minAltM: 800, maxAltM: null }, METRIC),
     ).toEqual({ title: 'NW · N · NE', detail: '≥30° · 800 m+' });
+    // No altitude filter: altitude is left out, never "0 m+" or "Any altitude".
+    expect(
+      slopeLegendText(30, 90, { aspectMask: NNW, minAltM: null, maxAltM: null }, METRIC),
+    ).toEqual({ title: 'NW · N · NE', detail: '≥30°' });
+    expect(slopeRowHint(30, 90, { aspectMask: NNW, minAltM: null, maxAltM: null }, METRIC)).toBe(
+      'NW · N · NE · 30–90°',
+    );
   });
 
   it('shows the legend only while slope is on and a filter is active', () => {
@@ -167,6 +174,8 @@ describe('altitude slider (the scale never caps the user)', () => {
 
   it('the top end is open: "800 m+", stored as no upper limit; 0 is no lower limit', () => {
     const s = altitudeSlider(DEFAULT_SLOPE_FILTER, { minM: 0, maxM: 1154 }, METRIC);
+    expect(altitudeSliderValue(0, s.max, s.max, METRIC)).toBe('Any altitude');
+    expect(altitudeSliderValue(0, 1150, s.max, METRIC)).toBe(`0–1${NBSP}150 m`);
     expect(altitudeSliderValue(800, s.max, s.max, METRIC)).toBe('800 m+');
     expect(altitudeSliderValue(800, 1150, s.max, METRIC)).toBe(`800–1${NBSP}150 m`);
     expect(altitudeScaleLabels(s.max, METRIC)).toEqual(['0', `1${NBSP}500 m+`]);
