@@ -28,13 +28,16 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { AppState, Pressable, StyleSheet, Vibration, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** How often the tone sounds again: exactly its length, so it loops seamlessly. */
 export const RESOUND_MS = SOS_TONE_MS;
 
 export function SosAlarmBanner() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const units = useSettingsStore((s) => s.units);
   const insets = useSafeAreaInsets();
@@ -189,7 +192,7 @@ export function SosAlarmBanner() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   edge: {
     position: 'absolute',

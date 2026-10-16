@@ -22,9 +22,10 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Line, Path } from 'react-native-svg';
-import { Icon, IconButton, Text, useTheme } from 'react-native-paper';
+import { Icon, IconButton, Text, useTheme } from '@ui/paper';
 
 import { COLOUR_NAMES } from './drawShared';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 const WIDTH_NAMES = { 1: 'Thin', 2: 'Medium', 3: 'Thick' } as const;
 const HEAD_SIZE_LETTERS = { 1: 'S', 2: 'M', 3: 'L' } as const;
@@ -84,6 +85,8 @@ function Seg<T>({
   testID: string;
   tight?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { colors } = useTheme();
   return (
@@ -142,6 +145,8 @@ function Section({
   /** A dot in this colour before `right` ("● your colour"). */
   rightDot?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={styles.sec}>
@@ -177,6 +182,10 @@ export function DrawToolPanel({
   onClose: () => void;
   bottom: number;
 }) {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { colors } = useTheme();
   const set = (patch: Partial<DrawPrefs>) => onChange({ ...prefs, ...patch });
@@ -185,7 +194,7 @@ export function DrawToolPanel({
     const on = prefs.width === w;
     const sw = { 1: 3, 2: 5, 3: 8 }[w];
     return (
-      <Svg width={22} height={12}>
+      <Svg viewBox="0 0 22 12" width={sz(22)} height={sz(12)}>
         <Line
           x1={3}
           y1={6}
@@ -202,19 +211,19 @@ export function DrawToolPanel({
     const c = ink(prefs.head === k);
     if (k === 'open')
       return (
-        <Svg width={22} height={14}>
+        <Svg viewBox="0 0 22 14" width={sz(22)} height={sz(14)}>
           <Path d="M2 7 H19 M13 2 L19 7 L13 12" stroke={c} strokeWidth={2.5} fill="none" />
         </Svg>
       );
     if (k === 'both')
       return (
-        <Svg width={24} height={14}>
+        <Svg viewBox="0 0 24 14" width={sz(24)} height={sz(14)}>
           <Path d="M8 7 H16" stroke={c} strokeWidth={2.5} />
           <Path d="M23 7 L15 2 L15 12Z M1 7 L9 2 L9 12Z" fill={c} />
         </Svg>
       );
     return (
-      <Svg width={22} height={14}>
+      <Svg viewBox="0 0 22 14" width={sz(22)} height={sz(14)}>
         <Path d="M2 7 H12" stroke={c} strokeWidth={2.5} />
         <Path d="M20 7 L11 2 L11 12Z" fill={c} />
       </Svg>
@@ -427,10 +436,10 @@ export function DrawToolPanel({
                   testID="team-draw-headsize"
                   value={prefs.headSize}
                   onPick={(headSize) => set({ headSize })}
-                  items={([1, 2, 3] as const).map((sz) => ({
-                    v: sz,
-                    node: HEAD_SIZE_LETTERS[sz],
-                    a11y: HEAD_SIZE_NAMES[sz],
+                  items={([1, 2, 3] as const).map((head) => ({
+                    v: head,
+                    node: HEAD_SIZE_LETTERS[head],
+                    a11y: HEAD_SIZE_NAMES[head],
                   }))}
                 />
               </>
@@ -444,7 +453,7 @@ export function DrawToolPanel({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // Centred, the same margin either side, at most 360 dp wide.
   dock: {
     position: 'absolute',

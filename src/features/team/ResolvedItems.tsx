@@ -11,9 +11,11 @@ import { StyleSheet, View } from 'react-native';
 import { Button, Text } from '@ui/paper';
 
 import { MemberAvatar, SectionLabel } from './components';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 export function ResolvedItems() {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -62,7 +64,11 @@ export function ResolvedItems() {
         const may = canResolve({ author: r.owner, mentions: r.mentions }, view.me, view.isAdmin);
         return (
           <View key={r.key} style={[styles.row, { backgroundColor: t.surfaceVariant }]}>
-            <MemberAvatar initials={m?.initials ?? '?'} color={m?.color ?? t.inkMuted} size={30} />
+            <MemberAvatar
+              initials={m?.initials ?? '?'}
+              color={m?.color ?? t.inkMuted}
+              size={sz(30)}
+            />
             <View style={styles.flex}>
               <Text variant="labelMedium" style={{ color: t.inkMuted }}>
                 {`${r.kind} · ${m?.name ?? 'A teammate'}`}

@@ -18,9 +18,11 @@ import { sendTeamComment } from './taskSend';
 import { commentTime, TeamComments } from './TeamComments';
 import { useToggleTask } from './useToggleTask';
 import { TeamRouteMap } from './TeamRouteMap';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 export function TeamTrailScreen() {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -68,7 +70,7 @@ export function TeamTrailScreen() {
   return (
     <TeamScreenFrame title={trail.name} testID="team-trail-screen">
       <View style={styles.by}>
-        {by && <MemberAvatar initials={by.initials} color={by.color} size={28} />}
+        {by && <MemberAvatar initials={by.initials} color={by.color} size={sz(28)} />}
         <Text variant="bodyMedium" style={{ color: t.inkVariant }}>
           {by?.isMe ? 'Shared by you' : `Shared by ${by?.name ?? 'a teammate'}`} ·{' '}
           {formatDistance(trail.distanceM)} · {new Date(trail.startedAt).toLocaleDateString()}

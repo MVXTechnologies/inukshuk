@@ -22,9 +22,11 @@ import { Button, Icon, Switch, Text, TextInput } from '@ui/paper';
 
 import { LinkChip, MemberAvatar, SectionLabel, TeamScreenFrame } from './components';
 import { actionMessage } from './messages';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 export function ConnectionScreen() {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -162,7 +164,7 @@ export function ConnectionScreen() {
           <SectionLabel>Nearby only until they update</SectionLabel>
           {old.map((m) => (
             <View key={m.id} style={styles.row} testID={`team-needs-update-${m.name}`}>
-              <MemberAvatar initials={m.initials} color={m.color} size={32} />
+              <MemberAvatar initials={m.initials} color={m.color} size={sz(32)} />
               <Text
                 variant="bodyMedium"
                 style={[styles.flex, styles.title, { color: t.ink }]}

@@ -19,7 +19,7 @@ import { Icon, Text } from '@ui/paper';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 
 import { MemberAvatar } from '../components';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /** The ETA list scrolls past this height (a big team), dp. */
 const ETAS_MAX_H = 188;
@@ -34,6 +34,8 @@ export function GatherPanel({
   /** Go: navigate to the gather (the panel closes). */
   onGo: (latitude: number, longitude: number) => void;
 }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -143,7 +145,7 @@ export function GatherPanel({
               }
               testID={`team-gather-eta-${r.name}`}
             >
-              {who && <MemberAvatar initials={who.initials} color={who.color} size={24} />}
+              {who && <MemberAvatar initials={who.initials} color={who.color} size={sz(24)} />}
               <Text style={[styles.etaName, { color: ink }]} numberOfLines={1}>
                 {r.isMe ? 'You' : (r.name.split(' ')[0] ?? r.name)}
               </Text>

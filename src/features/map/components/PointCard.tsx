@@ -11,9 +11,10 @@ import { PressGrid, type GridCell } from '@features/common/components/ActionGrid
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { StyleSheet, View } from 'react-native';
-import { Icon, IconButton, Text } from 'react-native-paper';
+import { Icon, IconButton, Text } from '@ui/paper';
 
 import { FLOATING_CARD_GAP } from '../bottomLayers';
+import { useScaledStyles } from '@ui/displayScale';
 
 export type PointCardAction = 'waypoint' | 'navigate' | 'copy' | 'convert' | 'share';
 
@@ -47,6 +48,8 @@ export function PointCard({
   onAction: (a: PointCardAction) => void;
   onClose: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const cells: GridCell[] = POINT_CARD_CELLS.map(({ k, icon, label }) => ({
     icon,
@@ -92,7 +95,7 @@ export function PointCard({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   card: {
     borderRadius: 16,

@@ -38,11 +38,12 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { useTeamMapFocus } from '../map/teamMapFocus';
 import { ProgressRing } from './parts';
 import { useHold } from './useHold';
+import { useScaledStyles } from '@ui/displayScale';
 
 const AGE_TICK_MS = 30_000;
 
@@ -83,6 +84,8 @@ export function AlertBands({
   scope = 'all',
   style,
 }: AlertBandsProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const every = useActiveAlerts();
   const alerts = useMemo(() => (scope === 'map' ? mapBandAlerts(every) : every), [every, scope]);
   const [expanded, setExpanded] = useState(false);
@@ -136,6 +139,8 @@ function Band({
   onNavigate: (latitude: number, longitude: number) => void;
   onCentre: (latitude: number, longitude: number) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const units = useSettingsStore((s) => s.units);
   const isAdmin = useTeamStore((s) => s.view?.isAdmin === true);
@@ -352,6 +357,8 @@ function GatherEtaList({
   /** The gather's coordinates in the user's format, in full. */
   coords: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const rally = useTeamStore((s) => s.rally);
   const view = useTeamStore((s) => s.view);
@@ -429,6 +436,8 @@ function HoldResolve({
   onResolve: () => void;
   testID: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const [hint, setHint] = useState(false);
   useEffect(() => {
     if (!hint) return;
@@ -507,6 +516,8 @@ function Round({
   onPress: () => void;
   testID: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   return (
     <Pressable
       onPress={onPress}
@@ -531,7 +542,7 @@ const shadow = {
   elevation: 6,
 };
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   column: { gap: 8 },
   etas: { borderRadius: 16, borderWidth: 1.5, paddingVertical: 4, paddingHorizontal: 12 },
   etaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 36 },

@@ -22,13 +22,14 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useState } from 'react';
 import { Alert, Keyboard, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { Icon, IconButton, Text } from 'react-native-paper';
+import { Icon, IconButton, Text } from '@ui/paper';
 
 import { MemberAvatar, useNow } from '../components';
 import { useTeamMapFocus } from '../map/teamMapFocus';
 import { useTeamPick } from '../map/TeamPick';
 import { actionMessage } from '../messages';
-import { CardAct, Fact, Facts, LifeRing, noteColor, noteStyles } from './noteParts';
+import { CardAct, Fact, Facts, LifeRing, noteColor, noteStylesSheet } from './noteParts';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 type Menu = null | 'main' | 'fade';
 
@@ -45,6 +46,12 @@ export function NoteCard({
   onNavigate: (latitude: number, longitude: number) => void;
   onClose: () => void;
 }) {
+  const { sz } = useDisplayScale();
+
+  const noteStyles = useScaledStyles(noteStylesSheet);
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const units = useSettingsStore((s) => s.units);
   // Re-render whenever team data changes ("Seen by" as receipts arrive).
@@ -204,7 +211,7 @@ export function NoteCard({
           <MemberAvatar
             initials={author?.initials ?? '?'}
             color={author?.color ?? t.inkMuted}
-            size={40}
+            size={sz(40)}
           />
           <View style={noteStyles.flex}>
             <Text style={[noteStyles.t1, { color: t.ink }]} numberOfLines={1}>
@@ -297,7 +304,7 @@ export function NoteCard({
                   <MemberAvatar
                     initials={by?.initials ?? '?'}
                     color={by?.color ?? t.inkMuted}
-                    size={26}
+                    size={sz(26)}
                   />
                   <View style={noteStyles.flex}>
                     <Text style={[styles.replyBy, { color: t.inkMuted }]}>
@@ -393,6 +400,8 @@ function MenuItem({
   bold?: boolean;
   iconColor?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const ink = danger ? t.status.gpsLostInk : t.ink;
   return (
@@ -417,7 +426,7 @@ function MenuItem({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   textWrap: { borderLeftWidth: 4, paddingLeft: 12, marginTop: 12, marginBottom: 2 },
   text: { fontSize: 18, lineHeight: 25, fontWeight: '700' },
   editWrap: { marginTop: 10 },

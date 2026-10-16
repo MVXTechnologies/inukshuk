@@ -27,12 +27,13 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo, useEffect, useMemo } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { useNow } from '../components';
 import { useOwnColour } from '../draw/drawShared';
 import { usePinDraft } from '../map/TeamPinComposer';
 import { noteColor } from './noteParts';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** The dot on the spot, and the gap between it and the callout's tail (dp). */
 const DOT = 12;
@@ -131,6 +132,8 @@ function Callout({
   onLayout?: (e: LayoutChangeEvent) => void;
   testID: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View
@@ -177,6 +180,8 @@ function Tile({
   mark: Extract<NoteMark, { kind: 'tile' }>;
   onLayout: (e: LayoutChangeEvent) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const c = noteColor(mark.color);
   const n = mark.pins.length;
@@ -292,7 +297,7 @@ export const NoteCallouts = memo(function NoteCallouts({ zoom }: { zoom: number 
   return out;
 });
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   wrap: { alignItems: 'center', maxWidth: 176 },
   card: {
     borderRadius: 12,

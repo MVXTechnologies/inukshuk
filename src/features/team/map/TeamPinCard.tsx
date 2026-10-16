@@ -21,7 +21,7 @@ import { MemberAvatar } from '../components';
 import { sendTeamComment } from '../taskSend';
 import { TeamComments } from '../TeamComments';
 import { useToggleTask } from '../useToggleTask';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 const dist = (m: number) => formatDistance(m, { style: 'short' });
 
@@ -47,6 +47,8 @@ export function TeamPinCard({
   here: { latitude: number; longitude: number } | null;
   onClose: () => void;
 }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -95,7 +97,7 @@ export function TeamPinCard({
         <MemberAvatar
           initials={owner?.initials ?? '?'}
           color={owner?.color ?? t.inkMuted}
-          size={34}
+          size={sz(34)}
         />
         <View style={styles.flex}>
           <Text variant="titleMedium" style={{ color: t.ink }}>

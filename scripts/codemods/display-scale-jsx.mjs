@@ -44,6 +44,9 @@ const TAGS = new Set([
   'HoldButton',
   'RegionPreviewThumb',
   'Badge',
+  'MemberAvatar',
+  'BandAvatar',
+  'FaceStack',
 ]);
 const PROPS = new Set(['size', 'width', 'height', 'radius', 'diameter']);
 const COMPONENT = /^(?:[A-Z]|use[A-Z])/;

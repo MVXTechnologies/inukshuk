@@ -64,7 +64,7 @@ import {
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path, Polygon } from 'react-native-svg';
 
@@ -82,6 +82,7 @@ import {
 import { useDrawPrefs, useOwnColour } from './drawShared';
 import { hitTestTeamDraw } from './hitTestDraw';
 import { ShapeMenu } from './ShapeMenu';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** The tool bar's two stroke tools; Shape, Time and Undo follow. */
 export const TOOLS: readonly { k: 'free' | 'arrow'; icon: string; label: string }[] = [
@@ -222,6 +223,8 @@ function DrawModeBody({
   locked = false,
   onCredits,
 }: DrawModeProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const tool = useTeamDrawStore((s) => s.tool);
@@ -809,6 +812,8 @@ function ToolButton({
   /** A hairline before it (Undo). */
   divided?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const ink = on ? drawChrome.onActive : open ? drawChrome.openInk : drawChrome.barInk;
   return (
     <Pressable
@@ -868,7 +873,7 @@ export function drawCreditsSheetBottom(safeBottom: number, bottomInset: number):
   return drawBarBottom(safeBottom, bottomInset) + BAR_H + CREDITS_GAP + CREDITS_H + 8;
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   canvas: { position: 'absolute', top: 0, left: 0, right: 0 },
   credits: { position: 'absolute', left: 16, zIndex: 9 },

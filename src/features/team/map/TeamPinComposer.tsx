@@ -23,12 +23,13 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Keyboard, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { Icon, IconButton, Switch, Text } from 'react-native-paper';
+import { Icon, IconButton, Switch, Text } from '@ui/paper';
 import { create } from 'zustand';
 
 import { useOwnColour } from '../draw/drawShared';
 import { actionMessage } from '../messages';
-import { FadeChoice, noteStyles, noteSwatches, Swatches } from '../notes/noteParts';
+import { FadeChoice, noteStylesSheet, noteSwatches, Swatches } from '../notes/noteParts';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface PinDraft {
   /** Where the note goes, `[lng, lat]`; null while no composer is open. */
@@ -69,6 +70,10 @@ export function TeamPinComposer({
   onPinned: (owner: string, id: string) => void;
   here?: { latitude: number; longitude: number } | null;
 }) {
+  const noteStyles = useScaledStyles(noteStylesSheet);
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const units = useSettingsStore((s) => s.units);
   const draft = usePinDraft();
@@ -202,7 +207,7 @@ export function TeamPinComposer({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   area: {
     borderWidth: 2,
     borderRadius: 14,

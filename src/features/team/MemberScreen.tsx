@@ -29,7 +29,7 @@ import {
 } from './components';
 import { actionMessage } from './messages';
 import { memberSyncLine } from './syncLine';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 const VIA: Record<string, string> = {
   genesis: 'Started the team',
@@ -38,6 +38,8 @@ const VIA: Record<string, string> = {
 };
 
 export function MemberScreen() {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -101,7 +103,7 @@ export function MemberScreen() {
   return (
     <TeamScreenFrame title={m.isMe ? `${m.name} (you)` : m.name} testID="team-member-screen">
       <View style={styles.head}>
-        <MemberAvatar initials={m.initials} color={m.color} size={56} dim={!m.active} />
+        <MemberAvatar initials={m.initials} color={m.color} size={sz(56)} dim={!m.active} />
         <View style={styles.flex}>
           <View style={styles.row}>
             <RoleChip role={m.role} left={m.left} />

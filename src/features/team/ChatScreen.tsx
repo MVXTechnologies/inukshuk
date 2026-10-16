@@ -24,7 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatThreads } from './ChatThreads';
 import { MemberAvatar } from './components';
 import { sendTeamComment } from './taskSend';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 function time(at: number): string {
   const d = new Date(at);
@@ -44,13 +44,15 @@ function Bubble({
   initials: string;
   onResolve?: () => void;
 }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
   const tag = m.priority === 2 ? 'URGENT' : m.priority === 1 ? 'IMPORTANT' : null;
   return (
     <View style={styles.msg} testID={`team-msg-${m.mine ? 'mine' : 'theirs'}`}>
-      <MemberAvatar initials={initials} color={m.authorColor} size={30} />
+      <MemberAvatar initials={initials} color={m.authorColor} size={sz(30)} />
       <View style={styles.flex}>
         <Text variant="labelLarge" style={{ color: t.ink }}>
           {m.mine ? 'You' : m.authorName}

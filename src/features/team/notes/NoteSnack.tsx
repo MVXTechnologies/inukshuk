@@ -15,9 +15,10 @@ import { useTeamStore } from '@state/teamStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { useTeamMapSelection } from '../map/TeamMapOverlay';
+import { useScaledStyles } from '@ui/displayScale';
 
 export const NOTE_SNACK_MS = 6_000;
 
@@ -28,6 +29,8 @@ export function NoteSnack({
   here: { latitude: number; longitude: number } | null;
   style?: StyleProp<ViewStyle>;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const units = useSettingsStore((s) => s.units);
   const pins = useTeamStore((s) => s.pins);
@@ -95,7 +98,7 @@ export function NoteSnack({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   wrap: { position: 'absolute', left: 12, right: 12 },
   snack: {
     minHeight: 56,

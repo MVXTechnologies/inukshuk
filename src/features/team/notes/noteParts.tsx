@@ -8,8 +8,9 @@ import { MEMBER_COLORS, memberColor } from '@core/teamui/colors';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import Svg, { Circle } from 'react-native-svg';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** Swatches a note offers: my member colour first, then the others, seven in all. */
 export function noteSwatches(own: number): number[] {
@@ -28,6 +29,8 @@ export function FadeChoice({
   onChange: (f: NoteFade) => void;
   testIDPrefix?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={[styles.seg, { borderColor: t.outline }]} accessibilityRole="radiogroup">
@@ -67,6 +70,8 @@ export function Swatches({
   value: number;
   onChange: (c: number) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={styles.swatches} accessibilityRole="radiogroup">
@@ -131,6 +136,8 @@ export function LifeRing({
 }
 
 export function Facts({ children }: { children: ReactNode }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return <View style={[styles.facts, { borderColor: t.outlineVariant }]}>{children}</View>;
 }
@@ -148,6 +155,8 @@ export function Fact({
   divider?: boolean;
   testID?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View
@@ -180,6 +189,8 @@ export function CardAct({
   testID: string;
   primary?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const bg = primary ? t.support.accent : t.surfaceVariant;
   const ink = primary ? t.support.onAccent : t.ink;
@@ -197,7 +208,7 @@ export function CardAct({
   );
 }
 
-export const noteStyles = StyleSheet.create({
+export const noteStylesSheet = StyleSheet.create({
   /** The bottom sheet over the map (mockup `.sheet`). */
   sheet: {
     borderRadius: 24,
@@ -216,7 +227,7 @@ export const noteStyles = StyleSheet.create({
   acts: { flexDirection: 'row', gap: 8 },
 });
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   seg: {
     flex: 1,
     flexDirection: 'row',

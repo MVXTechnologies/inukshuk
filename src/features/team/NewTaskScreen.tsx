@@ -28,7 +28,7 @@ import { MemberAvatar, SectionLabel, TeamScreenFrame } from './components';
 import { actionMessage } from './messages';
 import { useTeamPick } from './map/TeamPick';
 import { useAnchorLookup } from './useAnchorLookup';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 type Place = 'given' | 'here' | 'none';
 /** The Due chips: none, the time already set (editing), in an hour, picked. */
@@ -46,6 +46,8 @@ function anchorFromParams(p: Record<string, string | undefined>): TaskAnchor | n
 }
 
 export function NewTaskScreen() {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -251,7 +253,7 @@ export function NewTaskScreen() {
               accessibilityLabel={m.isMe ? 'Me' : m.name}
               testID={`team-task-for-${m.isMe ? 'me' : m.id}`}
             >
-              <MemberAvatar initials={m.initials} color={m.color} size={26} />
+              <MemberAvatar initials={m.initials} color={m.color} size={sz(26)} />
               <Text variant="labelLarge" style={{ color: t.ink }}>
                 {m.isMe ? 'Me' : m.name}
               </Text>

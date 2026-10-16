@@ -20,7 +20,7 @@ import { Icon, IconButton, Text } from '@ui/paper';
 
 import { BandAvatar } from '../bar/parts';
 import { useTeamMapFocus } from './teamMapFocus';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 export function TeammateCard({
   member,
@@ -35,6 +35,8 @@ export function TeammateCard({
   onNavigate: (latitude: number, longitude: number) => void;
   onClose: () => void;
 }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -63,7 +65,7 @@ export function TeammateCard({
           initials={row.initials}
           color={row.color}
           band={member.band}
-          size={48}
+          size={sz(48)}
           ring={t.surface}
           live
         />

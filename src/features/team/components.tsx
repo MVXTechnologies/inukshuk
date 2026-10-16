@@ -10,7 +10,8 @@ import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 export {
   GnssScreenFrame as TeamScreenFrame,
@@ -48,6 +49,8 @@ export function MemberAvatar({
   online?: boolean;
   dim?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View
@@ -77,6 +80,8 @@ export function MemberAvatar({
 }
 
 export function RoleChip({ role, left }: { role: Role; left?: boolean }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const strong = role === 'owner' || role === 'admin';
   return (
@@ -114,6 +119,8 @@ export const LINK_FONT_CAP = 1.15;
  * {@link LINK_FONT_CAP}, so a member's line still fits at 360 dp.
  */
 export function LinkChip({ link }: { link: MemberLink }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const color =
     link === 'direct'
@@ -151,6 +158,8 @@ export function Note({
   tone?: 'info' | 'warn';
   testID?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={[styles.note, { backgroundColor: t.surfaceVariant }]} testID={testID}>
@@ -184,6 +193,8 @@ export function ActionBanner({
   onAction?: () => void;
   testID?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View
@@ -239,6 +250,8 @@ export function ChoiceRow<T extends string | number>({
   testIDPrefix?: string;
   oneLine?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   if (oneLine) {
     return (
@@ -313,7 +326,7 @@ export function ChoiceRow<T extends string | number>({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   avatar: { alignItems: 'center', justifyContent: 'center' },
   dim: { opacity: 0.45 },

@@ -5,7 +5,8 @@
  */
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** The grid's labels grow with the font scale up to this. */
 export const GRID_LABEL_MAX_SCALE = 1.15;
@@ -28,6 +29,8 @@ export function GridItem({
   /** A small "NEW" on the disc's corner (a feature just added, #706). */
   tag?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -81,6 +84,8 @@ export interface GridCell {
 
 /** The wrapping grid (#744 option 2): five a row, every action one tap away. */
 export function PressGrid({ cells, testID }: { cells: readonly GridCell[]; testID: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   return (
     <View style={styles.grid} testID={testID}>
       {cells.map((c) => (
@@ -98,7 +103,7 @@ export function PressGrid({ cells, testID }: { cells: readonly GridCell[]; testI
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // Five a row (#744 option 2): a fifth each, labels wrap under their disc.
   grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 10, paddingTop: 2 },
   gridItem: { width: '20%', alignItems: 'center', gap: 4, paddingHorizontal: 1 },

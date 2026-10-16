@@ -14,7 +14,7 @@ import { Icon, Text } from '@ui/paper';
 
 import { LinkChip, MemberAvatar, useNow } from '../components';
 import { Card } from './TeamCards';
-import { useScaledStyles } from '@ui/displayScale';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /** This phone's internet line, from the team's room state. */
 export function internetLine(
@@ -29,6 +29,8 @@ export function internetLine(
 }
 
 export function ConnectionCard({ onClose }: { onClose: () => void }) {
+  const { sz } = useDisplayScale();
+
   const styles = useScaledStyles(stylesSheet);
 
   const t = useSchemeTokens();
@@ -73,7 +75,7 @@ export function ConnectionCard({ onClose }: { onClose: () => void }) {
           const link = net.links.get(m.id) ?? 'out';
           return (
             <View key={m.id} style={styles.row} testID={`team-connection-${m.name}`}>
-              <MemberAvatar initials={m.initials} color={m.color} size={32} />
+              <MemberAvatar initials={m.initials} color={m.color} size={sz(32)} />
               <View style={styles.flex}>
                 <Text
                   variant="bodyMedium"

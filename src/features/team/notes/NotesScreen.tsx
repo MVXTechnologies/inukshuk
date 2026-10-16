@@ -21,7 +21,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { myPosition } from '../bar/parts';
@@ -29,6 +29,7 @@ import { MemberAvatar, useNow } from '../components';
 import { useTeamMapFocus } from '../map/teamMapFocus';
 import { useTeamMapSelection } from '../map/TeamMapOverlay';
 import { LifeRing } from './noteParts';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 const FILTERS: readonly { id: NoteFilter; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -37,6 +38,10 @@ const FILTERS: readonly { id: NoteFilter; label: string }[] = [
 ];
 
 export function NotesScreen() {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -81,7 +86,7 @@ export function NotesScreen() {
         accessibilityRole="button"
         testID="note-row"
       >
-        <MemberAvatar initials={m?.initials ?? '?'} color={m?.color ?? t.inkMuted} size={34} />
+        <MemberAvatar initials={m?.initials ?? '?'} color={m?.color ?? t.inkMuted} size={sz(34)} />
         <View style={styles.flex}>
           <Text style={[styles.text, { color: t.ink }, r.unread && styles.bold]} numberOfLines={2}>
             {r.pin.note.text}
@@ -206,6 +211,8 @@ export function NotesScreen() {
 }
 
 function Section({ label }: { label: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Text style={[styles.sect, styles.sectPad, { color: t.inkMuted }]} accessibilityRole="header">
@@ -214,7 +221,7 @@ function Section({ label }: { label: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   flex: { flex: 1, minWidth: 0 },
   header: {
