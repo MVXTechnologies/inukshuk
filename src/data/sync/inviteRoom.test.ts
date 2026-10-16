@@ -63,12 +63,19 @@ async function joinFromAfar(w: ReturnType<typeof world>, compared: boolean) {
   const a = w.phone();
   await a.createTeam({ name: 'Chic-Chocs', myName: 'Marc', lifetimeMs: lifetimeMs('14d') });
   const inv = active(a).createInvite(DEFAULT_INVITE) as CreatedInvite;
+  // Marc shares his position: it must not ride the invite room (log only).
+  active(a).updateRecord({ prefs: { ...active(a).record.prefs, sharePosition: true } });
+  active(a).sharePosition({ latitude: 48.9, longitude: -66.1, at: w.rig.now() });
   a.host.setInternetOnline(true);
   await w.run(3_000);
   const b = w.phone();
   const attempt = await b.startJoin(parseAnyInvite(webJoinLink(inv.payload))!, 'Julie');
   await w.run(8_000);
   expect(attempt.state()).toMatchObject({ phase: 'verify', via: 'internet', internet: true });
+  // The catch-up is minimal: admitted, no position, and the room session
+  // already handed over (Julie's rtc claim arrived) before she confirms.
+  expect(attempt.replica.liveEphemeral(w.rig.now())).toEqual([]);
+  expect(a.host.inviteSessions()).toBe(0);
   const joined = await b.confirmJoin(compared);
   if (typeof joined === 'string') throw new Error(joined);
   joined.watchFirstLinkMs = 0;
@@ -120,6 +127,47 @@ describe('joining over the internet (G7)', () => {
     ).toBeNull();
     await w.run(1_000);
     expect(active(a).positions()).toEqual([]);
+  });
+
+  it('provisional is per team: another team’s paths keep direct (R-INV-4)', async () => {
+    const w = world();
+    const { a, b } = await joinFromAfar(w, false);
+    // Julie is also in Noé's team, joined in person (the code compared), now apart.
+    const c = w.phone();
+    await c.createTeam({
+      name: 'Hut crew',
+      myName: 'Noé',
+      lifetimeMs: lifetimeMs('14d'),
+      internet: true,
+    });
+    const hutInv = active(c).createInvite(DEFAULT_INVITE) as CreatedInvite;
+    b.host.setInternetOnline(false);
+    await active(c).startMesh();
+    await b.startJoin(parseAnyInvite(webJoinLink(hutInv.payload))!, 'Julie');
+    await w.rig.settle();
+    const hut = await b.confirmJoin(true);
+    if (typeof hut === 'string') throw new Error(hut);
+    hut.watchFirstLinkMs = 0;
+    await hut.startMesh();
+    await w.rig.settle();
+    await hut.stopMesh();
+    await active(c).stopMesh();
+    await w.rig.settle();
+    expect(b.teams.find((r) => r.teamId === active(a).teamId)?.provisional).toBeDefined();
+    expect(hut.provisional).toBe(false);
+    b.host.setInternetOnline(true);
+    c.host.setInternetOnline(true);
+    await w.run(20_000);
+    const byMember = (p: TeamService) =>
+      Object.fromEntries(
+        p.host
+          .links()
+          .filter((l) => l.state === 'open' && l.identity !== undefined)
+          .map((l) => [l.identity!, l.path]),
+      );
+    const links = byMember(b);
+    expect(links[active(a).me]).toBe('relay');
+    expect(links[active(c).me]).toBe('direct');
   });
 
   it('a removal cancels the invites made before it (R-INV-3)', async () => {

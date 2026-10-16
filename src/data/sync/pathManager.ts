@@ -50,7 +50,7 @@ import {
 } from '@core/group/roomProto';
 import type { TeamCrypto } from '@core/team/crypto';
 import { RELAY_LIMITS } from '@core/team/ratelimit';
-import { SyncSession, type RtcSignal, type Step, type SyncStore } from '@core/team/sync';
+import { RTC_CAP, SyncSession, type RtcSignal, type Step, type SyncStore } from '@core/team/sync';
 
 import { RtcCarrier, type AttemptEvent, type RtcConn } from './carriers/rtcCarrier';
 import type { RtcModuleLike } from './carriers/rtcModule';
@@ -90,14 +90,23 @@ export interface PathManagerOptions {
   stun?: IceServer[];
   /** Period of the decision tick (ms). */
   evalMs?: number;
-  /** Relay-only for every peer while true (a provisional join, R-INV-4). */
-  forceRelay?(): boolean;
+  /**
+   * Relay-only with this member (R-INV-4): it shares a group this phone
+   * joined provisionally. Other members keep direct paths.
+   */
+  relayOnlyWith?(member: string): boolean;
   onChange?(): void;
   onDiag?(event: string): void;
 }
 
-/** A joiner's session in an invite room ends after this long (it continues over a link). */
+/**
+ * A joiner's catch-up through an invite room (design exception, sync-layer
+ * §3.2 "as built G7"): the log only (no position, no stroke), and it ends at
+ * the hand-over — once the joiner's `rtc` claim arrived, so a direct or TURN
+ * link can take over — or at these caps, whichever comes first.
+ */
 export const INVITE_SESSION_MS = 5 * 60_000;
+export const INVITE_SESSION_MAX_BYTES = 2 * 1024 * 1024;
 
 /** Cloudflare's public STUN (no credentials; reveals our public address to Cloudflare only). */
 export const DEFAULT_STUN: IceServer[] = [{ urls: ['stun:stun.cloudflare.com:3478'] }];
@@ -145,6 +154,8 @@ interface L0 {
   /** A joiner's session in an invite room (full sync, so the joiner gets the log). */
   invite: boolean;
   since: number;
+  /** Bytes this phone sent on it (invite sessions are capped). */
+  sent: number;
 }
 
 interface AttemptRec {
@@ -200,7 +211,6 @@ export class PathManager {
 
   constructor(private readonly o: PathManagerOptions) {
     this.policy = { ...DEFAULT_PATH_POLICY, ...o.policy };
-    this.userRelay = this.policy.alwaysRelay;
     this.rtc = new RtcCarrier({
       module: o.rtc,
       timers: o.timers,
@@ -267,18 +277,14 @@ export class PathManager {
 
   /** "Always use the relay" (per phone, R-RTC-6): direct paths close and are never tried. */
   setAlwaysRelay(on: boolean): void {
-    this.userRelay = on;
-    if (this.applyRelayPolicy()) this.evaluateAll();
+    if (this.policy.alwaysRelay === on) return;
+    this.policy.alwaysRelay = on;
+    this.evaluateAll();
   }
 
-  private userRelay = false;
-
-  /** The user's choice, or forced while a join is provisional (R-INV-4); true when it changed. */
-  private applyRelayPolicy(): boolean {
-    const on = this.userRelay || (this.o.forceRelay?.() ?? false);
-    if (this.policy.alwaysRelay === on) return false;
-    this.policy.alwaysRelay = on;
-    return true;
+  /** Relay only with this member: the user's choice, or a provisional group with it (R-INV-4). */
+  private relayFor(member: string): boolean {
+    return this.policy.alwaysRelay || (this.o.relayOnlyWith?.(member) ?? false);
   }
 
   stop(): void {
@@ -339,14 +345,9 @@ export class PathManager {
   /** Periodic: rooms (day, rotation, switches), session deadlines, retries, decisions. */
   tick(): void {
     if (!this.online) return;
-    this.applyRelayPolicy();
     this.refresh();
     const now = this.now();
     for (const s of [...this.l0.values()]) {
-      if (s.invite && now - s.since > INVITE_SESSION_MS) {
-        this.closeL0(s, 'done');
-        continue;
-      }
       this.handleStep(s, s.session.tick(now));
     }
     for (const [roomId, entry] of this.rooms) {
@@ -355,6 +356,11 @@ export class PathManager {
       for (const h of entry.client.peers) this.maybeInitiate(roomId, entry, h);
     }
     this.evaluateAll();
+  }
+
+  /** Joiners' sessions open in invite rooms now (tests, diagnostics). */
+  inviteSessions(): number {
+    return [...this.l0.values()].filter((s) => s.invite).length;
   }
 
   /** Whether the phone is in use for the internet now (`setOnline`). */
@@ -473,6 +479,7 @@ export class PathManager {
       member: undefined,
       invite: false,
       since: this.now(),
+      sent: 0,
     };
     this.l0.set(this.key(roomId, h), s);
     this.handleStep(s, step);
@@ -498,12 +505,15 @@ export class PathManager {
         session: SyncSession.respond(
           this.o.c,
           g.store,
-          entry.invite ? { now: this.now(), limits: ROOM_SESSION_LIMITS } : this.sessionOptions(),
+          entry.invite
+            ? { now: this.now(), limits: ROOM_SESSION_LIMITS, logOnly: true }
+            : this.sessionOptions(),
         ),
         helloSent: true,
         member: undefined,
         invite: entry.invite,
         since: this.now(),
+        sent: 0,
       };
       this.l0.set(k, s);
     }
@@ -516,6 +526,7 @@ export class PathManager {
     for (const frame of step.send) {
       const kind = s.helloSent ? ROOM_KIND.frame : ROOM_KIND.hello;
       s.helloSent = true;
+      s.sent += frame.length;
       // A frame the room can't take ends the session (the counter must stay whole).
       if (entry === undefined || !entry.client.send(s.handle, encodeRoomPayload(kind, frame))) {
         if (s.session.phase !== 'closed') s.session.close('room');
@@ -528,8 +539,12 @@ export class PathManager {
           const now = this.now();
           if (s.invite) {
             // An invite room is for joiners only: they get the log, never ICE.
-            if (!event.joining) this.closeL0(s, 'not-joiner');
-            else this.diag('invite room: joiner admitted');
+            if (!event.joining) {
+              this.closeL0(s, 'not-joiner');
+              return;
+            }
+            s.member = event.peer;
+            this.diag('invite room: joiner admitted');
             break;
           }
           if (event.joining || this.o.links.memberBans.isBanned(event.peer, now)) {
@@ -562,6 +577,23 @@ export class PathManager {
         default:
           break;
       }
+    }
+    if (s.invite && s.session.phase !== 'closed') this.inviteHandover(s);
+  }
+
+  /**
+   * End a joiner's invite-room session as soon as a link can take over (its
+   * `rtc` claim is here), or at its byte or time cap.
+   */
+  private inviteHandover(s: L0): void {
+    const now = this.now();
+    const g = this.group(s.groupId);
+    if (s.member !== undefined && g?.store.canReceive?.(s.member, RTC_CAP, now) === true) {
+      this.closeL0(s, 'handover');
+    } else if (s.sent > INVITE_SESSION_MAX_BYTES) {
+      this.closeL0(s, 'cap');
+    } else if (now - s.since > INVITE_SESSION_MS) {
+      this.closeL0(s, 'done');
     }
   }
 
@@ -655,7 +687,7 @@ export class PathManager {
         p.attempts.delete(a.id);
       }
     }
-    const policy = this.policy.alwaysRelay ? 'relay' : 'direct';
+    const policy = this.relayFor(p.member) ? 'relay' : 'direct';
     const wantsTurn = policy === 'relay' || p.offers.length >= OFFERS_FOR_TURN;
     const placeholder = `pending-${++pendingSeq}`;
     p.attempts.set(placeholder, {
@@ -848,8 +880,8 @@ export class PathManager {
 
   private evaluate(member: string): void {
     if (!this.online) return;
-    this.applyRelayPolicy();
     const now = this.now();
+    const policy: PathPolicy = { ...this.policy, alwaysRelay: this.relayFor(member) };
     if (this.o.links.memberBans.isBanned(member, now)) {
       this.rtc.closeMember(member, 'banned');
       this.peers.delete(member);
@@ -865,7 +897,7 @@ export class PathManager {
         directAttemptAt: p.directAttemptAt,
         lastDirectTryAt: p.lastDirectTryAt,
       },
-      this.policy,
+      policy,
       now,
     );
     if (d.primary !== p.primary) this.diag(`path ${d.reason} ${d.primary ?? 'none'}`);
@@ -876,7 +908,7 @@ export class PathManager {
         const k = a.state === 'ready' ? a.path : a.policy;
         if (k !== kind) continue;
         // A path still proving itself is never closed for being "connecting".
-        if (a.state !== 'ready' && !(kind === 'direct' && this.policy.alwaysRelay)) continue;
+        if (a.state !== 'ready' && !(kind === 'direct' && policy.alwaysRelay)) continue;
         p.attempts.delete(a.id);
         if (a.state !== 'minting') this.rtc.close(a.id, 'not-needed');
       }

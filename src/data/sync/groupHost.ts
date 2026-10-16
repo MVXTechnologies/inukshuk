@@ -175,7 +175,11 @@ export class GroupHost implements SessionNet {
         ...(internet.policy ? { policy: internet.policy } : {}),
         ...(internet.stun ? { stun: internet.stun } : {}),
         ...(internet.evalMs !== undefined ? { evalMs: internet.evalMs } : {}),
-        forceRelay: () => [...this.sessions.values()].some((s) => s.provisional),
+        // R-INV-4: relay only with the members of a team joined provisionally.
+        relayOnlyWith: (member) =>
+          [...this.sessions.values()].some(
+            (s) => s.provisional && s.replica.state.members.get(member)?.status === 'active',
+          ),
         onChange: () => this.hooks.onChange(),
         onDiag: (event) => addBreadcrumb(`team net: ${event}`),
       });
@@ -253,6 +257,11 @@ export class GroupHost implements SessionNet {
       links,
       paths,
     };
+  }
+
+  /** Joiners' sessions open in this phone's invite rooms (tests, diagnostics). */
+  inviteSessions(): number {
+    return this.paths?.inviteSessions() ?? 0;
   }
 
   /** Run the path decisions now (tests; the manager ticks by itself otherwise). */

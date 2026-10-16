@@ -278,7 +278,10 @@ export class JoinAttempt {
       addBreadcrumb('team join: admitted');
       teamDebug('join', 'admitted');
     }
-    if (this.admitted && this.via === 'internet') this.advertise();
+    if (this.admitted && this.via === 'internet') {
+      this.room?.settle();
+      this.advertise();
+    }
     this.deps.onChange();
   }
 

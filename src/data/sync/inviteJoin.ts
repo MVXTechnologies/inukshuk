@@ -93,6 +93,13 @@ export class InviteRoomJoin {
     this.rooms.clear();
   }
 
+  /** Admitted: no session with another member's phone is started any more. */
+  settle(): void {
+    this.settled = true;
+  }
+
+  private settled = false;
+
   /** Send this phone's own new ops to the member now (its capabilities, its name). */
   push(ops: readonly SignedOp[]): void {
     const a = this.attempt;
@@ -187,7 +194,7 @@ export class InviteRoomJoin {
 
   /** Start a join session with the next member's phone, if none is running. */
   private next(): void {
-    if (this.stopped || this.attempt !== null) return;
+    if (this.stopped || this.settled || this.attempt !== null) return;
     for (const [roomId, client] of this.rooms) {
       if (client.state !== 'ready') continue;
       for (const h of client.peers) {
