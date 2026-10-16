@@ -155,6 +155,23 @@ describe('edit and delete on a real team (#746)', () => {
     await app.active?.stopMesh();
   });
 
+  /**
+   * Jest's clock for a test that opens the row menu: Paper's Menu opens
+   * through an effect, a Portal mount and a measure loop that re-polls every
+   * animation frame under real timers (Jest's views measure 0 × 0). On CI's
+   * runners that left the items unrendered when the test looked (run
+   * 38881902827); on fake timers the frame loop waits for the clock.
+   */
+  const useFakeClock = () =>
+    jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
+
+  /** Tap the row's ⋮ and wait until its items are on screen (the menu opens asynchronously). */
+  const openRowMenu = async () => {
+    await fireEvent.press(screen.getByTestId('team-task-menu'));
+    await screen.findByText('Edit');
+    await screen.findByText('Delete');
+  };
+
   const create = (over: { notes?: string; due?: number | null } = {}) => {
     const s = app.active!;
     expect(
@@ -164,11 +181,11 @@ describe('edit and delete on a real team (#746)', () => {
   };
 
   it.each(THEMES)('Delete hides the row at once; Undo brings it back (dark: %s)', async (dark) => {
-    jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
+    useFakeClock();
     create();
     await act(async () => useTeamStore.getState().refresh());
     await render(wrap(<TeamTasksScreen />, dark));
-    await fireEvent.press(screen.getByTestId('team-task-menu'));
+    await openRowMenu();
     await fireEvent.press(screen.getByText('Delete'));
     expect(screen.queryByText('Check the bridge at km 4')).toBeNull();
     expect(screen.getByText('Task deleted')).toBeTruthy();
@@ -187,11 +204,11 @@ describe('edit and delete on a real team (#746)', () => {
   });
 
   it('Delete without Undo: gone for the team after 6 s', async () => {
-    jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
+    useFakeClock();
     create();
     await act(async () => useTeamStore.getState().refresh());
     await render(wrap(<TeamTasksScreen />));
-    await fireEvent.press(screen.getByTestId('team-task-menu'));
+    await openRowMenu();
     await fireEvent.press(screen.getByText('Delete'));
     await act(async () => {
       jest.advanceTimersByTime(TASK_UNDO_MS - 1);
@@ -206,20 +223,22 @@ describe('edit and delete on a real team (#746)', () => {
   });
 
   it('leaving the list during the Undo still deletes it (the commit runs on unmount)', async () => {
+    useFakeClock();
     create();
     await act(async () => useTeamStore.getState().refresh());
     const r = await render(wrap(<TeamTasksScreen />));
-    await fireEvent.press(screen.getByTestId('team-task-menu'));
+    await openRowMenu();
     await fireEvent.press(screen.getByText('Delete'));
     await r.unmount();
     expect(app.active!.tasks()).toHaveLength(0);
   });
 
   it('Edit opens the task on the New task screen', async () => {
+    useFakeClock();
     const task = create();
     await act(async () => useTeamStore.getState().refresh());
     await render(wrap(<TeamTasksScreen />));
-    await fireEvent.press(screen.getByTestId('team-task-menu'));
+    await openRowMenu();
     await fireEvent.press(screen.getByText('Edit'));
     expect(mockPush).toHaveBeenCalledWith(`/team/task-new?eo=${task.owner}&ei=${task.id}`);
   });
