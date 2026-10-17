@@ -161,7 +161,7 @@ appId: com.inukshuk.app
     notVisible:
       id: 'team-panel-notes'
     timeout: 5000
-- takeScreenshot: team-notes-map
+- takeScreenshot: review-team-notes-map-light
 # Notes → her row: its card on the map (opening it marks it read and sends a
 # "seen" receipt).
 - tapOn:
@@ -294,7 +294,7 @@ appId: com.inukshuk.app
     timeout: 5000
 - assertVisible: '.*Hut water is dry.*'
 - assertVisible: '.*Camp here tonight.*'
-- takeScreenshot: team-notes-list
+- takeScreenshot: review-team-notes-list-light
 - tapOn:
     id: 'notes-filter-mine'
 - assertNotVisible: '.*Hut water is dry.*'
@@ -305,6 +305,41 @@ appId: com.inukshuk.app
       id: 'team-note-card'
     timeout: 5000
 - tapOn: 'Close'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-note-card'
+    timeout: 5000
+# Dark (the owner's phone): the map with both callouts (Julie's, read now,
+# and mine) and the Notes list, then back to System.
+- runFlow:
+    file: subflows/set-theme.yaml
+    env:
+      NEXT: Dark
+- extendedWaitUntil:
+    visible:
+      id: 'team-bar-pill'
+    timeout: 10000
+- takeScreenshot: review-team-notes-map-dark
+- tapOn:
+    id: 'team-bar-pill'
+- tapOn:
+    id: 'team-panel-notes'
+- extendedWaitUntil:
+    visible:
+      id: 'team-notes-screen'
+    timeout: 5000
+- assertVisible: '.*Hut water is dry.*'
+- assertVisible: '.*Camp here tonight.*'
+- takeScreenshot: review-team-notes-list-dark
+- tapOn: 'Back'
+- extendedWaitUntil:
+    visible:
+      id: 'team-bar-pill'
+    timeout: 5000
+- runFlow:
+    file: subflows/set-theme.yaml
+    env:
+      NEXT: System
 # Draw's Text: one tap places a note (the composer opens there). Draw is
 # the chip under the team pill (#757), no longer in the panel.
 - tapOn:

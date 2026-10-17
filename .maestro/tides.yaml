@@ -4,10 +4,11 @@
 # the overlays sheet's Extensions tab then carries its one-line switch row;
 # the flow flips it off and on, then removes the extension again so other
 # flows see the default state. On the way it turns "Show levels on the map"
-# (#764) on and off in the sub-panel, with review shots light and dark. The
-# station card itself (its graph, levels in three datums, copy buttons) is
-# covered by src/core/tides/card.test.ts, TideStationCard.test.tsx and the
-# sim screenshots: a tap on a live station needs the network and a fixed map.
+# (#764) on and off in the sub-panel, with review shots light and dark, and
+# with it on, the levels on the map and Boston's card, graph first, in both
+# themes (NOAA's live gauge: the CI emulator has the network). The card's
+# details (levels in three datums, copy buttons) are covered by
+# src/core/tides/card.test.ts and TideStationCard.test.tsx.
 #
 # Settings rows merge title + subtitle on iOS, so their matches are wildcard
 # regexes; the overlays rows' accessibility text is exactly their label.
@@ -147,10 +148,89 @@ appId: com.inukshuk.app
 - tapOn: 'Back to extensions'
 - tapOn: 'Close overlays'
 - assertVisible: 'Map actions'
+- setLocation:
+    latitude: 42.35389
+    longitude: -71.05028
+# The levels on the map (#764) and a station's card, graph first (light):
+# the map follows the fix onto NOAA's Boston gauge (8443970), so the
+# station sits at the map's centre (the map area ends at the info strip:
+# 47 %). A tap there opens its card; the guarded tap retries while the
+# station's tile is still loading. The graph proves the series loaded, the
+# same series the map's labels draw from; with the card closed, the map
+# shot shows them.
+- runFlow:
+    when:
+      notVisible:
+        id: 'tide-card'
+    commands:
+      - retry:
+          maxRetries: 3
+          commands:
+            - runFlow:
+                when:
+                  notVisible:
+                    id: 'tide-card'
+                commands:
+                  - tapOn:
+                      point: '50%,47%'
+            - extendedWaitUntil:
+                visible:
+                  id: 'tide-card'
+                timeout: 10000
+- assertVisible: 'Boston.*'
+- extendedWaitUntil:
+    visible:
+      id: 'tide-graph'
+    timeout: 30000
+- takeScreenshot: review-tides-card-light
+- tapOn: 'Close tide station'
+- extendedWaitUntil:
+    notVisible:
+      id: 'tide-card'
+    timeout: 5000
+- takeScreenshot: review-tides-map-light
 - runFlow:
     file: subflows/set-theme.yaml
     env:
       NEXT: Dark
+# The levels on the map (#764) and a station's card, graph first (dark):
+# the map follows the fix onto NOAA's Boston gauge (8443970), so the
+# station sits at the map's centre (the map area ends at the info strip:
+# 47 %). A tap there opens its card; the guarded tap retries while the
+# station's tile is still loading. The graph proves the series loaded, the
+# same series the map's labels draw from; with the card closed, the map
+# shot shows them.
+- runFlow:
+    when:
+      notVisible:
+        id: 'tide-card'
+    commands:
+      - retry:
+          maxRetries: 3
+          commands:
+            - runFlow:
+                when:
+                  notVisible:
+                    id: 'tide-card'
+                commands:
+                  - tapOn:
+                      point: '50%,47%'
+            - extendedWaitUntil:
+                visible:
+                  id: 'tide-card'
+                timeout: 10000
+- assertVisible: 'Boston.*'
+- extendedWaitUntil:
+    visible:
+      id: 'tide-graph'
+    timeout: 30000
+- takeScreenshot: review-tides-card-dark
+- tapOn: 'Close tide station'
+- extendedWaitUntil:
+    notVisible:
+      id: 'tide-card'
+    timeout: 5000
+- takeScreenshot: review-tides-map-dark
 - tapOn: 'Map overlays'
 - tapOn: 'Extensions tab'
 - tapOn: 'Options for Tide stations'
@@ -170,6 +250,10 @@ appId: com.inukshuk.app
     file: subflows/set-theme.yaml
     env:
       NEXT: System
+# Back to the shard's usual fix (Québec), as the emulator starts.
+- setLocation:
+    latitude: 46.8139
+    longitude: -71.2082
 # Leave it uninstalled.
 - tapOn:
     text: 'Library(, tab.*)?'

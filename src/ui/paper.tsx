@@ -21,7 +21,7 @@ import {
   scaleSpacing,
 } from '@core/display/displayScale';
 import { forwardRef, type ComponentProps, type ComponentRef } from 'react';
-import { type StyleProp, type TextStyle } from 'react-native';
+import { type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import {
   ActivityIndicator as PaperActivityIndicator,
   Button as PaperButton,
@@ -192,29 +192,57 @@ export function segmentHeight(factor: number): number {
   return scaleSize(20, factor) + 2 * scaleSpacing(9, factor);
 }
 
+/** Paper pads a segment's content this much a side (not a prop). */
+export const PAPER_SEGMENT_PAD = 16;
+/** What a segment's label keeps of it, at 100 % (spacing at other sizes). */
+export const SEGMENT_LABEL_PAD = 4;
+/**
+ * Each segment as wide as its label plus an equal share of the row's rest,
+ * instead of Paper's equal shares with a 76 dp minimum: at Large, "MGRS"
+ * read "MG…" in Coordinates' five segments, and the Photos rows' longer
+ * labels in three (screenshot review, run 38999011874). Explicit flexGrow,
+ * flexShrink and an auto basis override Paper's `flex: 1`.
+ */
+export const SEGMENT_STYLE: ViewStyle = {
+  flex: 0,
+  flexGrow: 1,
+  flexShrink: 1,
+  flexBasis: 'auto',
+  minWidth: 0,
+};
+
 export function SegmentedButtons(props: SegmentedProps) {
   const k = useDisplayFactor();
   // Drawn 38 dp tall at 100 % (less at Small): a vertical hitSlop takes each
   // segment's touch area to 48 dp at every size (#760). A caller's wins.
   const slop = hitSlopFor(segmentHeight(k));
+  // The label takes back Paper's side padding but SEGMENT_LABEL_PAD; on the
+  // left only when nothing (an icon, the selected check) sits before it.
+  const reclaim = scaleSpacing(SEGMENT_LABEL_PAD, k) - PAPER_SEGMENT_PAD;
   // Paper spreads each button's props onto its SegmentedButtonItem, which takes
   // hitSlop and labelMaxFontSizeMultiplier; the button type just omits them.
   type Extra = { hitSlop?: unknown; labelMaxFontSizeMultiplier?: number };
-  const buttons = props.buttons.map((b: SegmentedProps['buttons'][number] & Extra) => ({
-    ...b,
-    hitSlop: b.hitSlop ?? { top: slop, bottom: slop },
-    ...(k === 1
-      ? null
-      : {
-          icon: scaledIconSource(b.icon, k),
-          // Paper pads the content 9 dp; the label's own margin takes up the rest.
-          labelStyle: [
-            { marginVertical: scaleSpacing(9, k) - 9 } satisfies TextStyle,
-            b.labelStyle,
-          ] as StyleProp<TextStyle>,
-          labelMaxFontSizeMultiplier: osFontCap(k, b.labelMaxFontSizeMultiplier),
-        }),
-  }));
+  const buttons = props.buttons.map((b: SegmentedProps['buttons'][number] & Extra) => {
+    const lead = b.icon !== undefined || b.showSelectedCheck === true;
+    const sides: TextStyle = { marginRight: reclaim, ...(lead ? null : { marginLeft: reclaim }) };
+    return {
+      ...b,
+      hitSlop: b.hitSlop ?? { top: slop, bottom: slop },
+      style: [SEGMENT_STYLE, b.style] as StyleProp<ViewStyle>,
+      labelStyle: [
+        sides,
+        // Paper pads the content 9 dp; the label's own margin takes up the rest.
+        k === 1 ? null : ({ marginVertical: scaleSpacing(9, k) - 9 } satisfies TextStyle),
+        b.labelStyle,
+      ] as StyleProp<TextStyle>,
+      ...(k === 1
+        ? null
+        : {
+            icon: scaledIconSource(b.icon, k),
+            labelMaxFontSizeMultiplier: osFontCap(k, b.labelMaxFontSizeMultiplier),
+          }),
+    };
+  });
   return <PaperSegmentedButtons {...({ ...props, buttons } as SegmentedProps)} />;
 }
 
