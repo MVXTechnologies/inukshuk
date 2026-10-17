@@ -11,6 +11,7 @@ import type { Json } from '@core/team/canonical';
 import { isLive, visibleFields } from '@core/team/crdt';
 import { entityKey, type TeamData } from '@core/team/data';
 import { compareStamp, type Stamp } from '@core/team/hlc';
+import { displayNoteText, noteMeta } from '@core/domains/team/notes';
 
 export const PIN_THREAD_PREFIX = 'pin:';
 
@@ -32,15 +33,33 @@ export interface PinMessage {
   mentions: string[];
 }
 
+/** A pin shown as a note (#706). */
+export interface PinNote {
+  /** What the map and the card show: the edited text, else the pin's own, made clean. */
+  text: string;
+  /** Palette index (`MEMBER_COLORS`). */
+  color: number;
+  /** When it fades out on every phone, ms. */
+  expiresAt: number;
+  /** When its current fade was chosen (its life's start), ms. */
+  fadeFrom: number;
+  /** When it last had news for a reader: posted, or its text edited, ms. */
+  newsAt: number;
+  edited: boolean;
+}
+
 export interface TeamPin {
   id: string;
   owner: string;
+  /** Where it is: the note's moved anchor when it was moved. */
   lng: number;
   lat: number;
   /** The pin's own message first, then the replies, oldest first. */
   messages: PinMessage[];
   /** Newest message time. */
   lastAt: number;
+  /** The note it is shown as, or null for a plain pin. */
+  note: PinNote | null;
 }
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -88,13 +107,28 @@ export function teamPins(data: TeamData): TeamPin[] {
     const root = ordered.find((x) => x.msg.author === named.owner && x.msg.id === named.id);
     if (root === undefined) continue;
     const messages = [root, ...ordered.filter((x) => x !== root)].map((x) => x.msg);
+    const meta = noteMeta(data, named.owner, named.id);
+    const text = meta === null ? '' : displayNoteText(meta.text ?? root.msg.text);
+    const at = meta?.ll ?? ll;
     out.push({
       id: named.id,
       owner: named.owner,
-      lng: ll[0],
-      lat: ll[1],
+      lng: at[0],
+      lat: at[1],
       messages,
       lastAt: Math.max(...messages.map((m) => m.at)),
+      // Nothing left to show once cleaned: the plain pin it also is.
+      note:
+        meta === null || text === ''
+          ? null
+          : {
+              text,
+              color: meta.col,
+              expiresAt: meta.expiresAt,
+              fadeFrom: meta.fadeFrom,
+              newsAt: Math.max(root.msg.at, meta.editedAt ?? 0),
+              edited: meta.text !== null,
+            },
     });
   }
   return out.sort((a, b) => b.lastAt - a.lastAt || (a.id < b.id ? -1 : 1));

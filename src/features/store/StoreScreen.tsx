@@ -6,7 +6,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useRouter } from 'expo-router';
 import { useDeferredValue, useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { Keyboard, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { ActivityIndicator, Button, Icon, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Button, Icon, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@ui/components/ScreenHeader';
 import { InukshukLoader } from '@ui/components/InukshukLoader';
@@ -18,6 +18,7 @@ import { BrowseOnMapButton } from './explore/ExploreParts';
 import { exploreMapHref } from './explore/exploreRoutes';
 import { OrganisationMapsCta } from './explore/OrganisationMapsCta';
 import { useCatalogDownloadFlow } from './explore/useCatalogDownloadFlow';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The Explore tab ("Maps" before 2.0.0) — the map explorer (#447, board
@@ -42,6 +43,8 @@ import { useCatalogDownloadFlow } from './explore/useCatalogDownloadFlow';
 const SEARCH_DEBOUNCE_MS = 300;
 
 export function StoreScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const insets = useSafeAreaInsets();
@@ -290,7 +293,7 @@ export function StoreScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   searchRow: {
     flexDirection: 'row',

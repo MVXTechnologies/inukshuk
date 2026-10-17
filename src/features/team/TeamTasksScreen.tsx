@@ -31,7 +31,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Button, Icon, IconButton, Text } from 'react-native-paper';
+import { Button, Icon, IconButton, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChoiceRow, SectionLabel, TeamScreenFrame, useNow } from './components';
@@ -40,6 +40,7 @@ import { ResolvedItems } from './ResolvedItems';
 import { taskStateLabel } from './TaskChip';
 import { useAnchorLookup } from './useAnchorLookup';
 import { useToggleTask } from './useToggleTask';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** How long Delete's Undo stays (the app's 6 s). */
 export const TASK_UNDO_MS = 6000;
@@ -52,6 +53,8 @@ const ago = (ms: number) => {
 };
 
 export function TeamTasksScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -252,7 +255,7 @@ export function TeamTasksScreen() {
 
 const keyOf = (task: Pick<TeamTask, 'owner' | 'id'>) => `${task.owner}:${task.id}`;
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   group: { gap: 0 },
   // A list row (#757): about 56–64 dp, a hairline under it, no card.

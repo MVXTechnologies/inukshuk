@@ -4,10 +4,11 @@ import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useSupportCosts } from './useSupportCosts';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Settings › System info: "Prominent donors" (#476), the names published in
@@ -16,6 +17,8 @@ import { useSupportCosts } from './useSupportCosts';
  * their name.
  */
 export function DonorsList() {
+  const styles = useScaledStyles(stylesSheet);
+
   const router = useRouter();
   const t = useSchemeTokens();
   const costs = useSupportCosts();
@@ -86,7 +89,7 @@ export function DonorsList() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   wrap: { paddingHorizontal: space.lg, paddingVertical: space.sm, gap: 6 },
   heading: { fontSize: 16, lineHeight: 22, fontWeight: '800' },
   caption: { fontSize: 13, lineHeight: 18 },

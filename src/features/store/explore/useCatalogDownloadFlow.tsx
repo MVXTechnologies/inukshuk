@@ -6,7 +6,7 @@ import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { useRouter } from 'expo-router';
 import { useCallback, useState, type ReactNode } from 'react';
-import { Portal, Snackbar } from 'react-native-paper';
+import { Portal, Snackbar } from '@ui/paper';
 
 import { DestinationFolderDialog } from '../DestinationFolderDialog';
 import {

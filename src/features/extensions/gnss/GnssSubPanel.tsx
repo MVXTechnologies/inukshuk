@@ -5,7 +5,7 @@ import { useGnssStore } from '@state/gnssStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import { Button, Text } from '@ui/paper';
 
 import {
   SectionTitle,
@@ -22,6 +22,7 @@ import {
   GnssReceiverOption,
   GnssStandbyOption,
 } from './options';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Map overlays › Extensions › External GNSS receiver (#668): the live status
@@ -32,6 +33,8 @@ import {
  * long-running state the sheet handles badly).
  */
 export function GnssSubPanel({ onBack, onClose }: ExtensionSubPanelProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent } = useSheetAccent();
   const { show, installedAt } = useExtensionPrefs('gnss');
@@ -102,7 +105,7 @@ export function GnssSubPanel({ onBack, onClose }: ExtensionSubPanelProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: { marginHorizontal: 16, marginTop: 4, marginBottom: 8, padding: 12, borderRadius: 14 },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36 },
   cardTitle: { fontSize: 15, lineHeight: 20, fontWeight: '700', flexShrink: 1 },

@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Numbered circle pin for a trail note on the map. Colours are fixed (not
@@ -11,6 +12,8 @@ const BADGE_SIZE = 24;
 
 /** `size`: the badge's diameter (dp), 24 by default; the map's follows Pin size (#742). */
 export function NoteNumberBadge({ num, size = BADGE_SIZE }: { num: number; size?: number }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const k = size / BADGE_SIZE;
   return (
     <View
@@ -28,7 +31,7 @@ export function NoteNumberBadge({ num, size = BADGE_SIZE }: { num: number; size?
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   badge: {
     backgroundColor: BADGE_BG,
     borderWidth: 2,

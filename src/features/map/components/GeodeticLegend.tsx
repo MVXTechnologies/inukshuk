@@ -1,7 +1,8 @@
 import { Image, StyleSheet, View } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from '@ui/paper';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { geodeticImage } from '../geodeticImages';
+import { useScaledStyles } from '@ui/displayScale';
 
 const ENTRIES = [
   { kind: '3d', label: '3D' },
@@ -27,6 +28,8 @@ export function GeodeticLegend({
   /** Types the user's filter shows (default all); the others are struck through. */
   types?: readonly string[];
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const theme = useTheme().dark ? 'dark' : 'light';
   const color = disabled ? tokens.inkMuted : tokens.ink;
@@ -63,7 +66,7 @@ export function GeodeticLegend({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 12, rowGap: 4 },
   entry: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   icon: { width: 14, height: 14 },

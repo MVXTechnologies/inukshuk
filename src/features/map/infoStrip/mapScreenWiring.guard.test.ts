@@ -78,6 +78,8 @@ describe('MapScreen ↔ info strip', () => {
     expect(route).toMatch(/<InfoStripInsets>\s*<MapScreen \/>\s*<\/InfoStripInsets>/);
     // MapScreen's top chrome is placed from that safe area.
     expect(map).toMatch(/const insets = useSafeAreaInsets\(\);/);
-    expect(map).toMatch(/\{ top: insets\.top \+ 8 \}/);
+    // The 8 dp gap is spacing at the Display size (#760).
+    expect(map).toMatch(/top: insets\.top \+ topGap \}/);
+    expect(map).toMatch(/const topGap = sp\(8\);/);
   });
 });

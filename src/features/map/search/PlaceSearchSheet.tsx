@@ -20,10 +20,11 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { Icon, IconButton, Text, TouchableRipple } from 'react-native-paper';
+import { Icon, IconButton, Text, TouchableRipple } from '@ui/paper';
 import { SectionTitle } from '../components/mapSheet';
 import { deviceSearchLanguage } from './deviceLanguage';
 import { usePlaceSearch, type OnlineStatus } from './usePlaceSearch';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * "Search places" (#496): the sheet the map's search pill opens. Type a town,
@@ -48,6 +49,8 @@ export function PlaceSearchSheet({
   onSelect: (place: Place) => void;
   onClose: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { height } = useWindowDimensions();
   const units = useSettingsStore((s) => s.units);
@@ -212,6 +215,8 @@ function distanceOrNull(origin: LatLng | null, place: Place): number | null {
 
 /** One line of guidance or state, with an icon, in the list. */
 function Note({ icon, children, busy }: { icon: string; children: ReactNode; busy?: boolean }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <View style={styles.note} accessibilityLiveRegion="polite">
@@ -279,6 +284,8 @@ function ResultRow({
   /** Overrides the type icon (recents show a clock). */
   icon?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { place, distanceM } = ranked;
   const kind = placeKindLine(place, units);
@@ -317,7 +324,7 @@ function ResultRow({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   sheet: {
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,

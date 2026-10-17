@@ -2,13 +2,14 @@ import { ContourTexture } from '@ui/components/ContourTexture';
 import { LIBRARY_TYPE_FILTERS, type LibraryTypeFilter } from '@core/library/libraryRows';
 import { InukshukGlyph } from '@ui/components/InukshukGlyph';
 import { tabularNums } from '@ui/fonts';
-import { space, target } from '@ui/tokens';
+import { palette, space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { ReactNode, Ref } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Icon, Text, useTheme } from '@ui/paper';
 
 import { SelectCheck } from './LibraryRows';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * The Library's chrome (revamp §5, boards `After-Library.html` and
@@ -17,6 +18,14 @@ import { SelectCheck } from './LibraryRows';
  */
 
 export { ContourTexture };
+
+/** A shared folder's header extras (#712). */
+export interface SectionLive {
+  line: string;
+  tone: 'ok' | 'wait' | 'join';
+  faces: readonly { id: string; initials: string; color: string }[];
+  onMenu?: () => void;
+}
 
 /** One chip in the row: "Maps 2". */
 function Chip({
@@ -30,6 +39,8 @@ function Chip({
   on: boolean;
   onPress: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -83,6 +94,8 @@ export function TypeFilterChips({
   extraValue?: string | null;
   onExtraChange?: (id: string) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   return (
     <View style={styles.chipBar}>
       <ScrollView
@@ -134,6 +147,8 @@ export function SectionHeader({
   first,
   highlighted,
   dropRef,
+  live,
+  depth = 0,
 }: {
   title: string;
   count: string;
@@ -147,9 +162,21 @@ export function SectionHeader({
   first?: boolean;
   highlighted?: boolean;
   dropRef?: Ref<View>;
+  /** A shared folder (#712): its icon, sync line, faces and ⋮ (its own sheet). */
+  live?: SectionLive;
+  /** A sub-folder's depth (#712): indented under its parent. */
+  depth?: number;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
+  const lineColor =
+    live?.tone === 'wait'
+      ? t.status.pausedInk
+      : live?.tone === 'ok'
+        ? t.status.gnssFixed
+        : t.inkMuted;
   return (
     <View
       ref={dropRef}
@@ -168,16 +195,67 @@ export function SectionHeader({
         accessibilityRole="button"
         accessibilityState={{ expanded: !collapsed, ...(selected ? { selected: true } : {}) }}
         accessibilityHint={onLongPress ? 'Long-press to select the folder' : undefined}
-        style={styles.sectionToggle}
+        style={[styles.sectionToggle, depth > 0 && { paddingLeft: space.md + depth * 16 }]}
       >
         <Icon source={collapsed ? 'chevron-right' : 'chevron-down'} size={20} color={t.ink} />
-        <Text numberOfLines={1} style={[styles.sectionTitle, { color: t.ink }]}>
-          {title}
-          {count ? (
-            <Text style={[styles.sectionCount, { color: t.inkMuted }]}>{` ${count}`}</Text>
-          ) : null}
-        </Text>
+        {live !== undefined && (
+          <Icon source="folder-account" size={20} color={theme.colors.primary} />
+        )}
+        <View style={styles.sectionText}>
+          <Text numberOfLines={1} style={[styles.sectionTitle, { color: t.ink }]}>
+            {title}
+            {count ? (
+              <Text style={[styles.sectionCount, { color: t.inkMuted }]}>{` ${count}`}</Text>
+            ) : null}
+          </Text>
+          {live !== undefined && (
+            <View style={styles.liveLine}>
+              {live.tone === 'join' ? (
+                <ActivityIndicator size={12} color={theme.colors.primary} />
+              ) : (
+                <Icon
+                  source={live.tone === 'wait' ? 'cloud-off-outline' : 'cloud-check-outline'}
+                  size={15}
+                  color={lineColor}
+                />
+              )}
+              <Text
+                numberOfLines={1}
+                style={[styles.liveText, { color: live.tone === 'join' ? t.inkMuted : lineColor }]}
+              >
+                {live.line}
+              </Text>
+            </View>
+          )}
+        </View>
       </Pressable>
+      {live !== undefined && live.faces.length > 0 && (
+        <View style={styles.faces} accessibilityElementsHidden importantForAccessibility="no">
+          {live.faces.slice(0, 2).map((f, i) => (
+            <View
+              key={f.id}
+              style={[
+                styles.face,
+                { backgroundColor: f.color, borderColor: t.background },
+                i > 0 && styles.faceOverlap,
+              ]}
+            >
+              <Text style={styles.faceText}>{f.initials}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      {live?.onMenu !== undefined && (
+        <Pressable
+          onPress={live.onMenu}
+          accessibilityRole="button"
+          accessibilityLabel={`${title}: shared folder options`}
+          testID="library-shared-menu"
+          style={styles.liveMenu}
+        >
+          <Icon source="dots-vertical" size={22} color={t.inkMuted} />
+        </Pressable>
+      )}
       {actions}
       {selected && <SelectCheck selected />}
     </View>
@@ -196,6 +274,10 @@ export function LibraryEmptyState({
   onBrowseMaps: () => void;
   busy: boolean;
 }) {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={styles.emptyWrap}>
@@ -204,7 +286,7 @@ export function LibraryEmptyState({
         <View
           style={[styles.emptyBadge, { backgroundColor: t.surface, borderColor: t.outlineVariant }]}
         >
-          <InukshukGlyph size={64} frame="square" />
+          <InukshukGlyph size={sz(64)} frame="square" />
         </View>
         <View style={styles.emptyText}>
           <Text accessibilityRole="header" style={[styles.emptyTitle, { color: t.ink }]}>
@@ -255,7 +337,7 @@ export function LibraryEmptyState({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   chipBar: { flexDirection: 'row', alignItems: 'center', paddingRight: space.xs },
   chipScroll: { flexGrow: 1, flexShrink: 1 },
   chipRow: { paddingLeft: space.lg, paddingRight: space.sm, gap: space.sm, alignItems: 'center' },
@@ -285,6 +367,21 @@ const styles = StyleSheet.create({
     paddingRight: space.sm,
   },
   sectionTitle: { flexShrink: 1, fontSize: 15, lineHeight: 20, fontWeight: '800' },
+  sectionText: { flex: 1, minWidth: 0 },
+  liveLine: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
+  liveText: { flexShrink: 1, fontSize: 12.5, lineHeight: 17, fontWeight: '700' },
+  faces: { flexDirection: 'row', marginRight: space.xs },
+  face: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  faceOverlap: { marginLeft: -8 },
+  faceText: { fontSize: 9.5, fontWeight: '800', color: palette.white },
+  liveMenu: { width: 44, minHeight: target.min, alignItems: 'center', justifyContent: 'center' },
   sectionCount: { fontWeight: '500', ...tabularNums },
   emptyWrap: { flex: 1 },
   empty: {

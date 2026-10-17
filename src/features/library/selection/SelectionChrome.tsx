@@ -3,8 +3,9 @@ import { palette, space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useDisplayCondition } from '@ui/displayCondition';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, IconButton, Text, useTheme } from 'react-native-paper';
+import { Icon, IconButton, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Select mode's chrome (#711, approved mockup `mockups-261-library-select`):
@@ -26,6 +27,8 @@ export function SelectionHeader({
   selectAll: { label: string; onPress: () => void } | null;
   onClose: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={styles.header}>
@@ -94,6 +97,8 @@ export function SelectionActionBar({
   onExplain: (reason: string) => void;
   testIDPrefix: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -154,6 +159,8 @@ export function SelectionActionBar({
 
 /** The bubble over the bar that says why a dimmed action does not apply. */
 export function ReasonTip({ message }: { message: string | null }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   if (message === null) return null;
@@ -192,6 +199,8 @@ export function UndoBar({
   /** `<prefix>-undo-bar` and `<prefix>-undo` (the team's task list reuses it). */
   testIDPrefix?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const night = useDisplayCondition() === 'night';
   if (message === null) return null;
@@ -227,7 +236,7 @@ export const BAR_HEIGHT = 64;
 /** An action label may wrap once ("Hide from / map") rather than be cut. */
 export const SLOT_LABEL_LINES = 2;
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   header: {
     minHeight: 58,
     flexDirection: 'row',

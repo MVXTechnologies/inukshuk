@@ -13,11 +13,12 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { FlatList, Image, Pressable, StyleSheet, View } from 'react-native';
-import { Icon, IconButton, Text } from 'react-native-paper';
+import { Icon, IconButton, Text } from '@ui/paper';
 
 import { usePhotoCard } from '../photos/PhotoBottomCard';
 import { useNow } from './components';
 import { useTeamMapFocus } from './map/teamMapFocus';
+import { useScaledStyles } from '@ui/displayScale';
 
 const ICON: Record<ThreadRow['target']['kind'], string> = {
   photo: 'image-outline',
@@ -26,6 +27,8 @@ const ICON: Record<ThreadRow['target']['kind'], string> = {
 };
 
 export function ChatThreads() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const view = useTeamStore((s) => s.view);
@@ -147,7 +150,7 @@ export function ChatThreads() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   list: { padding: 16, gap: 8 },
   empty: { textAlign: 'center', paddingVertical: 32 },

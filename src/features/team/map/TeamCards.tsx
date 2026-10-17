@@ -13,7 +13,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { createContext, useContext, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
-import { Button, Icon, IconButton, Text } from 'react-native-paper';
+import { Button, Icon, IconButton, Text } from '@ui/paper';
 
 import { PressGrid, type GridCell } from '@features/common/components/ActionGrid';
 
@@ -28,7 +28,9 @@ import { startEditing } from './TrailEditor';
 import { loadTrackGeometry } from '@data/trackGeometry';
 import { useLibraryStore } from '@state/libraryStore';
 import { useTeamSheet, type TeamSheet } from './teamMode';
+import { ConnectionCard } from './ConnectionCard';
 import { FLOATING_CARD_GAP } from '@features/map/bottomLayers';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * Whether the card dock already floats (over the recording panel, with its
@@ -67,6 +69,8 @@ export function Round({
   tint?: string;
   filled?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const c = tint ?? t.ink;
   return (
@@ -101,7 +105,7 @@ export function Round({
   );
 }
 
-function Card({
+export function Card({
   title,
   sub,
   icon,
@@ -119,6 +123,8 @@ function Card({
   children: React.ReactNode;
   testID?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const floating = useContext(DockFloating);
   return (
@@ -161,6 +167,8 @@ function Card({
 }
 
 function StatusCard({ onClose }: { onClose: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const me = useTeamStore((s) => s.view?.me);
   const mine = useTeamStore((s) => (me ? s.statuses.get(me)?.id : undefined));
@@ -210,6 +218,10 @@ function StatusCard({ onClose }: { onClose: () => void }) {
 const PHRASES = ['Come here', 'Look at this', 'Wait for me', 'Need help', 'We regroup here'];
 
 function NotifyCard({ at, onClose }: { at: [number, number] | null; onClose: () => void }) {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const view = useTeamStore((s) => s.view);
   const [who, setWho] = useState<string[]>([]);
@@ -253,7 +265,7 @@ function NotifyCard({ at, onClose }: { at: [number, number] | null; onClose: () 
               testID={`team-notify-${m.name}`}
             >
               <View style={[styles.personRing, { borderColor: on ? t.ink : 'transparent' }]}>
-                <MemberAvatar initials={m.initials} color={m.color} size={40} />
+                <MemberAvatar initials={m.initials} color={m.color} size={sz(40)} />
               </View>
               <Text variant="labelSmall" style={{ color: t.ink }} numberOfLines={1}>
                 {m.name.split(' ')[0]}
@@ -366,6 +378,8 @@ function SpotCard({
   team: { owner: string; id: string } | null;
   onClose: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const router = useRouter();
   const open = useTeamSheet((s) => s.open);
   const guest = useTeamStore((s) => s.view?.members.find((m) => m.isMe)?.role === 'guest');
@@ -379,8 +393,8 @@ function SpotCard({
     >
       <View style={styles.roundRow}>
         <Round
-          icon="comment-text-outline"
-          label="Comment"
+          icon="note-text-outline"
+          label="Note"
           testID="team-spot-comment"
           onPress={() => {
             onClose();
@@ -483,9 +497,11 @@ function PressCard({
           },
         ]),
     {
-      icon: 'map-marker-account-outline',
-      label: 'Pin',
-      testID: 'team-press-pin',
+      // A note is a pin that shows its text (#706, G8).
+      icon: 'note-text-outline',
+      label: 'Note here',
+      testID: 'team-press-note',
+      tag: 'NEW',
       run: () => {
         onClose();
         usePinDraft.getState().open(at[0], at[1]);
@@ -562,6 +578,8 @@ function PressCard({
 
 /** Marks at one spot (a cluster at its limit): pick one. */
 function ListCard({ items, onClose }: { items: TeamMarkHit[]; onClose: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const view = useTeamStore((s) => s.view);
@@ -643,6 +661,8 @@ function SheetCard({
   switch (sheet.kind) {
     case 'status':
       return <StatusCard onClose={close} />;
+    case 'connection':
+      return <ConnectionCard onClose={close} />;
     case 'notify':
       return <NotifyCard at={sheet.at} onClose={close} />;
     case 'spot':
@@ -664,7 +684,7 @@ function SheetCard({
   }
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   card: {
     borderRadius: 16,

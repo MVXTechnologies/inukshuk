@@ -3,8 +3,9 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Fragment, useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 import Svg, { Circle, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 export interface ChartBand {
   from: number;
@@ -100,10 +101,15 @@ export function TrailChart({
   bare = false,
   onWidth,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const [width, setWidth] = useState(0);
+  // #760: drawn on a 100 % canvas scaled to the Display size (viewBox), so
+  // every coordinate, font and stroke below scales with it.
+  const { factor: chartF } = useDisplayScale();
   const onLayout = (e: LayoutChangeEvent) => {
-    setWidth(e.nativeEvent.layout.width);
+    setWidth(e.nativeEvent.layout.width / chartF);
     onWidth?.(e.nativeEvent.layout.width);
   };
 
@@ -166,7 +172,7 @@ export function TrailChart({
     // `x` is relative to the plot view the detector wraps, whatever SVG
     // element is under the finger.
     const at = ({ x }: { x: number }) => {
-      const ratio = totalM > 0 ? scrubRatio(x, 0, width) : null;
+      const ratio = totalM > 0 ? scrubRatio(x / chartF, 0, width) : null;
       if (ratio !== null) onScrub(ratio * totalM);
     };
     return (
@@ -182,7 +188,7 @@ export function TrailChart({
         .onStart(at)
         .onUpdate(at)
     );
-  }, [gestureId, width, totalM, onScrub]);
+  }, [gestureId, width, totalM, onScrub, chartF]);
 
   const cx = cursorDistanceM !== null && width > 0 ? xFor(cursorDistanceM) : null;
 
@@ -225,7 +231,7 @@ export function TrailChart({
       {above}
       <GestureDetector gesture={scrub}>
         <View
-          style={{ height: plotHeight }}
+          style={{ height: plotHeight * chartF }}
           onLayout={onLayout}
           accessible
           accessibilityRole="adjustable"
@@ -233,7 +239,11 @@ export function TrailChart({
           accessibilityValue={{ text: valueText }}
         >
           {width > 0 && (
-            <Svg width={width} height={plotHeight}>
+            <Svg
+              width={width * chartF}
+              height={plotHeight * chartF}
+              viewBox={`0 0 ${width} ${plotHeight}`}
+            >
               {bands.map((b) => (
                 <Rect
                   key={`b${b.from}`}
@@ -309,7 +319,7 @@ export function TrailChart({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: { borderRadius: 14, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 10, gap: 4 },
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   title: { fontSize: 13, fontWeight: '800' },

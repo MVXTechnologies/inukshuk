@@ -79,6 +79,50 @@ export function groupByFolder<T extends TrackSummary>(
   return { groups, ungroupedMaps, ungroupedTracks, ungroupedWaypoints, ungroupedAreas };
 }
 
+/** One folder in tree order, with how deep it sits (0: top level). */
+export interface FolderNode {
+  folder: Folder;
+  depth: number;
+  /** Its ancestors' ids, nearest first (collapsing one hides it). */
+  ancestors: string[];
+}
+
+/**
+ * Folders in tree order (#712: sub-folders, kept from shared folders): each
+ * parent before its children, siblings in their given order. A parent that
+ * no longer exists, or a cycle, puts the folder at the top level.
+ */
+export function folderTree(folders: readonly Folder[]): FolderNode[] {
+  const byId = new Map(folders.map((f) => [f.id, f]));
+  /** The effective parent: an existing folder that is not its own ancestor. */
+  const parentOf = (f: Folder): string | undefined => {
+    const seen = new Set([f.id]);
+    let p = f.parentId;
+    while (p !== undefined) {
+      if (seen.has(p) || !byId.has(p)) return undefined;
+      seen.add(p);
+      p = byId.get(p)!.parentId;
+    }
+    return f.parentId;
+  };
+  const kids = new Map<string | undefined, Folder[]>();
+  for (const f of folders) {
+    const p = parentOf(f);
+    const list = kids.get(p);
+    if (list === undefined) kids.set(p, [f]);
+    else list.push(f);
+  }
+  const out: FolderNode[] = [];
+  const visit = (parent: string | undefined, depth: number, ancestors: string[]) => {
+    for (const f of kids.get(parent) ?? []) {
+      out.push({ folder: f, depth, ancestors });
+      visit(f.id, depth + 1, [f.id, ...ancestors]);
+    }
+  };
+  visit(undefined, 0, []);
+  return out;
+}
+
 /** Total number of items (maps + trails + waypoints + areas) in a folder group. */
 export function folderItemCount<T extends TrackSummary>(group: FolderGroup<T>): number {
   return group.maps.length + group.tracks.length + group.waypoints.length + group.areas.length;

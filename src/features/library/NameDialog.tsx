@@ -1,7 +1,7 @@
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
 import { useKeyboardRelease } from '@ui/useKeyboardRelease';
 import { useRef } from 'react';
-import { Button, Dialog, TextInput } from 'react-native-paper';
+import { Button, Dialog, TextInput } from '@ui/paper';
 
 interface Props {
   visible: boolean;

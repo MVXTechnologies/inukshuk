@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 export interface Detent<V> {
   value: V;
@@ -41,6 +42,8 @@ export function DetentSlider<V>({
   trackColor,
   tickColor,
 }: Props<V>) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const accent = accentColor ?? theme.colors.primary;
   const track = trackColor ?? theme.colors.surfaceVariant;
@@ -89,7 +92,7 @@ export function DetentSlider<V>({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   trackBox: { height: 28, justifyContent: 'center' },
   track: { position: 'absolute', left: 0, right: 0, height: 2, borderRadius: 1 },

@@ -6,7 +6,7 @@ import { useOfflineStore } from '@state/offlineStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useCallback, useMemo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import {
   downloadable,
@@ -17,6 +17,7 @@ import {
   trailPacks,
   type TrailDownloadTarget,
 } from './trailDownload';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * One stage's (or a short stage-less trail's) offline download (#472): its
@@ -96,6 +97,8 @@ export function TrailDownloadButton({
   /** What is downloaded, for screen readers ("Stage 2, Mauricie"). */
   label: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { status, fraction } = download;
   return (
@@ -136,7 +139,7 @@ export function TrailDownloadButton({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   button: {
     minWidth: 44,
     height: 44,

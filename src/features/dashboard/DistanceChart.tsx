@@ -13,8 +13,9 @@ import { radius, space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from '@ui/paper';
 import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * "Distance per week" (revamp `After-Logbook.html`): stone bars for the last
@@ -74,9 +75,14 @@ export function DistanceChart({
   onGranularityChange: (g: ChartGranularity) => void;
   units: Units;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const [width, setWidth] = useState(0);
+  // #760: drawn on a 100 % canvas scaled to the Display size (viewBox), so
+  // every coordinate, font and stroke below scales with it.
+  const { factor: chartF } = useDisplayScale();
   // Counted from the newest bar so a selection means the same bar after the
   // clock rolls over; null = no selection (the period total).
   const [selectedFromEnd, setSelectedFromEnd] = useState<number | null>(null);
@@ -152,12 +158,15 @@ export function DistanceChart({
 
       <View
         style={styles.plot}
-        onLayout={(e: LayoutChangeEvent) => setWidth(Math.round(e.nativeEvent.layout.width))}
+        onLayout={(e: LayoutChangeEvent) =>
+          setWidth(Math.round(e.nativeEvent.layout.width / chartF))
+        }
       >
         {width > 0 && (
           <Svg
-            width={width}
-            height={CHART_H}
+            width={width * chartF}
+            height={CHART_H * chartF}
+            viewBox={`0 0 ${width} ${CHART_H}`}
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
           >
@@ -270,7 +279,7 @@ export function DistanceChart({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: {
     borderRadius: radius.lg,
     borderWidth: 1,

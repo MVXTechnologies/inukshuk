@@ -27,14 +27,16 @@ import { useStravaStore } from '@state/stravaStore';
 import { useSupportStore } from '@state/supportStore';
 import { DisplayConditionContext } from '@ui/displayCondition';
 import { resolveTheme } from '@ui/theme';
+import { displayScaleFactor } from '@core/display/displayScale';
 import { useAndroidImmersive } from '@ui/useAndroidImmersive';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { startLibrarySync } from '@data/sync/libraryPort';
 import { useEffect } from 'react';
 import { AppState, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
-import { PaperProvider } from 'react-native-paper';
+import { PaperProvider } from '@ui/paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { installTileHostAlias } from '@data/tileHostAlias';
 import { clearPhotoInbox } from '@data/photos/inbox';
@@ -60,7 +62,10 @@ export default function RootLayout() {
   const scheme = themeMode === 'system' ? (osScheme ?? 'light') : themeMode;
   // Display mode (decision 4): Sunlight and Night red override light/dark.
   const condition = useEffectiveDisplayCondition();
-  const theme = resolveTheme(scheme === 'dark' ? 'dark' : 'light', condition);
+  // Display size (#760): Paper's type scale follows the setting; components
+  // size themselves through `@ui/displayScale`.
+  const displayFactor = displayScaleFactor(useSettingsStore((s) => s.displayScale));
+  const theme = resolveTheme(scheme === 'dark' ? 'dark' : 'light', condition, displayFactor);
 
   const hydrateLibrary = useLibraryStore((s) => s.hydrate);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
@@ -75,7 +80,10 @@ export default function RootLayout() {
     // loop — missing RECEIVE_BOOT_COMPLETED) left the OS location task
     // registered, stop it before the next GPS fix can kill the process.
     cleanupBackgroundLocationAtLaunch().catch((err) => reportError(err, 'bg-task-cleanup'));
-    hydrateLibrary().catch((err) => reportError(err, 'library-hydrate'));
+    hydrateLibrary()
+      // Share live (#712) reads and writes the Library: only once it is loaded.
+      .then(() => startLibrarySync())
+      .catch((err) => reportError(err, 'library-hydrate'));
     hydrateSettings().catch((err) => reportError(err, 'settings-hydrate'));
     hydrateStrava().catch((err) => reportError(err, 'strava-hydrate'));
     hydrateImports().catch((err) => reportError(err, 'imports-hydrate'));
@@ -182,10 +190,17 @@ export default function RootLayout() {
                     <Stack.Screen name="team/share" />
                     <Stack.Screen name="team/teams" />
                     <Stack.Screen name="team/tasks" />
+                    <Stack.Screen name="team/connection" />
+                    <Stack.Screen name="team/notes" />
                     <Stack.Screen name="team/task-new" />
                     <Stack.Screen name="team/pin/[owner]/[id]" />
                     <Stack.Screen name="team/member/[id]" />
                     <Stack.Screen name="team/trail/[owner]/[id]" />
+                    {/* Share live (#712): a shared folder's Activity, People and trash. */}
+                    <Stack.Screen name="shared/[id]/activity" />
+                    <Stack.Screen name="shared/[id]/people" />
+                    <Stack.Screen name="shared/[id]/trash" />
+                    <Stack.Screen name="shared/[id]/invite" />
                   </Stack>
                   <ImportFeedbackSnackbar />
                   <PdfRecoverySnackbar />

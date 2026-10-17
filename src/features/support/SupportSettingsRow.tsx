@@ -2,13 +2,16 @@ import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The accent card at the top of Settings (#476, board `Entry.dc.html`) that
  * opens Support Inukshuk.
  */
 export function SupportSettingsRow() {
+  const styles = useScaledStyles(stylesSheet);
+
   const router = useRouter();
   const t = useSchemeTokens();
   return (
@@ -34,7 +37,7 @@ export function SupportSettingsRow() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: {
     marginTop: space.sm,
     marginHorizontal: space.lg,

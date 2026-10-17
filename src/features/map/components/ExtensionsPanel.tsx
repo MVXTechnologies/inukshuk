@@ -6,8 +6,9 @@ import { useExtensionsState } from '@features/extensions/prefs';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
-import { Button, Icon, Text } from 'react-native-paper';
+import { Button, Icon, Text } from '@ui/paper';
 import { NavRow, useSheetAccent } from './mapSheet';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Map overlays › Extensions tab (`@core/extensions/state`): each installed
@@ -25,6 +26,8 @@ export function ExtensionsPanel({
   /** Close the overlays sheet (when leaving for Settings). */
   onClose: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent, onAccent } = useSheetAccent();
   const router = useRouter();
@@ -77,7 +80,7 @@ export function ExtensionsPanel({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   empty: { alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingVertical: 20 },
   emptyTitle: { fontSize: 16, fontWeight: '700' },
   emptyText: { fontSize: 13, lineHeight: 18, textAlign: 'center', marginBottom: 6 },

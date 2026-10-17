@@ -272,6 +272,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         // the library manifest).
         cameraPermission:
           'Inukshuk uses the camera to attach photos to trail notes and to scan team invite QR codes.',
+        // Photos only, never video: no microphone purpose string, and
+        // RECORD_AUDIO blocked on Android (R-RTC-5, 2.7.0).
+        microphonePermission: false,
       },
     ],
     // Raise Gradle heap/metaspace so :expo-updates:kspReleaseKotlin doesn't OOM
@@ -330,6 +333,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // copied into the iOS bundle and Android res/raw for the "Team SOS"
     // channel. Not expo-notifications' plugin itself: it would add push.
     './plugins/withTeamSosSound',
+    // Live sync over the internet (2.7.0, G4): react-native-webrtc for data
+    // channels only. No microphone purpose string or audio / screen-capture
+    // permissions (security review R-RTC-5), react-native-webrtc's screen-share
+    // service removed, the native WebRTC builds pinned exactly. Its Info.plist
+    // and manifest edits run after every other plugin's, wherever it is listed;
+    // scripts/ci/media-permissions.mjs checks the result in CI.
+    './plugins/withWebRtcDataOnly',
     // Team notifications are local only: no Push entitlement, which prebuild
     // otherwise adds through expo-notifications' plugin (2.5.0 iOS signing
     // failure). Keep last; CI checks the final entitlements.
@@ -383,6 +393,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // Worldwide province / state label points (src/data/basemapTiles). Unset
     // = the Pages site's docs/data/admin1-labels-v1.json.
     admin1LabelsUrl: process.env.ADMIN1_LABELS_URL,
+    // Team-over-the-internet relay host (src/data/rtcRelay). Unset = ours
+    // (rtc.mvxtechnologies.com); `none` builds a nearby-only app. Not secret.
+    rtcRelayHost: process.env.RTC_RELAY_HOST,
   },
   updates: {
     // OTA self-correction channel; CI (ota-update.yml) publishes JS-only fixes

@@ -17,10 +17,11 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from '@ui/paper';
 import { refreshGeodeticCoverage } from '@data/geodeticCoverage';
 import { geodeticImage } from '../geodeticImages';
 import { SectionTitle, Segmented, SwitchRow, useSheetAccent } from './mapSheet';
+import { useScaledStyles } from '@ui/displayScale';
 
 const TYPE_LABEL: Record<MarkType, string> = {
   '3d': '3D',
@@ -71,6 +72,8 @@ function FilterChip({
   onPress: () => void;
   icon?: ReturnType<typeof geodeticImage>;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent, onAccent } = useSheetAccent();
   return (
@@ -105,6 +108,8 @@ function FilterChip({
 
 /** "Reset": every geodetic filter back to its default; quiet while none is on. */
 export function GeodeticFilterReset() {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent } = useSheetAccent();
   const active = useSettingsStore((s) => activeFilterCount(s.geodeticFilter));
@@ -130,6 +135,8 @@ export function GeodeticFilterReset() {
  * applies live and is persisted.
  */
 export function GeodeticFilters() {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const dark = useTheme().dark;
   const filter = useSettingsStore((s) => s.geodeticFilter);
@@ -267,7 +274,7 @@ export function GeodeticFilters() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   reset: { fontSize: 15, fontWeight: '700' },
   pad: { paddingHorizontal: 16, paddingBottom: 4 },
   chips: {

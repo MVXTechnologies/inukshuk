@@ -3,7 +3,8 @@ import { PLACE_TYPES } from '@core/search/placeTypes';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The temporary highlight on a place-search result (#496): the place's name
@@ -16,6 +17,8 @@ import { Icon, Text } from 'react-native-paper';
  * Visual only — taps fall through to the map.
  */
 export function SearchHitMarker({ place }: { place: Place }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <View
@@ -37,7 +40,7 @@ export function SearchHitMarker({ place }: { place: Place }) {
 }
 
 const DOT = 16;
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   wrap: { alignItems: 'center' },
   chip: {
     flexDirection: 'row',

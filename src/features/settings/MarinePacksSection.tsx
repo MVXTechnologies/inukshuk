@@ -4,16 +4,7 @@ import { formatBytes } from '@core/format';
 import { useMarinePackStore } from '@state/marinePackStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useEffect, useState } from 'react';
-import {
-  List,
-  Switch,
-  Text,
-  Button,
-  Dialog,
-  IconButton,
-  Portal,
-  useTheme,
-} from 'react-native-paper';
+import { List, Switch, Text, Button, Dialog, IconButton, Portal, useTheme } from '@ui/paper';
 
 /**
  * Offline marine packs in Settings → Data settings (marine wave D §D4),

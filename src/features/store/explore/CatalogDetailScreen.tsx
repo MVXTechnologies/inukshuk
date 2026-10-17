@@ -20,7 +20,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { Icon, ProgressBar, Text } from 'react-native-paper';
+import { Icon, ProgressBar, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CoverageMap, coverageText } from './CoverageMap';
@@ -29,6 +29,7 @@ import { itemFacets, itemScaleDenominator } from './facetsAdapter';
 import { useCatalogDownloadFlow } from './useCatalogDownloadFlow';
 import { openExternalLink } from '@lib/openLink';
 import { useCreditLanguage } from '../useCreditLanguage';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * One map's detail page (#447, board `Detail.dc.html`): preview (the
@@ -55,6 +56,12 @@ function formatLabel(item: CatalogItem): string {
 }
 
 export function CatalogDetailScreen({ id }: { id: string }) {
+  // #760: drawings sized in dp follow the Display size.
+  const { sz: dsz } = useDisplayScale();
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -164,7 +171,7 @@ export function CatalogDetailScreen({ id }: { id: string }) {
             thumbnailUrl={item.thumbnailUrl}
             seed={item.id}
             width={width}
-            height={PREVIEW_HEIGHT}
+            height={dsz(PREVIEW_HEIGHT)}
           />
           <Pressable
             onPress={() => router.back()}
@@ -224,7 +231,7 @@ export function CatalogDetailScreen({ id }: { id: string }) {
             accessible
             accessibilityLabel={`${coverageLabel}. ${coverageText(item.bbox)}`}
           >
-            <CoverageMap bbox={item.bbox} position={position} height={150} />
+            <CoverageMap bbox={item.bbox} position={position} height={sz(150)} />
             <Text style={[styles.coverageText, { color: t.inkMuted }]}>
               {coverageLabel} · {coverageText(item.bbox)}
             </Text>
@@ -309,7 +316,7 @@ export function CatalogDetailScreen({ id }: { id: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   center: { textAlign: 'center' },
   missing: { alignItems: 'center', paddingTop: 64, paddingHorizontal: 24 },

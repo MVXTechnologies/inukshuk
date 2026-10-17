@@ -3,7 +3,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Snackbar } from 'react-native-paper';
+import { Snackbar } from '@ui/paper';
 
 /** How long the offer stays up. */
 export const PHOTO_PROMPT_MS = 10_000;

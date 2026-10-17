@@ -12,7 +12,7 @@ import { useNavigationStore } from '@state/navigationStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { darkTheme, lightTheme } from '@ui/theme';
 import type { ReactNode } from 'react';
-import { PaperProvider } from 'react-native-paper';
+import { PaperProvider } from '@ui/paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { resetStripRuntime } from './stripRuntime';

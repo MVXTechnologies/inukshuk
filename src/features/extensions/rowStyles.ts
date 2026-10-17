@@ -5,7 +5,7 @@ import { StyleSheet } from 'react-native';
  * (coverage & sources…). Its own module so a surface that reuses those rows
  * (the overlays sheet's sub-panels) does not load the Settings shell.
  */
-export const extensionRowStyles = StyleSheet.create({
+export const extensionRowStylesSheet = StyleSheet.create({
   pad: { paddingHorizontal: 16, paddingVertical: 8 },
   flex: { flex: 1 },
   note: { marginTop: 8 },

@@ -15,8 +15,9 @@ import { useWaypointMoveStore } from '@state/waypointMoveStore';
 import { palette } from '@ui/tokens';
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Platform, Pressable, StyleSheet, Text, View, type ColorValue } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
@@ -41,6 +42,8 @@ function tabA11yLabel(title: string, position: number): string {
  * Dashboard.
  */
 export default function TabsLayout() {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const pill = theme.colors.secondaryContainer;
@@ -59,15 +62,20 @@ export default function TabsLayout() {
     // Hidden from accessibility: the glyph is an icon-font character, and
     // left exposed it prefixes the tab's label ("󰉖, Library"), which breaks
     // VoiceOver/TalkBack and every Maestro 'Library(, tab.*)?' selector.
-    const TabIcon = ({ color, focused }: { color: ColorValue; focused: boolean }) => (
-      <View
-        style={[styles.pill, focused && { backgroundColor: pill }]}
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-      >
-        <MaterialCommunityIcons name={name} color={color} size={22} />
-      </View>
-    );
+    const TabIcon = ({ color, focused }: { color: ColorValue; focused: boolean }) => {
+      const { sz } = useDisplayScale();
+
+      const styles = useScaledStyles(stylesSheet);
+      return (
+        <View
+          style={[styles.pill, focused && { backgroundColor: pill }]}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
+          <MaterialCommunityIcons name={name} color={color} size={sz(22)} />
+        </View>
+      );
+    };
     return TabIcon;
   };
   const label = ({
@@ -167,7 +175,7 @@ export default function TabsLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   returnDock: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   returnPill: {

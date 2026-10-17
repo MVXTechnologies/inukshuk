@@ -4,6 +4,7 @@ import { compositeOver, isPurple, parseRgba, toHsl } from '@core/color/hsl';
 import {
   darkScheme,
   lightScheme,
+  BASE_MIN_FONT_SIZE,
   MIN_FONT_SIZE,
   nightScheme,
   palette,
@@ -216,7 +217,11 @@ describe('year-in-review empty days read on dark cards', () => {
 });
 
 describe('type scale', () => {
-  it.each(Object.entries(type))('%s is at least the 12 dp floor', (_name, style) => {
-    expect(style.fontSize).toBeGreaterThanOrEqual(MIN_FONT_SIZE);
+  it.each(Object.entries(type))('%s is at least 12 dp at 100 %%', (_name, style) => {
+    expect(style.fontSize).toBeGreaterThanOrEqual(BASE_MIN_FONT_SIZE);
+  });
+
+  it('the floor at any Display size is 10 sp', () => {
+    expect(MIN_FONT_SIZE).toBe(10);
   });
 });

@@ -3,7 +3,11 @@ import { validateStyleMin } from '@maplibre/maplibre-gl-style-spec';
 import { buildGeodeticLayers, GEODETIC_SOURCE } from './geodeticStyle';
 import {
   buildTideLayers,
+  buildTideLevelLayers,
   CHS_TIDE_LAYER_IDS,
+  TIDE_LEVEL_LAYER_IDS,
+  TIDE_LEVEL_SOURCE,
+  tideLevelImageNames,
   CHS_TIDE_SOURCE,
   TIDE_LAYER_IDS,
   TIDE_SOURCE,
@@ -103,5 +107,60 @@ describe('tide-station layers (and the tidal branch of the geodetic ones)', () =
     };
     expect(validateStyleMin(style).map((e) => e.message)).toEqual([]);
     expect(zoomInsideMatchOrCase(chs)).toBe(false);
+  });
+});
+
+describe('water level labels (#764)', () => {
+  const levelStyle = (theme: 'light' | 'dark') => ({
+    version: 8 as const,
+    glyphs: 'https://glyphs.example/{fontstack}/{range}.pbf',
+    sources: {
+      [TIDE_LEVEL_SOURCE]: {
+        type: 'geojson' as const,
+        data: { type: 'FeatureCollection' as const, features: [] },
+      },
+    },
+    layers: buildTideLevelLayers({ theme, font: FONT }),
+  });
+
+  it.each(['light', 'dark'] as const)('validate against the MapLibre style spec (%s)', (theme) => {
+    expect(validateStyleMin(levelStyle(theme)).map((e) => e.message)).toEqual([]);
+  });
+
+  it('never put ["zoom"] inside match or case, and never sort symbols', () => {
+    const { layers } = levelStyle('dark');
+    expect(zoomInsideMatchOrCase(layers)).toBe(false);
+    expect(JSON.stringify(layers)).not.toContain('symbol-sort-key');
+  });
+
+  it('one layer per tier: z8–11 live gauges only, live above predicted from z11', () => {
+    const layers = buildTideLevelLayers({ theme: 'light', font: FONT });
+    const ids = TIDE_LEVEL_LAYER_IDS;
+    expect(layers.map((l) => l.id)).toEqual([
+      ids.mid,
+      ids.fullPred,
+      ids.ratePred,
+      ids.fullLive,
+      ids.rateLive,
+    ]);
+    const byId = Object.fromEntries(layers.map((l) => [l.id, l]));
+    expect(byId[ids.mid]).toMatchObject({ minzoom: 8, maxzoom: 11 });
+    expect(byId[ids.mid]?.filter).toEqual(['!', ['==', ['get', 'k'], 'pred']]);
+    expect(byId[ids.fullPred]).toMatchObject({ minzoom: 11, maxzoom: 13 });
+    expect(byId[ids.rateLive]).toMatchObject({ minzoom: 13 });
+    expect(JSON.stringify(byId[ids.mid]?.layout)).toContain('"v1"');
+    expect(JSON.stringify(byId[ids.rateLive]?.layout)).toContain('"r3"');
+    // One line wherever it fits.
+    expect(byId[ids.fullLive]?.layout?.['text-max-width']).toBeGreaterThanOrEqual(30);
+  });
+
+  it('names an arrow image of the theme, in the pill text colour', () => {
+    const json = JSON.stringify(buildTideLevelLayers({ theme: 'dark', font: FONT }));
+    expect(json).toContain('"-dark"');
+    const { pills, arrows } = tideLevelImageNames('dark');
+    expect(pills).toContain('tide-pill-1-48');
+    expect(pills).toContain('tide-pill-2-216');
+    expect(arrows).toContain('tide-arr-up-ink-dark');
+    expect(arrows).toHaveLength(6);
   });
 });

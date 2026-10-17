@@ -1,0 +1,147 @@
+name: RTC Worker
+
+# The rendezvous / TURN Worker for phone-to-phone sync (infra/rtc/worker,
+# 2.7.0 #705). Its own npm project, lockfile and Cloudflare account.
+#
+# - `gates` (PRs and main touching it): the security review's CI gates
+#   (§6.3): typecheck against the Workers types, the no-storage / no-logging
+#   grep and wrangler.toml checks (gates.mjs), the Worker's Jest suites and the
+#   shared rendezvous vectors. No secrets.
+# - `audit` (nightly, manual): npm audit of the Worker's lockfile, high+.
+#   Kept off PRs so a newly published advisory can't turn unrelated PRs red;
+#   it is red on its own run, where ci-health picks it up.
+# - `deploy` (push to main, manual on main): `wrangler deploy` to the relay's
+#   own account. No-ops until CLOUDFLARE_RTC_API_TOKEN and
+#   CLOUDFLARE_RTC_ACCOUNT_ID exist in the `rtc` environment (README).
+on:
+  pull_request:
+    paths:
+      - 'infra/rtc/**'
+      - 'src/core/group/rdv*'
+      - 'src/core/group/roomBlob*'
+      - 'src/core/team/bytes.ts'
+      - 'src/core/team/crypto.ts'
+      - 'src/core/team/nobleCrypto.ts'
+      - '.github/workflows/rtc-worker.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'infra/rtc/**'
+      - 'src/core/group/rdv*'
+      - 'src/core/group/roomBlob*'
+      - '.github/workflows/rtc-worker.yml'
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: rtc-worker-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: the GITHUB_TOKEN can only read the repository.
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: RTC Worker (gates · typecheck · tests)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            infra/rtc/worker/package-lock.json
+
+      # R-RLY-1 / R-META-2 / R-OPS-1: no storage, no logs, Workers Logs off,
+      # rate-limit bindings present, no KV/R2/D1. Plain Node, no install.
+      - name: Relay gates (no storage, no logs, wrangler.toml)
+        run: node infra/rtc/worker/gates.mjs
+
+      - name: Install the Worker's dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: infra/rtc/worker
+
+      - name: Typecheck the Worker
+        run: npm run typecheck
+        working-directory: infra/rtc/worker
+
+      - name: Install the app's dependencies (Jest)
+        run: npm ci
+
+      # The Worker's suites and the phone-side rendezvous code share one set of
+      # pinned vectors (src/core/group/rdv.vectors.json); run both together.
+      - name: Worker tests + shared rendezvous vectors
+        run: npx jest --ci infra/rtc/worker src/core/group/rdv src/core/group/roomBlob
+
+  audit:
+    name: RTC Worker audit (high+)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      # Reads the lockfile only: nothing is installed.
+      - run: npm audit --audit-level=high
+        working-directory: infra/rtc/worker
+
+  guard:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    # Same environment as the deploy job, so the check sees environment secrets.
+    environment: rtc
+    outputs:
+      enabled: ${{ steps.c.outputs.enabled }}
+    steps:
+      - id: c
+        env:
+          HAS_TOKEN: ${{ secrets.CLOUDFLARE_RTC_API_TOKEN != '' }}
+          HAS_ACCOUNT: ${{ secrets.CLOUDFLARE_RTC_ACCOUNT_ID != '' }}
+        run: |
+          if [ "$HAS_TOKEN" = "true" ] && [ "$HAS_ACCOUNT" = "true" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::RTC Worker deploy skipped: CLOUDFLARE_RTC_API_TOKEN / CLOUDFLARE_RTC_ACCOUNT_ID not configured (infra/rtc/README.md)."
+          fi
+
+  deploy:
+    name: Deploy inukshuk-rtc
+    needs: [gates, guard]
+    if: needs.guard.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    # The `rtc` environment holds the relay account's deploy token; restrict it
+    # to `main` (Settings → Environments → rtc → Deployment branches).
+    environment: rtc
+    concurrency:
+      group: rtc-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: infra/rtc/worker/package-lock.json
+
+      - name: Install the Worker's dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: infra/rtc/worker
+
+      # Worker secrets (TURN key, analytics token, IP tag key) are set once by
+      # the owner with `wrangler secret put`; a deploy never touches them.
+      - name: wrangler deploy
+        working-directory: infra/rtc/worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_RTC_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_RTC_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: npx wrangler deploy

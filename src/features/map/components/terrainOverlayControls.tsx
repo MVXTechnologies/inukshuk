@@ -1,9 +1,10 @@
 import { useSettingsStore } from '@state/settingsStore';
 import { StyleSheet, View } from 'react-native';
-import { Icon, Portal, Snackbar, Text, TouchableRipple } from 'react-native-paper';
+import { Icon, Portal, Snackbar, Text, TouchableRipple } from '@ui/paper';
 import { useTimedSnackbar, type TimedSnackbar } from '../../common/useTimedSnackbar';
 import { DetentSlider } from './DetentSlider';
 import { RangeSlider } from './RangeSlider';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Shared UI + store wiring for the terrain overlays (slope bands, contour
@@ -49,6 +50,8 @@ export function useSlopeDisclaimer(): { snackbar: TimedSnackbar; onSlopeEnabled:
  * {@link useSlopeDisclaimer}; the host renders the DisclaimerSnackbar itself.
  */
 export function TerrainOverlayMenuRows({ onSlopeEnabled }: { onSlopeEnabled: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const slope = useSettingsStore((s) => s.terrainSlope);
   const contours = useSettingsStore((s) => s.terrainContours);
   const intervalM = useSettingsStore((s) => s.terrainContourIntervalM);
@@ -129,7 +132,7 @@ export function DisclaimerSnackbar({ snackbar }: { snackbar: TimedSnackbar }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   layerRow: {
     flexDirection: 'row',
     alignItems: 'center',

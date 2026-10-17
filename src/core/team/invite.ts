@@ -19,7 +19,7 @@ import { isMemberId, memberIdOf, memberPublicKey, TEAM_ID_BYTES } from './ids';
  * | bytes | field |
  * |---|---|
  * | 1 | version (1) |
- * | 1 | flags (bit 0: network hint present) |
+ * | 1 | flags (bit 0: network hint present; bit 1: a shared folder's invite, #712) |
  * | 16 | teamId |
  * | 16 | **invite seed** — the only secret |
  * | 4 | expiry, unix seconds, big-endian (display only) |
@@ -47,6 +47,10 @@ import { isMemberId, memberIdOf, memberPublicKey, TEAM_ID_BYTES } from './ids';
  * - Never in a token: names, phone numbers, the team key.
  *
  * Threat model: `docs/design/team-protocol.md` §Invites.
+ *
+ * A shared folder's invite (#712, 2.7.0) sets flag bit 1. A 2.6 phone refuses
+ * any unknown flag bit (pinned by `compat.test.ts`), so it never joins a
+ * folder as an empty team; a 2.7 phone joins it as a folder, never as a team.
  */
 
 export const INVITE_VERSION = 1;
@@ -68,7 +72,12 @@ export interface InviteToken {
   /** Epoch ms, whole seconds. Display only: the authoritative expiry is in `i.create`. */
   expiresAt: number;
   net?: NetHint;
+  /** What the invite is for: absent, a team; `lib`, a shared folder or item (#712). */
+  app?: 'lib';
 }
+
+/** Flag bit 1: the invite is a shared folder's. */
+const FLAG_FOLDER = 2;
 
 /** Where a token is going. Only a QR (shown in person) may carry the network hint. */
 export type InviteChannel = 'sms' | 'link' | 'qr';
@@ -80,7 +89,7 @@ export function encodeInvite(token: InviteToken, channel: InviteChannel): string
   const withNet = channel === 'qr' && token.net !== undefined;
   const head = new Uint8Array(2 + TEAM_ID_BYTES + INVITE_SEED_BYTES + 4);
   head[0] = INVITE_VERSION;
-  head[1] = withNet ? 1 : 0;
+  head[1] = (withNet ? 1 : 0) | (token.app === 'lib' ? FLAG_FOLDER : 0);
   head.set(fromB64uLen(token.teamId, TEAM_ID_BYTES)!, 2);
   head.set(token.seed, 2 + TEAM_ID_BYTES);
   new DataView(head.buffer).setUint32(
@@ -108,13 +117,14 @@ export function decodeInvite(payload: string): InviteToken | undefined {
   if (bytes === undefined || bytes.length < headLen || bytes[0] !== INVITE_VERSION)
     return undefined;
   const flags = bytes[1]!;
-  if ((flags & ~1) !== 0) return undefined;
+  if ((flags & ~(1 | FLAG_FOLDER)) !== 0) return undefined;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
   const token: InviteToken = {
     teamId: toB64u(bytes.subarray(2, 2 + TEAM_ID_BYTES)),
     seed: bytes.slice(2 + TEAM_ID_BYTES, 2 + TEAM_ID_BYTES + INVITE_SEED_BYTES),
     expiresAt: view.getUint32(2 + TEAM_ID_BYTES + INVITE_SEED_BYTES) * 1000,
   };
+  if ((flags & FLAG_FOLDER) !== 0) token.app = 'lib';
   if ((flags & 1) === 0) return bytes.length === headLen ? token : undefined;
   let o = headLen;
   if (bytes.length < o + 7) return undefined;

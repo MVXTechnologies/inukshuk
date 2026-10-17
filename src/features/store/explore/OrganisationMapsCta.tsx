@@ -4,8 +4,9 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import { openExternalLink } from '@lib/openLink';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** How long the Copy button reads "Copied". */
 export const COPIED_FEEDBACK_MS = 2000;
@@ -18,6 +19,8 @@ export const COPIED_FEEDBACK_MS = 2000;
  * `@core/catalog/contribute`.
  */
 export function OrganisationMapsCta({ style }: { style?: StyleProp<ViewStyle> }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -91,7 +94,7 @@ export function OrganisationMapsCta({ style }: { style?: StyleProp<ViewStyle> })
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: {
     borderRadius: radius.lg,
     borderWidth: 1,

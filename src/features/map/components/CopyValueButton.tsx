@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
-import { IconButton, useTheme } from 'react-native-paper';
+import { IconButton, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   /** Exactly what the clipboard gets: the displayed value with its datum. */
@@ -23,6 +24,8 @@ export const COPIED_MS = 1500;
  * what was copied. Themed from Paper's colours, so it reads in light and dark.
  */
 export function CopyValueButton({ text, label, onCopy, testID, size = 15 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -52,6 +55,6 @@ export function CopyValueButton({ text, label, onCopy, testID, size = 15 }: Prop
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   button: { margin: 0, width: 26, height: 26 },
 });

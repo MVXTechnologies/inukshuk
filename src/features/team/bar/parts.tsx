@@ -7,8 +7,9 @@ import type { AgeBand } from '@core/teamui/positions';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import * as Location from 'expo-location';
 import { StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 import Svg, { Circle } from 'react-native-svg';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** A teammate's initials on their colour, in their freshness band. */
 export function BandAvatar({
@@ -28,6 +29,8 @@ export function BandAvatar({
   /** A small green dot for a live position. */
   live?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const lost = band === 'lost';
   return (
@@ -81,6 +84,8 @@ export function FaceStack({
   /** How much of a face the next one covers (0–1). */
   overlap?: number;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   return (
     <View style={styles.stack} accessible={false} testID="team-face-stack">
       {faces.map((f, i) => (
@@ -150,7 +155,7 @@ export async function myPosition(
   }
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   avatar: { alignItems: 'center', justifyContent: 'center' },
   initials: { fontWeight: '800', letterSpacing: 0.2 },
   live: { position: 'absolute', right: -2, bottom: -2, borderWidth: 2 },

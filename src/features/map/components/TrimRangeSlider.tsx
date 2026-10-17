@@ -7,7 +7,8 @@ import {
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 const THUMB = 22;
 const RAIL = 4;
@@ -43,6 +44,8 @@ interface Props {
  * it, clamped against the other thumb exactly as a drag would be.
  */
 export function TrimRangeSlider({ count, start, end, onChange }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<'start' | 'end' | null>(null);
@@ -175,7 +178,7 @@ export function TrimRangeSlider({ count, start, end, onChange }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   container: { height: HEIGHT, justifyContent: 'center' },
   fill: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 },
   rail: {

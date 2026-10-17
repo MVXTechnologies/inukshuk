@@ -2,6 +2,7 @@ import { configureFonts, MD3DarkTheme, MD3LightTheme, type MD3Theme } from 'reac
 
 import { FONT_FAMILY } from './fonts';
 import type { DisplayCondition } from '@core/display/condition';
+import { scaleFont } from '@core/display/displayScale';
 
 import {
   darkScheme,
@@ -182,10 +183,44 @@ export const nightTheme: MD3Theme = {
 export function resolveTheme(
   scheme: 'light' | 'dark',
   condition: DisplayCondition = 'normal',
+  displayFactor = 1,
 ): MD3Theme {
-  if (condition === 'sunlight') return sunlightTheme;
-  if (condition === 'night') return nightTheme;
-  return scheme === 'dark' ? darkTheme : lightTheme;
+  const base =
+    condition === 'sunlight'
+      ? sunlightTheme
+      : condition === 'night'
+        ? nightTheme
+        : scheme === 'dark'
+          ? darkTheme
+          : lightTheme;
+  return scaleTheme(base, displayFactor);
+}
+
+/**
+ * A theme with its MD3 type scale at the Display size (#760): every Paper
+ * variant's fontSize, lineHeight and letterSpacing times `factor`. The same
+ * theme object at 1, and one cached object per theme and factor, so the
+ * PaperProvider's value only changes when the setting does.
+ */
+const scaledThemes = new WeakMap<MD3Theme, Map<number, MD3Theme>>();
+export function scaleTheme(theme: MD3Theme, factor: number): MD3Theme {
+  if (factor === 1 || !Number.isFinite(factor) || factor <= 0) return theme;
+  let byFactor = scaledThemes.get(theme);
+  if (byFactor === undefined) {
+    byFactor = new Map();
+    scaledThemes.set(theme, byFactor);
+  }
+  const hit = byFactor.get(factor);
+  if (hit !== undefined) return hit;
+  const fonts = Object.fromEntries(
+    Object.entries(theme.fonts).map(([name, font]) => [
+      name,
+      'fontSize' in font ? scaleFont(font, factor) : font,
+    ]),
+  ) as MD3Theme['fonts'];
+  const scaled: MD3Theme = { ...theme, fonts };
+  byFactor.set(factor, scaled);
+  return scaled;
 }
 
 /** Semantic colours used by the map HUD that aren't part of MD3. */

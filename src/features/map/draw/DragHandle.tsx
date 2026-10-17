@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { PanResponder, StyleSheet, View } from 'react-native';
-import { Icon } from 'react-native-paper';
+import { Icon } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 const SIZE = 56;
 
@@ -26,6 +27,8 @@ interface Props {
  * those never received the finger on Android (the map's gestures won).
  */
 export function DragHandle({ at, color, fill, onMove, onEnd, onCancel }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const [offset, setOffset] = useState<[number, number]>([0, 0]);
   const cb = useRef({ onMove, onEnd, onCancel, at });
   useEffect(() => {
@@ -80,7 +83,7 @@ export function DragHandle({ at, color, fill, onMove, onEnd, onCancel }: Props) 
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   grip: {
     position: 'absolute',
     width: SIZE,

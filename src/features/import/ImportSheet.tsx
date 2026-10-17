@@ -29,11 +29,12 @@ import { space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { sourceFor, startSourceImport } from './importController';
 import { PillButton, SourceTile } from './importParts';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * Library › Import activities (#432/#435, board `ImportSheet`): pick a
@@ -76,6 +77,10 @@ function SourceRow({
   busy?: boolean;
   onPress: () => void;
 }) {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -101,7 +106,7 @@ function SourceRow({
       ) : (
         <Icon source="link-variant" size={22} color={t.inkMuted} />
       )}
-      <SourceTile kind={kind} size={32} />
+      <SourceTile kind={kind} size={sz(32)} />
       <View style={styles.sourceText}>
         <Text style={[styles.sourceTitle, { color: t.ink }]}>{title}</Text>
         <Text style={[styles.sourceSubtitle, { color: t.inkMuted }]}>{subtitle}</Text>
@@ -143,6 +148,8 @@ function SheetBody({
   onClose: () => void;
   onImportFiles: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -457,7 +464,7 @@ function SheetBody({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     borderTopLeftRadius: 22,

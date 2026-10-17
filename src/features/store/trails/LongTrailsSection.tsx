@@ -7,12 +7,13 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 
 import { SectionHeading } from '../explore/ExploreParts';
 import { exploreTrailHref, exploreTrailsHref } from '../explore/exploreRoutes';
 import { LongTrailCard } from './LongTrailParts';
 import { useRankedTrails } from './useLongTrails';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Explore's "Long-distance trails near you" (#467, board `Main.dc.html`): the
@@ -24,6 +25,8 @@ import { useRankedTrails } from './useLongTrails';
  * dead section.
  */
 export function LongTrailsSection() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const units = useSettingsStore((s) => s.units);
@@ -74,7 +77,7 @@ export function LongTrailsSection() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   blurb: {
     marginTop: -6,
     marginBottom: space.md,

@@ -22,12 +22,13 @@ import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Button, Icon, IconButton, Text, TextInput } from 'react-native-paper';
+import { Button, Icon, IconButton, Text, TextInput } from '@ui/paper';
 
 import { MemberAvatar, SectionLabel, TeamScreenFrame } from './components';
 import { actionMessage } from './messages';
 import { useTeamPick } from './map/TeamPick';
 import { useAnchorLookup } from './useAnchorLookup';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 type Place = 'given' | 'here' | 'none';
 /** The Due chips: none, the time already set (editing), in an hour, picked. */
@@ -45,6 +46,10 @@ function anchorFromParams(p: Record<string, string | undefined>): TaskAnchor | n
 }
 
 export function NewTaskScreen() {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const params = useLocalSearchParams<Record<string, string>>();
@@ -248,7 +253,7 @@ export function NewTaskScreen() {
               accessibilityLabel={m.isMe ? 'Me' : m.name}
               testID={`team-task-for-${m.isMe ? 'me' : m.id}`}
             >
-              <MemberAvatar initials={m.initials} color={m.color} size={26} />
+              <MemberAvatar initials={m.initials} color={m.color} size={sz(26)} />
               <Text variant="labelLarge" style={{ color: t.ink }}>
                 {m.isMe ? 'Me' : m.name}
               </Text>
@@ -340,7 +345,7 @@ export function NewTaskScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   people: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     flexDirection: 'row',

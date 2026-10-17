@@ -1,7 +1,8 @@
 import type { OutingAnalysis } from '@core/geo/track';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 export interface JumpMark {
   id: 'start' | 'steepest' | 'summit' | 'end';
@@ -37,6 +38,8 @@ interface Props {
 
 /** A row of chips; the one whose landmark is under the cursor reads as selected. */
 export function JumpChips({ marks, cursorDistanceM, onJump }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   if (marks.length === 0) return null;
   const activeId =
@@ -72,7 +75,7 @@ export function JumpChips({ marks, cursorDistanceM, onJump }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   chips: { flexDirection: 'row', gap: 8 },
   chip: {
     flexGrow: 1,

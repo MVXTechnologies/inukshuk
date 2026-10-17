@@ -2,7 +2,7 @@ import { useGnssStore } from '@state/gnssStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { ExtensionSettingsShell } from '../ExtensionSettingsShell';
 import { useExtensionPrefs } from '../prefs';
@@ -13,6 +13,7 @@ import {
   GnssReceiverOption,
   GnssStandbyOption,
 } from './options';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * External GNSS receiver in Settings → Extensions (mockup `gnss-settings`):
@@ -20,6 +21,8 @@ import {
  * receiver, RTK corrections, the project datum and the phone-GPS policy.
  */
 export function GnssSettings() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { installedAt } = useExtensionPrefs('gnss');
   const hydrated = useGnssStore((s) => s.hydrated);
@@ -77,7 +80,7 @@ export function GnssSettings() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   info: {
     flexDirection: 'row',

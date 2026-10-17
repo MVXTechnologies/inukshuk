@@ -12,8 +12,9 @@ import { ExtensionExpansionProvider } from '@features/extensions/expansion';
 import { EXTENSION_SETTINGS } from '@features/extensions/settingsModules';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 import { useReducedMotion } from 'react-native-reanimated';
+import { useScaledStyles } from '@ui/displayScale';
 
 export function ExtensionsSection({
   openExtension,
@@ -21,6 +22,8 @@ export function ExtensionsSection({
   /** The extension a deep link opens (`extensionSettingsHref`); others start collapsed. */
   openExtension?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const reduceMotion = useReducedMotion();
   const available = availableExtensions();
@@ -52,7 +55,7 @@ export function ExtensionsSection({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   pad: { paddingHorizontal: 16, paddingVertical: 8 },
   divider: { height: StyleSheet.hairlineWidth, marginHorizontal: 16, marginVertical: 4 },
 });

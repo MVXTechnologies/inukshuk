@@ -1,7 +1,8 @@
 import { palette } from '@ui/tokens';
 import { StyleSheet, View } from 'react-native';
-import { Icon, Text, TouchableRipple } from 'react-native-paper';
+import { Icon, Text, TouchableRipple } from '@ui/paper';
 import { weatherChrome as wc } from '../weather/weatherChrome';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * "Following · Sentier des Crêtes" (#678): what the compass is guiding you
@@ -10,6 +11,8 @@ import { weatherChrome as wc } from '../weather/weatherChrome';
  * route mark instead of the sage flag.
  */
 export function FollowChip({ name, onStop }: { name: string; onStop: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   return (
     <View style={styles.chip}>
       <Icon source="map-marker-path" size={16} color={palette.route} />
@@ -29,7 +32,7 @@ export function FollowChip({ name, onStop }: { name: string; onStop: () => void 
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',

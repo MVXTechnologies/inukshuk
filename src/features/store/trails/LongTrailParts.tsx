@@ -4,9 +4,10 @@ import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 
 import { TrailThumb } from './TrailThumb';
+import { useDisplayScale, useScaledStyles } from '@ui/displayScale';
 
 /**
  * The long-distance trail card (Explore's carousel, board `Main.dc.html`) and
@@ -31,6 +32,10 @@ export const LongTrailCard = memo(function LongTrailCard({
   distance: string | null;
   onPress: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+  // #760: the thumbnail is drawn at the Display size, as its card is.
+  const { sz: dsz } = useDisplayScale();
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -42,8 +47,8 @@ export const LongTrailCard = memo(function LongTrailCard({
       <View style={[styles.cardImage, { borderColor: t.outlineVariant }]}>
         <TrailThumb
           parts={trailThumb(trail)}
-          width={TRAIL_CARD_WIDTH - 2}
-          height={TRAIL_CARD_IMAGE_HEIGHT - 2}
+          width={dsz(TRAIL_CARD_WIDTH) - 2}
+          height={dsz(TRAIL_CARD_IMAGE_HEIGHT) - 2}
           seed={trail.id}
           insetBottom={distance !== null ? 38 : 0}
         />
@@ -78,6 +83,9 @@ export const LongTrailRow = memo(function LongTrailRow({
   distance: string | null;
   onPress: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+  const { sz: dsz } = useDisplayScale();
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -89,8 +97,8 @@ export const LongTrailRow = memo(function LongTrailRow({
       <View style={[styles.rowThumb, { borderColor: t.outlineVariant }]}>
         <TrailThumb
           parts={trailThumb(trail)}
-          width={ROW_THUMB - 2}
-          height={ROW_THUMB - 2}
+          width={dsz(ROW_THUMB) - 2}
+          height={dsz(ROW_THUMB) - 2}
           seed={trail.id}
           stroke={3}
           contours={false}
@@ -111,7 +119,7 @@ export const LongTrailRow = memo(function LongTrailRow({
   );
 });
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   pressed: { opacity: 0.85 },
   card: { width: TRAIL_CARD_WIDTH, gap: 6 },
   cardImage: {

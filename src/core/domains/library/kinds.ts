@@ -1,0 +1,179 @@
+import type { Json } from '@core/team/canonical';
+import { isShortId, isTeamId } from '@core/team/ids';
+import { BASE_FIELD, parseBase } from '@core/group/conflicts';
+import { flag, knownFieldsValid, text, type FieldRule } from '@core/group/fields';
+
+import { MAX_TRACK_PARTS, PART_CHARS } from './trackCodec';
+
+/**
+ * The library domain's record kinds (2.7.0 #712, `docs/design/sync-layer.md`
+ * §5.3; security review §4). Wire names are short: every op carries them.
+ *
+ * | kind | key | fields | who writes | who purges (`e.del`) |
+ * |---|---|---|---|---|
+ * | `lfo` folder | shared `(lfo, id)` | `n` name, `p` parent folder, `o` order, `rm` | editors+ | managers, from the trash |
+ * | `lit` item | shared `(lit, id)` | `t` type (once), `n`, `p`, `o`, `d`, `sty`, `rm`; `g` track/area geometry; `ll` `el` `ic` waypoint; `cat` catalog map | editors+ | managers, from the trash |
+ * | `lac` activity cursor | owned, id `g` | `seen` (ms) | anyone, their own | its member or a manager |
+ * | `lcm` comment | owned | `on` record id (once), `tx` | anyone (viewers too), their own | its writer or a manager |
+ * | `lpt` trail part | shared `(lpt, <rev>_<n>)` | `i` item, `r` revision, `n` index, `of` count, `d` encoded slice (all once) | editors+ | managers |
+ * | `lnx` successor | shared, id `g` | `g` the group that carries the folder on (renewal) | managers | nobody |
+ *
+ * A trail's points travel whole (positions, elevations, times, segments:
+ * `trackCodec.ts`) in `lpt` parts, each within the op cap; its `lit` names
+ * the revision (`tr`) and the part count (`tc`), so a phone rebuilds it once
+ * every part of that revision is in, and an edit of the line is a new
+ * revision (the old parts stay, write-once, until purged).
+ *
+ * Every `lfo`/`lit` write may carry a base `b` (`@core/group/conflicts`).
+ * Deleting is a **soft delete**: `rm: 1` puts the record in the trash (its
+ * fields stay, so Restore is `rm: 0` and keeps any edit made meanwhile);
+ * a manager's `e.del` purges it for good.
+ *
+ * Fields are **forward-lenient** (`@core/group/fields`): known fields are
+ * checked strictly, unknown ones (a 2.7.1 blob manifest `m`, say) are kept,
+ * so a newer phone's item is never dropped by this one.
+ */
+export const LFO = 'lfo';
+export const LIT = 'lit';
+export const LAC = 'lac';
+export const LCM = 'lcm';
+export const LPT = 'lpt';
+/** The folder's successor group (renewal before the group's year is up). */
+export const LNX = 'lnx';
+export const LIBRARY_KINDS: readonly string[] = [LFO, LIT, LAC, LCM, LPT, LNX];
+/** A record copied into a successor group at renewal (not a change by its writer). */
+export const COPY_FIELD = 'cp';
+/** Kinds forming the shared tree (soft delete, base stamps, purge). */
+export const TREE_KINDS: readonly string[] = [LFO, LIT];
+/** Owned kinds: keyed `(kind, owner, id)`. */
+export const OWNED_LIBRARY_KINDS: readonly string[] = [LAC, LCM];
+
+/** The activity cursor's id (one per member). */
+export const CURSOR_ID = 'g';
+
+// ── Limits (security review §4.5) ───────────────────────────────────────────
+
+export const MAX_ITEMS = 5000;
+export const MAX_FOLDERS = 1000;
+/** Folders nest at most this deep below the shared root. */
+export const MAX_FOLDER_DEPTH = 8;
+/**
+ * A track or area geometry inline in the op (larger ones become blobs, 2.7.1).
+ * Not the design's 24 KiB: an `e.set` is capped at 32 KiB *after* AEAD and
+ * base64url, which leaves ~20 KiB of plaintext body (measured in
+ * `replica.test.ts`); {@link MAX_INLINE_BODY} is the real gate.
+ */
+export const MAX_INLINE_GEOMETRY = 16 * 1024;
+/** Plaintext JSON bytes of one library `e.set` body that always fit the encrypted op cap. */
+export const MAX_INLINE_BODY = 20_000;
+export const MAX_NAME = 120;
+export const MAX_DESCRIPTION = 4000;
+export const MAX_COMMENT = 1000;
+/** Trash entries stay restorable on every phone this long (R-LIB-1). */
+export const TRASH_MS = 30 * 24 * 60 * 60 * 1000;
+
+// ── Field rules ─────────────────────────────────────────────────────────────
+
+export const ITEM_TYPES = ['trk', 'wpt', 'map', 'area'] as const;
+export type ItemType = (typeof ITEM_TYPES)[number];
+
+const finite = (v: Json): v is number => typeof v === 'number' && Number.isFinite(v);
+
+const id: FieldRule = (v) => isShortId(v);
+const order: FieldRule = finite;
+const description: FieldRule = (v) => typeof v === 'string' && v.length <= MAX_DESCRIPTION;
+/** Google encoded polyline (`@core/trails/polyline`): printable ASCII 63–126 only. */
+const geometry: FieldRule = (v) =>
+  typeof v === 'string' && v.length > 0 && v.length <= MAX_INLINE_GEOMETRY && /^[?-~]+$/.test(v);
+const lngLat: FieldRule = (v) => {
+  if (!Array.isArray(v) || v.length !== 2) return false;
+  const [lng, lat] = v as [Json, Json];
+  return finite(lng) && finite(lat) && Math.abs(lng) <= 180 && Math.abs(lat) <= 90;
+};
+const elevation: FieldRule = (v) => finite(v) && Math.abs(v) <= 20_000;
+/** An icon id (a newer build's ids included: kept, drawn as the default pin until known). */
+const icon: FieldRule = (v) => typeof v === 'string' && /^[a-z0-9_-]{1,64}$/.test(v);
+/** A catalog id (`cpa-…`, `qcriv-…`): each phone resolves it in its OWN catalog, never a URL. */
+export const isCatalogId = (v: unknown): v is string =>
+  typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(v);
+const STYLE_KEYS: Readonly<Record<string, FieldRule>> = {
+  /** Colour `#RRGGBB`. */
+  c: (v) => typeof v === 'string' && /^#[0-9A-Fa-f]{6}$/.test(v),
+  /** Pin size. */
+  s: (v) => v === 'S' || v === 'M' || v === 'L' || v === 'XL',
+  /** Line width (px). */
+  w: (v) => finite(v) && v > 0 && v <= 64,
+};
+const style: FieldRule = (v) =>
+  v !== null &&
+  typeof v === 'object' &&
+  !Array.isArray(v) &&
+  Object.keys(v).length <= 16 &&
+  knownFieldsValid(v as Record<string, Json>, STYLE_KEYS);
+const base: FieldRule = (v) => parseBase(v) !== undefined;
+
+const TREE_COMMON: Readonly<Record<string, FieldRule>> = {
+  n: text(MAX_NAME),
+  p: id,
+  o: order,
+  rm: flag,
+  [BASE_FIELD]: base,
+};
+
+export const FOLDER_RULES: Readonly<Record<string, FieldRule>> = TREE_COMMON;
+
+export const ITEM_RULES: Readonly<Record<string, FieldRule>> = {
+  ...TREE_COMMON,
+  t: (v) => (ITEM_TYPES as readonly Json[]).includes(v),
+  d: description,
+  sty: style,
+  g: geometry,
+  ll: lngLat,
+  el: elevation,
+  ic: icon,
+  cat: isCatalogId,
+  /** A trail's geometry revision (its `lpt` parts carry it). */
+  tr: id,
+  /** How many parts that revision has. */
+  tc: (v) => Number.isSafeInteger(v) && (v as number) >= 1 && (v as number) <= MAX_TRACK_PARTS,
+  /** The trail's activity type (a built-in category id). */
+  ty: (v) => typeof v === 'string' && /^[a-z0-9_-]{1,40}$/.test(v),
+};
+
+/** A trail part: one slice of the encoded trail (`trackCodec.ts`). */
+export const PART_RULES: Readonly<Record<string, FieldRule>> = {
+  i: id,
+  r: id,
+  n: (v) => Number.isSafeInteger(v) && (v as number) >= 0 && (v as number) < MAX_TRACK_PARTS,
+  of: (v) => Number.isSafeInteger(v) && (v as number) >= 1 && (v as number) <= MAX_TRACK_PARTS,
+  d: (v) => typeof v === 'string' && v.length > 0 && v.length <= PART_CHARS && /^[?-~A]+$/.test(v),
+};
+
+export const CURSOR_RULES: Readonly<Record<string, FieldRule>> = {
+  seen: (v) => Number.isSafeInteger(v) && (v as number) >= 0,
+};
+
+export const COMMENT_RULES: Readonly<Record<string, FieldRule>> = {
+  on: id,
+  tx: text(MAX_COMMENT),
+};
+
+/** Per kind: field rules, the fields a record's first write must carry, and write-once fields. */
+export interface KindSpec {
+  rules: Readonly<Record<string, FieldRule>>;
+  first: readonly string[];
+  once: readonly string[];
+}
+
+export const SPECS: ReadonlyMap<string, KindSpec> = new Map<string, KindSpec>([
+  [LFO, { rules: FOLDER_RULES, first: ['n'], once: [] }],
+  [LIT, { rules: ITEM_RULES, first: ['t', 'n'], once: ['t'] }],
+  [LAC, { rules: CURSOR_RULES, first: ['seen'], once: [] }],
+  [LCM, { rules: COMMENT_RULES, first: ['on', 'tx'], once: ['on'] }],
+  [LNX, { rules: { g: (v) => isTeamId(v) }, first: ['g'], once: [] }],
+  [LPT, { rules: PART_RULES, first: ['i', 'r', 'n', 'of', 'd'], once: ['i', 'r', 'n', 'of', 'd'] }],
+]);
+
+export const isLibraryKind = (kind: string): boolean => SPECS.has(kind);
+export const isTreeKind = (kind: string): boolean => TREE_KINDS.includes(kind);
+export const isOwnedLibraryKind = (kind: string): boolean => OWNED_LIBRARY_KINDS.includes(kind);

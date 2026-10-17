@@ -4,8 +4,9 @@ import { formatDistance, formatDuration, formatTimestamp } from '@state/formatte
 import { useLibraryStore } from '@state/libraryStore';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, PanResponder, Pressable, StyleSheet, View } from 'react-native';
-import { Icon, IconButton, Text, useTheme } from 'react-native-paper';
+import { Icon, IconButton, Text, useTheme } from '@ui/paper';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   /** Newest-first trail ids sharing the tapped heat spot (from `heatAt`). */
@@ -53,6 +54,8 @@ export function HeatPointCarousel({
   onClose,
   topInset,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const customCategories = useLibraryStore((s) => s.customCategories);
 
@@ -263,7 +266,7 @@ export function HeatPointCarousel({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // Top-right, layered directly over MapControlsRail — user preference (v4).
   // elevation (Android) + the shadow* props (iOS) keep it above the rail's
   // own FABs regardless of native z-ordering quirks.

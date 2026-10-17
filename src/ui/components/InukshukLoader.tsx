@@ -22,7 +22,7 @@ import {
 import { EASE_IN_OUT, sampleTrack, type Track } from '@core/anim/keyframes';
 import { memo, useEffect, useId, useMemo } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { useTheme } from '@ui/paper';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -44,6 +44,7 @@ import {
   STONES,
   type StoneShape,
 } from './inukshukStones';
+import { useScaledStyles } from '@ui/displayScale';
 
 export interface InukshukLoaderProps {
   /** Height of the figure in dp (its width follows, ~0.9×). Default 96. */
@@ -102,6 +103,8 @@ export function InukshukLoader({
   tone = 'auto',
   style,
 }: InukshukLoaderProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const reduceMotion = useReducedMotion();
   const theme = useTheme();
   const night = tone === 'night' || (tone === 'auto' && theme.dark);
@@ -236,6 +239,8 @@ const Stone = memo(function Stone({
   night: boolean;
   clipId: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const { shape } = placed;
   const animated = useAnimatedStyle(() => {
     const t = clock.get();
@@ -279,6 +284,8 @@ function DustSpeck({
   clock: SharedValue<number>;
   unit: number;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const { speck, landing } = placed;
   const motion = speck.motion;
   const animated = useAnimatedStyle(() => {
@@ -310,7 +317,7 @@ function DustSpeck({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   clip: { position: 'absolute', overflow: 'hidden' },
   // CSS transform-origin: 50% 100% — each stone pivots and squashes on its
   // contact edge, so it never sinks into the stone below.

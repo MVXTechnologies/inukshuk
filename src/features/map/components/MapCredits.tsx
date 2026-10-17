@@ -3,10 +3,11 @@ import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { MapSheet, SectionTitle, SheetHeader } from './mapSheet';
 import { openExternalLink } from '@lib/openLink';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The map's credits (2.1.1, owner request): a small ⓘ button to the LEFT of
@@ -20,6 +21,8 @@ import { openExternalLink } from '@lib/openLink';
  * in Settings › System info, linked from the sheet.
  */
 export function MapCreditsButton({ onPress }: { onPress: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const outline = useChromeOutline();
   return (
@@ -59,6 +62,8 @@ export function MapCreditsSheet({
   layer?: ViewStyle;
   onClose: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   return (
@@ -114,6 +119,8 @@ export function MapCreditsSheet({
 }
 
 function CreditLink({ label, url }: { label: string; url: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -130,7 +137,7 @@ function CreditLink({ label, url }: { label: string; url: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // Small on the map (the scale bar's height), with a 44-dp hit area via hitSlop.
   button: {
     width: 24,

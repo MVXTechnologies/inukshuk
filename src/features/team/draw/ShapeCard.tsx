@@ -16,11 +16,12 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { BackHandler, StyleSheet, View } from 'react-native';
-import { IconButton, Text } from 'react-native-paper';
+import { IconButton, Text } from '@ui/paper';
 
 import { MemberAvatar } from '../components';
 import { Round } from '../map/TeamCards';
 import { useTeamMapFocus } from '../map/teamMapFocus';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /** The card for the shape whose key is in the drawing store, or nothing. */
 export function TeamShapeCard({
@@ -56,6 +57,10 @@ function Card({
   onNavigate: (latitude: number, longitude: number) => void;
   focused: boolean;
 }) {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const view = useTeamStore((s) => s.view);
@@ -93,7 +98,11 @@ function Card({
       testID="team-shape-card"
     >
       <View style={styles.head}>
-        <MemberAvatar initials={author?.initials ?? '?'} color={author?.color ?? color} size={36} />
+        <MemberAvatar
+          initials={author?.initials ?? '?'}
+          color={author?.color ?? color}
+          size={sz(36)}
+        />
         <View style={styles.flex}>
           <Text variant="titleSmall" style={{ color: t.ink }} numberOfLines={1}>
             {`${mine ? 'You' : (author?.name ?? 'A teammate')} · ${SHAPE_NAMES[shape.sh]}`}
@@ -187,7 +196,7 @@ function Card({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   card: {
     borderRadius: 16,

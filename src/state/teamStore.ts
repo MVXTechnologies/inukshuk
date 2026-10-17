@@ -4,11 +4,13 @@
  * Screens read the snapshot and call the service's actions directly
  * (`teamActions()`); nothing here holds protocol state of its own.
  */
-import type { TeamAlert } from '@core/teamui/alerts';
+import { withTeam, type TeamAlert } from '@core/teamui/alerts';
 import type { TeamPhoto } from '@core/teamui/comments';
 import type { Said } from '@core/teamui/mapMarks';
 import type { TeamRally, TeamSos } from '@core/teamui/field';
 import { threadsUnread } from '@core/teamui/threads';
+import { memberLinks, type MemberLink } from '@core/teamui/links';
+import { capHolders, RTC_CAP } from '@core/teamdraw/caps';
 import type { TeamTrailView } from '@core/teamui/trails';
 import type { TeamPin } from '@core/teamui/pins';
 import type { MemberStatus } from '@core/teamui/system';
@@ -41,6 +43,22 @@ export interface TeamBanner extends TeamAlert {
   teamName: string;
   authorName: string;
   at: number;
+}
+
+/** The team on screen's internet (#705, G7): the pill's glyph, the chips, the Connection sheet. */
+export interface TeamNet {
+  /** The team's switch (`net`). */
+  on: boolean;
+  /** This build can use the internet (relay configured, WebRTC present). */
+  capable: boolean;
+  /** This phone is in the team's room now (`ready`), or reaching the relay failed (`failing`). */
+  room: 'ready' | 'failing' | 'trying' | 'none';
+  /** The app is in use, so rooms may open. */
+  online: boolean;
+  /** Joined over the internet and not vouched for yet (R-INV-4). */
+  provisional: boolean;
+  /** Each teammate's link. */
+  links: ReadonlyMap<string, MemberLink>;
 }
 
 export interface TeamSnapshot {
@@ -85,6 +103,7 @@ export interface TeamSnapshot {
   meshRunning: boolean;
   joinNotices: JoinNotice[];
   join: JoinState | null;
+  net: TeamNet | null;
   /** The newest alert to show as a banner (cleared when shown long enough). */
   banner: TeamBanner | null;
 }
@@ -97,6 +116,12 @@ export interface TeamSnapshot {
 export interface SosAlarm {
   /** `sos:<owner>:<id>`. */
   entity: string;
+  /**
+   * The team it came from: an SOS from ANY of my teams rings (owner decision
+   * 2026-10-16); when it is not the team on screen, the screens offer to
+   * switch to it.
+   */
+  teamId: string;
   owner: string;
   authorName: string;
   teamName: string;
@@ -128,10 +153,27 @@ export function resetRallyBuzzForTests(): void {
   rallyBuzz = new RallyBuzzGate();
 }
 
+/**
+ * The SOS and rally points active in every team on this phone: the team on
+ * screen from the snapshot, the others from their sessions (an SOS from any
+ * team rings, so any team can end its alarm).
+ */
+function activeEverywhere(s: TeamSnapshot): ReadonlySet<string> {
+  const out = new Set(activeEntities(s.soses, s.rally));
+  const service = appTeamService();
+  for (const r of s.teams) {
+    if (r.teamId === s.activeId) continue;
+    const other = service?.host?.open(r.teamId);
+    if (other === undefined) continue;
+    for (const e of activeEntities(other.soses(), null)) out.add(e);
+  }
+  return out;
+}
+
 /** Clear what was resolved or ended: its notification, and the alarm if it was this one. */
 function settleAlerts(): void {
   const s = useTeamStore.getState();
-  const active = activeEntities(s.soses, s.rally);
+  const active = activeEverywhere(s);
   for (const gone of ledger.settle(active)) void dismissTeamNotification(gone);
   if (s.sosAlarm !== null && !active.has(s.sosAlarm.entity)) {
     setInAppAlarm(false);
@@ -179,6 +221,30 @@ function snapshot(service: TeamService | null): Omit<TeamSnapshot, 'banner'> {
     meshRunning: s?.meshRunning ?? false,
     joinNotices: s ? [...s.joinNotices] : [],
     join: service?.join?.state() ?? null,
+    net: s !== null && service !== null ? teamNet(service, s) : null,
+  };
+}
+
+function teamNet(service: TeamService, s: TeamSession): TeamNet | null {
+  // Test doubles of the service may have no host.
+  if (typeof service.host?.groupNet !== 'function') return null;
+  const now = service.now();
+  const view = s.view();
+  const g = service.host.groupNet(s.teamId);
+  const on = s.internetOn;
+  return {
+    on,
+    capable: g.capable,
+    room: on ? g.room : 'none',
+    online: g.online,
+    provisional: s.provisional,
+    links: memberLinks({
+      members: view.members.filter((m) => m.active && !m.isMe).map((m) => m.id),
+      links: g.links,
+      paths: g.paths,
+      internetOn: on && g.capable,
+      rtcCapable: capHolders(s.replica.data(now), now, RTC_CAP).holders,
+    }),
   };
 }
 
@@ -214,6 +280,27 @@ export const useTeamStore = create<TeamStore>((set) => ({
     if (entity !== null) silenceSos(entity);
   },
 }));
+
+/**
+ * Show a team (an SOS from a team not on screen, owner 2026-10-16): make it
+ * the active one and refresh the store at once. True when it is on screen
+ * after the call; false for a team this phone doesn't have.
+ */
+export async function switchToTeam(teamId: string): Promise<boolean> {
+  const service = appTeamService();
+  if (service === null) return false;
+  if (service.active?.teamId === teamId) return true;
+  if (!service.teams.some((r) => r.teamId === teamId)) return false;
+  await service.activate(teamId);
+  useTeamStore.getState().refresh();
+  return service.active?.teamId === teamId;
+}
+
+/** The ringing SOS's team on screen (its banner or notification was tapped). */
+export async function showAlarmTeam(): Promise<boolean> {
+  const alarm = useTeamStore.getState().sosAlarm;
+  return alarm === null ? false : switchToTeam(alarm.teamId);
+}
 
 /** Teammates' live strokes into the drawing store, at most once per frame (#683). */
 let liveFrame: ReturnType<typeof requestAnimationFrame> | null = null;
@@ -262,12 +349,15 @@ export function wireTeamStore(): TeamService | null {
       useTeamStore.getState().refresh();
     }, 250);
   });
-  const offAlert = service.onAlert((alert) => {
-    const view = service.active?.view();
+  const offAlert = service.onAlert((alert, teamId) => {
+    // An SOS can come from a team not on screen (owner decision 2026-10-16):
+    // names and "me" from the team it came from.
+    const from = service.host?.open(teamId) ?? service.active;
+    const view = from?.view();
     const author = view?.members.find((m) => m.id === alert.author);
     const authorName = author?.name ?? 'A teammate';
     const teamName = view?.name ?? 'Team';
-    const me = service.active?.me ?? '';
+    const me = from?.me ?? '';
     // An SOS or a rally point (#708): its own channel, once per entity, never mine.
     if (alert.kind === 'sos' || alert.kind === 'rally') {
       const routed = ledger.route(alert, me);
@@ -277,6 +367,7 @@ export function wireTeamStore(): TeamService | null {
         useTeamStore.setState({
           sosAlarm: {
             entity: alert.entity,
+            teamId,
             owner: alert.author,
             authorName,
             teamName,
@@ -287,7 +378,8 @@ export function wireTeamStore(): TeamService | null {
         void notifyTeam({
           title: `SOS · ${authorName}`,
           body: `${alert.text === 'SOS · needs help' ? 'Needs help' : alert.text} · ${teamName}`,
-          url: alert.url,
+          // Opening it shows that team, whichever is on screen now.
+          url: withTeam(alert.url, teamId),
           channel: 'sos',
           identifier: routed.id,
         });

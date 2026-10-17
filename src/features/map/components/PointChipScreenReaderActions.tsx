@@ -1,10 +1,11 @@
 import type { PointChipHit } from '@core/map/mapTap';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 
 import { useScreenReaderEnabled } from '../../common/useScreenReaderEnabled';
 import { MAP_POINT_ACTION_LABELS } from './MapPointChip';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   /** The chip's readout as a sentence ("Point 46.81, -71.21, 120 m NE"). */
@@ -37,6 +38,8 @@ export function PointChipScreenReaderActions(props: Props) {
 }
 
 function Panel({ label, onAction, onClose, top }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <View
@@ -76,7 +79,7 @@ function Panel({ label, onAction, onClose, top }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   panel: {
     position: 'absolute',
     left: 16,

@@ -5,7 +5,7 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useRecorderStore } from '@state/recorderStore';
 import { useStravaStore } from '@state/stravaStore';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Snackbar } from 'react-native-paper';
+import { Snackbar } from '@ui/paper';
 
 /** How long the "Push to Strava?" offer stays available. */
 const PROMPT_MS = 10_000;

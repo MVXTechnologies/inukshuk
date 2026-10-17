@@ -6,15 +6,22 @@ import { TideLegend } from '../../map/components/TideLegend';
 import { setExtensionPrefs, useExtensionPrefs } from '../prefs';
 import type { ExtensionSubPanelProps } from '../types';
 import { TideSources, useTideCoverage } from './TideSources';
+import { TideLevelsSwitchRow } from './TideLevelsRow';
+import { useScaledStyles } from '@ui/displayScale';
+import { useSettingsStore } from '@state/settingsStore';
 
 /**
- * Map overlays › Extensions › Tide stations (#668): the switch, the gauge
- * symbols, Coverage & sources (each opens its licence; the same rows as in
+ * Map overlays › Extensions › Tide stations (#668): the switch, "Show levels
+ * on the map" while the stations are drawn (#764), the gauge symbols (and
+ * the level labels' while they show), Coverage & sources (each opens its licence; the same rows as in
  * Settings) and, with Geodetic points installed, the way to the tidal
  * benchmarks, which are a Geodetic points filter.
  */
 export function TideSubPanel({ onBack, openSubPanel }: ExtensionSubPanelProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const { show } = useExtensionPrefs('tides');
+  const levelsOn = useSettingsStore((s) => s.tideLevelsOnMap);
   const geodeticInstalled = useExtensionPrefs('geodetic').installedAt > 0;
   const coverage = useTideCoverage();
   const { label, summary } = EXTENSIONS.tides;
@@ -28,9 +35,10 @@ export function TideSubPanel({ onBack, openSubPanel }: ExtensionSubPanelProps) {
         value={show}
         onToggle={() => setExtensionPrefs('tides', { show: !show })}
       />
+      {show && <TideLevelsSwitchRow />}
       <SectionTitle>Symbols</SectionTitle>
       <View style={styles.pad}>
-        <TideLegend />
+        <TideLegend levels={show && levelsOn} />
       </View>
       <SectionTitle>Coverage & sources</SectionTitle>
       <TideSources coverage={coverage} />
@@ -46,6 +54,6 @@ export function TideSubPanel({ onBack, openSubPanel }: ExtensionSubPanelProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   pad: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 6 },
 });

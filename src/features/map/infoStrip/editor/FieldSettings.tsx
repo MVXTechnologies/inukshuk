@@ -23,7 +23,7 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Fragment, useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Button, Icon, Text } from 'react-native-paper';
+import { Button, Icon, Text } from '@ui/paper';
 
 import {
   SectionTitle,
@@ -36,6 +36,7 @@ import {
 import { StripField } from '../StripField';
 import { useLiveTideStations } from '../useStripTides';
 import { previewCaptions, previewValue } from './preview';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** A choice with more options than this is a list of rows, not a segmented control. */
 const SEGMENTED_MAX = 4;
@@ -75,6 +76,8 @@ export function FieldSettings({
   onStripTarget: (target: Target) => void;
   onBack: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const f = strip.rows[at.row]?.[at.index];
   const d = f === undefined ? undefined : fieldDescriptor(f.field);
@@ -171,6 +174,8 @@ function ChoiceParam({
   value: string;
   onSelect: (v: string) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { accent } = useSheetAccent();
   return (
@@ -230,6 +235,8 @@ function StationParam({
   units: Units;
   onSelect: (v: string) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { accent } = useSheetAccent();
   const stations = useLiveTideStations(true);
@@ -322,6 +329,8 @@ function TargetParam({
   onOwn: (t: Target | null) => void;
   onStrip: (t: Target) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { accent } = useSheetAccent();
   const waypoints = useLibraryStore((s) => s.waypoints);
@@ -420,7 +429,7 @@ function TargetParam({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   preview: {
     flexDirection: 'row',
     alignItems: 'center',

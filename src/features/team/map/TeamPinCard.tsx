@@ -15,12 +15,13 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, IconButton, Text } from 'react-native-paper';
+import { Button, IconButton, Text } from '@ui/paper';
 
 import { MemberAvatar } from '../components';
 import { sendTeamComment } from '../taskSend';
 import { TeamComments } from '../TeamComments';
 import { useToggleTask } from '../useToggleTask';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 const dist = (m: number) => formatDistance(m, { style: 'short' });
 
@@ -46,6 +47,10 @@ export function TeamPinCard({
   here: { latitude: number; longitude: number } | null;
   onClose: () => void;
 }) {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const tasks = useTeamStore((s) => s.tasks);
@@ -92,7 +97,7 @@ export function TeamPinCard({
         <MemberAvatar
           initials={owner?.initials ?? '?'}
           color={owner?.color ?? t.inkMuted}
-          size={34}
+          size={sz(34)}
         />
         <View style={styles.flex}>
           <Text variant="titleMedium" style={{ color: t.ink }}>
@@ -155,7 +160,7 @@ export function TeamPinCard({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   card: {
     borderRadius: 16,

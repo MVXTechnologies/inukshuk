@@ -21,13 +21,16 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Icon, IconButton, Text } from 'react-native-paper';
+import { Button, Icon, IconButton, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GridDownload } from './GridDownload';
 import { ReceiverChipView } from './ReceiverChipView';
+import { useScaledStyles } from '@ui/displayScale';
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={styles.row}>
@@ -66,6 +69,8 @@ function useNow(): number {
  * view over the map (no Portal: it can open while recording).
  */
 export function ReceiverSheet({ chip }: { chip: ReceiverChip }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -280,6 +285,8 @@ function PositionBlock({
   lon: number;
   lat: number;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   if (result === null) return null;
   const waiting = missingGrids(result);
@@ -323,6 +330,8 @@ function Coordinates({
   receiverAccM: number | null;
   receiverVAccM: number | null;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { plan, value } = result;
   const total = totalAccuracy(receiverAccM, plan.datumAccuracyM);
@@ -359,6 +368,8 @@ function Coordinates({
 }
 
 function MapLine({ result }: { result: PositionResult }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   if (!result.ok) {
     return (
@@ -384,6 +395,8 @@ function MapLine({ result }: { result: PositionResult }) {
 }
 
 function Pill({ text }: { text: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={[styles.pill, { backgroundColor: t.surfaceVariant }]}>
@@ -393,6 +406,8 @@ function Pill({ text }: { text: string }) {
 }
 
 function Tile({ label, value, tint }: { label: string; value: string; tint: boolean }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View
@@ -406,7 +421,7 @@ function Tile({ label, value, tint }: { label: string; value: string; tint: bool
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // Above the map's controls rail and the recording panel.
   layer: { zIndex: 50, elevation: 50 },
   fallback: { gap: 2, marginTop: 6 },

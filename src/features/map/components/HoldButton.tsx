@@ -1,3 +1,4 @@
+import { hitSlopFor } from '@core/display/displayScale';
 import { useEffect, useRef, type ReactNode } from 'react';
 import {
   Animated,
@@ -10,6 +11,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** How long a hold must last to confirm (revamp `After-Targets.html`: 0.8 s). */
 export const HOLD_MS = 800;
@@ -52,6 +54,8 @@ export function HoldButton({
    */
   accessibilityConfirmAction?: { name: string; label: string };
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const progress = useAnimatedValue(0);
   const animation = useRef<Animated.CompositeAnimation | null>(null);
   // The hold is decided by a timer, not by the ring's animation finishing:
@@ -113,6 +117,8 @@ export function HoldButton({
     <Pressable
       onPressIn={start}
       onPressOut={cancel}
+      // #760: a disc under 48 dp (36 and 40 at 100 %, smaller at Small) still answers to 48.
+      hitSlop={hitSlopFor(size)}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
@@ -157,6 +163,6 @@ export function HoldButton({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   button: { alignItems: 'center', justifyContent: 'center' },
 });

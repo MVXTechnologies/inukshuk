@@ -8,8 +8,9 @@ import { formatDistance } from '@state/formatters';
 import { useMemo } from 'react';
 import { photoFileUri } from '../../photos/photoUri';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { Button, Icon, IconButton, Text, useTheme } from 'react-native-paper';
+import { Button, Icon, IconButton, Text, useTheme } from '@ui/paper';
 import { HoldButton } from '../components/HoldButton';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 export interface TimelineItem {
   event: TimelineEvent;
@@ -79,6 +80,10 @@ export function TimelineTab({
   onOpenPhoto,
   onAddPhotos,
 }: Props) {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   // The outing's events and its photos (#587), merged in trail order.
@@ -243,7 +248,7 @@ export function TimelineTab({
                   style={styles.tight}
                 />
                 <HoldButton
-                  size={36}
+                  size={sz(36)}
                   onConfirm={() => onDeleteNote(event.noteId ?? '')}
                   accessibilityLabel={`Delete note ${event.noteNum ?? ''}`.trim()}
                   accessibilityHint="Press and hold to delete"
@@ -263,7 +268,7 @@ export function TimelineTab({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   pad: { padding: 16 },
   addRow: { paddingHorizontal: 16, paddingBottom: 12, gap: 4, alignItems: 'flex-start' },
   addButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

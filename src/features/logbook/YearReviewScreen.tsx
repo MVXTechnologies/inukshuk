@@ -19,11 +19,12 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import { IconButton, Text, useTheme } from 'react-native-paper';
+import { IconButton, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Rect, Text as SvgText } from 'react-native-svg';
 
 import { ActivityChips, Segmented, StatsCard } from './StatsControls';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const METRICS: { value: ReviewMetric; label: string }[] = [
@@ -38,6 +39,8 @@ const METRICS: { value: ReviewMetric; label: string }[] = [
  * with the best month darker.
  */
 export function YearReviewScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const router = useRouter();
@@ -163,6 +166,8 @@ export function YearReviewScreen() {
 }
 
 function Summary({ value, label }: { value: string; label: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <View style={styles.summaryCell} accessible accessibilityLabel={`${value} ${label}`}>
@@ -203,6 +208,9 @@ function CalendarHeatmap({
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const [width, setWidth] = useState(0);
+  // #760: drawn on a 100 % canvas scaled to the Display size (viewBox), so
+  // every coordinate, font and stroke below scales with it.
+  const { factor: chartF } = useDisplayScale();
   const scroller = useRef<ScrollView>(null);
   const { cell, contentWidth, offsetX } = heatmapStrip({
     year,
@@ -219,25 +227,29 @@ function CalendarHeatmap({
   );
   // Open on the most recent weeks; again when the year (or the card) changes.
   useEffect(() => {
-    if (width > 0) scroller.current?.scrollTo({ x: offsetX, animated: false });
-  }, [width, offsetX, year]);
+    if (width > 0) scroller.current?.scrollTo({ x: offsetX * chartF, animated: false });
+  }, [width, offsetX, year, chartF]);
   return (
     <View
       accessible
       accessibilityLabel={accessibilityLabel}
       accessibilityHint="Scrolls sideways through the year"
-      onLayout={(e: LayoutChangeEvent) => setWidth(Math.floor(e.nativeEvent.layout.width))}
-      style={{ height: width > 0 ? height : 120 }}
+      onLayout={(e: LayoutChangeEvent) => setWidth(Math.floor(e.nativeEvent.layout.width / chartF))}
+      style={{ height: (width > 0 ? height : 120) * chartF }}
     >
       {width > 0 && (
         <ScrollView
           ref={scroller}
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentOffset={{ x: offsetX, y: 0 }}
+          contentOffset={{ x: offsetX * chartF, y: 0 }}
           testID="year-heatmap-strip"
         >
-          <Svg width={contentWidth} height={height}>
+          <Svg
+            width={contentWidth * chartF}
+            height={height * chartF}
+            viewBox={`0 0 ${contentWidth} ${height}`}
+          >
             {monthStarts.map((col, m) => (
               <SvgText
                 key={m}
@@ -277,6 +289,8 @@ function CalendarHeatmap({
 }
 
 function Legend() {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const shades = [tokens.stats.dayEmpty, ...tokens.stats.dayShades];
   return (
@@ -312,6 +326,8 @@ function MonthBars({
   best: number | null;
   format: (m: number) => string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const max = Math.max(1, ...months);
   return (
@@ -351,7 +367,7 @@ function MonthBars({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   content: { paddingHorizontal: space.lg, paddingTop: 2, gap: 12 },
   yearRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },

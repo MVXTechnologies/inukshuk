@@ -14,6 +14,11 @@ import { sanitizeLastKnownPosition } from '@core/geo/lastKnownPosition';
 import { sanitizeOverlayTab, type OverlayTab } from '@core/map/overlayTabs';
 import { DEFAULT_PIN_SCALE, normalizePinScale, type PinScale } from '@core/map/pinScale';
 import {
+  DEFAULT_DISPLAY_SCALE,
+  normalizeDisplayScale,
+  type DisplayScale,
+} from '@core/display/displayScale';
+import {
   DEFAULT_POINTING_LINE,
   sanitizePointingLine,
   type PointingLineSettings,
@@ -245,6 +250,12 @@ export interface Settings {
    */
   pinScale: PinScale;
   /**
+   * Settings › Display › Display size (#760): the whole UI's type, spacing,
+   * icons and map chrome at 60–150 % (default 100 %), on top of which the OS
+   * font size still applies (`@core/display/displayScale`).
+   */
+  displayScale: DisplayScale;
+  /**
    * "Labels on satellite" (overlays menu → On the map, #484): while the base
    * map is Satellite, draw our vector map's roads, trails and names over the
    * imagery. No effect on the Map base, which carries its own.
@@ -286,6 +297,11 @@ export interface Settings {
   extensions: ExtensionPrefsMap;
   /** Geodetic points shown, by attribute (overlays menu → the funnel; `@core/geodetic/filter`). */
   geodeticFilter: GeodeticFilter;
+  /**
+   * Tide stations › "Show levels on the map" (#764): each station's water
+   * level, trend and next high or low beside its symbol. Off by default.
+   */
+  tideLevelsOnMap: boolean;
   /** The overlays sheet's last tab (`@core/map/overlayTabs`), reopened next time. */
   overlaysTab: OverlayTab;
   /**
@@ -390,6 +406,12 @@ export interface Settings {
   /** The one-time "Add photos from this outing?" after saving a recording (owner Q6). */
   photoPromptAfterSaveShown: boolean;
   /**
+   * Team mode over the internet (#705): every internet path of this phone
+   * goes through the relay, so teammates never see its IP address (per
+   * phone, owner 2026-10-15; off = direct when possible).
+   */
+  teamAlwaysRelay: boolean;
+  /**
    * The waypoint editor's starred and recent icons (#675): favourites first
    * in its quick row and at the top of the icon picker, then the last five
    * picked. Sanitized on read (unknown ids dropped).
@@ -430,6 +452,7 @@ const DEFAULTS: Settings = {
   showCenterCursor: true,
   coordinateFormat: DEFAULT_COORDINATE_FORMAT,
   pinScale: DEFAULT_PIN_SCALE,
+  displayScale: DEFAULT_DISPLAY_SCALE,
   satelliteLabels: true,
   satelliteImagery: DEFAULT_IMAGERY_LOOK,
   showHillshade: DEFAULT_SHOW_HILLSHADE,
@@ -438,6 +461,7 @@ const DEFAULTS: Settings = {
   showParks: true,
   extensions: defaultExtensionPrefs(),
   geodeticFilter: DEFAULT_GEODETIC_FILTER,
+  tideLevelsOnMap: false,
   overlaysTab: 'map',
   tiltRelief: DEFAULT_TILT_RELIEF,
   betaTerrain3d: false,
@@ -465,6 +489,7 @@ const DEFAULTS: Settings = {
   photoCopySize: DEFAULT_PHOTO_COPY_SIZE,
   includePhotosWhenSharing: false,
   photoPromptAfterSaveShown: false,
+  teamAlwaysRelay: false,
   waypointIcons: EMPTY_WAYPOINT_ICON_PREFS,
   pointingLine: DEFAULT_POINTING_LINE,
   infoStrip: normaliseInfoStripSettings(undefined),
@@ -548,6 +573,7 @@ function snapshot(s: SettingsState): Settings {
     showCenterCursor,
     coordinateFormat,
     pinScale,
+    displayScale,
     satelliteLabels,
     satelliteImagery,
     showHillshade,
@@ -556,6 +582,7 @@ function snapshot(s: SettingsState): Settings {
     showParks,
     extensions,
     geodeticFilter,
+    tideLevelsOnMap,
     overlaysTab,
     tiltRelief,
     betaTerrain3d,
@@ -583,6 +610,7 @@ function snapshot(s: SettingsState): Settings {
     photoCopySize,
     includePhotosWhenSharing,
     photoPromptAfterSaveShown,
+    teamAlwaysRelay,
     waypointIcons,
     pointingLine,
     infoStrip,
@@ -614,6 +642,7 @@ function snapshot(s: SettingsState): Settings {
     showCenterCursor,
     coordinateFormat,
     pinScale,
+    displayScale,
     satelliteLabels,
     satelliteImagery,
     showHillshade,
@@ -622,6 +651,7 @@ function snapshot(s: SettingsState): Settings {
     showParks,
     extensions,
     geodeticFilter,
+    tideLevelsOnMap,
     overlaysTab,
     tiltRelief,
     betaTerrain3d,
@@ -649,6 +679,7 @@ function snapshot(s: SettingsState): Settings {
     photoCopySize,
     includePhotosWhenSharing,
     photoPromptAfterSaveShown,
+    teamAlwaysRelay,
     waypointIcons,
     pointingLine,
     infoStrip,
@@ -709,6 +740,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       }
       // A number default: the ladder keeps any number, so snap junk to 100 %.
       next.pinScale = normalizePinScale(next.pinScale);
+      next.displayScale = normalizeDisplayScale(next.displayScale);
       if (!isTiltRelief(next.tiltRelief)) next.tiltRelief = DEFAULT_TILT_RELIEF;
       // See-through white is a slider stop (0–4) now; the feature's first cut
       // stored names, which the ladder's typeof check would DROP against the

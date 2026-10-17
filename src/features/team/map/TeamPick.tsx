@@ -9,16 +9,18 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
-import { Button, Icon, Text } from 'react-native-paper';
+import { Button, Icon, Text } from '@ui/paper';
 import { create } from 'zustand';
 
 import { teamService, useTeamStore } from '@state/teamStore';
 
 import { usePinDraft } from './TeamPinComposer';
 import { useTeamSheet } from './teamMode';
+import { useTeamMapSelection } from './TeamMapOverlay';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
+import { useScaledStyles } from '@ui/displayScale';
 
-export type PickPurpose = 'task' | 'notify' | 'pin' | 'rally';
+export type PickPurpose = 'task' | 'notify' | 'pin' | 'rally' | 'note-move';
 
 export interface Picked {
   anchor: TaskAnchor;
@@ -40,7 +42,11 @@ export const useTeamPick = create<{
   purpose: PickPurpose | null;
   picked: Picked | null;
   draft: TaskDraft | null;
+  /** Moving my note (#706): its id. */
+  note: string | null;
   start: (purpose: PickPurpose, draft?: TaskDraft) => void;
+  /** Move my note: the next pick is its new place. */
+  moveNote: (id: string) => void;
   choose: (p: Picked) => void;
   again: () => void;
   cancel: () => void;
@@ -48,7 +54,9 @@ export const useTeamPick = create<{
   purpose: null,
   picked: null,
   draft: null,
-  start: (purpose, draft) => set({ purpose, picked: null, draft: draft ?? null }),
+  note: null,
+  start: (purpose, draft) => set({ purpose, picked: null, draft: draft ?? null, note: null }),
+  moveNote: (id) => set({ purpose: 'note-move', picked: null, draft: null, note: id }),
   choose: (picked) => set({ picked }),
   again: () => set({ picked: null }),
   cancel: () => set({ purpose: null, picked: null }),
@@ -59,14 +67,15 @@ const WHAT: Record<PickPurpose, string> = {
   notify: 'Notify about a place',
   pin: 'Pin a message',
   rally: 'Set the rally point',
+  'note-move': 'Move the note',
 };
 
 /** Where a finished pick goes. */
 export function usePickDone(): (p: Picked | null) => void {
   const router = useRouter();
   return (p) => {
-    const { purpose, draft } = useTeamPick.getState();
-    useTeamPick.setState({ purpose: null, picked: null });
+    const { purpose, draft, note } = useTeamPick.getState();
+    useTeamPick.setState({ purpose: null, picked: null, note: null });
     if (purpose === 'task') {
       const a = p?.anchor;
       const q =
@@ -81,6 +90,12 @@ export function usePickDone(): (p: Picked | null) => void {
       useTeamSheet.getState().open({ kind: 'notify', at: p ? p.at : null });
     } else if (purpose === 'pin' && p) {
       usePinDraft.getState().open(p.at[0], p.at[1]);
+    } else if (purpose === 'note-move' && p && note !== null) {
+      teamService()?.active?.editNote(note, { ll: p.at });
+      useTeamStore.getState().refresh();
+      useTeamMapSelection
+        .getState()
+        .select({ kind: 'pin', owner: teamService()?.active?.me ?? '', id: note });
     } else if (purpose === 'rally' && p) {
       teamService()?.active?.setRally(p.at[0], p.at[1]);
       useTeamStore.getState().refresh();
@@ -90,6 +105,8 @@ export function usePickDone(): (p: Picked | null) => void {
 
 /** The banner while picking, then the confirm card. */
 export function TeamPickOverlay({ top, cardStyle }: { top: number; cardStyle: object }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const purpose = useTeamPick((s) => s.purpose);
   const picked = useTeamPick((s) => s.picked);
@@ -172,7 +189,7 @@ export function TeamPickOverlay({ top, cardStyle }: { top: number; cardStyle: ob
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   lane: { position: 'absolute', left: 8, right: 8, zIndex: MAP_OVERLAY_Z.teamPick },
   banner: {

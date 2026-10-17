@@ -3,11 +3,12 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useCoordinateFormatter } from '@state/useCoordinateFormatter';
 import { useEffect, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, IconButton, Text } from 'react-native-paper';
+import { Icon, IconButton, Text } from '@ui/paper';
 
 import { visiblePinKey, type VisiblePin } from './pinHit';
 import { useWaypointClusterSheet } from './waypointTap';
 import { WaypointPinView } from './WaypointPinView';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   /** Every drawn pin (MapScreen's `visiblePins`): the sheet's keys resolve against it. */
@@ -41,6 +42,8 @@ export function WaypointClusterSheet({
   floating = false,
   suppressed = false,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const keys = useWaypointClusterSheet((s) => s.keys);
   const close = useWaypointClusterSheet((s) => s.close);
   const t = useSchemeTokens();
@@ -126,7 +129,7 @@ export function WaypointClusterSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: {
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,

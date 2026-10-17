@@ -3,11 +3,12 @@ import { useCoordinateFormatter } from '@state/useCoordinateFormatter';
 import type { StoredWaypointIcon } from '@core/models';
 import { useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Icon, IconButton, Surface, Text, useTheme } from 'react-native-paper';
+import { Button, Icon, IconButton, Surface, Text, useTheme } from '@ui/paper';
 import { InukshukGlyph } from '@ui/components/InukshukGlyph';
 import { HoldButton } from './HoldButton';
 import { mciGlyph } from './waypointGlyph';
 import { useRealSafeAreaInsets } from '../infoStrip/InfoStripInsets';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 export interface ViewableWaypoint {
   label: string;
@@ -67,6 +68,10 @@ export function WaypointViewerCard({
   onClose,
   floating = false,
 }: Props) {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const [photoOpen, setPhotoOpen] = useState(false);
   const formatCoords = useCoordinateFormatter();
@@ -105,7 +110,7 @@ export function WaypointViewerCard({
           />
         )}
         <HoldButton
-          size={40}
+          size={sz(40)}
           onConfirm={onDelete}
           accessibilityLabel="Delete waypoint"
           accessibilityHint="Press and hold to delete"
@@ -126,7 +131,7 @@ export function WaypointViewerCard({
           accessibilityLabel={`${waypointIconLabel(waypoint.icon)} icon`}
         >
           {glyph === null ? (
-            <InukshukGlyph size={22} frame="square" tone="mono" color={muted} />
+            <InukshukGlyph size={sz(22)} frame="square" tone="mono" color={muted} />
           ) : (
             <Icon source={glyph} size={22} color={muted} />
           )}
@@ -218,6 +223,8 @@ function PhotoViewer({
   onShare: () => void;
   onClose: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   // Its own window, under the status bar: the real inset, not the strip-shifted one.
   const insets = useRealSafeAreaInsets();
   return (
@@ -260,7 +267,7 @@ function PhotoViewer({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: {
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,

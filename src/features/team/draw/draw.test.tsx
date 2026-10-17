@@ -32,7 +32,10 @@ import { useState, type ReactNode } from 'react';
 import { Alert, BackHandler, StyleSheet, View } from 'react-native';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
 
+import { noteFadeForDrawing } from '@core/domains/team/notes';
+
 import { TeamPanel } from '../bar/TeamPanel';
+import { usePinDraft } from '../map/TeamPinComposer';
 import { TeamStatusBar } from '../bar/TeamStatusBar';
 import { useTeamMapFocus } from '../map/teamMapFocus';
 import { DrawAlertSnack } from './DrawAlertSnack';
@@ -307,7 +310,8 @@ describe('drawing mode', () => {
       const { r } = await open(dark);
       expect(screen.getByTestId('team-draw-done')).toBeTruthy();
       expect(screen.getByTestId('team-draw-clear')).toBeTruthy();
-      // #756: Freehand · Arrow · Shape · Time · Undo, equal shares of one row, each labelled.
+      // #756: Freehand · Arrow · Shape · Time · Undo, equal shares of one row, each
+      // labelled (Text, #706, is a choice in Shape's panel: owner 2026-10-16).
       const ids = [
         'team-draw-tool-free',
         'team-draw-tool-arrow',
@@ -332,6 +336,7 @@ describe('drawing mode', () => {
         labels.push(String(label.props.children));
       }
       expect(labels).toEqual(['Freehand', 'Arrow', 'Shape', 'Time', 'Undo']);
+      expect(screen.queryByTestId('team-draw-tool-text')).toBeNull();
       // No Style button any more: its options live in each tool's panel.
       expect(screen.queryByTestId('team-draw-style-button')).toBeNull();
       // The top bar's title has the width (no pencil icon), its subtitle may wrap.
@@ -392,6 +397,55 @@ describe('drawing mode', () => {
       handlers[handlers.length - 1]!();
     });
     expect(useTeamDrawStore.getState().active).toBe(false);
+  });
+
+  it('Text (#706) is Shape’s third choice: a tap places a note in the drawing’s colour and fade', async () => {
+    usePinDraft.getState().close();
+    const { canvas } = await open();
+    const shapeBtn = () => screen.getByTestId('team-draw-tool-shape');
+    // Circle · Rectangle · Text, Text marked NEW.
+    await fireEvent.press(shapeBtn());
+    expect(screen.getByTestId('team-draw-panel-shape')).toBeTruthy();
+    expect(screen.getByTestId('team-draw-shape-circle')).toBeTruthy();
+    expect(screen.getByTestId('team-draw-shape-rect')).toBeTruthy();
+    expect(screen.getByTestId('team-draw-shape-text')).toHaveTextContent(/NEW/);
+    // Picking Text closes the panel; the Shape button shows the Text glyph and label.
+    await fireEvent.press(screen.getByTestId('team-draw-shape-text'));
+    expect(screen.queryByTestId('team-draw-panel')).toBeNull();
+    expect(shapeBtn().props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId('team-draw-tool-free').props.accessibilityState.selected).toBe(false);
+    expect(screen.getByTestId('team-draw-tool-shape-label')).toHaveTextContent('Text');
+    expect(screen.getByLabelText('Shape, Text')).toBeTruthy();
+    expect(screen.getByTestId('team-draw-text-hint')).toBeTruthy();
+    // Reopened, the panel shows Text as the choice.
+    await fireEvent.press(shapeBtn());
+    expect(screen.getByTestId('team-draw-shape-text').props.accessibilityState.selected).toBe(true);
+    await fireEvent.press(screen.getByTestId('team-draw-panel-close'));
+    // A stroke tool turns it off; the button is Shape again, with the last shape.
+    await fireEvent.press(screen.getByTestId('team-draw-tool-arrow'));
+    expect(screen.getByTestId('team-draw-tool-shape-label')).toHaveTextContent('Shape');
+    expect(screen.getByLabelText('Shape, Circle')).toBeTruthy();
+    expect(screen.queryByTestId('team-draw-text-hint')).toBeNull();
+    // So does a shape.
+    await fireEvent.press(shapeBtn());
+    await fireEvent.press(screen.getByTestId('team-draw-shape-text'));
+    await fireEvent.press(shapeBtn());
+    await fireEvent.press(screen.getByTestId('team-draw-shape-rect'));
+    expect(useTeamDrawStore.getState().tool).toBe('rect');
+    expect(screen.getByTestId('team-draw-tool-shape-label')).toHaveTextContent('Shape');
+    expect(screen.queryByTestId('team-draw-text-hint')).toBeNull();
+    // Text again, then one tap on the map: drawing mode ends, the composer opens there.
+    await fireEvent.press(shapeBtn());
+    await fireEvent.press(screen.getByTestId('team-draw-shape-text'));
+    await fireEvent(canvas, 'responderGrant', ev(touch(1, 200, 400)));
+    await fireEvent(canvas, 'responderRelease', ev());
+    await until(() => usePinDraft.getState().at !== null, 'the note composer');
+    expect(useTeamDrawStore.getState().active).toBe(false);
+    expect(app.active!.draw.shapes()).toEqual([]);
+    // The drawing's colour (a palette index) and its Time fade (30 s by default).
+    expect(typeof usePinDraft.getState().col).toBe('number');
+    expect(usePinDraft.getState().fade).toEqual(noteFadeForDrawing(30_000));
+    usePinDraft.getState().close();
   });
 
   it('remembers the style (30 s by default; no red), each option in its own tool’s panel', async () => {

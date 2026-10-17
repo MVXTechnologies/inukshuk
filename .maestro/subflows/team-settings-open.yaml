@@ -1,0 +1,49 @@
+# Settings → Extensions → Team mode, its details open (Get it first if
+# needed). Used by team-internet.yaml. Settings rows merge title + subtitle
+# on iOS: wildcard regexes; the accordion openers are guarded
+# (maestro-ios-tap-traps).
+appId: com.inukshuk.app
+---
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Settings'
+    timeout: 15000
+- tapOn: 'Settings'
+- scrollUntilVisible:
+    element: 'Extensions.*'
+    direction: DOWN
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: '.*Team mode.*'
+          commands:
+            - tapOn: 'Extensions.*'
+      - scrollUntilVisible:
+          element: '.*Team mode.*'
+          direction: DOWN
+          timeout: 5000
+- scrollUntilVisible:
+    element:
+      id: 'extension-row-team'
+    direction: DOWN
+- runFlow:
+    when:
+      visible: 'Get Team mode'
+    commands:
+      - tapOn: 'Get Team mode'
+- runFlow:
+    when:
+      notVisible:
+        id: 'extension-details-team'
+    commands:
+      - tapOn:
+          id: 'extension-row-team'
+- scrollUntilVisible:
+    element:
+      id: 'team-join-row'
+    direction: DOWN

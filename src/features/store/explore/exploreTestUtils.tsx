@@ -7,7 +7,7 @@ import type { CatalogIndex, CatalogItem, CatalogShardRef } from '@core/catalog/s
 import { useCatalogStore } from '@state/catalogStore';
 import { act, render } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
-import { PaperProvider } from 'react-native-paper';
+import { PaperProvider } from '@ui/paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 export const QUEBEC = { latitude: 46.8139, longitude: -71.2082 };

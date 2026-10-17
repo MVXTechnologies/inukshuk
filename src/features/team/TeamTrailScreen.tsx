@@ -11,15 +11,20 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 
 import { MemberAvatar, Note, SectionLabel, TeamScreenFrame } from './components';
 import { sendTeamComment } from './taskSend';
 import { commentTime, TeamComments } from './TeamComments';
 import { useToggleTask } from './useToggleTask';
 import { TeamRouteMap } from './TeamRouteMap';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 export function TeamTrailScreen() {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { width } = useWindowDimensions();
   const { owner, id, photo } = useLocalSearchParams<{
@@ -65,7 +70,7 @@ export function TeamTrailScreen() {
   return (
     <TeamScreenFrame title={trail.name} testID="team-trail-screen">
       <View style={styles.by}>
-        {by && <MemberAvatar initials={by.initials} color={by.color} size={28} />}
+        {by && <MemberAvatar initials={by.initials} color={by.color} size={sz(28)} />}
         <Text variant="bodyMedium" style={{ color: t.inkVariant }}>
           {by?.isMe ? 'Shared by you' : `Shared by ${by?.name ?? 'a teammate'}`} ·{' '}
           {formatDistance(trail.distanceM)} · {new Date(trail.startedAt).toLocaleDateString()}
@@ -167,7 +172,7 @@ export function TeamTrailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   by: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: -space.sm },
   strip: { gap: space.sm },
   thumbWrap: { borderWidth: 2, borderRadius: 12, padding: 2 },

@@ -8,19 +8,11 @@ import { useLibraryStore } from '@state/libraryStore';
 import { KeyboardLifted } from '@ui/components/KeyboardLifted';
 import { useEffect, useRef, useState } from 'react';
 import { BackHandler, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import {
-  Button,
-  Chip,
-  Icon,
-  Surface,
-  Text,
-  TextInput,
-  TouchableRipple,
-  useTheme,
-} from 'react-native-paper';
+import { Button, Chip, Icon, Surface, Text, TextInput, TouchableRipple, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NewCategoryForm } from '../components/NewCategoryForm';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The chips always on show, in order: Navigation trail (the default) and the
@@ -73,6 +65,8 @@ export function SaveRouteSheet({
   onSave,
   onCancel,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const customCategories = useLibraryStore((s) => s.customCategories);
@@ -262,6 +256,8 @@ function MenuRow({
   selected: boolean;
   onPress: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   return (
     <TouchableRipple
@@ -281,7 +277,7 @@ function MenuRow({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   scrim: {
     position: 'absolute',
     top: 0,

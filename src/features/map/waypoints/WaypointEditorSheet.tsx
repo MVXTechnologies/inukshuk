@@ -35,7 +35,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { Button, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Text, TextInput, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useIosKeyboardHeight } from '../../common/useIosKeyboardHeight';
@@ -45,6 +45,7 @@ import { IconTile } from './IconTile';
 import { WaypointIconPickerPage } from './WaypointIconPickerPage';
 import { WaypointPinView } from './WaypointPinView';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * The minimal waypoint shape the editor needs — satisfied by both a live
@@ -135,6 +136,10 @@ function EditorContent({
   onSetStyle,
   screenFocused = true,
 }: WaypointEditorProps) {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const insets = useSafeAreaInsets();
@@ -425,7 +430,7 @@ function EditorContent({
                           pressed && { backgroundColor: tokens.surfaceVariant },
                         ]}
                       >
-                        <MaterialCommunityIcons name="apps" size={24} color={tokens.ink} />
+                        <MaterialCommunityIcons name="apps" size={sz(24)} color={tokens.ink} />
                         <Text style={[styles.allIconsLabel, { color: tokens.inkVariant }]}>
                           All icons ›
                         </Text>
@@ -471,7 +476,7 @@ function EditorContent({
                             {on && (
                               <MaterialCommunityIcons
                                 name="check"
-                                size={18}
+                                size={sz(18)}
                                 color={waypointInk(c.hex)}
                               />
                             )}
@@ -564,6 +569,8 @@ function EditorContent({
 }
 
 function Section({ title }: { title: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <Text style={[styles.section, { color: tokens.inkMuted }]} accessibilityRole="header">
@@ -574,7 +581,7 @@ function Section({ title }: { title: string }) {
 
 const MAX_PIN = WAYPOINT_PIN_DIAMETER.XL;
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   root: {
     position: 'absolute',
     top: 0,

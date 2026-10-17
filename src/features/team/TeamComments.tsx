@@ -13,13 +13,16 @@ import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { IconButton, Text, TextInput } from 'react-native-paper';
+import { IconButton, Text, TextInput } from '@ui/paper';
 
 import { MemberAvatar, ROLE_LABEL } from './components';
 import { TaskChip } from './TaskChip';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /** A comment's text with its `+task @Name` highlighted. */
 function CommentText({ text, members }: { text: string; members: readonly MemberRow[] }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const cmd = parseTaskCommand(text, members);
   if (cmd === null || !cmd.ok) {
@@ -73,6 +76,10 @@ export function TeamComments({
   tasks?: readonly TeamTask[];
   onToggleTask?: (task: TeamTask) => void;
 }) {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +108,11 @@ export function TeamComments({
         const about = c.photoId && photoLabel ? photoLabel(c.photoId) : null;
         return (
           <View key={`${c.author}:${c.id}`} style={styles.row} testID="team-comment">
-            <MemberAvatar initials={m?.initials ?? '?'} color={m?.color ?? t.inkMuted} size={30} />
+            <MemberAvatar
+              initials={m?.initials ?? '?'}
+              color={m?.color ?? t.inkMuted}
+              size={sz(30)}
+            />
             <View style={styles.flex}>
               <Text variant="labelLarge" style={{ color: t.ink }}>
                 {name}
@@ -166,7 +177,7 @@ export function TeamComments({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   wrap: { gap: space.sm },
   row: { flexDirection: 'row', gap: space.sm, paddingVertical: 4 },

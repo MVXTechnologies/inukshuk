@@ -77,7 +77,7 @@ describe('invite token', () => {
     version2[0] = 2;
     expect(decodeInvite(version2.toString('base64url'))).toBeUndefined();
     const flags = Buffer.from(bytes);
-    flags[1] = 0x82;
+    flags[1] = 0x84;
     expect(decodeInvite(flags.toString('base64url'))).toBeUndefined();
     const trailing = Buffer.concat([Buffer.from(inv.encode('sms'), 'base64url'), Buffer.from([0])]);
     expect(decodeInvite(trailing.toString('base64url'))).toBeUndefined();
@@ -118,5 +118,16 @@ describe('join proof', () => {
     expect(parseJoinProof({ ...proof, m: 'x' })).toBeUndefined();
     expect(parseJoinProof({ ...proof, x: 'x' })).toBeUndefined();
     expect(parseJoinProof({ ...proof, ip: 'x' })).toBeUndefined();
+  });
+
+  it('a shared folder invite carries its flag both ways, with or without the network hint', () => {
+    const folder = { ...inv.token, app: 'lib' as const };
+    expect(decodeInvite(encodeInvite(folder, 'sms'))?.app).toBe('lib');
+    const qr = decodeInvite(
+      encodeInvite({ ...folder, net: { host: [10, 0, 0, 2], port: 7 } }, 'qr'),
+    )!;
+    expect(qr.app).toBe('lib');
+    expect(qr.net?.port).toBe(7);
+    expect(decodeInvite(encodeInvite(inv.token, 'sms'))?.app).toBeUndefined();
   });
 });

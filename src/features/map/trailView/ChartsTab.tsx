@@ -7,10 +7,11 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import { photoFileUri } from '../../photos/photoUri';
 import { PhotoLane } from './PhotoLane';
 import { TrailChart } from './TrailChart';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   series: ChartSeries | null;
@@ -48,6 +49,8 @@ export function ChartsTab({
   onOpenPhoto,
   onCursorPhoto,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const [laneW, setLaneW] = useState(0);
   const totalM = series?.totalM ?? 0;
@@ -230,7 +233,7 @@ export function ChartsTab({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   pad: { padding: 16 },
   wrap: { paddingHorizontal: 16, paddingTop: 12, gap: 10 },
   hint: { fontSize: 12.5 },

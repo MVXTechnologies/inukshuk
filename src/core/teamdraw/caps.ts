@@ -35,6 +35,17 @@ export const RECEIPT_CAP = 'rc';
 /** The receipt protocol this version speaks (the value of `rc`). */
 export const RECEIPT_PROTOCOL = 1;
 
+/**
+ * The notes capability (#706, 2.7.0): this phone shows a pin's note and
+ * writes a "seen" receipt (`pnr`) when it opens one. Its value is the notes
+ * protocol version. "Seen by 4 of 5" counts over the members that advertise
+ * it, so a 2.6 phone (which shows the note as a plain pin and never sends a
+ * receipt) is not counted as missing. Rides the same record as `pen`.
+ */
+export const NOTE_CAP = 'nt';
+/** The notes protocol this version speaks (the value of `nt`). */
+export const NOTE_PROTOCOL = 1;
+
 /** How long a capability claim holds without being renewed. */
 export const CAP_TTL_MS = 7 * 24 * 3600_000;
 /** A claim older than this is renewed on the next team open. */
@@ -54,34 +65,83 @@ function visible(rec: EntityState, field: string): { value: Json; wall: number }
 }
 
 /**
+ * How a claim of one capability is read (generalised in 2.7.0 from the
+ * hard-coded pen and receipt rules; `docs/design/sync-layer.md` §6).
+ */
+export interface CapSpec {
+  /** The protocol versions of this capability this phone speaks: the claim must name one. */
+  readonly versions: readonly number[];
+  /**
+   * The field holding the version, when it is not the flag itself: `pen`
+   * keeps its 2.5.2 shape (`pen: 1`, `v: <version>`). Every later capability
+   * writes its version as the flag's value (`rc: 1`, `lnk: 1`…).
+   */
+  readonly versionField?: string;
+  /**
+   * Also bound the claim by the flag's own stamp (the rollback rule): a phone
+   * rolled back to a version without the capability keeps renewing `x`, never
+   * the flag, so its old claim lapses within {@link CAP_TTL_MS}. `pen` predates
+   * the rule (every version since 2.5.2 renews it).
+   */
+  readonly boundByFlag: boolean;
+}
+
+/** Multiplexed links (2.7.0 G2/G5): channels and lanes over one connection. */
+export const LINK_CAP = 'lnk';
+/** WebRTC signalling frames inside a session (2.7.0 G2/G6). */
+export const RTC_CAP = 'rtc';
+/** Blob channels (2.7.x). */
+export const BLOB_CAP = 'blob';
+
+/** The link-layer protocol this version speaks (the value of `lnk`). */
+export const LINK_PROTOCOL = 1;
+/** The WebRTC signalling protocol this version speaks (the value of `rtc`, G6). */
+export const RTC_PROTOCOL = 1;
+
+/**
+ * Every capability this phone reads, by name. A name not here is never held
+ * (fail closed). Advertising one is separate ({@link advertisedCapBody}):
+ * 2.7.0 reads `lnk` / `rtc` / `blob` claims and makes `lnk` (G5) and `rtc` (G6).
+ */
+export const CAP_SPECS: ReadonlyMap<string, CapSpec> = new Map<string, CapSpec>([
+  [PEN_CAP, { versions: [PEN_PROTOCOL], versionField: CAP_VERSION, boundByFlag: false }],
+  [RECEIPT_CAP, { versions: [RECEIPT_PROTOCOL], boundByFlag: true }],
+  [NOTE_CAP, { versions: [NOTE_PROTOCOL], boundByFlag: true }],
+  [LINK_CAP, { versions: [1], boundByFlag: true }],
+  [RTC_CAP, { versions: [1], boundByFlag: true }],
+  [BLOB_CAP, { versions: [1], boundByFlag: true }],
+]);
+
+const speaks = (spec: CapSpec, v: Json | undefined) =>
+  typeof v === 'number' && spec.versions.includes(v);
+
+/**
  * Until when `member`'s claim of `cap` holds (exclusive), or `undefined` when
- * there is none: no live record, the flag off, not the pen protocol this
- * phone speaks, or no expiry. The expiry is capped at the claim's own stamp
- * plus {@link CAP_TTL_MS}: a claim cannot outlive the rule on its writer's say-so.
+ * there is none: no live record, an unknown capability, the flag off, not a
+ * version of it this phone speaks, or no expiry. The expiry is capped at the
+ * claim's own stamp plus {@link CAP_TTL_MS}: a claim cannot outlive the rule on
+ * its writer's say-so (and at the flag's stamp plus the TTL when the spec says so).
  */
 export function capExpiry(
   data: TeamData,
   member: string,
   cap: string = PEN_CAP,
+  spec: CapSpec | undefined = CAP_SPECS.get(cap),
 ): number | undefined {
+  if (spec === undefined) return undefined;
   const rec = data.entities.get(capKey(member));
   if (rec === undefined || !isLive(rec.state)) return undefined;
   const flag = visible(rec.state, cap);
   const x = visible(rec.state, CAP_EXPIRES);
   // Only a number gets past the fold's `validCapFields`; anything else is no claim.
-  if (x === undefined || typeof x.value !== 'number') return undefined;
-  if (cap === PEN_CAP) {
-    const v = visible(rec.state, CAP_VERSION);
-    if (flag?.value !== 1 || v?.value !== PEN_PROTOCOL) return undefined;
-    return Math.min(x.value, x.wall + CAP_TTL_MS);
+  if (x === undefined || typeof x.value !== 'number' || flag === undefined) return undefined;
+  if (spec.versionField === undefined) {
+    if (!speaks(spec, flag.value)) return undefined;
+  } else if (flag.value !== 1 || !speaks(spec, visible(rec.state, spec.versionField)?.value)) {
+    return undefined;
   }
-  if (cap === RECEIPT_CAP) {
-    if (flag?.value !== RECEIPT_PROTOCOL) return undefined;
-    // Also bounded by the flag's own stamp: a phone rolled back to 2.6.0 keeps
-    // renewing `pen`, `v` and `x`, never `rc`, so its old `rc` lapses in a week.
-    return Math.min(x.value, x.wall + CAP_TTL_MS, flag.wall + CAP_TTL_MS);
-  }
-  return undefined;
+  const until = Math.min(x.value, x.wall + CAP_TTL_MS);
+  return spec.boundByFlag ? Math.min(until, flag.wall + CAP_TTL_MS) : until;
 }
 
 /** Whether `member` advertises `cap` at `now` (a live, current, unexpired claim). */
@@ -135,6 +195,43 @@ export function capBody(
       [CAP_EXPIRES]: now + CAP_TTL_MS,
     },
   };
+}
+
+/**
+ * The record a 2.7.0 phone writes: the 2.6 body ({@link capBody}, which is
+ * what every older phone writes, kept as is for their fixtures) plus `lnk`,
+ * the LAN upgrade to link-mux framing (design §2.6), and `rtc`, WebRTC
+ * signalling inside a session (R-RTC-1), and `nt`, notes and their "seen"
+ * receipts (#706, G8). A rolled-back phone renews `pen`/`v`/`rc`/`x` without
+ * them, so its claims lapse (`boundByFlag`).
+ */
+export function advertisedCapBody(
+  me: string,
+  now: number,
+): { k: 'cap'; id: string; f: Record<string, Json> } {
+  const body = capBody(me, now);
+  return {
+    ...body,
+    f: {
+      ...body.f,
+      [LINK_CAP]: LINK_PROTOCOL,
+      [RTC_CAP]: RTC_PROTOCOL,
+      [NOTE_CAP]: NOTE_PROTOCOL,
+    },
+  };
+}
+
+/**
+ * {@link needsCap} for a 2.7.0 phone: also when its `lnk`, `rtc` or `nt`
+ * claim is missing or stale (a 2.6 claim, or a G5 build's `lnk`-only one,
+ * renews at once on the first open).
+ */
+export function needsAdvertisedCap(data: TeamData, me: string, now: number): boolean {
+  if (needsCap(data, me, now)) return true;
+  return [LINK_CAP, RTC_CAP, NOTE_CAP].some((cap) => {
+    const until = capExpiry(data, me, cap);
+    return until === undefined || until - now < CAP_TTL_MS - CAP_RENEW_MS;
+  });
 }
 
 /**

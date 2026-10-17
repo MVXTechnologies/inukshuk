@@ -101,7 +101,9 @@ export function teamMapMarks(input: MarksInput): {
   }
   bubbles.sort((a, b) => Number(b.fresh) - Number(a.fresh));
 
-  const pins: PinMark[] = input.pins.slice(0, MAX_PIN_MARKS).map((p) => {
+  // A note (#706) draws as its callout (`./notes`), and leaves the map when it fades.
+  const plain = input.pins.filter((p) => p.note === null);
+  const pins: PinMark[] = plain.slice(0, MAX_PIN_MARKS).map((p) => {
     const fresh = unseenCount(p.messages, me, seenAt(`pin:${p.owner}:${p.id}`));
     return {
       key: `${p.owner}:${p.id}`,

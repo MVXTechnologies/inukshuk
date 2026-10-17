@@ -17,7 +17,8 @@
  *   the screen-reader label, never in the band's one-line title, which they
  *   overflowed on a phone (QA 2.6.1).
  */
-import { MAP_EDGE_INSET, MAP_LANE_INSET } from '@core/map/mapChrome';
+import { scaleSpacing } from '@core/display/displayScale';
+import { MAP_EDGE_INSET, MAP_LANE_INSET, mapChromeAt } from '@core/map/mapChrome';
 import type { Units } from '@core/format';
 import { formatCoordinate, type CoordinateFormat } from '@core/convert/coordinateDisplay';
 
@@ -296,10 +297,14 @@ export function stripBandLayout(i: {
   /** In Draw mode: the top of the tool bar's ⓘ (`drawCreditsSheetBottom`). */
   drawChromeTop: number;
   sosButtonShown: boolean;
+  /** The Display size (#760); 1 when omitted. */
+  factor?: number;
 }): { bottom: number; right: number; overDraw: boolean } {
+  const k = i.factor ?? 1;
+  const chrome = mapChromeAt(k);
   return {
-    bottom: (i.drawMode ? i.drawChromeTop : i.fabBottom) + STRIP_BAND_GAP,
-    right: i.sosButtonShown ? STRIP_BAND_RIGHT_BESIDE_SOS : STRIP_BAND_RIGHT,
+    bottom: (i.drawMode ? i.drawChromeTop : i.fabBottom) + scaleSpacing(STRIP_BAND_GAP, k),
+    right: i.sosButtonShown ? chrome.laneInset : chrome.edgeInset,
     overDraw: i.drawMode,
   };
 }

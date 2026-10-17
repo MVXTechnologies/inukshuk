@@ -23,12 +23,13 @@ import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native';
-import { Button, Icon, IconButton, Snackbar, Text, useTheme } from 'react-native-paper';
+import { Button, Icon, IconButton, Snackbar, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AccuracyPanel } from './AccuracyPanel';
 import { SystemPicker, type PickerTab } from './SystemPicker';
 import { useConvertEnv } from './useConvertEnv';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** Québec City: where an empty Convert starts when nothing better is known. */
 const DEFAULT_NEAR = { lat: 46.8131, lon: -71.2075 };
@@ -64,6 +65,8 @@ function heightTitle(id: string | null, req: ConvertRequest): { title: string; s
  * (`@core/convert/graph`); anything else is refused in red, never guessed.
  */
 export function ConvertScreen({ params }: { params: Record<string, unknown> }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const router = useRouter();
@@ -649,6 +652,8 @@ function SystemPill({
   muted?: boolean;
   testID: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const bg = muted ? theme.colors.elevation.level2 : theme.colors.surfaceVariant;
@@ -697,6 +702,8 @@ function Field({
   testID: string;
   highlight?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const border = error
@@ -732,7 +739,7 @@ function Field({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   header: {

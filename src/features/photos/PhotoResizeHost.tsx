@@ -5,6 +5,7 @@ import { WebView } from 'react-native-webview';
 
 import { registerPhotoResizer } from './photoResizer';
 import { createResizeHostController } from './resizeHostController';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The hidden WebView that turns picked photos into the three copies (#587).
@@ -18,6 +19,8 @@ import { createResizeHostController } from './resizeHostController';
  * mounts and before any import can start.
  */
 export function PhotoResizeHost() {
+  const styles = useScaledStyles(stylesSheet);
+
   const [pageUrl, setPageUrl] = useState<string | null>(null);
   const [generation, setGeneration] = useState(0);
   const [host] = useState(() => createResizeHostController(setPageUrl));
@@ -60,7 +63,7 @@ export function PhotoResizeHost() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   hidden: {
     position: 'absolute',
     width: 1,

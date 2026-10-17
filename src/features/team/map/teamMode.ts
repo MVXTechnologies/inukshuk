@@ -61,6 +61,8 @@ export type TeamSheet =
   /** The team panel, dropped from the bar (#707). */
   | { kind: 'menu' }
   | { kind: 'status' }
+  /** How each teammate is reached, and the internet settings (#705). */
+  | { kind: 'connection' }
   | { kind: 'notify'; at: [number, number] | null }
   | {
       kind: 'spot';

@@ -1,7 +1,8 @@
 import type { SplitRow } from '@core/library/trailViewText';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   rows: readonly SplitRow[];
@@ -17,6 +18,8 @@ interface Props {
  * only, the bar sized by climb.
  */
 export function SplitsTab({ rows, unitLabel, measure, loading }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   if (loading) {
     return (
@@ -83,7 +86,7 @@ export function SplitsTab({ rows, unitLabel, measure, loading }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   pad: { padding: 16 },
   wrap: { paddingHorizontal: 16, paddingTop: 10, gap: 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 34 },

@@ -1,7 +1,8 @@
 import { reportError } from '@lib/errorReporting';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Text, useTheme } from 'react-native-paper';
+import { Button, Text, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Top-level React error boundary: a render crash anywhere under the router
@@ -17,6 +18,8 @@ interface FallbackProps {
 
 /** Function component so the paper theme hook works (light AND dark). */
 function ErrorFallback({ error, onRetry }: FallbackProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   return (
     <View style={[styles.fill, { backgroundColor: theme.colors.background }]}>
@@ -77,7 +80,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   content: { flexGrow: 1, justifyContent: 'center', padding: 24, gap: 16 },
   title: { textAlign: 'center' },

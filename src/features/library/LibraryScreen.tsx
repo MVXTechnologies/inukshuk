@@ -41,7 +41,7 @@ import {
   Snackbar,
   Text,
   useTheme,
-} from 'react-native-paper';
+} from '@ui/paper';
 import { countBySource, sourceLabel } from '@core/import/origin';
 import type { ActivitySourceId } from '@core/import/sources';
 import { countActiveFilters, filterTracks, type TrackFilter } from '@core/library/filterTracks';
@@ -53,7 +53,7 @@ import {
 } from '@core/library/libraryRows';
 import { isSearchActive, searchTracks } from '@core/library/searchTracks';
 import { sortTracks, type SortKey } from '@core/library/sortTracks';
-import { groupByFolder } from '@core/library/folders';
+import { folderTree, groupByFolder } from '@core/library/folders';
 import { libraryListItems, type LibraryListItem } from '@core/library/libraryListItems';
 import { georeferenceNotice, isUnplacedCatalogMap } from '@core/library/overlayPages';
 import { creditLine } from '@core/catalog/credit';
@@ -92,13 +92,16 @@ import { ImportSheet } from '../import/ImportSheet';
 import { activityImportMessage, pickAndImportActivityFiles } from './importActivities';
 import { pickAndImportMaps } from './importMap';
 import { itemCount, refKey, type ItemRef } from '@core/library/selection';
-import { useLibrarySelection } from './selection/useLibrarySelection';
+import { JoiningFolders } from './live/JoiningFolders';
+import { useShareLive } from './live/useShareLive';
+import { useLibrarySelection, type LiveTarget } from './selection/useLibrarySelection';
 import { NameDialog } from './NameDialog';
 import { DragGhost } from './DragGhost';
 import { useDragToFolder, type DragItem } from './useDragToFolder';
 import { SetCategoryDialog } from './SetCategoryDialog';
 import { TrackFilterDialog } from './TrackFilterDialog';
 import { useTrackElevationPreview } from './useTrackElevationPreview';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /** Quiet time after a keystroke before the list re-filters. */
 const SEARCH_DEBOUNCE_MS = 200;
@@ -156,6 +159,10 @@ const DELETE_COPY: Record<DeleteTarget['kind'], { title: string; body: (name: st
  * over the list.
  */
 export function LibraryScreen() {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const isFocused = useIsFocused();
@@ -316,7 +323,13 @@ export function LibraryScreen() {
   );
 
   const grouped = useMemo(
-    () => groupByFolder(folders, maps, visibleTracks, waypoints),
+    () =>
+      groupByFolder(
+        folderTree(folders).map((n) => n.folder),
+        maps,
+        visibleTracks,
+        waypoints,
+      ),
     [folders, maps, visibleTracks, waypoints],
   );
   // Same for the newest-first waypoint lists rendered below — each call copies
@@ -361,6 +374,7 @@ export function LibraryScreen() {
   // The select-mode hook, for the drag callbacks (declared before it).
   const selectionRef = useRef<{
     dropSelection: (item: ItemRef, target: string | null) => boolean;
+    openCopy: (target: LiveTarget) => void;
   } | null>(null);
   const scrollListTo = useCallback(
     (y: number) => listRef.current?.scrollToOffset({ offset: y, animated: false }),
@@ -530,6 +544,9 @@ export function LibraryScreen() {
     addFolder(name || 'New folder');
   };
 
+  // A folder inside another (#712: sub-folders), from the folder's Organize actions.
+  const [subFolderOf, setSubFolderOf] = useState<{ id: string; name: string } | null>(null);
+
   const commitRenameFolder = (name: string) => {
     if (renamingFolder && name) renameFolder(renamingFolder.id, name);
     setRenamingFolder(null);
@@ -586,7 +603,9 @@ export function LibraryScreen() {
     actions,
     dropTarget,
     folderId,
+    depth,
   }: {
+    depth?: number;
     key: string;
     title: string;
     count: string;
@@ -600,6 +619,8 @@ export function LibraryScreen() {
       title={title}
       count={count}
       first={first}
+      depth={depth ?? 0}
+      live={folderId === undefined ? undefined : liveHeader(folderId)}
       collapsed={collapsed[key] === true}
       onToggle={() => toggleSection(key)}
       onLongPress={folderId === undefined ? undefined : () => sel.longPressFolder(folderId)}
@@ -609,6 +630,23 @@ export function LibraryScreen() {
       highlighted={dropTarget !== undefined && dragging !== null && dragHovered === dropTarget}
     />
   );
+
+  const liveHeader = (folderId: string) => {
+    const shared = live.folderShare(folderId);
+    if (shared === undefined) return undefined;
+    return {
+      line: shared.line.text,
+      tone: shared.line.tone,
+      faces: shared.faces,
+      onMenu: () => live.openSheet(shared.groupId),
+    };
+  };
+  /** A row's Share live caption: "Renamed by Julie · 2 h", or "Live with …" for a shared item. */
+  const liveNote = (kind: 'track' | 'waypoint' | 'area' | 'map', id: string): string | undefined =>
+    live.note(kind, id)?.text ?? live.itemShare(kind, id)?.subtitle;
+  /** The "not sent yet" clock before a row's caption. */
+  const liveIcon = (kind: 'track' | 'waypoint' | 'area' | 'map', id: string) =>
+    live.note(kind, id)?.pending === true ? 'clock-outline' : undefined;
 
   const moveToFolderItems = (
     kind: 'map' | 'track' | 'waypoint' | 'area',
@@ -972,7 +1010,8 @@ export function LibraryScreen() {
         testID={`library-row-waypoint-${w.id}`}
         name={w.label}
         detail={preview !== null ? `Waypoint · ${preview}` : 'Waypoint'}
-        caption={shortDate(w.createdAt, nowMs)}
+        caption={liveNote('waypoint', w.id) ?? shortDate(w.createdAt, nowMs)}
+        captionIcon={liveIcon('waypoint', w.id)}
         photoUri={w.photoUri}
         glyph={waypointIconGlyph(w.icon)}
         accessibilityLabel={
@@ -1079,7 +1118,10 @@ export function LibraryScreen() {
         leading={dragHandle({ kind: 'area', id: a.id, label: a.name })}
         name={a.name}
         detail={preview !== null ? `${size} · ${preview}` : size}
-        caption={[shortDate(a.createdAt, nowMs), ...(a.tags ?? [])].join(' · ')}
+        caption={
+          liveNote('area', a.id) ?? [shortDate(a.createdAt, nowMs), ...(a.tags ?? [])].join(' · ')
+        }
+        captionIcon={liveIcon('area', a.id)}
         color={a.color}
         photoUri={a.photoUris?.[0]}
         accessibilityLabel={
@@ -1152,7 +1194,17 @@ export function LibraryScreen() {
   // Select mode (#711): hold a row (or a folder's header) to select it; the
   // action bar replaces the tab bar. Selection logic: @core/library/selection.
   const pendingScrollRef = useRef<string | null>(null);
+  // Share live (#712): shared folders' headers, row notes, sheets and dialogs.
+  const live = useShareLive({
+    focused: isFocused,
+    showSnack,
+    onSendCopy: (target) => selectionRef.current?.openCopy(target),
+    itemsIn: (folderId) =>
+      [...maps, ...tracks, ...waypoints, ...areas].filter((x) => x.folderId === folderId).length,
+  });
   const sel = useLibrarySelection({
+    liveRow: live.liveRow,
+    onShareLive: live.onShareLive,
     items,
     focused: isFocused,
     units,
@@ -1203,6 +1255,7 @@ export function LibraryScreen() {
           first: item.first,
           dropTarget: item.dropTarget,
           folderId: item.folderId,
+          depth: item.depth ?? 0,
           actions:
             organizing && item.folderId !== undefined
               ? folderActions(item.folderId, item.title)
@@ -1245,6 +1298,8 @@ export function LibraryScreen() {
             selecting={sel.selecting}
             selected={sel.keys.has(`track:${t.id}`)}
             flash={sel.flashKeys.has(`track:${t.id}`)}
+            note={liveNote('track', t.id)}
+            noteIcon={liveIcon('track', t.id)}
             menuOpen={menuTrackId === t.id}
             elevation={expanded ? (elevationPreview ?? null) : undefined}
             grip={grip}
@@ -1259,6 +1314,15 @@ export function LibraryScreen() {
 
   const folderActions = (id: string, name: string) => (
     <View style={styles.folderActions}>
+      <IconButton
+        icon="folder-plus-outline"
+        size={20}
+        onPress={() => {
+          setSubFolderOf({ id, name });
+        }}
+        accessibilityLabel={`New folder inside ${name}`}
+        testID="library-folder-new-sub"
+      />
       <IconButton
         icon="pencil-outline"
         size={20}
@@ -1367,7 +1431,7 @@ export function LibraryScreen() {
             accessibilityLabel="Filter trails"
           />
           {activeFilterCount > 0 && (
-            <Badge size={16} style={styles.filterBadge}>
+            <Badge size={sz(16)} style={styles.filterBadge}>
               {activeFilterCount}
             </Badge>
           )}
@@ -1458,6 +1522,7 @@ export function LibraryScreen() {
           ListHeaderComponent={
             <>
               <ImportJobCard />
+              <JoiningFolders folders={live.joining} />
               {/* Once a year, behind SUPPORT_NUDGE_ENABLED (off): renders nothing otherwise. */}
               {!organizing && <SupportNudgeCard />}
               {organizing && !hasFolders && (
@@ -1499,6 +1564,7 @@ export function LibraryScreen() {
       />
 
       {sel.overlay}
+      {live.overlay}
 
       <Portal>
         <NameDialog
@@ -1515,6 +1581,17 @@ export function LibraryScreen() {
               setNewFolderForMove(false);
               sel.moveIntoNewFolder(name);
             } else createFolder(name);
+          }}
+        />
+
+        <NameDialog
+          visible={subFolderOf !== null}
+          title={`New folder in ${subFolderOf?.name ?? ''}`}
+          label="Folder name"
+          onDismiss={() => setSubFolderOf(null)}
+          onSubmit={(name) => {
+            if (subFolderOf !== null) addFolder(name || 'New folder', subFolderOf.id);
+            setSubFolderOf(null);
           }}
         />
 
@@ -1623,7 +1700,7 @@ export function LibraryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   showMore: { alignSelf: 'center', marginVertical: space.md },
   title: { flex: 1, fontSize: 28, lineHeight: 34, fontWeight: '800', letterSpacing: -0.3 },

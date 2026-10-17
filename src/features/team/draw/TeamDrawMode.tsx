@@ -18,6 +18,11 @@
  *   Under 12 dp it is dropped; a second finger cancels it.
  * - A tap on my shape selects it; a long-press opens its menu (note, delete).
  *   An admin may do both on anyone's shape.
+ * - Text (#706), a choice of Shape's panel (Circle · Rectangle · Text; owner
+ *   2026-10-16), places a note: one tap on the map leaves drawing mode and
+ *   opens the note composer there, in the drawing's colour and its Time fade
+ *   (`noteFadeForDrawing`). While it is the choice, the Shape button shows
+ *   the Text glyph and label; Freehand, Arrow or a shape turns it off.
  */
 import type { Units } from '@core/format';
 import { DrawGesture, type GestureAction, type Touch } from '@core/teamdraw/gesture';
@@ -59,10 +64,14 @@ import {
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path, Polygon } from 'react-native-svg';
 
+import { noteFadeForDrawing } from '@core/domains/team/notes';
+import { unproject } from '@core/teamdraw/screen';
+
+import { usePinDraft } from '../map/TeamPinComposer';
 import {
   DrawToolPanel,
   fadeBadge,
@@ -73,6 +82,7 @@ import {
 import { useDrawPrefs, useOwnColour } from './drawShared';
 import { hitTestTeamDraw } from './hitTestDraw';
 import { ShapeMenu } from './ShapeMenu';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** The tool bar's two stroke tools; Shape, Time and Undo follow. */
 export const TOOLS: readonly { k: 'free' | 'arrow'; icon: string; label: string }[] = [
@@ -81,7 +91,7 @@ export const TOOLS: readonly { k: 'free' | 'arrow'; icon: string; label: string 
 ];
 /** The tool bar's labels grow with the font scale up to this (owner's cap, #756). */
 export const TOOL_LABEL_MAX_SCALE = 1.2;
-const isShape = (k: ShapeKind) => k === 'circle' || k === 'rect';
+const isShape = (k: ShapeKind): k is 'circle' | 'rect' => k === 'circle' || k === 'rect';
 const TOOL_ICON: Record<ShapeKind, string> = {
   free: 'draw',
   arrow: 'arrow-top-right',
@@ -213,6 +223,8 @@ function DrawModeBody({
   locked = false,
   onCredits,
 }: DrawModeProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const tool = useTeamDrawStore((s) => s.tool);
@@ -231,11 +243,16 @@ function DrawModeBody({
     if (!open) setPanel(null);
   };
   // The Shape button's shape: the last one picked (the current tool when it is one).
-  const [shape, setShape] = useState<ShapeKind>(() => (isShape(tool) ? tool : 'circle'));
+  const [shape, setShape] = useState<'circle' | 'rect'>(() => (isShape(tool) ? tool : 'circle'));
   const [hint, setHint] = useState(hintNow);
   const [pts, setPts] = useState<readonly ScreenPt[]>([]);
   const [chip, setChip] = useState<string | null>(null);
   const [drawn, setDrawn] = useState<string[]>([]);
+  /** The Text tool (#706): the next tap places a note. Not remembered between entries. */
+  const [textTool, setTextTool] = useState(false);
+  // What the Shape button shows: Text while it is the choice, else the shape.
+  const shapeChoice =
+    SHAPE_CHOICES.find((c) => c.k === (textTool ? 'text' : shape)) ?? SHAPE_CHOICES[0]!;
 
   const gesture = useRef(new DrawGesture());
   const view = useRef<Viewport | null>(null);
@@ -253,9 +270,9 @@ function DrawModeBody({
   const throttle = useRef(new PenThrottle());
   const dueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const live = useRef({ tool, prefs, units, styleOpen, locked });
+  const live = useRef({ tool, prefs, units, styleOpen, locked, textTool });
   useEffect(() => {
-    live.current = { tool, prefs, units, styleOpen, locked };
+    live.current = { tool, prefs, units, styleOpen, locked, textTool };
   });
 
   const done = useCallback(() => {
@@ -384,6 +401,8 @@ function DrawModeBody({
       switch (a.type) {
         case 'begin':
           setStyleOpen(false);
+          // The Text tool draws nothing: only its tap counts.
+          if (live.current.textTool) break;
           stroke.current = new StrokeBuilder(
             live.current.tool,
             session()?.newId() ?? String(Date.now()),
@@ -396,6 +415,7 @@ function DrawModeBody({
           void syncView();
           break;
         case 'update': {
+          if (live.current.textTool) break;
           latest.current = a.pts;
           setPts([...a.pts]);
           const b = stroke.current;
@@ -431,6 +451,16 @@ function DrawModeBody({
         case 'long-press': {
           if (live.current.styleOpen) {
             setStyleOpen(false);
+            break;
+          }
+          if (live.current.textTool && a.type === 'tap') {
+            if (vp === null) break;
+            const [lng, lat] = unproject(a.at, vp);
+            const p = live.current.prefs;
+            done();
+            usePinDraft
+              .getState()
+              .open(lng, lat, { col: p.colour, fade: noteFadeForDrawing(p.fadeMs) });
             break;
           }
           const map = mapRef.current;
@@ -626,6 +656,15 @@ function DrawModeBody({
           <Icon source={TOOL_ICON[tool]} size={17} color={color} />
           <Text style={[styles.chipText, { color: drawChrome.chipInk }]}>{chip}</Text>
         </View>
+      ) : textTool ? (
+        <View
+          style={[styles.hint, { top: insets.top + 70, backgroundColor: t.map.chip }]}
+          pointerEvents="none"
+          testID="team-draw-text-hint"
+        >
+          <Icon source="gesture-tap" size={18} color={t.map.chipInk} />
+          <Text style={[styles.hintText, { color: t.map.chipInk }]}>Tap where the note goes</Text>
+        </View>
       ) : hint ? (
         <View
           style={[styles.hint, { top: insets.top + 70, backgroundColor: t.map.chip }]}
@@ -644,11 +683,16 @@ function DrawModeBody({
           kind={panel}
           prefs={prefs}
           own={own}
-          shape={shape}
+          shape={textTool ? 'text' : shape}
           onShape={(k) => {
+            setPanel(null);
+            if (k === 'text') {
+              setTextTool(true);
+              return;
+            }
+            setTextTool(false);
             setShape(k);
             useTeamDrawStore.getState().setTool(k);
-            setPanel(null);
           }}
           bottom={barBottom + BAR_H + 8}
           onChange={(next) => useTeamDrawStore.getState().setPrefs(next)}
@@ -676,7 +720,7 @@ function DrawModeBody({
 
       <View style={[styles.bar, { bottom: barBottom }]} testID="team-draw-toolbar">
         {TOOLS.map(({ k, icon, label }) => {
-          const on = k === tool;
+          const on = k === tool && !textTool;
           return (
             <ToolButton
               key={k}
@@ -688,6 +732,7 @@ function DrawModeBody({
               onPress={() => {
                 if (on) setPanel((p) => (p === k ? null : k));
                 else {
+                  setTextTool(false);
                   useTeamDrawStore.getState().setTool(k);
                   setPanel(null);
                 }
@@ -699,13 +744,14 @@ function DrawModeBody({
           );
         })}
         <ToolButton
-          icon={SHAPE_CHOICES.find((c) => c.k === shape)?.icon ?? 'circle-outline'}
-          label="Shape"
-          on={isShape(tool)}
+          icon={shapeChoice.icon}
+          // Text (#706) names itself on the button while it is the choice.
+          label={textTool ? shapeChoice.label : 'Shape'}
+          on={isShape(tool) || textTool}
           open={panel === 'shape'}
           onPress={() => setPanel((p) => (p === 'shape' ? null : 'shape'))}
           caret
-          a11y={`Shape, ${SHAPE_CHOICES.find((c) => c.k === shape)?.label ?? 'Circle'}`}
+          a11y={`Shape, ${shapeChoice.label}`}
           testID="team-draw-tool-shape"
         />
         <ToolButton
@@ -766,6 +812,8 @@ function ToolButton({
   /** A hairline before it (Undo). */
   divided?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const ink = on ? drawChrome.onActive : open ? drawChrome.openInk : drawChrome.barInk;
   return (
     <Pressable
@@ -825,7 +873,7 @@ export function drawCreditsSheetBottom(safeBottom: number, bottomInset: number):
   return drawBarBottom(safeBottom, bottomInset) + BAR_H + CREDITS_GAP + CREDITS_H + 8;
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   canvas: { position: 'absolute', top: 0, left: 0, right: 0 },
   credits: { position: 'absolute', left: 16, zIndex: 9 },

@@ -3,17 +3,27 @@ import type { TeamData } from '@core/team/data';
 import { T0, MIN } from '@core/team/testing/fixtures';
 
 import {
+  advertisedCapBody,
+  BLOB_CAP,
   CAP_RENEW_MS,
+  CAP_SPECS,
   CAP_TTL_MS,
   capBody,
   capExpiry,
   capHolders,
   capKey,
   hasCap,
+  LINK_CAP,
+  LINK_PROTOCOL,
+  needsAdvertisedCap,
   needsCap,
+  NOTE_CAP,
+  NOTE_PROTOCOL,
   PEN_CAP,
+  RTC_CAP,
+  RTC_PROTOCOL,
 } from './caps';
-import { validCapFields } from './record';
+import { PEN_PROTOCOL, validCapFields } from './record';
 import { crew } from './testUtils';
 
 const DAY = 24 * 3600_000;
@@ -139,5 +149,111 @@ describe('a claim the fold would never let through', () => {
       ]),
     } as unknown as TeamData;
     expect(capExpiry(data, 'm')).toBeUndefined();
+  });
+});
+
+describe('per-capability versions (2.7.0 sync groups)', () => {
+  const at = (n: number) => T0 + n * MIN;
+
+  it('every 2.7 capability holds only at a version this phone speaks, bound by its flag', () => {
+    const { w, bob, eve, rb, re, sync } = crew();
+    const x = at(1) + CAP_TTL_MS;
+    // Bob: lnk v1, rtc v2 (a later protocol this phone does not speak), blob v1.
+    rb.write(at(1), 'e.set', {
+      k: 'cap',
+      id: bob.id,
+      f: { ...capBody(bob.id, at(1)).f, [LINK_CAP]: 1, [RTC_CAP]: 2, [BLOB_CAP]: 1 },
+    });
+    // Eve: no 2.7 flags at all.
+    re.write(at(1), 'e.set', capBody(eve.id, at(1)));
+    sync(at(2));
+    const d = w.root.data();
+    expect(capExpiry(d, bob.id, LINK_CAP)).toBe(x);
+    expect(capExpiry(d, bob.id, BLOB_CAP)).toBe(x);
+    expect(capExpiry(d, bob.id, RTC_CAP)).toBeUndefined();
+    expect(capExpiry(d, eve.id, LINK_CAP)).toBeUndefined();
+    expect(w.root.canReceive(bob.id, LINK_CAP, at(2))).toBe(true);
+    expect(w.root.canReceive(eve.id, LINK_CAP, at(2))).toBe(false);
+    expect(capHolders(d, at(2), LINK_CAP).holders).toEqual(new Set([bob.id]));
+    // Rolled back: the old version renews pen/v/rc/x a day later, never lnk.
+    rb.write(at(1) + DAY, 'e.set', capBody(bob.id, at(1) + DAY));
+    sync(at(2) + DAY);
+    expect(capExpiry(w.root.data(), bob.id, LINK_CAP)).toBe(x);
+    expect(capExpiry(w.root.data(), bob.id)).toBe(at(1) + DAY + CAP_TTL_MS);
+  });
+
+  it('the pen claim keeps its 2.5.2 shape: flag 1 and the version in v, not bound by the flag', () => {
+    const { w, bob, rb, sync } = crew();
+    rb.write(at(1), 'e.set', {
+      k: 'cap',
+      id: bob.id,
+      f: { ...capBody(bob.id, at(1)).f, pen: 2, v: PEN_PROTOCOL },
+    });
+    sync(at(2));
+    expect(capExpiry(w.root.data(), bob.id)).toBeUndefined();
+    rb.write(at(3), 'e.set', { k: 'cap', id: bob.id, f: { pen: 1, v: PEN_PROTOCOL + 1 } });
+    sync(at(4));
+    expect(capExpiry(w.root.data(), bob.id)).toBeUndefined();
+    // The flag a day old, the expiry renewed eight days later: still held (2.5.2 rule).
+    rb.write(at(5), 'e.set', { k: 'cap', id: bob.id, f: { v: PEN_PROTOCOL } });
+    rb.write(at(5) + DAY, 'e.set', { k: 'cap', id: bob.id, f: { pen: 1 } });
+    rb.write(at(5) + 9 * DAY, 'e.set', { k: 'cap', id: bob.id, f: { x: at(5) + 15 * DAY } });
+    sync(at(6) + 9 * DAY);
+    expect(capExpiry(w.root.data(), bob.id)).toBe(at(5) + 15 * DAY);
+  });
+
+  it('a capability this phone does not know is never held; a caller may pass its own spec', () => {
+    const { w, bob, rb, sync } = crew();
+    rb.write(at(1), 'e.set', { k: 'cap', id: bob.id, f: { ...capBody(bob.id, at(1)).f, zz: 3 } });
+    sync(at(2));
+    const d = w.root.data();
+    expect(CAP_SPECS.has('zz')).toBe(false);
+    expect(capExpiry(d, bob.id, 'zz')).toBeUndefined();
+    expect(capExpiry(d, bob.id, 'zz', { versions: [3], boundByFlag: true })).toBe(
+      at(1) + CAP_TTL_MS,
+    );
+    expect(capExpiry(d, bob.id, 'zz', { versions: [1, 2], boundByFlag: true })).toBeUndefined();
+    expect(capExpiry(d, bob.id, 'absent', { versions: [1], boundByFlag: false })).toBeUndefined();
+  });
+});
+
+describe('what a 2.7.0 phone advertises (G5)', () => {
+  const at = (n: number) => T0 + n * MIN;
+
+  it('claims lnk, rtc and nt on top of the 2.6 record, which stays byte-for-byte what older phones write', () => {
+    const body = advertisedCapBody('m', at(1));
+    expect(body.f).toEqual({
+      ...capBody('m', at(1)).f,
+      [LINK_CAP]: LINK_PROTOCOL,
+      [RTC_CAP]: RTC_PROTOCOL,
+      [NOTE_CAP]: NOTE_PROTOCOL,
+    });
+    expect(capBody('m', at(1)).f[NOTE_CAP]).toBeUndefined();
+    expect(capBody('m', at(1)).f[LINK_CAP]).toBeUndefined();
+    expect(capBody('m', at(1)).f[RTC_CAP]).toBeUndefined();
+    expect(validCapFields(body.f)).toBe(true);
+  });
+
+  it('peers read the lnk and rtc claims (G6)', () => {
+    const { w, bob, rb, sync } = crew();
+    rb.write(at(1), 'e.set', advertisedCapBody(bob.id, at(1)));
+    sync(at(2));
+    expect(w.root.canReceive(bob.id, LINK_CAP, at(2))).toBe(true);
+    expect(w.root.canReceive(bob.id, RTC_CAP, at(2))).toBe(true);
+    expect(hasCap(w.root.data(), bob.id, at(2))).toBe(true);
+  });
+
+  it('renews at once over a 2.6 claim, then only once a day', () => {
+    const { bob, rb } = crew();
+    rb.write(at(1), 'e.set', capBody(bob.id, at(1)));
+    expect(needsCap(rb.data(), bob.id, at(2))).toBe(false);
+    expect(needsAdvertisedCap(rb.data(), bob.id, at(2))).toBe(true);
+    // A G5 build's claim (lnk, no rtc) renews at once too.
+    const { rtc: _rtc, ...g5 } = advertisedCapBody(bob.id, at(3)).f;
+    rb.write(at(3), 'e.set', { k: 'cap', id: bob.id, f: g5 });
+    expect(needsAdvertisedCap(rb.data(), bob.id, at(4))).toBe(true);
+    rb.write(at(5), 'e.set', advertisedCapBody(bob.id, at(5)));
+    expect(needsAdvertisedCap(rb.data(), bob.id, at(6))).toBe(false);
+    expect(needsAdvertisedCap(rb.data(), bob.id, at(5) + CAP_RENEW_MS + 1)).toBe(true);
   });
 });

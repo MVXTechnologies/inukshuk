@@ -84,6 +84,32 @@ module.exports = [
     },
   },
   {
+    // Display size (#760): Paper comes from @ui/paper, whose wrappers pass
+    // Paper's built-in paddings and icon sizes in at the user's Display size.
+    // A direct import draws that component at 100 % whatever the setting.
+    files: ['app/**/*.{ts,tsx}', 'src/**/*.{ts,tsx}'],
+    ignores: [
+      'src/core/**',
+      'src/ui/paper.tsx',
+      'src/ui/theme.ts',
+      '**/*.test.{ts,tsx}',
+      '**/*TestUtils.{ts,tsx}',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'react-native-paper',
+              message: "Import Paper from '@ui/paper' so it follows the Display size (#760).",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Repo tooling runs in Node, not React Native: give it Node's globals so
     // Buffer/process/console are not flagged as undefined.
     files: ['scripts/**/*.{js,mjs,cjs}'],

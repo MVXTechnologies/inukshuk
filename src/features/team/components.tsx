@@ -5,11 +5,13 @@
  * paper-surface-ios-flex-collapse).
  */
 import type { Role } from '@core/team/roles';
+import { LINK_LABEL, type MemberLink } from '@core/teamui/links';
 import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 export {
   GnssScreenFrame as TeamScreenFrame,
@@ -47,6 +49,8 @@ export function MemberAvatar({
   online?: boolean;
   dim?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View
@@ -76,6 +80,8 @@ export function MemberAvatar({
 }
 
 export function RoleChip({ role, left }: { role: Role; left?: boolean }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const strong = role === 'owner' || role === 'admin';
   return (
@@ -95,6 +101,51 @@ export function RoleChip({ role, left }: { role: Role; left?: boolean }) {
   );
 }
 
+const LINK_ICON: Record<MemberLink, string> = {
+  direct: 'swap-horizontal',
+  relay: 'cloud-outline',
+  nearby: 'access-point',
+  connecting: 'dots-horizontal',
+  old: 'cellphone-arrow-down',
+  out: 'cloud-off-outline',
+};
+
+/** The link chip's text grows to this much of the font scale at most (a chip, like map chrome). */
+export const LINK_FONT_CAP = 1.15;
+
+/**
+ * How a teammate is reached (#705): Direct (green), Relayed, Nearby,
+ * Connecting, Needs update or Out of reach (amber). Small, and capped at
+ * {@link LINK_FONT_CAP}, so a member's line still fits at 360 dp.
+ */
+export function LinkChip({ link }: { link: MemberLink }) {
+  const styles = useScaledStyles(stylesSheet);
+
+  const t = useSchemeTokens();
+  const color =
+    link === 'direct'
+      ? t.status.gnssFixed
+      : link === 'out' || link === 'old'
+        ? t.status.pausedInk
+        : t.inkVariant;
+  return (
+    <View
+      style={[styles.link, { backgroundColor: t.surfaceVariant }]}
+      accessibilityLabel={LINK_LABEL[link]}
+      testID={`team-link-${link}`}
+    >
+      <Icon source={LINK_ICON[link]} size={12} color={color} />
+      <Text
+        style={[styles.linkText, { color }]}
+        maxFontSizeMultiplier={LINK_FONT_CAP}
+        numberOfLines={1}
+      >
+        {LINK_LABEL[link]}
+      </Text>
+    </View>
+  );
+}
+
 /** A rounded info box (privacy statements, hints). */
 export function Note({
   icon = 'information-outline',
@@ -107,6 +158,8 @@ export function Note({
   tone?: 'info' | 'warn';
   testID?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={[styles.note, { backgroundColor: t.surfaceVariant }]} testID={testID}>
@@ -140,6 +193,8 @@ export function ActionBanner({
   onAction?: () => void;
   testID?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View
@@ -195,6 +250,8 @@ export function ChoiceRow<T extends string | number>({
   testIDPrefix?: string;
   oneLine?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   if (oneLine) {
     return (
@@ -269,7 +326,7 @@ export function ChoiceRow<T extends string | number>({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   avatar: { alignItems: 'center', justifyContent: 'center' },
   dim: { opacity: 0.45 },
@@ -290,6 +347,17 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   chipText: { fontSize: 12, fontWeight: '600' },
+  link: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderRadius: 6,
+    paddingLeft: 4,
+    paddingRight: 6,
+    paddingVertical: 1,
+    flexShrink: 0,
+  },
+  linkText: { fontSize: 11, lineHeight: 14, fontWeight: '700' },
   note: {
     flexDirection: 'row',
     gap: 10,

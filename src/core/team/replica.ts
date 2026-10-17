@@ -30,9 +30,17 @@ import {
 } from './membership';
 import { isAdminRole, type Audience, type Priority } from './roles';
 import { capHolders } from '@core/teamdraw/caps';
+import type { DomainLookup, GroupId } from '@core/group/registry';
+import { teamRegistry } from '@core/domains/team';
+
+export interface GroupReplicaOptions {
+  /** The group's domain plug-ins (default: a team group, {@link teamRegistry}). */
+  registry?: DomainLookup;
+}
 
 /**
- * One device's copy of one team (#589): the op log, the resolved membership,
+ * One device's copy of one sync group (#589; a team, or since 2.7.0 any group
+ * whose domains `registry` names): the op log, the resolved membership,
  * the keyring and the device's own writer. Pure and in-memory; the data layer
  * persists `log` records, the writer cursor and the keyring (secure store)
  * and rebuilds a replica from them on launch.
@@ -85,7 +93,7 @@ export const MAX_GAP_BYTES_PER_AUTHOR = 1024 * 1024;
 export const AUTO_ROTATE_INTERVAL_MS = 30 * 60 * 1000;
 export { PEN_TTL_S };
 
-export class TeamReplica {
+export class GroupReplica {
   readonly log = new OpLog();
   readonly writer: OpWriter;
   readonly id: string;
@@ -132,15 +140,25 @@ export class TeamReplica {
   private now = 0;
   state: TeamState;
 
+  /** The domain plug-ins this group's data fold dispatches to (fixed for the replica's life). */
+  readonly registry: DomainLookup;
+
   constructor(
     private readonly c: TeamCrypto,
     readonly teamId: string,
     readonly keys: DeviceKeys,
     cursor?: WriterCursor,
+    options: GroupReplicaOptions = {},
   ) {
     this.writer = new OpWriter(c, keys, teamId, cursor?.seq ?? 0, cursor?.hlc, cursor?.prev);
     this.id = memberIdOf(keys.signPublic);
     this.state = resolveFolder(c, teamId, []).state;
+    this.registry = options.registry ?? teamRegistry();
+  }
+
+  /** The group id (the team id: same bytes, same derivation). */
+  get groupId(): GroupId {
+    return this.teamId;
   }
 
   /** Import keys from the secure store (or the creator's first key). */
@@ -524,7 +542,7 @@ export class TeamReplica {
         for (const op of sorted) {
           // roleAt holds exactly the data ops the fold accepted.
           if (this.state.roleAt.has(op.id)) {
-            applyDataOp(this.entityCache, this.state, op, (o) => this.decode(o));
+            applyDataOp(this.entityCache, this.state, op, (o) => this.decode(o), this.registry);
             this.capCache = undefined;
           }
         }
@@ -609,7 +627,7 @@ export class TeamReplica {
       for (const op of this.log.liveEphemeral(now)) {
         // Positions only: live strokes (`pen`) are read by `@core/teamdraw/pen`.
         if (op.env.t !== 'pos' || !admitEphemeral(this.state, op)) continue;
-        applyDataOp(scratch, this.state, op, (o) => this.decode(o));
+        applyDataOp(scratch, this.state, op, (o) => this.decode(o), this.registry);
         validUntil = Math.min(validUntil, expiresAt(op.env) ?? Infinity);
       }
       this.positionCache = { state: this.state, validUntil, view: scratch.positions };
@@ -622,7 +640,8 @@ export class TeamReplica {
   private entities(): TeamData {
     if (this.entityCache === undefined) {
       const fresh = emptyData();
-      for (const op of this.state.data) applyDataOp(fresh, this.state, op, (o) => this.decode(o));
+      for (const op of this.state.data)
+        applyDataOp(fresh, this.state, op, (o) => this.decode(o), this.registry);
       this.entityCache = fresh;
     }
     return this.entityCache;
@@ -735,3 +754,6 @@ export class TeamReplica {
     return this.quarantine.size;
   }
 }
+
+/** The 2.6 name: a team is a sync group whose domain is the team (kept for every caller). */
+export { GroupReplica as TeamReplica };

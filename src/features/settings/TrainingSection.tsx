@@ -5,7 +5,8 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import { Keyboard, StyleSheet, View } from 'react-native';
-import { Button, HelperText, List, TextInput } from 'react-native-paper';
+import { Button, HelperText, List, TextInput } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Settings › Training: the max heart rate the Logbook's heart-rate zones are
@@ -14,6 +15,8 @@ import { Button, HelperText, List, TextInput } from 'react-native-paper';
  * inline — no dialog (a Paper Portal can swallow touches on One UI).
  */
 export function TrainingSection() {
+  const styles = useScaledStyles(stylesSheet);
+
   const maxHr = useSettingsStore((s) => s.maxHeartRateBpm);
   const set = useSettingsStore((s) => s.set);
   const tracks = useLibraryStore((s) => s.tracks);
@@ -91,7 +94,7 @@ export function TrainingSection() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16 },
   input: { flex: 1 },
   button: { minHeight: 44, justifyContent: 'center', marginTop: 6 },

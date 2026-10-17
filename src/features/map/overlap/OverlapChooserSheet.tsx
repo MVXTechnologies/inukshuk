@@ -12,10 +12,11 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, IconButton, Text } from 'react-native-paper';
+import { Icon, IconButton, Text } from '@ui/paper';
 import Svg, { Path } from 'react-native-svg';
 
 import { useOverlapChooser } from './overlapChooser';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 interface Props {
   onPickTrail: (trackId: string) => void;
@@ -49,6 +50,8 @@ export function OverlapChooserSheet({
   floating = false,
   suppressed = false,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const hits = useOverlapChooser((s) => s.hits);
   const close = useOverlapChooser((s) => s.close);
   const tracks = useLibraryStore((s) => s.tracks);
@@ -165,9 +168,13 @@ export function OverlapChooserSheet({
 
 /** A trail's stroke or an area's outline, in the item's own colour. */
 function Swatch({ kind, color }: { kind: OverlapHit['kind']; color: string }) {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   return (
     <View style={styles.swatch} testID={`overlap-swatch-${kind}`}>
-      <Svg width={28} height={28} viewBox="0 0 28 28">
+      <Svg width={sz(28)} height={sz(28)} viewBox="0 0 28 28">
         {kind === 'trail' ? (
           <Path
             d="M3 22 C10 18 14 10 25 6"
@@ -191,7 +198,7 @@ function Swatch({ kind, color }: { kind: OverlapHit['kind']; color: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: {
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,

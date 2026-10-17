@@ -16,10 +16,11 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { Button, Icon, Text } from 'react-native-paper';
+import { Button, Icon, Text } from '@ui/paper';
 
 import { SectionTitle, SheetNote, SubPanelHeader, useSheetAccent } from '../../components/mapSheet';
 import { StripField } from '../StripField';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** A strip's rows drawn from the fields' samples (a real miniature, mockup §6). */
 function Miniature({
@@ -29,6 +30,8 @@ function Miniature({
   strip: InfoStrip;
   installed: ReadonlySet<AnyExtensionKey>;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const units = useSettingsStore((s) => s.units);
   const shown = (f: InfoStrip['rows'][number][number]) => {
@@ -103,6 +106,8 @@ export function PresetsPage({
   onGetExtension: (key: AnyExtensionKey) => void;
   onBack: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const units = useSettingsStore((s) => s.units);
   const { accent } = useSheetAccent();
@@ -248,6 +253,8 @@ export function SaveStripPage({
   onSave: (name: string) => void;
   onCancel: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { accent, onAccent } = useSheetAccent();
   const [name, setName] = useState(initialName);
@@ -290,7 +297,7 @@ export function SaveStripPage({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: {
     marginHorizontal: 16,
     marginVertical: 5,

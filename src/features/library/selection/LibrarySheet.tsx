@@ -1,11 +1,13 @@
 import { palette, space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
+import { KeyboardLifted } from '@ui/components/KeyboardLifted';
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { IconButton, Text, useTheme } from 'react-native-paper';
+import { IconButton, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useScreenSheet } from '../../common/useScreenSheet';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The Library's bottom sheets (#711: Move to…, Share): a plain themed View
@@ -31,6 +33,8 @@ export function LibrarySheet({
   testID?: string;
   children: ReactNode;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   useScreenSheet(visible && focused, onClose);
   const t = useSchemeTokens();
   const theme = useTheme();
@@ -45,40 +49,44 @@ export function LibrarySheet({
         accessibilityRole="button"
         importantForAccessibility="no"
       />
-      <View
-        style={[
-          styles.sheet,
-          {
-            backgroundColor: theme.dark ? t.elevation.level1 : t.surface,
-            paddingBottom: insets.bottom + space.md,
-          },
-        ]}
-        accessibilityViewIsModal
-      >
-        <View style={[styles.handle, { backgroundColor: t.outline }]} />
-        <View style={styles.head}>
-          <View style={styles.headText}>
-            <Text accessibilityRole="header" style={[styles.title, { color: t.ink }]}>
-              {title}
-            </Text>
-            {subtitle ? (
-              <Text numberOfLines={1} style={[styles.subtitle, { color: t.inkMuted }]}>
-                {subtitle}
+      {/* Above the keyboard while it is up: Share live's name field sat under
+        the keys with the sheet's Start button (E2E run 38979337220). */}
+      <KeyboardLifted style={styles.dock}>
+        <View
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: theme.dark ? t.elevation.level1 : t.surface,
+              paddingBottom: insets.bottom + space.md,
+            },
+          ]}
+          accessibilityViewIsModal
+        >
+          <View style={[styles.handle, { backgroundColor: t.outline }]} />
+          <View style={styles.head}>
+            <View style={styles.headText}>
+              <Text accessibilityRole="header" style={[styles.title, { color: t.ink }]}>
+                {title}
               </Text>
-            ) : null}
+              {subtitle ? (
+                <Text numberOfLines={1} style={[styles.subtitle, { color: t.inkMuted }]}>
+                  {subtitle}
+                </Text>
+              ) : null}
+            </View>
+            <IconButton
+              icon="close"
+              iconColor={t.inkMuted}
+              onPress={onClose}
+              style={styles.close}
+              accessibilityLabel="Close"
+            />
           </View>
-          <IconButton
-            icon="close"
-            iconColor={t.inkMuted}
-            onPress={onClose}
-            style={styles.close}
-            accessibilityLabel="Close"
-          />
+          <ScrollView style={styles.body} bounces={false} keyboardShouldPersistTaps="handled">
+            {children}
+          </ScrollView>
         </View>
-        <ScrollView style={styles.body} bounces={false}>
-          {children}
-        </ScrollView>
-      </View>
+      </KeyboardLifted>
     </View>
   );
 }
@@ -110,6 +118,8 @@ export function SheetRow({
   accessibilityLabel?: string;
   testID?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   return (
@@ -148,6 +158,8 @@ export function SheetRow({
 }
 
 export function SheetDivider() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return <View style={[styles.divider, { backgroundColor: t.outlineVariant }]} />;
 }
@@ -155,18 +167,14 @@ export function SheetDivider() {
 const SCRIM_LIGHT = 'rgba(20,24,28,0.40)';
 const SCRIM_DARK = 'rgba(0,0,0,0.55)';
 
-export const sheetStyles = StyleSheet.create({
+export const sheetStylesSheet = StyleSheet.create({
   detail: { fontSize: 12.5, lineHeight: 17, fontWeight: '600' },
 });
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   scrim: { ...StyleSheet.absoluteFill },
+  dock: { position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '85%' },
   sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    maxHeight: '85%',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingTop: space.sm,

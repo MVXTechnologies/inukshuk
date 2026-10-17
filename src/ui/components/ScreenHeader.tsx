@@ -3,7 +3,8 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { IconButton, Text } from 'react-native-paper';
+import { IconButton, Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The one header row of the tab screens (Library, Explore, Logbook): the
@@ -27,6 +28,8 @@ export function ScreenHeader({
   /** Actions placed before the Settings gear. */
   children?: ReactNode;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const router = useRouter();
   return (
@@ -60,13 +63,17 @@ export function HeaderAction({
   accessibilityLabel,
   disabled,
   size,
+  testID,
 }: {
   icon: string;
   onPress: () => void;
   accessibilityLabel: string;
   disabled?: boolean;
   size?: number;
+  testID?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <IconButton
@@ -77,11 +84,12 @@ export function HeaderAction({
       onPress={onPress}
       disabled={disabled}
       accessibilityLabel={accessibilityLabel}
+      testID={testID}
     />
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   header: {
     minHeight: 52,
     flexDirection: 'row',

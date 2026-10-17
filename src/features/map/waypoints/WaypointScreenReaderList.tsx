@@ -5,12 +5,13 @@ import { useMapStore } from '@state/mapStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useScreenReaderEnabled } from '../../common/useScreenReaderEnabled';
 import { useScreenSheet } from '../../common/useScreenSheet';
 import { SheetHeader, useSheetWidth } from '../components/mapSheet';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** What the list needs of a drawn pin (MapScreen's `visiblePins`). */
 export interface ListedPin extends LatLng {
@@ -82,6 +83,8 @@ export function WaypointScreenReaderList(props: Props) {
 }
 
 function ListControl({ pins, here, units, onOpen, available, screenFocused, top }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const width = useSheetWidth();
@@ -183,7 +186,7 @@ function ListControl({ pins, here, units, onOpen, available, screenFocused, top 
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   buttonDock: { position: 'absolute', left: 16 },
   button: {
     minHeight: 48,

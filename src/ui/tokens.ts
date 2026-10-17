@@ -1,3 +1,5 @@
+import { MIN_TEXT_SP } from '@core/display/displayScale';
+
 /**
  * Stone & Paper — Inukshuk's design tokens (docs/design/ui-revamp, board
  * `After-Tokens.html`). Three layers:
@@ -1076,8 +1078,14 @@ export const type = {
   caption: { fontSize: 12, lineHeight: 16, fontWeight: '500' },
 } as const;
 
-/** Minimum type size anywhere in the app. */
-export const MIN_FONT_SIZE = 12;
+/**
+ * Minimum type size anywhere in the app, at any Display size (#760): text
+ * shrinks with the setting and stops here (`@core/display/displayScale`).
+ */
+export const MIN_FONT_SIZE = MIN_TEXT_SP;
+
+/** The smallest size in the 100 % type scale (`type`). */
+export const BASE_MIN_FONT_SIZE = 12;
 
 /** Touch targets (dp): 48 minimum; a 36 dp visual gets a 6 dp hitSlop. */
 export const target = { min: 48, compact: 36, compactHitSlop: 6, record: 56 } as const;

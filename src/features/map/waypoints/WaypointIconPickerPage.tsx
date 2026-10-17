@@ -7,9 +7,10 @@ import type { WaypointIcon } from '@core/models';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { Icon, IconButton, Text } from 'react-native-paper';
+import { Icon, IconButton, Text } from '@ui/paper';
 
 import { ICON_TILE_HEIGHT, IconTile } from './IconTile';
+import { useScaledStyles } from '@ui/displayScale';
 
 const COLUMNS = 5;
 const HEADER_H = 34;
@@ -74,6 +75,8 @@ export function WaypointIconPickerPage({
   onBack,
   width,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const [query, setQuery] = useState('');
   const list = useRef<FlatList<Row>>(null);
@@ -104,15 +107,18 @@ export function WaypointIconPickerPage({
     };
   }, [searching, results, favorites, recents]);
 
+  // #760: the rows' heights at the Display size (the scaled sheet's own values).
+  const headerH = (styles.header.height as number | undefined) ?? HEADER_H;
+  const rowH = (styles.row.height as number | undefined) ?? ROW_H;
   const offsets = useMemo(() => {
     const out: number[] = [];
     let y = 0;
     for (const r of rows) {
       out.push(y);
-      y += r.kind === 'header' ? HEADER_H : ROW_H;
+      y += r.kind === 'header' ? headerH : rowH;
     }
     return out;
-  }, [rows]);
+  }, [rows, headerH, rowH]);
 
   const jump = useCallback(
     (id: string) => {
@@ -148,7 +154,7 @@ export function WaypointIconPickerPage({
           ))}
         </View>
       ),
-    [tokens.inkMuted, value, tileW, onPick, favSet, onToggleFavorite],
+    [styles, tokens.inkMuted, value, tileW, onPick, favSet, onToggleFavorite],
   );
 
   return (
@@ -234,7 +240,7 @@ export function WaypointIconPickerPage({
         keyExtractor={(r) => r.key}
         renderItem={renderRow}
         getItemLayout={(_, index) => ({
-          length: rows[index]?.kind === 'header' ? HEADER_H : ROW_H,
+          length: rows[index]?.kind === 'header' ? headerH : rowH,
           offset: offsets[index] ?? 0,
           index,
         })}
@@ -261,7 +267,7 @@ export function WaypointIconPickerPage({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   page: { flex: 1 },
   back: {
     flexDirection: 'row',

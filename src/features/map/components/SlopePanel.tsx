@@ -25,7 +25,7 @@ import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 import Svg, { Circle, G, Line, Path, Text as SvgText } from 'react-native-svg';
 import {
   SectionTitle,
@@ -36,6 +36,7 @@ import {
   useSheetWidth,
 } from './mapSheet';
 import { RangeSlider } from './RangeSlider';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * The slope layer's options (#723, mockup B1–B4, owner pick: Option 2
@@ -102,6 +103,8 @@ export function SlopeRow({
 
 /** "Reset": steepness, aspects and altitude back to their defaults; quiet while they are. */
 function SlopeReset({ onReset }: { onReset: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent } = useSheetAccent();
   const { minDeg, maxDeg, filter } = useSlopeSettings();
@@ -128,6 +131,8 @@ function SlopeReset({ onReset }: { onReset: () => void }) {
 
 /** The steepness bands as a strip with their thresholds (mockup B2). */
 function BandStrip() {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <View accessible accessibilityLabel="Bands from 27°, 30°, 32°, 35°, 45° and up">
@@ -172,6 +177,14 @@ function wedge(c: number, r0: number, r1: number, a0: number, a1: number): strin
  * and the hub is its own accessible toggle.
  */
 export function AspectRose({ mask, onChange }: { mask: number; onChange: (mask: number) => void }) {
+  const styles = useScaledStyles(stylesSheet);
+  // #760: the rose is drawn in its 196-unit viewBox at the Display size; the
+  // touch targets are placed in the same scaled box.
+  const { sz } = useDisplayScale();
+  const f = sz(ROSE) / ROSE;
+  const petal = sz(44) / 2;
+  const hub = sz(52) / 2;
+
   const tokens = useSchemeTokens();
   const { accent, onAccent } = useSheetAccent();
   const C = ROSE / 2;
@@ -181,7 +194,7 @@ export function AspectRose({ mask, onChange }: { mask: number; onChange: (mask: 
   const all = (mask & 0xff) === 0xff;
   return (
     <View style={styles.roseBox} accessibilityRole="none" accessibilityLabel="Aspect">
-      <Svg width={ROSE} height={ROSE}>
+      <Svg width="100%" height="100%" viewBox={`0 0 ${ROSE} ${ROSE}`}>
         {Array.from({ length: 72 }, (_, i) => {
           const a = (i / 72) * TAU;
           const big = i % 9 === 0;
@@ -254,7 +267,10 @@ export function AspectRose({ mask, onChange }: { mask: number; onChange: (mask: 
             accessibilityState={{ checked: on }}
             style={[
               styles.petalHit,
-              { left: C + LABEL_R * Math.sin(am) - 22, top: C - LABEL_R * Math.cos(am) - 22 },
+              {
+                left: (C + LABEL_R * Math.sin(am)) * f - petal,
+                top: (C - LABEL_R * Math.cos(am)) * f - petal,
+              },
             ]}
           />
         );
@@ -265,7 +281,7 @@ export function AspectRose({ mask, onChange }: { mask: number; onChange: (mask: 
         accessibilityRole="togglebutton"
         accessibilityLabel="All aspects"
         accessibilityState={{ checked: all }}
-        style={[styles.hubHit, { left: C - 26, top: C - 26 }]}
+        style={[styles.hubHit, { left: C * f - hub, top: C * f - hub }]}
       />
     </View>
   );
@@ -273,9 +289,17 @@ export function AspectRose({ mask, onChange }: { mask: number; onChange: (mask: 
 
 /** The legend chip's 20 px rose: the selected sectors in the bands' red. */
 export function MiniRose({ mask }: { mask: number }) {
+  const { sz } = useDisplayScale();
+
   const tokens = useSchemeTokens();
   return (
-    <Svg width={20} height={20} accessibilityElementsHidden importantForAccessibility="no">
+    <Svg
+      viewBox="0 0 20 20"
+      width={sz(20)}
+      height={sz(20)}
+      accessibilityElementsHidden
+      importantForAccessibility="no"
+    >
       {ASPECT_SECTORS.map((name, k) => (
         <Path
           key={name}
@@ -294,6 +318,8 @@ export function MiniRose({ mask }: { mask: number }) {
  * rose, and Reset. Every change applies live and is persisted.
  */
 export function SlopeSubPanel({ onBack }: { onBack: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent } = useSheetAccent();
   const sheetW = useSheetWidth();
@@ -386,6 +412,8 @@ export function SlopeSubPanel({ onBack }: { onBack: () => void }) {
  * scale bar. A tap opens the Slope sub-panel. Renders nothing otherwise.
  */
 export function SlopeLegendChip({ onPress }: { onPress: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const outline = useChromeOutline();
   const { slope, minDeg, maxDeg, filter, units } = useSlopeSettings();
@@ -410,7 +438,7 @@ export function SlopeLegendChip({ onPress }: { onPress: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   reset: { fontSize: 15, fontWeight: '700' },
   bands: {
     flexDirection: 'row',

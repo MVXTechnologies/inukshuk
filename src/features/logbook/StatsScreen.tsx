@@ -25,13 +25,14 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HrZonesCard } from './HrZonesCard';
 import { StatsBarChart } from './StatsBarChart';
 import { ActivityChips, LinkRow, Segmented, StatsCard } from './StatsControls';
 import { useTrailStats } from './useTrailStats';
+import { useScaledStyles } from '@ui/displayScale';
 
 const PERIODS: { value: StatsPeriod; label: string }[] = [
   { value: 'week', label: 'Week' },
@@ -57,6 +58,8 @@ const PERIOD_CAPS: Record<StatsPeriod, string> = {
  * this screen never reads a GPX.
  */
 export function StatsScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const router = useRouter();
@@ -255,6 +258,8 @@ function TotalsCard({
   outings: number;
   comparison: { text: string; delta: number | null } | null;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const bg = theme.colors.inverseSurface;
   const ink = theme.colors.inverseOnSurface;
@@ -299,6 +304,8 @@ function TotalsCard({
 }
 
 function Hero({ value, label, ink }: { value: HeroValue; label: string; ink: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   return (
     <View style={styles.cell}>
       <Text
@@ -317,7 +324,7 @@ function Hero({ value, label, ink }: { value: HeroValue; label: string; ink: str
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   content: { paddingHorizontal: space.lg, paddingTop: 2, gap: 12 },
   computing: {

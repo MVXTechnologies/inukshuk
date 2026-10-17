@@ -29,7 +29,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useKeyboardRelease } from '@ui/useKeyboardRelease';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
 import {
   ControlRow,
@@ -43,6 +43,7 @@ import {
   useSheetWidth,
 } from './mapSheet';
 import { StepSlider } from './StepSlider';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** The `below` indent of a sheet row (see mapSheet), left + right. */
 const BELOW_INSET = 52 + 16;
@@ -98,6 +99,8 @@ export function PointingLineRow({ onOpen }: { onOpen: () => void }) {
  * longer (labelled when asked), and the caption under it.
  */
 function Preview({ cfg }: { cfg: PointingLineSettings }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const units = useSettingsStore((s) => s.units);
   const w = useSheetWidth() - 32;
@@ -204,6 +207,8 @@ function Preview({ cfg }: { cfg: PointingLineSettings }) {
 
 /** The fixed bearing, typed in whole degrees; committed as you type, tidied on leaving. */
 function BearingInput({ value, onChange }: { value: number; onChange: (deg: number) => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent } = useSheetAccent();
   const [text, setText] = useState(() => String(value));
@@ -252,6 +257,8 @@ function CustomLengthInput({
   valueM: number;
   onChange: (m: number) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent } = useSheetAccent();
   const units = useSettingsStore((s) => s.units);
@@ -313,6 +320,8 @@ export function PointingLinePanel({
   /** The back row's a11y/Maestro handle (the info strip editor's page says where it goes back to). */
   backLabel?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent } = useSheetAccent();
   const sheetW = useSheetWidth();
@@ -437,7 +446,7 @@ export function PointingLinePanel({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   previewWrap: { paddingHorizontal: 16, paddingBottom: 4 },
   preview: { height: PREVIEW_H, borderRadius: 12, overflow: 'hidden' },
   caption: { fontSize: 11.5, lineHeight: 15, marginTop: 4 },

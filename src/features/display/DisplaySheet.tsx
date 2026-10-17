@@ -4,8 +4,9 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, Switch, Text, useTheme } from 'react-native-paper';
+import { Icon, Switch, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScaledStyles } from '@ui/displayScale';
 
 const CARDS: { condition: DisplayCondition; title: string; caption: string; icon: string }[] = [
   { condition: 'normal', title: 'Normal', caption: 'Paper & stone', icon: 'weather-partly-cloudy' },
@@ -25,6 +26,8 @@ const CARDS: { condition: DisplayCondition; title: string; caption: string; icon
  * A plain Modal, not a Paper Portal.
  */
 export function DisplaySheet({ visible, onDismiss }: { visible: boolean; onDismiss: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const insets = useSafeAreaInsets();
@@ -148,6 +151,8 @@ function ToggleRow({
   value: boolean;
   onChange: (value: boolean) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   return (
@@ -161,7 +166,7 @@ function ToggleRow({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '85%' },
   content: { padding: 20, gap: 12 },

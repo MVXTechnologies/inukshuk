@@ -3,8 +3,9 @@ import type { Folder } from '@core/models';
 import { assessFreeSpaceForWrite } from '@data/diskSpace';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Dialog, RadioButton, Text, useTheme } from 'react-native-paper';
+import { Button, Dialog, RadioButton, Text, useTheme } from '@ui/paper';
 import { NameDialog } from '../library/NameDialog';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** RadioButton value for "no folder" (values must be strings). */
 const UNGROUPED = '__ungrouped__';
@@ -45,6 +46,8 @@ export function DestinationFolderDialog({
   onDismiss,
   onConfirm,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   // The parent remounts this dialog per open (key on the pending item), so the
   // initial selection is seeded once — and a folder deleted since the last
@@ -130,7 +133,7 @@ export function DestinationFolderDialog({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   context: { marginBottom: 8 },
   diskNote: { marginBottom: 8 },
   newFolderRow: { flexDirection: 'row', justifyContent: 'flex-start' },

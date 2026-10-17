@@ -5,7 +5,8 @@
  *
  * - Freehand: colour, width, solid or dashed;
  * - Arrow: colour, width, the head and its size;
- * - Shape: the shape picker (Circle, Rectangle), then colour, width, dash;
+ * - Shape: the shape picker (Circle, Rectangle, and Text: a note, #706),
+ *   then colour, width, dash;
  * - Time: how long the next shapes stay (a 4 × 2 grid at full size, not
  *   seven options squeezed into one row).
  *
@@ -21,9 +22,10 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Line, Path } from 'react-native-svg';
-import { Icon, IconButton, Text, useTheme } from 'react-native-paper';
+import { Icon, IconButton, Text, useTheme } from '@ui/paper';
 
 import { COLOUR_NAMES } from './drawShared';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 const WIDTH_NAMES = { 1: 'Thin', 2: 'Medium', 3: 'Thick' } as const;
 const HEAD_SIZE_LETTERS = { 1: 'S', 2: 'M', 3: 'L' } as const;
@@ -47,10 +49,19 @@ export function fadeBadge(ms: number | null): string {
 
 /** The panels: one per tool button that has options. */
 export type ToolPanel = 'free' | 'arrow' | 'shape' | 'time';
-/** The shapes the Shape button picks between. */
-export const SHAPE_CHOICES: readonly { k: ShapeKind; icon: string; label: string }[] = [
+/** What Shape's panel picks: a shape, or Text (a note on the map, #706). */
+export type ShapeChoice = Extract<ShapeKind, 'circle' | 'rect'> | 'text';
+/** The choices the Shape button picks between (owner 2026-10-16: Text is the third). */
+export const SHAPE_CHOICES: readonly {
+  k: ShapeChoice;
+  icon: string;
+  label: string;
+  /** A small "NEW" on its corner (a feature just added). */
+  tag?: string;
+}[] = [
   { k: 'circle', icon: 'circle-outline', label: 'Circle' },
   { k: 'rect', icon: 'square-outline', label: 'Rectangle' },
+  { k: 'text', icon: 'format-text', label: 'Text', tag: 'NEW' },
 ];
 const PANEL_TITLE: Record<ToolPanel, string> = {
   free: 'Freehand',
@@ -74,6 +85,8 @@ function Seg<T>({
   testID: string;
   tight?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { colors } = useTheme();
   return (
@@ -132,6 +145,8 @@ function Section({
   /** A dot in this colour before `right` ("● your colour"). */
   rightDot?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={styles.sec}>
@@ -160,13 +175,17 @@ export function DrawToolPanel({
   prefs: DrawPrefs;
   /** My member colour's index ("yours"). */
   own: number;
-  /** The Shape button's current shape (the picker's selection). */
-  shape: ShapeKind;
-  onShape: (k: ShapeKind) => void;
+  /** The Shape button's current choice (the picker's selection). */
+  shape: ShapeChoice;
+  onShape: (k: ShapeChoice) => void;
   onChange: (p: DrawPrefs) => void;
   onClose: () => void;
   bottom: number;
 }) {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { colors } = useTheme();
   const set = (patch: Partial<DrawPrefs>) => onChange({ ...prefs, ...patch });
@@ -175,7 +194,7 @@ export function DrawToolPanel({
     const on = prefs.width === w;
     const sw = { 1: 3, 2: 5, 3: 8 }[w];
     return (
-      <Svg width={22} height={12}>
+      <Svg viewBox="0 0 22 12" width={sz(22)} height={sz(12)}>
         <Line
           x1={3}
           y1={6}
@@ -192,19 +211,19 @@ export function DrawToolPanel({
     const c = ink(prefs.head === k);
     if (k === 'open')
       return (
-        <Svg width={22} height={14}>
+        <Svg viewBox="0 0 22 14" width={sz(22)} height={sz(14)}>
           <Path d="M2 7 H19 M13 2 L19 7 L13 12" stroke={c} strokeWidth={2.5} fill="none" />
         </Svg>
       );
     if (k === 'both')
       return (
-        <Svg width={24} height={14}>
+        <Svg viewBox="0 0 24 14" width={sz(24)} height={sz(14)}>
           <Path d="M8 7 H16" stroke={c} strokeWidth={2.5} />
           <Path d="M23 7 L15 2 L15 12Z M1 7 L9 2 L9 12Z" fill={c} />
         </Svg>
       );
     return (
-      <Svg width={22} height={14}>
+      <Svg viewBox="0 0 22 14" width={sz(22)} height={sz(14)}>
         <Path d="M2 7 H12" stroke={c} strokeWidth={2.5} />
         <Path d="M20 7 L11 2 L11 12Z" fill={c} />
       </Svg>
@@ -311,7 +330,7 @@ export function DrawToolPanel({
         </View>
         {kind === 'shape' && (
           <View style={styles.shapes} accessibilityRole="radiogroup" accessibilityLabel="Shape">
-            {SHAPE_CHOICES.map(({ k, icon, label }) => {
+            {SHAPE_CHOICES.map(({ k, icon, label, tag }) => {
               const on = k === shape;
               return (
                 <Pressable
@@ -327,6 +346,19 @@ export function DrawToolPanel({
                   testID={`team-draw-shape-${k}`}
                 >
                   <Icon source={icon} size={26} color={ink(on)} />
+                  {tag !== undefined && (
+                    <View
+                      style={[styles.tag, { backgroundColor: t.team.bubbleNew }]}
+                      pointerEvents="none"
+                    >
+                      <Text
+                        style={[styles.tagText, { color: t.team.bubbleNewInk }]}
+                        allowFontScaling={false}
+                      >
+                        {tag}
+                      </Text>
+                    </View>
+                  )}
                   <Text
                     variant="labelLarge"
                     style={{ color: ink(on), fontWeight: '800' }}
@@ -404,10 +436,10 @@ export function DrawToolPanel({
                   testID="team-draw-headsize"
                   value={prefs.headSize}
                   onPick={(headSize) => set({ headSize })}
-                  items={([1, 2, 3] as const).map((sz) => ({
-                    v: sz,
-                    node: HEAD_SIZE_LETTERS[sz],
-                    a11y: HEAD_SIZE_NAMES[sz],
+                  items={([1, 2, 3] as const).map((head) => ({
+                    v: head,
+                    node: HEAD_SIZE_LETTERS[head],
+                    a11y: HEAD_SIZE_NAMES[head],
                   }))}
                 />
               </>
@@ -421,7 +453,7 @@ export function DrawToolPanel({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // Centred, the same margin either side, at most 360 dp wide.
   dock: {
     position: 'absolute',
@@ -469,6 +501,15 @@ const styles = StyleSheet.create({
     gap: 3,
     paddingHorizontal: 4,
   },
+  tag: {
+    position: 'absolute',
+    top: 4,
+    right: 6,
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  tagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.4 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   // Four a row (the 4 × 2 grid of mockup 756): a quarter less the gaps.
   cell: {

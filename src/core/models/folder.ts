@@ -8,4 +8,9 @@ export interface Folder {
   id: string;
   name: string;
   createdAt: number;
+  /**
+   * The folder it sits in (#712: a shared folder keeps its sub-folders);
+   * absent = top level. A parent that no longer exists means top level.
+   */
+  parentId?: string;
 }

@@ -21,7 +21,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@ui/components/ScreenHeader';
 import { ActivityTypeChips } from './ActivityTypeChips';
@@ -30,6 +30,7 @@ import { DistanceChart } from './DistanceChart';
 import { MonthCalendar } from './MonthCalendar';
 import { RecentActivityRow } from './RecentActivityRow';
 import { useDashboardClock } from './useDashboardClock';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** How many rows the Recent list shows. */
 const RECENT_ROWS = 5;
@@ -43,6 +44,8 @@ const RECENT_ROWS = 5;
  * nothing persisted.
  */
 export function DashboardScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const router = useRouter();
@@ -248,7 +251,7 @@ export function DashboardScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   content: { paddingTop: 2, paddingBottom: space.xl },
   top: { paddingHorizontal: space.lg, gap: 10 },

@@ -13,8 +13,9 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { IconButton, List, SegmentedButtons, Text, useTheme } from 'react-native-paper';
+import { IconButton, List, SegmentedButtons, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScaledStyles } from '@ui/displayScale';
 
 const DISTANCE_NAMES: Record<DistanceUnit, string> = {
   km: 'Kilometres',
@@ -81,6 +82,8 @@ export function UnitsSetting() {
 }
 
 function UnitsSheet({ visible, onDismiss }: { visible: boolean; onDismiss: () => void }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const insets = useSafeAreaInsets();
@@ -152,7 +155,7 @@ function UnitsSheet({ visible, onDismiss }: { visible: boolean; onDismiss: () =>
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '85%', paddingTop: 8 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 },

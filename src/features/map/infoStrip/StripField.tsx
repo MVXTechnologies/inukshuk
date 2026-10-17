@@ -5,11 +5,13 @@ import type { StripSubject, StripValue } from '@core/infoStrip/types';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo, useMemo, useState } from 'react';
 import { PixelRatio, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { CursorGlyph } from '../components/CenterCursor';
 import { WaypointPinView } from '../waypoints/WaypointPinView';
 import { glyphIcon } from './glyphs';
+import { useDisplayFactor, useScaledStyles, useDisplayScale } from '@ui/displayScale';
+import { scaleFontSize } from '@core/display/displayScale';
 
 export interface StripFieldProps {
   value: StripValue;
@@ -57,6 +59,11 @@ export const StripField = memo(function StripField({
   testID,
   textTestID,
 }: StripFieldProps) {
+  const styles = useScaledStyles(stylesSheet);
+  // #760: the cell fits its text at the Display size (text grows with it, as
+  // with the OS font scale), and draws a fitted size at that size too.
+  const displayFactor = useDisplayFactor();
+
   const t = useSchemeTokens();
   // The cell's width, once laid out (one extra render, then only on resize).
   const [width, setWidth] = useState<number | null>(null);
@@ -69,9 +76,9 @@ export const StripField = memo(function StripField({
   const fitted = useMemo(
     () =>
       fit && width !== null
-        ? fitCell(given, width, PixelRatio.getFontScale(), caption)
+        ? fitCell(given, width, PixelRatio.getFontScale() * displayFactor, caption)
         : unfittedCell(given),
-    [fit, width, given, caption],
+    [fit, width, given, caption, displayFactor],
   );
   const value = fitted.value;
   const subject = given.subject;
@@ -114,7 +121,7 @@ export const StripField = memo(function StripField({
         style={[
           styles.value,
           { color: ink },
-          fitted.valueSp !== VALUE_SP && { fontSize: fitted.valueSp },
+          fitted.valueSp !== VALUE_SP && { fontSize: scaleFontSize(fitted.valueSp, displayFactor) },
           muted && styles.muted,
           // Beside a caption, the caption gives way: only a name is ever cut.
           captioned && styles.whole,
@@ -141,6 +148,10 @@ export const StripField = memo(function StripField({
  * Decorative: the cell's label names it.
  */
 function SubjectIcon({ subject, color }: { subject: StripSubject; color: string }) {
+  // #760: drawings sized in dp follow the Display size.
+  const { sz: dsz } = useDisplayScale();
+  const styles = useScaledStyles(stylesSheet);
+
   const kind =
     subject.cursor !== undefined ? 'cursor' : subject.pin !== undefined ? 'pin' : 'glyph';
   return (
@@ -157,7 +168,7 @@ function SubjectIcon({ subject, color }: { subject: StripSubject; color: string 
           testIDPrefix="strip-subject-cursor"
         />
       ) : subject.pin !== undefined ? (
-        <WaypointPinView icon={subject.pin.icon} color={subject.pin.color} diameter={PIN_DP} />
+        <WaypointPinView icon={subject.pin.icon} color={subject.pin.color} diameter={dsz(PIN_DP)} />
       ) : (
         <Icon source={glyphIcon(subject.glyph)} size={14} color={color} />
       )}
@@ -182,7 +193,7 @@ function propsEqual(a: StripFieldProps, b: StripFieldProps): boolean {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   field: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 0, flexShrink: 1 },
   tag: { fontSize: 10.5, fontWeight: '700', letterSpacing: 0.3 },
   value: {

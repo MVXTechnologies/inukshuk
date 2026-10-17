@@ -18,11 +18,14 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, HelperText, Text, TextInput } from 'react-native-paper';
+import { Button, HelperText, Icon, Switch, Text, TextInput } from '@ui/paper';
 
-import { ChoiceRow, Note, SectionLabel, TeamScreenFrame } from './components';
+import { ChoiceRow, SectionLabel, TeamScreenFrame } from './components';
+import { useScaledStyles } from '@ui/displayScale';
 
 export function CreateTeamScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const lastName = useTeamStore((s) => s.teams.find((x) => x.myName)?.myName ?? '');
@@ -30,6 +33,8 @@ export function CreateTeamScreen() {
   const [name, setName] = useState('');
   const [myName, setMyName] = useState(lastName);
   const [lifetime, setLifetime] = useState<LifetimeId>(DEFAULT_LIFETIME);
+  // Owner 2026-10-15: new teams sync over the internet by default.
+  const [internet, setInternet] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ready = cleanName(name) !== null && cleanName(myName) !== null && !busy;
@@ -40,7 +45,7 @@ export function CreateTeamScreen() {
     setBusy(true);
     setError(null);
     try {
-      await service.createTeam({ name, myName, lifetimeMs: lifetimeMs(lifetime) });
+      await service.createTeam({ name, myName, lifetimeMs: lifetimeMs(lifetime), internet });
       if (!show) setExtensionPrefs('team', { show: true });
       void ensureTeamNotifications();
       useTeamStore.getState().refresh();
@@ -106,21 +111,56 @@ export function CreateTeamScreen() {
       <Text variant="bodySmall" style={{ color: t.inkVariant }}>
         An admin can extend it, up to a year. After it ends the team turns read-only.
       </Text>
+      <SectionLabel>How phones connect</SectionLabel>
+      <View style={[styles.card, { borderColor: t.outlineVariant }]}>
+        <View style={styles.row}>
+          <Icon source="access-point" size={22} color={t.inkVariant} />
+          <View style={styles.flex}>
+            <Text variant="bodyLarge" style={[styles.title, { color: t.ink }]}>
+              Nearby
+            </Text>
+            <Text variant="bodySmall" style={{ color: t.inkVariant }}>
+              Same Wi-Fi or hotspot, no internet needed · always on
+            </Text>
+          </View>
+          <Icon source="check" size={20} color={t.status.gnssFixed} />
+        </View>
+        <View style={[styles.divider, { backgroundColor: t.outlineVariant }]} />
+        <View style={styles.row}>
+          <Icon source="web" size={22} color={t.inkVariant} />
+          <View style={styles.flex}>
+            <Text variant="bodyLarge" style={[styles.title, { color: t.ink }]}>
+              Over the internet
+            </Text>
+            <Text variant="bodySmall" style={{ color: t.inkVariant }}>
+              Anywhere with a signal: phone to phone when possible, otherwise through our free relay
+            </Text>
+          </View>
+          <Switch
+            value={internet}
+            onValueChange={setInternet}
+            accessibilityLabel="Over the internet"
+            testID="team-create-internet"
+          />
+        </View>
+      </View>
       {error !== null && (
         <HelperText type="error" visible>
           {error}
         </HelperText>
       )}
-      <View style={styles.gap} />
-      <Note icon="shield-lock-outline">
-        The team lives only on its members’ phones, end-to-end encrypted. You’re its organizer: you
-        and the admins you choose manage who’s in it.
-      </Note>
+      <Text variant="bodySmall" style={{ color: t.inkVariant }}>
+        You’re its organizer: you and the admins you choose manage who’s in it.
+      </Text>
     </TeamScreenFrame>
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   helper: { marginTop: -8, paddingHorizontal: 0 },
-  gap: { height: 4 },
+  flex: { flex: 1, minWidth: 0 },
+  title: { fontWeight: '600' },
+  card: { borderWidth: StyleSheet.hairlineWidth * 2, borderRadius: 12, paddingHorizontal: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  divider: { height: StyleSheet.hairlineWidth },
 });

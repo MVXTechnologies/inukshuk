@@ -11,7 +11,7 @@ import { activeProfile, profileLine } from '@core/gnss/config';
 import { projectDatumOption } from '@core/gnss/projectDatum';
 import { useGnssStore, type NtripState } from '@state/gnssStore';
 import { useRouter, type Href } from 'expo-router';
-import { List, Switch } from 'react-native-paper';
+import { List, Switch } from '@ui/paper';
 
 import { NavRow, SwitchRow } from '../../map/components/mapSheet';
 

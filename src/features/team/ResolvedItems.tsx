@@ -8,11 +8,16 @@ import { canResolve } from '@core/teamui/pins';
 import { teamService, useTeamStore } from '@state/teamStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { StyleSheet, View } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import { Button, Text } from '@ui/paper';
 
 import { MemberAvatar, SectionLabel } from './components';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 export function ResolvedItems() {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const view = useTeamStore((s) => s.view);
   const pins = useTeamStore((s) => s.pins);
@@ -59,7 +64,11 @@ export function ResolvedItems() {
         const may = canResolve({ author: r.owner, mentions: r.mentions }, view.me, view.isAdmin);
         return (
           <View key={r.key} style={[styles.row, { backgroundColor: t.surfaceVariant }]}>
-            <MemberAvatar initials={m?.initials ?? '?'} color={m?.color ?? t.inkMuted} size={30} />
+            <MemberAvatar
+              initials={m?.initials ?? '?'}
+              color={m?.color ?? t.inkMuted}
+              size={sz(30)}
+            />
             <View style={styles.flex}>
               <Text variant="labelMedium" style={{ color: t.inkMuted }}>
                 {`${r.kind} · ${m?.name ?? 'A teammate'}`}
@@ -86,7 +95,7 @@ export function ResolvedItems() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1, gap: 2 },
   group: { gap: 8 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 12 },

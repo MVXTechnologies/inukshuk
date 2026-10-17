@@ -1,10 +1,11 @@
 import { POINT_CHIP_MAX_W, type PointChipHit } from '@core/map/mapTap';
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 
 import { palette } from '@ui/tokens';
 import { weatherChrome as wc } from '../weather/weatherChrome';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The one tap-anywhere readout surface on the map (marine wave D §D1/D-5):
@@ -60,6 +61,8 @@ export function MapPointChip({
    */
   shiftX?: number;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   return (
     <View
       style={styles.wrap}
@@ -92,11 +95,15 @@ export function MapPointChip({
 
 /** The long-press point under its docked card (#757 c): the chip's anchor dot, larger. */
 export function MapPointDot() {
+  const styles = useScaledStyles(stylesSheet);
+
   return <View style={styles.pointDot} pointerEvents="none" testID="map-point-dot" />;
 }
 
 /** One readout line inside {@link MapPointChip}. */
 export function MapPointLine({ text, muted = false }: { text: string; muted?: boolean }) {
+  const styles = useScaledStyles(stylesSheet);
+
   return (
     <Text style={[styles.chipText, muted && styles.chipTextMuted]} numberOfLines={1}>
       {text}
@@ -225,6 +232,8 @@ function MapPointChipActionRow({
   onConvert,
   onClaimTouch,
 }: MapPointChipActions) {
+  const styles = useScaledStyles(stylesSheet);
+
   return (
     <View style={styles.actions} pointerEvents="box-none">
       <ActionButton
@@ -270,6 +279,8 @@ function ActionButton({
   /** The sage fill of the mockup's Convert button. */
   accent?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   return (
     <View
       style={[styles.action, accent && styles.actionAccent]}
@@ -289,7 +300,7 @@ function ActionButton({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   wrap: { alignItems: 'center' },
   chip: {
     backgroundColor: wc.panel,

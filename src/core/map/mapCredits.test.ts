@@ -102,7 +102,10 @@ it('lists the drawn extensions after weather and before marine, in draw order', 
   });
   const tides = lines.find((l) => l.id === 'tides');
   expect(tides).not.toHaveProperty('link');
-  expect(tides?.credit).toMatch(/^NOAA\/NOS\/CO-OPS · Shom, 2025\..*Not for navigation$/);
+  // Only CHS's licence asks for a navigation notice (#764): it closes the CHS clause.
+  expect(tides?.credit).toMatch(
+    /^NOAA\/NOS\/CO-OPS · Shom, 2025\..*Canadian Hydrographic Service.*not to be used for navigation$/,
+  );
 });
 
 it('gives every line a non-empty label and credit', () => {

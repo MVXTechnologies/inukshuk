@@ -5,9 +5,10 @@ import { useOnMapTrailStore } from '@state/onMapTrailStore';
 import { palette } from '@ui/tokens';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
-import { Icon, Text, TouchableRipple } from 'react-native-paper';
+import { Icon, Text, TouchableRipple } from '@ui/paper';
 
 import { weatherChrome as wc } from '../weather/weatherChrome';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The trail shown with "On map" (#710), or null: none without one, and never
@@ -34,6 +35,8 @@ export function useOnMapTrailChip(): OnMapTrailRef | null {
  * `onmap-trail-close` (a11y label "Close trail on map").
  */
 export function OnMapTrailChip({ trail }: { trail: OnMapTrailRef }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const router = useRouter();
   const close = useOnMapTrailStore((s) => s.close);
   return (
@@ -66,7 +69,7 @@ export function OnMapTrailChip({ trail }: { trail: OnMapTrailRef }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',

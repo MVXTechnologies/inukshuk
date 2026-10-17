@@ -32,8 +32,9 @@ import { palette } from '@ui/tokens';
 import { useSettingsStore } from '@state/settingsStore';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
-import { Button, ProgressBar, Switch, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, ProgressBar, Switch, Text, TextInput, useTheme } from '@ui/paper';
 import type { ComposePhase, MakeMapOptions } from './composeMapPdf';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The map maker as an editor (#349).
@@ -99,6 +100,8 @@ export function MapMakerEditor({
   onCreate,
   onCancel,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const [preset, setPreset] = useState<'a4' | 'letter'>('a4');
   const [orientation, setOrientation] = useState<PageOrientation>('portrait');
@@ -739,7 +742,10 @@ export function MapMakerEditor({
   );
 }
 
-const Band = ({ style }: { style: ViewStyle }) => <View style={[styles.band, style]} />;
+const Band = ({ style }: { style: ViewStyle }) => {
+  const styles = useScaledStyles(stylesSheet);
+  return <View style={[styles.band, style]} />;
+};
 
 /**
  * Four scrims around the sheet. RN has no "cut a hole in this view", and the
@@ -772,7 +778,7 @@ function Mask({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { ...StyleSheet.absoluteFill, zIndex: 10 },
   stage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   band: { position: 'absolute', backgroundColor: palette.surface },

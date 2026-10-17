@@ -78,7 +78,7 @@ import {
   useState,
 } from 'react';
 import { AppState, Linking, Share, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { Banner, Snackbar, useTheme } from 'react-native-paper';
+import { Banner, Snackbar, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
 import { MapMakerEditor, type EditorCamera } from './mapmaker/MapMakerEditor';
@@ -107,7 +107,12 @@ import { useFollowTrail } from './nav/useFollowTrail';
 import { useNavigationStore } from '@state/navigationStore';
 import { DestinationMarkerPin } from './components/DestinationMarkerPin';
 import { MapCreditsButton, MapCreditsSheet } from './components/MapCredits';
-import { MAP_EDGE_INSET, MAP_LANE_INSET } from '@core/map/mapChrome';
+import {
+  MAP_EDGE_INSET,
+  MAP_LANE_INSET,
+  chromeScale,
+  teamPillSpansLeft,
+} from '@core/map/mapChrome';
 import { mapCredits } from '@core/map/mapCredits';
 import { bareTapAfterFocus } from '@core/map/mapTap';
 import { centreCursorPoint } from '@core/map/centreCursor';
@@ -127,6 +132,7 @@ import { cardCameraCenterPx } from '@core/map/cardCamera';
 import {
   ExtensionCardDock,
   ExtensionImages,
+  ExtensionOverlays,
   extensionHitPosition,
   extensionRecenters,
   hitTestExtensions,
@@ -162,6 +168,7 @@ import { ReceiverFollow } from '@features/gnss/ReceiverFollow';
 import { ReceiverMapOverlay } from '@features/gnss/ReceiverMapOverlay';
 import { TeamMapLayers } from '@features/team/map/TeamMapLayers';
 import { TeamDrawLayers } from '@features/team/draw/TeamDrawLayers';
+import { hitTestNotes, NoteCallouts } from '@features/team/notes/NoteCallouts';
 import {
   drawCreditsSheetBottom,
   TeamDrawMode,
@@ -289,6 +296,8 @@ import { useTrackHeat } from './useTrackHeat';
 import { useGeoJsonString } from './useGeoJsonString';
 import { MarineDisclaimerChip } from './marine/MarineDisclaimerChip';
 import { MarinePackBanner } from './marine/MarinePackBanner';
+import { UpdatePromptBanner } from './components/UpdatePromptBanner';
+import { useStoreUpdatePrompt } from './useStoreUpdatePrompt';
 import { DepthPointLine } from './marine/DepthPointLine';
 import { MarineLegend } from './marine/MarineLegend';
 import { marineChartSource, useMarineChart } from './marine/useMarineChart';
@@ -320,6 +329,8 @@ import { useMapSnackbars } from './useMapSnackbars';
 import { RecordingCheckPanel } from '@features/recording/RecordingCheckPanel';
 import { useRecordingCheck } from '@features/recording/useRecordingCheck';
 import { useMapDrawing } from './draw/useMapDrawing';
+import { useDisplayScale, useScaledStyles } from '@ui/displayScale';
+import { useMapChrome } from './useMapChrome';
 
 /** Kept out of the 3D drape: the 2D tilted-relief pass (the mesh is the relief). */
 const TERRAIN_DRAPE_DROP_IDS: readonly string[] = [TILT_RELIEF_LAYER_ID];
@@ -436,6 +447,13 @@ function useThrottledLineFeature(
 let holdHintShown = false;
 
 export function MapScreen() {
+  const styles = useScaledStyles(stylesSheet);
+  // #760: the chrome's insets, lane and top gap at the Display size.
+  const mapChrome = useMapChrome();
+  const { sz, sp, factor: displayFactor } = useDisplayScale();
+  const topGap = sp(8);
+  const lane = { left: mapChrome.laneInset, right: mapChrome.laneInset };
+
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraRef>(null);
@@ -731,6 +749,21 @@ export function MapScreen() {
         : { zoom, latitude },
     );
   }, []);
+  // The settled camera for the extensions' live overlays (Tide stations'
+  // water levels, #764): a new object only when the zoom or centre moved.
+  const overlayZoom = scaleAt?.zoom ?? null;
+  const extensionView = useMemo(
+    () =>
+      overlayZoom !== null && mapCenter !== null
+        ? { zoom: overlayZoom, center: [mapCenter.longitude, mapCenter.latitude] as const }
+        : null,
+    [overlayZoom, mapCenter],
+  );
+  const queryRendered = useCallback(
+    (layers: string[]): Promise<unknown[]> =>
+      mapRef.current?.queryRenderedFeatures({ layers }) ?? Promise.resolve([]),
+    [],
+  );
   // What the trail lines and heatmap are built for (#494): the settled
   // viewport plus a margin, sticky across small moves (see useCullRegion).
   const cullRegion = useCullRegion(settledBounds, scaleAt?.zoom ?? null);
@@ -1169,6 +1202,9 @@ export function MapScreen() {
 
   // Plain messages and the EDIT / UNDO bar share one slot (useMapSnackbars).
   const mapSnacks = useMapSnackbars();
+  // The "New version" prompt (2.7.0): null unless the store has a newer
+  // binary; it hides itself while recording or during an SOS.
+  const updatePrompt = useStoreUpdatePrompt();
   const { message: snack, show: showSnack, dismiss: dismissSnack } = mapSnacks.plain;
   /** Positions in the user's coordinate format (#677): the point chip and the copy actions. */
   const formatCoords = useCoordinateFormatter();
@@ -1592,11 +1628,13 @@ export function MapScreen() {
     if (!inspectId || !inspectPoints || !bbox) return;
     setFollowUser(false);
     const bounds = toLngLatBounds(bbox);
+    // #760: the chrome-clearing parts follow the Display size.
+    const cs = chromeScale(displayFactor);
     const padding = {
-      top: insets.top + 80,
-      left: 40,
-      right: 40,
-      bottom: (inspectPanelHeight ?? INSPECT_PANEL_H_ESTIMATE) + INSPECT_PANEL_PAD,
+      top: insets.top + Math.round(80 * cs),
+      left: Math.round(40 * cs),
+      right: Math.round(40 * cs),
+      bottom: (inspectPanelHeight ?? INSPECT_PANEL_H_ESTIMATE) + Math.round(INSPECT_PANEL_PAD * cs),
     };
     const fit = () => cameraRef.current?.fitBounds(bounds, { duration: 600, padding });
     // Capture the camera as it stood BEFORE this selection-driven fit — but
@@ -2178,6 +2216,20 @@ export function MapScreen() {
           photoTap.run();
           return;
         }
+        const noteHit = await hitTestNotes(map, px, py);
+        if (noteHit?.kind === 'note') {
+          const p = useTeamStore
+            .getState()
+            .pins.find((x) => x.owner === noteHit.owner && x.id === noteHit.id);
+          if (p) {
+            useTeamPick.getState().choose({
+              anchor: { kind: 'pin', owner: p.owner, id: p.id },
+              label: 'A note',
+              at: [p.lng, p.lat],
+            });
+            return;
+          }
+        }
         const markHit = await hitTestTeamMarks(map, px, py);
         if (markHit?.kind === 'cluster') {
           const split = await clusterExpansionZoom(markHit.id);
@@ -2335,6 +2387,28 @@ export function MapScreen() {
       // everything else (the map extensions, trails, heat).
       if (photoTap !== null && Date.now() - photoTap.at < PHOTO_TAP_FRESH_MS) {
         photoTap.run();
+        return;
+      }
+
+      // Team notes (#706): drawn over the team's marks, so asked first. A
+      // note opens its card; a tile of notes zooms in to split them.
+      const noteHit = await hitTestNotes(map, px, py);
+      if (noteHit !== null) {
+        drawingRef.current.closeAreaCard();
+        setPointAt(null);
+        setViewWp(null);
+        setForecastAt(null);
+        setExtensionHit(null);
+        useTeamDrawStore.getState().openCard(null);
+        if (noteHit.kind === 'note') {
+          useTeamMapSelection
+            .getState()
+            .select({ kind: 'pin', owner: noteHit.owner, id: noteHit.id });
+        } else {
+          const zoom = (await mapRef.current?.getZoom().catch(() => null)) ?? null;
+          if (zoom !== null && zoom < 17) zoomMapTo(noteHit.lngLat, Math.min(zoom + 2, 18));
+          else router.push('/team/notes' as never);
+        }
         return;
       }
 
@@ -2638,7 +2712,7 @@ export function MapScreen() {
           const centerPx = cardCameraCenterPx({
             featurePx: [px[0], px[1]],
             mapSize: size,
-            visibleTop: insets.top + MAP_TOP_CHROME_PX,
+            visibleTop: insets.top + Math.round(MAP_TOP_CHROME_PX * chromeScale(displayFactor)),
             visibleBottom: cardTop,
           });
           if (centerPx === null) return;
@@ -2654,7 +2728,7 @@ export function MapScreen() {
         }
       })();
     },
-    [insets.top, setFollowUser],
+    [insets.top, setFollowUser, displayFactor],
   );
 
   const onMapPress = useCallback(
@@ -2904,11 +2978,31 @@ export function MapScreen() {
     !searchOpen;
   // The top-centre chip rows (lane, On map #710, receiver) under the slot.
   const topChips = topChipLayout({
+    factor: displayFactor,
     teamBarHeight: teamBarShown ? teamBarHeight : 0,
     laneTaken: topLaneTaken,
     onMapChip: onMapChip !== null,
   });
   const topChipOffset = topChips.lane;
+  // #760: at Large the top slot runs from the left edge inset to the rail
+  // (owner 2026-10-16), and the compass drops below whatever holds the slot.
+  const slotSpansLeft = teamPillSpansLeft(displayFactor);
+  const searchPillUp =
+    makeMapState === null &&
+    heatSelection === null &&
+    !selecting &&
+    !drawing.active &&
+    !teamDrawing &&
+    movingWp === null &&
+    (shownTrail !== null || (!searchOpen && searchSlot === 'search'));
+  const searchLane = slotSpansLeft ? { ...lane, left: mapChrome.edgeInset } : lane;
+  const compassDrop = !slotSpansLeft
+    ? 0
+    : teamBarShown
+      ? teamBarHeight + topGap
+      : searchPillUp
+        ? sz(48) + topGap
+        : 0;
   // The settled camera (see the notes inline). Programmatic settles that
   // the compass streams in heading-up are thinned (useSettleThrottle); the
   // gesture-pause controller still sees every one (see onRegionDidChange).
@@ -3384,6 +3478,15 @@ export function MapScreen() {
             {/* The map extensions: the symbols their layers name, and a ring
               under the feature whose card is up. */}
             <ExtensionImages shown={shownExtensions} dark={theme.dark} />
+            <ExtensionOverlays
+              shown={shownExtensions}
+              dark={theme.dark}
+              glyphs={style.glyphs}
+              beforeId={MARKERS_ANCHOR}
+              view={extensionView}
+              offline={offlineOnly}
+              queryRendered={queryRendered}
+            />
             {extensionHit !== null &&
               shownExtensions.includes(extensionHit.key) &&
               renderExtensionSelection(extensionHit, {
@@ -3570,6 +3673,8 @@ export function MapScreen() {
             {teamMarks}
             {teamTrailLayers}
             {teamField}
+            {/* Team notes (#706): callouts over the team's marks. */}
+            <NoteCallouts zoom={scaleAt?.zoom ?? null} />
             {/* Revamp puck, replacing MapLibre's default one (children do):
               halo, ring and dot in the scheme's puck tokens, plus the amber
               uncertainty ring on a weak signal while recording. */}
@@ -3644,7 +3749,18 @@ export function MapScreen() {
         )}
 
         {/* Top-left compass (decision 1): snug to the safe area. */}
-        <View style={[styles.topLeft, { top: insets.top + 8 }]} pointerEvents="box-none">
+        <View
+          style={[
+            styles.topLeft,
+            {
+              left: mapChrome.edgeInset,
+              // At Large the top slot (team bar or search pill) spans over
+              // this corner (#760): the compass sits just below it instead.
+              top: insets.top + topGap + compassDrop,
+            },
+          ]}
+          pointerEvents="box-none"
+        >
           <CompassBadge
             onPress={resetNorth}
             mapBearing={mapBearing}
@@ -3694,7 +3810,10 @@ export function MapScreen() {
           !drawing.active &&
           !teamDrawing &&
           movingWp === null && (
-            <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
+            <View
+              style={[styles.searchPill, searchLane, { top: insets.top + topGap }]}
+              pointerEvents="box-none"
+            >
               {/* A shown long-distance trail takes the pill's place (#467). */}
               {shownTrail !== null ? (
                 <ShownTrailPill shown={shownTrail} />
@@ -3707,13 +3826,13 @@ export function MapScreen() {
         {/* Team mode (#707): the team status bar in the search slot. */}
         {teamBarShown && (
           <TeamStatusBar
-            top={insets.top + 8}
+            top={insets.top + topGap}
             here={location}
             onNavigate={(latitude, longitude) => setDestination({ latitude, longitude })}
           />
         )}
         {searchOpen && !drawing.active && (
-          <View style={[styles.searchSheet, { top: insets.top + 8 }]} pointerEvents="box-none">
+          <View style={[styles.searchSheet, { top: insets.top + topGap }]} pointerEvents="box-none">
             <PlaceSearchSheet
               origin={location}
               bias={searchBias}
@@ -3729,7 +3848,7 @@ export function MapScreen() {
           like the GPS warning, never a Portal/Dialog. */}
         {marineActive && (
           <View
-            style={[styles.marineChip, { top: insets.top + topChipOffset }]}
+            style={[styles.marineChip, lane, { top: insets.top + topChipOffset }]}
             pointerEvents="none"
           >
             <MarineDisclaimerChip />
@@ -3742,7 +3861,7 @@ export function MapScreen() {
           destination exists; the ✕ on it is the way out. */}
         {destination !== null && !marineActive && (
           <View
-            style={[styles.topCenterChip, { top: insets.top + topChipOffset }]}
+            style={[styles.topCenterChip, lane, { top: insets.top + topChipOffset }]}
             pointerEvents="box-none"
           >
             <DestinationChip onClear={() => setDestination(null)} />
@@ -3750,7 +3869,7 @@ export function MapScreen() {
         )}
         {follow !== null && !marineActive && (
           <View
-            style={[styles.topCenterChip, { top: insets.top + topChipOffset }]}
+            style={[styles.topCenterChip, lane, { top: insets.top + topChipOffset }]}
             pointerEvents="box-none"
           >
             <FollowChip name={follow.name} onStop={stopFollowing} />
@@ -3761,7 +3880,7 @@ export function MapScreen() {
           (#707) never covers it. */}
         {onMapChip !== null && makeMapState === null && (
           <View
-            style={[styles.topCenterChip, { top: insets.top + topChips.onMap }]}
+            style={[styles.topCenterChip, lane, { top: insets.top + topChips.onMap }]}
             pointerEvents="box-none"
           >
             <OnMapTrailChip trail={onMapChip} />
@@ -3779,7 +3898,7 @@ export function MapScreen() {
         {/* Also hidden while the team menu runs down the same edge. */}
         {makeMapState === null && heatSelection === null && !teamOwnsRail && movingWp === null && (
           <MapControlsRail
-            top={insets.top + 8}
+            top={insets.top + topGap}
             viewToggle={
               betaTerrain3d ? { is3d: viewToggle.is3d, onPress: viewToggle.onPress } : undefined
             }
@@ -3851,7 +3970,7 @@ export function MapScreen() {
         {permission === 'denied' && (
           <Banner
             visible
-            style={[styles.banner, { top: insets.top + 8 }]}
+            style={[styles.banner, { top: insets.top + topGap }]}
             icon="map-marker-off"
             actions={[]}
           >
@@ -3863,7 +3982,7 @@ export function MapScreen() {
         {permission === 'granted' && unavailableReason !== null && (
           <Banner
             visible
-            style={[styles.banner, { top: insets.top + 8 }]}
+            style={[styles.banner, { top: insets.top + topGap }]}
             icon="map-marker-off"
             actions={[]}
           >
@@ -4007,6 +4126,22 @@ export function MapScreen() {
               offline={marineChart.chart?.offline ?? false}
             />
           )}
+          {/* The "New version" prompt (2.7.0): one line + Update, in this
+            column like the marine offer (never a Dialog or Portal). Not while
+            the region selector, the map maker or a drawing owns the bottom. */}
+          {updatePrompt !== null &&
+            !selecting &&
+            makeMapState === null &&
+            !drawing.active &&
+            !teamDrawing && (
+              <UpdatePromptBanner
+                text={updatePrompt.text}
+                action={updatePrompt.action}
+                actionLabel={updatePrompt.actionLabel}
+                onAction={updatePrompt.onAction}
+                onDismiss={updatePrompt.onDismiss}
+              />
+            )}
           {/* Offline marine pack offer (wave D §D4): a quiet Surface row in
             the bottom stack — never a Dialog, never a Portal (One UI
             touch-swallow), and snoozed for 30 days by "Not now". */}
@@ -4112,7 +4247,7 @@ export function MapScreen() {
         {/* "Night on · tap to exit" (Night-Mode board), under the search pill. */}
         {displayCondition === 'night' && makeMapState === null && (
           <View
-            style={[styles.topCenterChip, { top: insets.top + topChipOffset }]}
+            style={[styles.topCenterChip, lane, { top: insets.top + topChipOffset }]}
             pointerEvents="box-none"
           >
             <NightExitPill />
@@ -4163,7 +4298,7 @@ export function MapScreen() {
         )}
         {recordingPanelUp && recordingPhoto.toast && (
           <View
-            style={waypointCardDockStyle(true, panelHeight, stripLift)}
+            style={waypointCardDockStyle(true, panelHeight, stripLift, displayFactor)}
             pointerEvents="box-none"
           >
             <CapturedPhotoToast toast={recordingPhoto.toast} onUndo={recordingPhoto.undo} />
@@ -4182,7 +4317,7 @@ export function MapScreen() {
           a tapped teammate's or shared waypoint's card. */}
         {makeMapState === null && (
           <TeamMapOverlay
-            fabBottom={teamFabBottom(bottomColumnLift + stripLift, bottomColumnH)}
+            fabBottom={teamFabBottom(bottomColumnLift + stripLift, bottomColumnH, displayFactor)}
             panelTop={insets.top + 4}
             snackStyle={liftedSnackbarStyle(bottomColumnLift + stripLift, bottomColumnH)}
             bandPlace={alertBandPlace({
@@ -4207,7 +4342,12 @@ export function MapScreen() {
             }}
             here={location}
             cardSlotFree={cardSlotFree && viewWaypoint === null && extensionHit === null}
-            cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+            cardStyle={waypointCardDockStyle(
+              recordingPanelUp,
+              panelHeight,
+              stripLift,
+              displayFactor,
+            )}
             cardFloating={recordingPanelUp}
             onNavigate={(latitude, longitude) => setDestination({ latitude, longitude })}
             screenFocused={isFocused}
@@ -4223,12 +4363,12 @@ export function MapScreen() {
           onCredits={setCreditsOpen}
         />
         <TeamPickOverlay
-          top={insets.top + 8}
-          cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+          top={insets.top + topGap}
+          cardStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift, displayFactor)}
         />
         {/* A tapped photo's bottom card (app-wide, owner 2026-10-07). */}
         <PhotoBottomCard
-          dockStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+          dockStyle={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift, displayFactor)}
         />
 
         {/* Right-edge activity carousel: opened by tapping a "hot" heat spot
@@ -4341,7 +4481,7 @@ export function MapScreen() {
 
         {cardSlotFree && movingWp === null && viewWaypoint !== null && (
           <View
-            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift, displayFactor)}
             pointerEvents="box-none"
             testID="waypoint-card-dock"
           >
@@ -4397,7 +4537,7 @@ export function MapScreen() {
           pointAt !== null &&
           pointAsCard && (
             <View
-              style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+              style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift, displayFactor)}
               pointerEvents="box-none"
               testID="point-card-dock"
             >
@@ -4427,7 +4567,7 @@ export function MapScreen() {
         {/* A cluster's pins at the camera's cap (#685): pick one to open its card. */}
         {cardSlotFree && movingWp === null && (
           <View
-            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift, displayFactor)}
             pointerEvents="box-none"
           >
             <WaypointClusterSheet
@@ -4442,7 +4582,7 @@ export function MapScreen() {
         {/* Several trails / areas under one tap (#745): pick one. */}
         {cardSlotFree && movingWp === null && (
           <View
-            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift, displayFactor)}
             pointerEvents="box-none"
           >
             <OverlapChooserSheet
@@ -4467,7 +4607,7 @@ export function MapScreen() {
             <ExtensionCardDock
               key={extensionHit.key}
               hit={extensionHit}
-              style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift)}
+              style={waypointCardDockStyle(recordingPanelUp, panelHeight, stripLift, displayFactor)}
               dockRef={extensionDockRef}
               onLayout={() => {
                 // The dock's own y is relative to its container, not the map:
@@ -4606,7 +4746,7 @@ export function MapScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   // Top-left instrument column: the compass badge alone since the scale bar
   // moved to the bottom-left corner — no gap left floating under it.

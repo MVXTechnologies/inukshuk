@@ -2,9 +2,10 @@ import { locatorScene } from '@core/catalog/locatorSceneCache';
 import type { CatalogBbox } from '@core/catalog/schema';
 import { memo, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { useTheme } from '@ui/paper';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Offline locator thumbnail for a store row: the item's coverage rectangle
@@ -33,6 +34,8 @@ export const LocatorThumb = memo(function LocatorThumb({
   bbox: CatalogBbox | undefined;
   size: number;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const scene = useMemo(() => (bbox === undefined ? null : locatorScene(bbox, CANVAS_PX)), [bbox]);
 
@@ -89,7 +92,7 @@ export const LocatorThumb = memo(function LocatorThumb({
   );
 });
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   frame: { borderRadius: 8, overflow: 'hidden' },
   placeholder: { alignItems: 'center', justifyContent: 'center' },
 });

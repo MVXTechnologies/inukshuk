@@ -20,7 +20,11 @@ export interface TideSource {
   licenceUrl: string;
   /** Station page; `{id}` = the tile's `i`. */
   page: string;
-  /** The agency's own caution, shown on every card. */
+  /**
+   * The agency's own caution, as published. Shown only where the licence
+   * requires a notice (CHS's, in full on its card); the others ask for
+   * credit only (#764).
+   */
   disclaimer: string;
 }
 

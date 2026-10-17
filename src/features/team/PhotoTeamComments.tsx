@@ -8,11 +8,12 @@ import { teamService, useTeamStore } from '@state/teamStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { sendTeamComment } from './taskSend';
 import { TeamComments } from './TeamComments';
 import { useToggleTask } from './useToggleTask';
+import { useScaledStyles } from '@ui/displayScale';
 
 export function PhotoTeamComments({
   photoId,
@@ -22,6 +23,8 @@ export function PhotoTeamComments({
   /** Every comment (the photo card scrolls them), not just the last four. */
   all?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const view = useTeamStore((s) => s.view);
   const photo = useTeamStore((s) => s.photos.find((p) => p.id === photoId));
@@ -72,7 +75,7 @@ export function PhotoTeamComments({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   wrap: { gap: 6, marginTop: 8 },
   head: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 });

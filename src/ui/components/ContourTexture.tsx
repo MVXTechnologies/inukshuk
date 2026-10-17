@@ -2,6 +2,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The paper screens' contour texture (revamp §5, boards `After-Library.html`
@@ -26,6 +27,8 @@ export function ContourTexture({
   variant: 'header' | 'empty';
   top?: number;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const height = variant === 'header' ? 170 : 300;
   return (
@@ -62,6 +65,6 @@ export function HeaderContours() {
   return <ContourTexture variant="header" top={insets.top} />;
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   texture: { position: 'absolute', left: 0, right: 0, overflow: 'hidden' },
 });

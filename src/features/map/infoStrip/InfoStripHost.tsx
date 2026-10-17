@@ -17,6 +17,7 @@ import { useRealSafeAreaInsets } from './InfoStripInsets';
 import { useCurrentStrip } from './stripSettings';
 import { openStripEditor, setStripRuntime, useStripRuntime } from './stripRuntime';
 import { useStripSnapshot, type StripInputs } from './useStripData';
+import { useScaledStyles } from '@ui/displayScale';
 
 export interface InfoStripHostProps extends StripInputs {
   /** The bottom column's lift: the recording panel, a trail sheet or a drawing panel. */
@@ -69,6 +70,8 @@ export const InfoStripHost = memo(function InfoStripHost({
   onOpenTarget,
   ...inputs
 }: InfoStripHostProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const strip = useCurrentStrip();
   const units = useSettingsStore((s) => s.units);
   const heroFields = useStripRuntime((s) => s.heroFields);
@@ -172,7 +175,7 @@ export const InfoStripHost = memo(function InfoStripHost({
   );
 });
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // The bottom of the map's overlay order (overlayOrder.ts), so neither zIndex nor elevation.
   dock: { position: 'absolute', left: 0, right: 0 },
   top: { top: 0 },

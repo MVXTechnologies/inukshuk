@@ -18,7 +18,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import { Button, Text } from '@ui/paper';
 
 import { ActionSnackbar } from '../../../common/ActionSnackbar';
 import { useActionSnackbar } from '../../../common/useActionSnackbar';
@@ -39,6 +39,7 @@ import { FieldSettings } from './FieldSettings';
 import { PresetsPage, SaveStripPage } from './PresetsPage';
 import { RowsEditor } from './RowsEditor';
 import { MAP_OVERLAY_Z } from '../../overlayOrder';
+import { useScaledStyles } from '@ui/displayScale';
 
 export type EditorPage =
   | { kind: 'main' }
@@ -105,6 +106,8 @@ export function InfoStripEditor({
   /** The map screen is in front: only then does Android Back belong to the editor. */
   focused?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { accent, onAccent } = useSheetAccent();
   const router = useRouter();
@@ -449,7 +452,7 @@ export function InfoStripEditor({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   dim: { backgroundColor: 'rgba(20,24,28,0.35)', zIndex: MAP_OVERLAY_Z.editorSheet },
   sheet: {
     position: 'absolute',

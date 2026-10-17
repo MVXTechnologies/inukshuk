@@ -8,16 +8,17 @@ import {
 import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
-import { LibrarySheet, SheetRow, sheetStyles } from './LibrarySheet';
+import { LibrarySheet, SheetRow, sheetStylesSheet } from './LibrarySheet';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The Share sheet (#711): one choice in 2.6.1, "Send a copy", which says
  * exactly what will go before the system share sheet opens: the file name,
  * what is inside and the size, then the contents of a zip. Catalog maps are
- * named as links, never files (their licence). Live sharing (#712) will add
- * a row above this one in 2.7.0; no teaser until then (owner, 2026-10-14).
+ * named as links, never files (their licence). For a folder or a single
+ * item, "Share live" (#712) sits above it.
  */
 
 const PLAN_ICON: Record<SharePlan['kind'], string> = {
@@ -46,6 +47,7 @@ export function ShareSheet({
   busy,
   onSend,
   onClose,
+  live,
 }: {
   visible: boolean;
   focused: boolean;
@@ -58,7 +60,13 @@ export function ShareSheet({
   busy: boolean;
   onSend: () => void;
   onClose: () => void;
+  /** "Share live" (#712), for a folder or a single item. */
+  live?: { label: string; detail: string; onPress: () => void };
 }) {
+  const sheetStyles = useScaledStyles(sheetStylesSheet);
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   if (plan === null) return null;
   const [what, meta] = sendCopyLines(plan, bytes);
@@ -74,9 +82,25 @@ export function ShareSheet({
       onClose={onClose}
       testID="library-share-sheet"
     >
+      {live !== undefined && (
+        <SheetRow
+          big
+          accent
+          icon={<Icon source="sync" size={26} color={t.ink} />}
+          label={live.label}
+          detail={
+            <Text numberOfLines={2} style={[sheetStyles.detail, { color: t.inkMuted }]}>
+              {live.detail}
+            </Text>
+          }
+          trailing={<Icon source="chevron-right" size={24} color={t.inkMuted} />}
+          onPress={live.onPress}
+          testID="library-share-live"
+        />
+      )}
       <SheetRow
         big
-        accent
+        accent={live === undefined}
         icon={<Icon source={PLAN_ICON[plan.kind]} size={26} color={t.ink} />}
         label="Send a copy"
         detail={
@@ -126,7 +150,7 @@ export function ShareSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   files: { marginLeft: 82, marginRight: 20, gap: 2 },
   fileLine: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 18 },
   fileLabel: { flexShrink: 1, fontSize: 12.5, lineHeight: 18, fontWeight: '600' },

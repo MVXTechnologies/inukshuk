@@ -9,9 +9,10 @@ import { useMemo } from 'react';
 
 import { TideStationCard } from '../../map/components/TideStationCard';
 import { useChsStations } from '../../map/hooks/useChs';
-import { tideImages } from '../../map/tideImages';
+import { tideImages, tideLevelImages } from '../../map/tideImages';
 import { tideStationAt } from '../../map/tideTap';
 import type { ExtensionMapModule } from '../types';
+import { TideLevelsOverlay } from './levels';
 
 export const TIDES_MAP: ExtensionMapModule<TideStation> = {
   useStyleExtras(active, { offlineOnly }) {
@@ -19,7 +20,9 @@ export const TIDES_MAP: ExtensionMapModule<TideStation> = {
     const chs = useChsStations(active, offlineOnly);
     return useMemo(() => ({ chs }), [chs]);
   },
-  images: tideImages,
+  images: (theme) => ({ ...tideImages(theme), ...tideLevelImages(theme) }),
+  // "Show levels on the map" (#764): live labels beside the stations.
+  Overlay: TideLevelsOverlay,
   // Above the survey marks: a station wins over the marks round its harbour.
   hitTest: ({ map, px, py, lngLat }) => tideStationAt(map, px, py, lngLat),
   position: (station) => [station.lng, station.lat],

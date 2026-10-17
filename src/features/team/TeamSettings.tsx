@@ -10,7 +10,7 @@ import { selectChatUnread, useTeamStore } from '@state/teamStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
-import { List, Text } from 'react-native-paper';
+import { List, Text } from '@ui/paper';
 
 import { Note } from './components';
 import {
@@ -20,8 +20,11 @@ import {
   TeamYourTeamsOption,
 } from './options';
 import { openPeers, teamSyncLine } from './syncLine';
+import { useScaledStyles } from '@ui/displayScale';
 
 export function TeamSettings() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const { installedAt } = useExtensionPrefs('team');
@@ -43,17 +46,17 @@ export function TeamSettings() {
       badge={undefined}
       badgeIcon="account-group"
       badgeIconSize={22}
-      description="Share positions, waypoints and messages with your team — phone to phone, no server"
+      description="Share positions, waypoints and messages with your team, nearby or over the internet"
       legend={
         <Text variant="bodySmall" style={{ color: t.inkVariant }}>
-          Invite by SMS, link or QR code. Works on the same Wi-Fi or a phone’s hotspot, with no cell
-          signal. Teams end after 14 days unless extended.
+          Invite by SMS, link or QR code. Works over the internet, or on the same Wi-Fi or hotspot
+          with no cell signal. Teams end after 14 days unless extended.
         </Text>
       }
-      note="Free · end-to-end encrypted · nothing goes through an Inukshuk server"
+      note="Free"
       showLabel="Team mode on"
       switchDescription={(on) =>
-        on ? 'On · syncs with teammates nearby while the app is open' : 'Off · no team traffic'
+        on ? 'On · syncs with teammates while the app is open' : 'Off · no team traffic'
       }
       removeDescription="Stops team mode; your teams stay on this phone"
       removeMessage="Team mode stops and nothing is shared. Your teams stay on this phone until you leave them, and come back if you get the extension again."
@@ -83,6 +86,6 @@ export function TeamSettings() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   note: { marginHorizontal: 16, marginVertical: 8 },
 });

@@ -7,7 +7,8 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The optional once-a-year card at the top of the Library (#476, board
@@ -15,6 +16,8 @@ import { Text } from 'react-native-paper';
  * `SUPPORT_NUDGE_ENABLED` is on. Either answer hides it for 12 months.
  */
 export function SupportNudgeCard({ enabled = SUPPORT_NUDGE_ENABLED }: { enabled?: boolean }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const router = useRouter();
   const t = useSchemeTokens();
   const tracks = useLibraryStore((s) => s.tracks);
@@ -76,7 +79,7 @@ export function SupportNudgeCard({ enabled = SUPPORT_NUDGE_ENABLED }: { enabled?
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: {
     marginHorizontal: space.lg,
     marginTop: space.sm,

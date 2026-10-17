@@ -9,7 +9,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 import Svg, { Path } from 'react-native-svg';
 import { RegionPreviewThumb } from '../RegionPreviewThumb';
 import { usePreviewBbox } from './BaseMapCards';
@@ -22,6 +22,7 @@ import {
   useSheetWidth,
 } from './mapSheet';
 import { StepSlider } from './StepSlider';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /** See-through white's slider stops: Off, 25 %, 50 %, 75 %, 100 %. */
 const WHITE_KEY_STOPS = WHITE_KEY_LEVELS.map(whiteKeyLabel);
@@ -56,6 +57,12 @@ function Print() {
  * default for every PDF map; a map overrides it from its Library ⋮ menu.
  */
 export function PdfMapsPanel({ onBack }: { onBack: () => void }) {
+  // #760: drawings sized in dp follow the Display size.
+  const { sz: dsz } = useDisplayScale();
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const { accent } = useSheetAccent();
   const show = useSettingsStore((s) => s.showPdfOverlay);
@@ -114,10 +121,10 @@ export function PdfMapsPanel({ onBack }: { onBack: () => void }) {
               bbox={bbox}
               basemap="map"
               tileUrl={tileUrl}
-              size={SAMPLE_H - 2}
+              size={dsz(SAMPLE_H) - 2}
               width={sampleW - 2}
-              height={SAMPLE_H - 2}
-              radius={9}
+              height={dsz(SAMPLE_H) - 2}
+              radius={sz(9)}
             />
             {/* The white left on the paper at this stop. */}
             <View
@@ -144,7 +151,7 @@ export function PdfMapsPanel({ onBack }: { onBack: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   samples: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingBottom: 4 },
   swatch: { height: SAMPLE_H, borderRadius: 10, borderWidth: 1, overflow: 'hidden' },
   caption: { fontSize: 11.5, lineHeight: 15, marginTop: 3 },

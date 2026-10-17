@@ -29,12 +29,13 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Icon, Switch, Text, useTheme } from 'react-native-paper';
+import { Icon, Switch, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Polyline } from 'react-native-svg';
 import { HoldButton } from './HoldButton';
 import { setStripRuntime, useStripRuntime } from '../infoStrip/stripRuntime';
 import { InukshukGlyph } from '@ui/components/InukshukGlyph';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 interface Props {
   status: 'recording' | 'paused';
@@ -81,6 +82,12 @@ function splitUnit(text: string): { value: string; unit: string } {
  * keep their labels (Stop now needs a hold: flows use longPressOn).
  */
 export function RecordingPanel(props: Props) {
+  // #760: drawings sized in dp follow the Display size.
+  const { sz: dsz } = useDisplayScale();
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const {
     status,
     stats,
@@ -501,7 +508,7 @@ export function RecordingPanel(props: Props) {
         {gloveLocked ? (
           <View style={styles.controls}>
             <HoldButton
-              size={56}
+              size={sz(56)}
               onConfirm={() => onGloveLockChange(false)}
               accessibilityLabel="Unlock controls"
               accessibilityHint="Press and hold to unlock"
@@ -528,7 +535,7 @@ export function RecordingPanel(props: Props) {
             >
               <Icon
                 source={paused ? 'play' : 'pause'}
-                size={compact ? 20 : 22}
+                size={dsz(compact ? 20 : 22)}
                 color={theme.colors.onPrimary}
               />
               <Text
@@ -615,7 +622,7 @@ export function RecordingPanel(props: Props) {
               </Pressable>
             )}
             <HoldButton
-              size={56}
+              size={sz(56)}
               onConfirm={onStop}
               accessibilityLabel="Stop recording"
               accessibilityHint="Press and hold to stop"
@@ -674,6 +681,10 @@ function ElevationSoFar({
   muted: string;
   line: string;
 }) {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const [width, setWidth] = useState(0);
   const first = altitudes[0];
   const last = altitudes[altitudes.length - 1];
@@ -695,7 +706,7 @@ function ElevationSoFar({
         importantForAccessibility="no-hide-descendants"
       >
         {points !== '' && (
-          <Svg width={width} height={40}>
+          <Svg width={width} height={sz(40)}>
             <Polyline points={points} fill="none" stroke={line} strokeWidth={2} />
           </Svg>
         )}
@@ -704,7 +715,7 @@ function ElevationSoFar({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   sheet: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,

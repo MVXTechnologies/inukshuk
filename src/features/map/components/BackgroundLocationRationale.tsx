@@ -1,6 +1,7 @@
 import { StyleSheet, View } from 'react-native';
-import { Button, Icon, Surface, Text, useTheme } from 'react-native-paper';
+import { Button, Icon, Surface, Text, useTheme } from '@ui/paper';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   visible: boolean;
@@ -23,6 +24,8 @@ interface Props {
  * in light and dark mode.
  */
 export function BackgroundLocationRationale({ visible, onRespond }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   if (!visible) return null;
   return (
@@ -50,7 +53,7 @@ export function BackgroundLocationRationale({ visible, onRespond }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   scrim: {
     position: 'absolute',
     top: 0,

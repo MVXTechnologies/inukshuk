@@ -1,0 +1,24 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.inukshukappupdate'
+version = '1.0.0'
+
+android {
+  namespace 'expo.modules.inukshukappupdate'
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // Google Play In-App Updates. Adds no permission: its manifest and those of
+  // its dependencies (play core-common, play-services-basement/-tasks, the
+  // last two already in the app through expo-location) declare none.
+  // core-common adds one non-exported transparent activity that hosts Play's
+  // update dialog.
+  implementation 'com.google.android.play:app-update:2.1.0'
+}

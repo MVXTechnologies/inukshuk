@@ -5,7 +5,9 @@
     "tidal": "#D2302A",
     "halo": "#FFFFFF",
     "label": "#0B4F60",
-    "labelHalo": "#F7F3EA"
+    "labelHalo": "#F7F3EA",
+    "levelInk": "#FFFFFF",
+    "levelStale": "#9FC1C4"
   },
   "dark": {
     "station": "#4CC6DE",
@@ -13,6 +15,8 @@
     "tidal": "#FF6252",
     "halo": "#13171B",
     "label": "#9FE3F0",
-    "labelHalo": "#13171B"
+    "labelHalo": "#13171B",
+    "levelInk": "#0B1A1F",
+    "levelStale": "#295A65"
   }
 }

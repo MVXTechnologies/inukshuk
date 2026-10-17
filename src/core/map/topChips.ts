@@ -12,12 +12,24 @@
  * - **Receiver:** the external-receiver chip, below everything above.
  */
 
+import { scaleSize, scaleSpacing } from '@core/display/displayScale';
+
 /** The search pill's slot: its 8 dp top margin + 48 dp height + an 8 dp gap. */
 export const SEARCH_SLOT_OFFSET = 8 + 48 + 8;
-/** One chip row under another. */
+/** One chip row under another: a 36 dp chip and an 8 dp gap. */
 export const CHIP_ROW = 44;
 
+/** The slot and row at a Display size (#760): heights scale, gaps scale as spacing. */
+export function searchSlotOffset(factor = 1): number {
+  return scaleSpacing(8, factor) + scaleSize(48, factor) + scaleSpacing(8, factor);
+}
+export function chipRow(factor = 1): number {
+  return scaleSize(36, factor) + scaleSpacing(8, factor);
+}
+
 export interface TopChipInputs {
+  /** The Display size (#760); 1 when omitted. */
+  factor?: number;
   /** The team bar's measured column height (pill + its chip row); 0 when it is not shown. */
   teamBarHeight: number;
   /** The lane holds a chip (marine, destination, following, night). */
@@ -37,7 +49,10 @@ export interface TopChipLayout {
 
 /** Each top-centre row's offset from the safe-area top (see the module doc). */
 export function topChipLayout(i: TopChipInputs): TopChipLayout {
-  const lane = i.teamBarHeight > 0 ? 8 + i.teamBarHeight + 8 : SEARCH_SLOT_OFFSET;
-  const onMap = lane + (i.laneTaken ? CHIP_ROW : 0);
-  return { lane, onMap, receiver: onMap + (i.onMapChip ? CHIP_ROW : 0) };
+  const k = i.factor ?? 1;
+  const gap = scaleSpacing(8, k);
+  const row = chipRow(k);
+  const lane = i.teamBarHeight > 0 ? gap + i.teamBarHeight + gap : searchSlotOffset(k);
+  const onMap = lane + (i.laneTaken ? row : 0);
+  return { lane, onMap, receiver: onMap + (i.onMapChip ? row : 0) };
 }

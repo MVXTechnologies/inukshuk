@@ -1,0 +1,168 @@
+# The G7 screens (#705) that need no live relay, each asserted before its
+# review screenshot (review-team-internet-<screen>-${MODE}). Starts and ends
+# on the map, with a team open whose internet switch is on. Used by
+# team-internet.yaml, once in light and once in dark.
+appId: com.inukshuk.app
+---
+# The panel's connection chip → the Connection sheet (the one E2E line).
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: 'team-bar-pill'
+    timeout: 10000
+- tapOn:
+    id: 'team-bar-pill'
+- extendedWaitUntil:
+    visible:
+      id: 'team-panel-connection'
+    timeout: 5000
+# The chip is there because the team's switch is on. Its words follow the
+# path: "Internet" only once this phone reached the team's room on the real
+# relay, else "Looking for teammates" for a team of one (run 38972409026). The
+# flow needs no live relay, so it checks the chip itself, not its path.
+- assertVisible: '.*\. Connection details'
+- takeScreenshot: review-team-internet-panel-${MODE}
+- tapOn:
+    id: 'team-panel-connection'
+- extendedWaitUntil:
+    visible:
+      id: 'team-connection-card'
+    timeout: 5000
+- assertVisible: '.*End-to-end encrypted, on every path.*'
+- assertVisible:
+    id: 'team-connection-settings'
+- takeScreenshot: review-team-internet-sheet-${MODE}
+# Connection settings → the Connection screen.
+- tapOn:
+    id: 'team-connection-settings'
+- extendedWaitUntil:
+    visible:
+      id: 'team-connection-screen'
+    timeout: 5000
+- assertVisible:
+    id: 'team-internet-switch'
+- assertVisible: 'On for the whole team'
+- assertVisible:
+    id: 'team-always-relay-row'
+- assertVisible:
+    id: 'team-dial-open'
+- takeScreenshot: review-team-internet-connection-${MODE}
+- tapOn: 'Back'
+# Manage team: the Connection row, then an invite that works anywhere.
+- tapOn:
+    id: 'team-bar-pill'
+- tapOn:
+    id: 'team-panel-manage'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 5000
+- scrollUntilVisible:
+    element:
+      id: 'team-connection-row'
+    direction: DOWN
+- assertVisible: '.*Internet \+ nearby.*'
+- takeScreenshot: review-team-internet-hub-${MODE}
+- scrollUntilVisible:
+    element:
+      id: 'team-invite-button'
+    direction: UP
+- tapOn:
+    id: 'team-invite-button'
+- extendedWaitUntil:
+    visible:
+      id: 'team-invite-create'
+    timeout: 5000
+- tapOn:
+    id: 'team-invite-create'
+- extendedWaitUntil:
+    visible:
+      id: 'team-invite-qr'
+    timeout: 5000
+- assertVisible: '.*They can be anywhere.*'
+- assertVisible: '.*in person or on a call.*'
+- takeScreenshot: review-team-internet-invite-${MODE}
+- tapOn:
+    id: 'team-invite-done'
+- extendedWaitUntil:
+    visible:
+      id: 'team-hub-screen'
+    timeout: 5000
+- tapOn: 'Back'
+# New team: How phones connect, the internet on by default (then Cancel).
+- runFlow: team-settings-open.yaml
+- scrollUntilVisible:
+    element:
+      id: 'team-create-row'
+    direction: UP
+- tapOn:
+    id: 'team-create-row'
+- extendedWaitUntil:
+    visible:
+      id: 'team-create-screen'
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: 'team-create-internet'
+    direction: DOWN
+- assertVisible: 'Over the internet'
+- takeScreenshot: review-team-internet-create-${MODE}
+# The header's Back, not the footer's Cancel: the name field takes the focus
+# when New team opens, and its keyboard covers the footer (run 38982598827).
+# By id: with the keyboard up, Android's navigation Back (the IME's ⌄) is
+# named "Back" too and only closes the keyboard (run 39014661721's retry).
+# Never hideKeyboard here: with the keyboard already down it presses Back.
+- tapOn:
+    id: 'screen-back'
+# Back on Settings, which has no tab bar: back to Library.
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-create-screen'
+    timeout: 5000
+- tapOn: 'Back'
+# A newer app's invite (an invite flag this version doesn't know, 4): the join
+# screen asks for the update. Not flag 2: since G10 that is a shared folder's
+# invite, which this version reads (run 38987712071). inviteUpdate.test.ts
+# checks this very link.
+- runFlow: team-settings-open.yaml
+- tapOn:
+    id: 'team-join-row'
+- extendedWaitUntil:
+    visible:
+      id: 'team-join-paste'
+    timeout: 10000
+- tapOn:
+    id: 'team-join-paste'
+- inputText: 'https://inukshuk.mvxtechnologies.com/j#AQQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+- hideKeyboard
+- tapOn:
+    id: 'team-join-paste-go'
+- extendedWaitUntil:
+    visible:
+      id: 'team-join-newer'
+    timeout: 5000
+- assertVisible: 'This invite needs a newer Inukshuk'
+- assertVisible: 'Update'
+- takeScreenshot: review-team-internet-newer-${MODE}
+- tapOn:
+    id: 'team-join-newer-back'
+- extendedWaitUntil:
+    visible:
+      id: 'team-join-screen'
+    timeout: 5000
+# Join → Settings → Library, then the map (where this subflow ends).
+- tapOn: 'Back'
+- extendedWaitUntil:
+    notVisible:
+      id: 'team-join-screen'
+    timeout: 5000
+- tapOn: 'Back'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: 'team-bar-pill'
+    timeout: 10000

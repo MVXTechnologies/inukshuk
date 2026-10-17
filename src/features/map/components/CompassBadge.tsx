@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, useAnimatedValue } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { subscribeHeadingMotion } from '../headingMotion';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface CompassBadgeProps {
   /** Called when the badge is tapped (used to reset the map to north). */
@@ -51,6 +52,8 @@ const NEEDLE_BOX = 26;
  * continuous angle so a bearing crossing 0° never spins the long way round.
  */
 export function CompassBadge({ onPress, mapBearing, followHeading = false }: CompassBadgeProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const outline = useChromeOutline();
 
@@ -113,7 +116,7 @@ export function CompassBadge({ onPress, mapBearing, followHeading = false }: Com
         pointerEvents="none"
         style={[styles.needle, { transform: [{ rotate: northRotate }] }]}
       >
-        <Svg width={NEEDLE_BOX} height={NEEDLE_BOX} viewBox="0 0 24 24">
+        <Svg width="100%" height="100%" viewBox="0 0 24 24">
           <Path d="M12 2.5 16.2 12H7.8Z" fill={tokens.map.compassNorth} />
           <Path d="M12 21.5 7.8 12h8.4Z" fill={tokens.map.compassSouth} />
         </Svg>
@@ -122,7 +125,7 @@ export function CompassBadge({ onPress, mapBearing, followHeading = false }: Com
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   puck: {
     width: target.min,
     height: target.min,

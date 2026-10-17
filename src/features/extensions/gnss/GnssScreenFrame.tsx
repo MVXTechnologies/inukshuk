@@ -4,8 +4,9 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** The receiver extension's sub-screens: a back header and a scrolling body. */
 export function GnssScreenFrame({
@@ -20,6 +21,8 @@ export function GnssScreenFrame({
   footer?: ReactNode;
   testID?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -29,7 +32,14 @@ export function GnssScreenFrame({
       testID={testID}
     >
       <View style={styles.header}>
-        <HeaderAction icon="arrow-left" onPress={() => router.back()} accessibilityLabel="Back" />
+        <HeaderAction
+          icon="arrow-left"
+          onPress={() => router.back()}
+          accessibilityLabel="Back"
+          // E2E taps it by id: with the keyboard up, Android's own Back (the
+          // IME's ⌄) is also named "Back" and only closes the keyboard.
+          testID="screen-back"
+        />
         <Text accessibilityRole="header" style={[styles.title, { color: t.ink }]}>
           {title}
         </Text>
@@ -57,6 +67,8 @@ export function GnssScreenFrame({
 
 /** A section heading inside a sub-screen ("NEARBY · BLUETOOTH LE"). */
 export function SectionLabel({ children }: { children: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Text style={[styles.section, { color: t.inkVariant }]} accessibilityRole="header">
@@ -65,7 +77,7 @@ export function SectionLabel({ children }: { children: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   header: {
     minHeight: 52,

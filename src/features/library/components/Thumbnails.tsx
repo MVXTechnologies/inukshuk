@@ -4,8 +4,9 @@ import type { RouteThumbnail } from '@core/library/routeThumbnail';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
-import { Icon } from 'react-native-paper';
+import { Icon } from '@ui/paper';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** Thumbnail side (dp), board `After-Library.html`. */
 export const THUMB_SIZE = 56;
@@ -38,6 +39,8 @@ export const TrailThumbnail = memo(function TrailThumbnail({
   thumb: RouteThumbnail | null | undefined;
   category: CategoryDefinition | null;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const contour = CONTOURS[parseInt(fnv1a32(trackId), 16) % CONTOURS.length] ?? CONTOURS[0];
   return (
@@ -48,7 +51,7 @@ export const TrailThumbnail = memo(function TrailThumbnail({
           { backgroundColor: t.library.thumb, borderColor: t.library.thumbEdge },
         ]}
       >
-        <Svg width={THUMB_SIZE} height={THUMB_SIZE} viewBox="0 0 56 56">
+        <Svg width="100%" height="100%" viewBox="0 0 56 56">
           <Path d={contour} fill="none" stroke={t.library.thumbContour} strokeWidth={1} />
           {thumb ? (
             <>
@@ -89,6 +92,8 @@ export const TrailThumbnail = memo(function TrailThumbnail({
  * pipeline already drew it, else a neutral folded-sheet placeholder.
  */
 export function MapThumbnail({ uri }: { uri: string | null | undefined }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View
@@ -101,7 +106,7 @@ export function MapThumbnail({ uri }: { uri: string | null | undefined }) {
         // `resize` makes Android decode at display size: the raster is 2048 px.
         <Image source={{ uri }} style={styles.raster} resizeMode="cover" resizeMethod="resize" />
       ) : (
-        <Svg width={THUMB_SIZE} height={THUMB_SIZE} viewBox="0 0 56 56">
+        <Svg width="100%" height="100%" viewBox="0 0 56 56">
           <Rect
             x={11}
             y={5}
@@ -135,7 +140,7 @@ export function MapThumbnail({ uri }: { uri: string | null | undefined }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   frame: { width: THUMB_SIZE, height: THUMB_SIZE },
   tile: {
     width: THUMB_SIZE,

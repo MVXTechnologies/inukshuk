@@ -2,7 +2,8 @@ import { tabularNums } from '@ui/fonts';
 import { target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The Logbook header's two additions (owner-approved mockup): the week-streak
@@ -16,6 +17,8 @@ export function LogbookHeaderActions({
   streakWeeks: number;
   onOpenStats: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   return (
@@ -57,7 +60,7 @@ export function LogbookHeaderActions({
 
 const PILL_H = 36;
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 4 },
   flame: {
     minWidth: target.min,

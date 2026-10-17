@@ -1,6 +1,8 @@
 /**
- * The tide card's live "Now" line: the latest observed water level above
- * chart datum and the next high / low, from the station's own agency.
+ * Live tide data from the station's own agency: the latest observed water
+ * level above chart datum and the next high / low (the info strip's tide
+ * fields), and the request URLs and parsers behind the map's level labels
+ * and the card's graph (#764, `./levels`, `@data/tideSeries`).
  *
  * - NOAA CO-OPS data API (public domain, no key):
  *   datagetter?product=water_level&date=latest&datum=MLLW&units=metric → {data:[{t,v}]}
@@ -16,7 +18,6 @@
  * Same discipline as `@core/weather/tides`: parsers are total — any input in,
  * a usable result (or null / empty) out. Endpoints verified live 2026-10-05.
  */
-import { formatElevation, type Units } from '@core/format';
 import { nextHighLow, type TideExtreme, type TideReading } from '@core/weather/tides';
 
 export const COOPS_DATA_URL = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter';
@@ -70,10 +71,36 @@ export function coopsHiLoUrl(stationId: string, nowMs: number): string {
   );
 }
 
+/** The last `hours` of 6-minute observations (the card's graph and the map label, #764). */
+export function coopsObservedUrl(stationId: string, nowMs: number, hours = 12): string {
+  return (
+    `${COOPS_DATA_URL}?product=water_level&begin_date=${encodeURIComponent(coopsDate(nowMs - hours * 3_600_000))}` +
+    `&range=${hours}&station=${encodeURIComponent(stationId)}` +
+    `&datum=MLLW&units=metric&time_zone=gmt&format=json&application=${APP}`
+  );
+}
+
+/**
+ * Predictions from `fromMs` for `hours`: the curve every 30 min, or (a
+ * secondary station, which publishes no curve) its highs and lows.
+ */
+export function coopsPredictionsUrl(
+  stationId: string,
+  fromMs: number,
+  hours: number,
+  interval: '30' | 'hilo',
+): string {
+  return (
+    `${COOPS_DATA_URL}?product=predictions&interval=${interval}&begin_date=${encodeURIComponent(coopsDate(fromMs))}` +
+    `&range=${hours}&station=${encodeURIComponent(stationId)}` +
+    `&datum=MLLW&units=metric&time_zone=gmt&format=json&application=${APP}`
+  );
+}
+
 export function kvUrl(
   lat: number,
   lng: number,
-  kind: 'obs' | 'tab',
+  kind: 'obs' | 'tab' | 'pre',
   fromMs: number,
   toMs: number,
 ): string {
@@ -124,6 +151,21 @@ export function parseCoopsHiLo(json: unknown): TideExtreme[] {
     const kind = o.type === 'H' ? 'high' : o.type === 'L' ? 'low' : null;
     if (kind && Number.isFinite(heightM) && Number.isFinite(timeMs))
       out.push({ timeMs, heightM, kind });
+  }
+  return out.sort((a, b) => a.timeMs - b.timeMs);
+}
+
+/** CO-OPS predictions JSON (a curve: no H/L type) → readings, time-sorted. */
+export function parseCoopsPredictions(json: unknown): TideReading[] {
+  const data = rec(json)?.predictions;
+  if (!Array.isArray(data)) return [];
+  const out: TideReading[] = [];
+  for (const r of data) {
+    const o = rec(r);
+    if (!o) continue;
+    const heightM = typeof o.v === 'string' && o.v.trim() !== '' ? Number(o.v) : NaN;
+    const timeMs = coopsTime(o.t);
+    if (Number.isFinite(heightM) && Number.isFinite(timeMs)) out.push({ timeMs, heightM });
   }
   return out.sort((a, b) => a.timeMs - b.timeMs);
 }
@@ -187,27 +229,4 @@ export function kvExtremes(
     nowMs,
   );
   return [nextHigh, nextLow].filter((e): e is TideExtreme => e !== null);
-}
-
-/**
- * "Water 1.23 m above MLLW · rising · next high 14:52 (1.57 m)" — the card's
- * Now line, heights in the user's elevation unit (#702).
- */
-export function nowLine(
-  live: LiveTide,
-  cdLabel: string,
-  clock: (ms: number) => string,
-  units: Units,
-): string | null {
-  const h = (m: number) => formatElevation(m, units, { decimals: 2 });
-  const parts: string[] = [];
-  if (live.level) {
-    parts.push(`Water ${h(live.level.heightM)} above ${cdLabel}`);
-    if (live.trend) parts.push(live.trend);
-  }
-  const next = [live.nextHigh, live.nextLow]
-    .filter((e): e is TideExtreme => e !== null)
-    .sort((a, b) => a.timeMs - b.timeMs)[0];
-  if (next) parts.push(`next ${next.kind} ${clock(next.timeMs)} (${h(next.heightM)})`);
-  return parts.length ? parts.join(' · ') : null;
 }

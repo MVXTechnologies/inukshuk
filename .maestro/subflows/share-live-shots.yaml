@@ -1,0 +1,105 @@
+# Subflow (library-share.yaml): the screens of a folder shared live, each
+# asserted before its review shot `review-share-<screen>-${THEME}`. Starts and
+# ends on the Library tab with the shared folder "ShareTrip" showing.
+#
+# - ${THEME}: light | dark (the shot names; the caller sets the app theme).
+# - ${STOP}: 'confirm' ends the share at the Stop sharing dialog; 'cancel'
+#   keeps it (the other pass still needs it).
+appId: com.inukshuk.app
+---
+# --- The folder's sheet, People, and its invite (People › Invite people) ---
+- tapOn:
+    id: 'library-shared-menu'
+- extendedWaitUntil:
+    visible:
+      id: 'library-shared-sheet'
+    timeout: 8000
+- assertVisible: 'Live · yours'
+- takeScreenshot: review-share-sheet-${THEME}
+- tapOn:
+    id: 'shared-sheet-people'
+- extendedWaitUntil:
+    visible:
+      id: 'live-people-screen'
+    timeout: 8000
+- assertVisible: 'Invite people'
+# Me, first: the row's name reads "You" (its avatar also says "YOU").
+- assertVisible:
+    id: 'live-person-me'
+- takeScreenshot: review-share-people-${THEME}
+- tapOn:
+    id: 'live-people-invite'
+- extendedWaitUntil:
+    visible:
+      id: 'folder-invite-qr'
+    timeout: 8000
+- assertVisible: 'Send link'
+- assertVisible: 'SMS'
+- takeScreenshot: review-share-invite-${THEME}
+- tapOn:
+    id: 'folder-invite-done'
+- extendedWaitUntil:
+    visible:
+      id: 'live-people-screen'
+    timeout: 8000
+- tapOn: 'Back'
+# --- Activity (the share's own creation is its first line) ---
+- extendedWaitUntil:
+    visible:
+      id: 'library-shared-menu'
+    timeout: 8000
+- tapOn:
+    id: 'library-shared-menu'
+- extendedWaitUntil:
+    visible:
+      id: 'shared-sheet-activity'
+    timeout: 8000
+- tapOn:
+    id: 'shared-sheet-activity'
+- extendedWaitUntil:
+    visible:
+      id: 'live-activity-screen'
+    timeout: 8000
+- assertVisible: 'You shared this folder'
+- takeScreenshot: review-share-activity-${THEME}
+- tapOn: 'Back'
+# --- Stop sharing (the owner's) ---
+- extendedWaitUntil:
+    visible:
+      id: 'library-shared-menu'
+    timeout: 8000
+- tapOn:
+    id: 'library-shared-menu'
+- extendedWaitUntil:
+    visible:
+      id: 'shared-sheet-stop'
+    timeout: 8000
+- tapOn:
+    id: 'shared-sheet-stop'
+- extendedWaitUntil:
+    visible:
+      id: 'shared-stop-dialog'
+    timeout: 8000
+- assertVisible: 'Stop sharing ShareTrip\?'
+- takeScreenshot: review-share-stop-${THEME}
+- runFlow:
+    when:
+      true: ${STOP == 'confirm'}
+    commands:
+      - tapOn:
+          id: 'shared-stop-dialog-confirm'
+      - extendedWaitUntil:
+          notVisible:
+            id: 'library-shared-menu'
+          timeout: 15000
+- runFlow:
+    when:
+      true: ${STOP != 'confirm'}
+    commands:
+      - tapOn: 'Cancel'
+      - extendedWaitUntil:
+          notVisible:
+            id: 'shared-stop-dialog'
+          timeout: 8000
+      - assertVisible:
+          id: 'library-shared-menu'

@@ -6,7 +6,8 @@ import {
 import { useLibraryStore } from '@state/libraryStore';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Button, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Text, TextInput, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 const NAME_ERROR: Record<'empty' | 'too-long' | 'duplicate', string> = {
   empty: 'Give the category a name',
@@ -28,6 +29,8 @@ interface Props {
  * Portal/Dialog (both live on the map's overlay paths).
  */
 export function NewCategoryForm({ onAdded, onCancel, nameLabel = 'Category name' }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const customCategories = useLibraryStore((s) => s.customCategories);
   const addCustomCategory = useLibraryStore((s) => s.addCustomCategory);
@@ -95,7 +98,7 @@ export function NewCategoryForm({ onAdded, onCancel, nameLabel = 'Category name'
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   addForm: { marginTop: 12, gap: 8 },
   swatchRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
   swatch: { width: 32, height: 32, borderRadius: 16 },

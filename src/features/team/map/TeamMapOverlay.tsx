@@ -4,11 +4,11 @@
  * panel), the sender's undo snackbar, the team panel dropped from the bar,
  * the active SOS / gather band in the strip area while the bar is away, and
  * the compact cards; a tapped teammate's card (`TeammateCard`) or shared
- * waypoint; pins and the pin composer. A plain themed View
+ * waypoint; pins and notes (#706: a note's card, the composer, the arrival
+ * snackbar). A plain themed View
  * for the card (paper-surface-ios-flex-collapse); its own state store so
  * MapScreen only routes the tap.
  */
-import { MAP_LANE_INSET } from '@core/map/mapChrome';
 import { stripBandLayout, type AlertBandPlace } from '@core/teamui/alertBands';
 import { rangeAndBearing } from '@core/teamui/positions';
 import { useExtensionPrefs } from '@features/extensions/prefs';
@@ -19,7 +19,7 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { StyleSheet, View } from 'react-native';
-import { Button, Icon, IconButton, Text } from 'react-native-paper';
+import { Button, Icon, IconButton, Text } from '@ui/paper';
 import { create } from 'zustand';
 
 import { AlertBands } from '../bar/AlertBands';
@@ -38,8 +38,13 @@ import { TeamPinCard } from './TeamPinCard';
 import { useTeamPick } from './TeamPick';
 import { TeamPinComposer, usePinDraft } from './TeamPinComposer';
 import { DrawAlertSnack } from '../draw/DrawAlertSnack';
+import { NoteCard } from '../notes/NoteCard';
+import { NoteSnack } from '../notes/NoteSnack';
+import { isNote } from '@core/teamui/notes';
 import { TeamShapeCard } from '../draw/ShapeCard';
 import { useTeamDrawStore } from '@state/teamDrawStore';
+import { useDisplayFactor, useScaledStyles } from '@ui/displayScale';
+import { useMapChrome } from '@features/map/useMapChrome';
 
 export type TeamMapHit =
   | { kind: 'member'; id: string }
@@ -126,6 +131,11 @@ export function TeamMapOverlay({
   /** Whether the map screen is focused (`useIsFocused()`): cards answer Back only then. */
   screenFocused?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+  // #760: the strip band and the draw snack sit in the map chrome's lanes at the Display size.
+  const displayFactor = useDisplayFactor();
+  const chrome = useMapChrome();
+
   const t = useSchemeTokens();
   const { installedAt, show } = useExtensionPrefs('team');
   const view = useTeamStore((s) => s.view);
@@ -176,6 +186,7 @@ export function TeamMapOverlay({
     fabBottom,
     drawChromeTop,
     sosButtonShown: chromeFree,
+    factor: displayFactor,
   });
 
   return (
@@ -196,7 +207,7 @@ export function TeamMapOverlay({
           scope="map"
           style={[
             styles.stripBand,
-            { bottom: strip.bottom, right: strip.right },
+            { bottom: strip.bottom, left: chrome.edgeInset, right: strip.right },
             strip.overDraw && styles.stripBandOverDraw,
           ]}
         />
@@ -205,12 +216,18 @@ export function TeamMapOverlay({
         <SosButton bottom={pending ? fabBottom + 28 + UNDO_SNACK_LIFT : fabBottom} here={here} />
       )}
       {signal && !drawing && <UndoSnack style={snackStyle} />}
+      {signal && !drawing && draft === null && hit === null && !card && (
+        <NoteSnack here={here} style={snackStyle} />
+      )}
       {panel && (
         <TeamPanel top={panelTop} here={here} focused={screenFocused} onNavigate={onNavigate} />
       )}
       {draft !== null && (
         <KeyboardLifted style={cardStyle} testID="team-card-dock">
-          <TeamPinComposer onPinned={(owner, id) => select({ kind: 'pin', owner, id })} />
+          <TeamPinComposer
+            here={here}
+            onPinned={(owner, id) => select({ kind: 'pin', owner, id })}
+          />
         </KeyboardLifted>
       )}
       {!editing && draft === null && card && sheet !== null && (
@@ -229,11 +246,21 @@ export function TeamMapOverlay({
         </View>
       )}
       {signal && !drawing && (
-        <DrawAlertSnack style={{ bottom: fabBottom, right: MAP_LANE_INSET }} />
+        <DrawAlertSnack style={{ bottom: fabBottom, right: chrome.laneInset }} />
       )}
       {draft === null && !card && cardSlotFree && pin && (
         <View style={cardStyle} pointerEvents="box-none" testID="team-card-dock">
-          <TeamPinCard pin={pin} view={view} here={here} onClose={() => select(null)} />
+          {isNote(pin) ? (
+            <NoteCard
+              pin={pin}
+              view={view}
+              here={here}
+              onNavigate={onNavigate}
+              onClose={() => select(null)}
+            />
+          ) : (
+            <TeamPinCard pin={pin} view={view} here={here} onClose={() => select(null)} />
+          )}
         </View>
       )}
       {draft === null && !card && cardSlotFree && member && row && (
@@ -300,7 +327,7 @@ export function TeamMapOverlay({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   /** Cards stop short of the SOS button's column. */
   card: {

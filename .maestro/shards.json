@@ -33,7 +33,7 @@
       "settings.yaml",
       "recording-check.yaml"
     ],
-    "catalog": ["make-map.yaml", "store.yaml", "pdf-overlays.yaml"],
+    "catalog": ["make-map.yaml", "store.yaml", "pdf-overlays.yaml", "library-share.yaml"],
     "extensions": [
       "convert.yaml",
       "geodetic.yaml",
@@ -42,7 +42,8 @@
       "extensions-review.yaml"
     ],
     "team": ["team-draw.yaml", "team.yaml"],
-    "team-join": ["team-join.yaml"]
+    "team-net": ["team-internet.yaml", "team-notes.yaml"],
+    "team-join": ["update-prompt.yaml", "team-join.yaml"]
   },
   "requires": {
     "heatmap.yaml": ["category-record.yaml"],
@@ -54,7 +55,8 @@
     "photos-add.yaml": ["category-record.yaml"],
     "photos-viewer.yaml": ["category-record.yaml", "photos-add.yaml"],
     "photos-share.yaml": ["category-record.yaml", "photos-add.yaml"],
-    "photos-review.yaml": ["category-record.yaml", "photos-add.yaml", "photos-viewer.yaml"]
+    "photos-review.yaml": ["category-record.yaml", "photos-add.yaml", "photos-viewer.yaml"],
+    "library-share.yaml": ["make-map.yaml"]
   },
   "last": {
     "record.yaml": "its save-vs-discard outcome is indeterminate, so nothing after it may count trails"

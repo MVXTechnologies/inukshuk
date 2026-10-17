@@ -7,12 +7,13 @@ import type { ComputeContext, DepsSnapshot, FieldGroup, FieldRef } from '@core/i
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { Icon, IconButton, Text } from 'react-native-paper';
+import { Icon, IconButton, Text } from '@ui/paper';
 
 import { SectionTitle, SheetNote, useSheetAccent } from '../../components/mapSheet';
 import { GROUP_ICON, GROUP_LABEL, glyphIcon } from '../glyphs';
 import { StripField } from '../StripField';
 import { previewValue } from './preview';
+import { useScaledStyles } from '@ui/displayScale';
 
 type Rows = readonly (readonly FieldRef[])[];
 
@@ -40,6 +41,8 @@ export function FieldPicker({
   onPick: (f: FieldRef) => void;
   onClose: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const { accent, onAccent } = useSheetAccent();
   const [query, setQuery] = useState('');
@@ -159,7 +162,7 @@ export function FieldPicker({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', paddingLeft: 16 },
   title: { flex: 1, fontSize: 17, fontWeight: '800' },
   search: {

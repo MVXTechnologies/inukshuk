@@ -16,8 +16,9 @@ import {
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@ui/paper';
 import Svg, { Line, Path } from 'react-native-svg';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * The app's compact elevation strip: an ochre line on a light ochre fill, the
@@ -66,13 +67,18 @@ export function ProfileStrip({
   onScrub,
   testID = 'route-profile',
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const [width, setWidth] = useState(0);
+  // #760: drawn on a 100 % canvas scaled to the Display size (viewBox), so
+  // every coordinate, font and stroke below scales with it.
+  const { factor: chartF } = useDisplayScale();
   const [scrub, setScrub] = useState<ProfileScrubPoint | null>(null);
   const responder = useMemo(() => {
     const move = (e: GestureResponderEvent) => {
       if (width <= 0) return;
-      const point = scrubProfile(profile, e.nativeEvent.locationX / width);
+      const point = scrubProfile(profile, e.nativeEvent.locationX / chartF / width);
       setScrub(point);
       onScrub?.(point);
     };
@@ -92,7 +98,7 @@ export function ProfileStrip({
       onPanResponderRelease: end,
       onPanResponderTerminate: end,
     });
-  }, [profile, width, onScrub]);
+  }, [profile, width, onScrub, chartF]);
 
   const paths = useMemo(
     () => (width > 0 ? profilePaths(profile, width, PROFILE_HEIGHT) : null),
@@ -106,7 +112,7 @@ export function ProfileStrip({
   return (
     <View
       style={[styles.wrap, dimmed && styles.dimmed]}
-      onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
+      onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width / chartF)}
       accessible
       accessibilityRole="adjustable"
       accessibilityLabel={`Elevation profile, ${compactDistance(profile.totalM, units)}, ${bottom} to ${top}${turnaroundRatio !== undefined ? ', out and back' : ''}${dimmed ? ', updating' : ''}`}
@@ -114,7 +120,12 @@ export function ProfileStrip({
       {...responder.panHandlers}
     >
       {paths !== null && (
-        <Svg width={width} height={PROFILE_HEIGHT} pointerEvents="none">
+        <Svg
+          width={width * chartF}
+          height={PROFILE_HEIGHT * chartF}
+          viewBox={`0 0 ${width} ${PROFILE_HEIGHT}`}
+          pointerEvents="none"
+        >
           <Path d={paths.area} fill={palette.ochre} fillOpacity={0.16} />
           <Path
             d={paths.line}
@@ -174,7 +185,7 @@ export function ProfileStrip({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   wrap: { height: PROFILE_HEIGHT, width: '100%' },
   dimmed: { opacity: 0.45 },
   // On a paper chip, so a label never sits illegibly on the line.

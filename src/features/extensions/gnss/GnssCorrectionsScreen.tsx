@@ -22,9 +22,10 @@ import {
   Switch,
   Text,
   TextInput,
-} from 'react-native-paper';
+} from '@ui/paper';
 
 import { GnssScreenFrame, SectionLabel } from './GnssScreenFrame';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The frames a caster's corrections can be declared in — the ones Convert
@@ -67,6 +68,8 @@ function mountLine(r: RankedStream, units: Units): string {
  * corrections.
  */
 export function GnssCorrectionsScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const router = useRouter();
   const config = useGnssStore((s) => s.config);
@@ -453,7 +456,7 @@ export function GnssCorrectionsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   pair: { flexDirection: 'row', gap: 12, alignItems: 'center' },

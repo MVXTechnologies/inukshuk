@@ -5,11 +5,12 @@ import {
 } from '@core/recording/recordingReadiness';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Icon, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Button, Icon, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRecordingReadiness } from './useRecordingReadiness';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
+import { useScaledStyles } from '@ui/displayScale';
 
 export type RecordingCheckMode =
   /** Before a recording starts: "Start recording" proceeds. */
@@ -44,6 +45,8 @@ function CheckRow({
   busy: boolean;
   onFix: (fix: ReadinessFix) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   // ✓ stays neutral; "needs action" is the app's amber (the weak-GPS ink,
@@ -104,6 +107,8 @@ export function RecordingCheckPanel({ visible, ...rest }: Props) {
 }
 
 function OpenPanel({ mode, incident, onStart, onClose }: Omit<Props, 'visible'>) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { checks, fix } = useRecordingReadiness();
@@ -201,7 +206,7 @@ function OpenPanel({ mode, incident, onStart, onClose }: Omit<Props, 'visible'>)
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   scrim: {
     position: 'absolute',
     top: 0,

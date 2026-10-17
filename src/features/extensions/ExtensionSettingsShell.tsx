@@ -21,11 +21,12 @@ import { extensionBasics } from '@core/extensions/registry';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { ReactNode } from 'react';
 import { Alert, Image, StyleSheet, View, type ImageRequireSource } from 'react-native';
-import { Button, Icon, List, Switch, Text, TouchableRipple, useTheme } from 'react-native-paper';
+import { Button, Icon, List, Switch, Text, TouchableRipple, useTheme } from '@ui/paper';
 
 import { installExtension, removeExtension } from './actions';
 import { useExtensionExpanded } from './expansion';
 import { setExtensionPrefs, useExtensionPrefs } from './prefs';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   extKey: AnyExtensionKey;
@@ -78,6 +79,8 @@ export function ExtensionSettingsShell({
   removeMessage,
   children,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   const theme = useTheme();
   const { installedAt, show } = useExtensionPrefs(extKey);
@@ -195,7 +198,7 @@ export function ExtensionSettingsShell({
 /** Badge 36 + gap 12 past the row's 16 padding: where the name starts. */
 const TEXT_INSET = 16 + 36 + 12;
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', minHeight: 64 },
   rowTouch: { flex: 1, alignSelf: 'stretch', justifyContent: 'center' },
   rowInner: {

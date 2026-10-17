@@ -7,13 +7,14 @@ import { target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { Divider, Icon, IconButton, Menu } from 'react-native-paper';
+import { Divider, Icon, IconButton, Menu } from '@ui/paper';
 
 import { ElevationProfile } from '../../common/components/ElevationProfile';
 import type { DragItem } from '../useDragToFolder';
 import type { ElevationPreviewTrack } from '../useTrackElevationPreview';
 import { RowDivider, TrailRow } from './LibraryRows';
 import { MoveToFolderItems } from './MoveToFolderItems';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Everything a trail row can ask the Library for. The screen passes ONE
@@ -54,6 +55,10 @@ export interface TrackListRowProps {
   selected: boolean;
   /** Just moved: the brief sage wash (#711). */
   flash?: boolean;
+  /** Share live (#712): who changed it last, or "Live with …"; replaces the date caption. */
+  note?: string;
+  /** An icon before the note (the "not sent yet" clock). */
+  noteIcon?: string;
   menuOpen: boolean;
   /** Elevation peek: undefined = closed, null = loading, else the trail. */
   elevation: ElevationPreviewTrack | null | undefined;
@@ -78,6 +83,8 @@ export const TrackListRow = memo(function TrackListRow({
   selecting,
   selected,
   flash,
+  note,
+  noteIcon,
   menuOpen,
   elevation,
   grip,
@@ -85,6 +92,8 @@ export const TrackListRow = memo(function TrackListRow({
   folders,
   actions,
 }: TrackListRowProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   // Decision 7: the type is a badge on the thumbnail, a word in the caption
   // and part of the spoken label — never colour alone.
@@ -98,7 +107,7 @@ export const TrackListRow = memo(function TrackListRow({
         .filter((part): part is string => part !== null)
         .join(' · ')
     : (category?.name ?? null);
-  const caption = trailCaption(t.startedAt, typeName, nowMs);
+  const caption = note ?? trailCaption(t.startedAt, typeName, nowMs);
   const spoken = [
     t.name,
     typeName ?? undefined,
@@ -186,6 +195,7 @@ export const TrackListRow = memo(function TrackListRow({
         category={category}
         stats={stats}
         caption={caption}
+        captionIcon={noteIcon}
         // Long-press enters select mode (#711); while selecting, taps toggle
         // the row instead of opening the trail.
         accessibilityLabel={
@@ -228,7 +238,7 @@ export const TrackListRow = memo(function TrackListRow({
   );
 });
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   menuButton: { margin: 0, width: 44, height: target.min },
   dragHandle: {
     width: 36,

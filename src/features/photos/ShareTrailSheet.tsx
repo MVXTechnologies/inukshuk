@@ -9,8 +9,9 @@ import { useSettingsStore } from '@state/settingsStore';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
 import { BackHandler, Pressable, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Icon, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Icon, Text, useTheme } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Share a trail (#587, owner Q8): the GPX alone, or "Trail + photos" as a zip
@@ -37,6 +38,8 @@ export function ShareTrailSheet(props: ShareTrailSheetProps) {
 type Busy = null | 'gpx' | 'zip';
 
 function SheetContent({ track, photos, onClose, onMessage }: ShareTrailSheetProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const withPhotosByDefault = useSettingsStore((s) => s.includePhotosWhenSharing);
@@ -204,7 +207,7 @@ function SheetContent({ track, photos, onClose, onMessage }: ShareTrailSheetProp
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   scrim: {
     position: 'absolute',
     top: 0,

@@ -4,7 +4,8 @@ import { useDisplayStore } from '@state/displayStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { nightScheme, palette } from '@ui/tokens';
 import { Pressable, StyleSheet } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * "Night on · tap to exit" (`After-Night.html`). If Night red was chosen, the
@@ -12,6 +13,8 @@ import { Icon, Text } from 'react-native-paper';
  * silences it until sunrise without turning the toggle off.
  */
 export function NightExitPill() {
+  const styles = useScaledStyles(stylesSheet);
+
   const chosen = useSettingsStore((s) => s.displayCondition);
   const set = useSettingsStore((s) => s.set);
   const position = useSettingsStore((s) => s.lastKnownPosition);
@@ -40,7 +43,7 @@ export function NightExitPill() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   pill: {
     height: 36,
     borderRadius: 18,

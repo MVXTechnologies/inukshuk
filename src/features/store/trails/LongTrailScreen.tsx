@@ -26,7 +26,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Icon, ProgressBar, Snackbar, Text } from 'react-native-paper';
+import { Button, Icon, ProgressBar, Snackbar, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CatalogItemRow } from '../CatalogItemRow';
@@ -40,6 +40,7 @@ import { TrailDownloadButton, useTrailDownload } from './useTrailDownload';
 import { useTrailOrigin } from './useLongTrails';
 import { useTrailClimb } from './useTrailClimb';
 import { openExternalLink } from '@lib/openLink';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * One long-distance trail (#467, boards `Detail.dc.html` light and dark):
@@ -80,6 +81,8 @@ function subtitle(
 }
 
 export function LongTrailScreen({ id }: { id: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -415,6 +418,8 @@ function StageRow({
   onShow: () => void;
   onMessage: (message: string) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const stage = detail.stages[index];
   const download = useTrailDownload(detail, index, onMessage);
@@ -470,6 +475,8 @@ function WholeTrailDownload({
   detail: TrailDetail;
   onMessage: (message: string) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const units = useSettingsStore((s) => s.units);
   const download = useTrailDownload(detail, null, onMessage);
@@ -521,7 +528,7 @@ function WholeTrailDownload({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   center: { alignItems: 'center', justifyContent: 'center' },
   centerText: { textAlign: 'center', paddingHorizontal: 24 },

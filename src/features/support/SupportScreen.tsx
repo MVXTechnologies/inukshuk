@@ -12,12 +12,13 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useRef } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Icon, Text } from 'react-native-paper';
+import { ActivityIndicator, Icon, Text } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useSupportCosts } from './useSupportCosts';
 import { useTipJar, type TipJar } from './useTipJar';
 import { openExternalLink } from '@lib/openLink';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Settings › Support Inukshuk (#476, board `Main.dc.html`): why the app is
@@ -36,6 +37,8 @@ function deviceLocale(): string | null {
 }
 
 export function SupportScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const t = useSchemeTokens();
@@ -142,6 +145,8 @@ export function SupportScreen() {
  * funded.
  */
 function YearProgress({ costs }: { costs: CostsDocument }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   if (costs.goals === null) return null;
   const { funded, active } = goalsView(costs.goals);
@@ -197,6 +202,8 @@ function YearProgress({ costs }: { costs: CostsDocument }) {
 }
 
 function TipSection({ jar }: { jar: TipJar }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
 
   if (jar.phase === 'loading') {
@@ -289,6 +296,8 @@ function TipTile({
   onPress: () => void;
   disabled: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -318,6 +327,8 @@ function TipTile({
 
 /** What donations pay for, grouped under the two goals — plain words, no amounts. */
 function WhatDonationsPayFor() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <>
@@ -356,7 +367,7 @@ function WhatDonationsPayFor() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   flex: { flex: 1 },
   header: {

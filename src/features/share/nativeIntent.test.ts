@@ -4,6 +4,7 @@ import type { TrackPoint, TrackSummary } from '@core/models';
 import * as storage from '@data/storage';
 import { openImportedUri } from '@features/library/importActivities';
 import { importGpxFromUri } from '@features/library/importGpx';
+import { useUpdatePromptFake } from '@features/map/updatePromptE2E';
 import { useLibraryStore } from '@state/libraryStore';
 
 import { redirectSystemPath } from '../../../app/+native-intent';
@@ -209,3 +210,9 @@ it.each(['removed', 'replaced'] as const)(
     expect(storage.deleteFileAt).not.toHaveBeenCalled();
   },
 );
+
+it('leaves the E2E update-prompt link alone outside an E2E build', async () => {
+  const link = 'inukshuk://e2e/update-prompt?state=downloaded';
+  await expect(redirectSystemPath({ path: link, initial: true })).resolves.toBe(link);
+  expect(useUpdatePromptFake.getState().fake).toBeNull();
+});

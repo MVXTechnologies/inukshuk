@@ -31,7 +31,8 @@ import * as storage from '@data/storage';
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
-import { Icon, useTheme } from 'react-native-paper';
+import { Icon, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 interface Props {
   bbox: BoundingBox | null;
@@ -95,6 +96,8 @@ export function RegionPreviewThumb({
   radius = 8,
   columns = 1,
 }: Props): ReactElement {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tiles = useMemo(
     () => (bbox && tileUrl ? previewTiles(bbox, basemap, tileUrl, columns) : []),
@@ -175,7 +178,7 @@ export function RegionPreviewThumb({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   frame: {
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,

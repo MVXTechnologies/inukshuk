@@ -6,10 +6,11 @@ import { formatDistance } from '@state/formatters';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from '@ui/paper';
 import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg';
 
 import { StatsCard } from './StatsControls';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
 
 /**
  * The Statistics bar chart, following the period: day by day (Week), week by
@@ -53,9 +54,14 @@ export function StatsBarChart({
   period: StatsPeriod;
   units: Units;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const [width, setWidth] = useState(0);
+  // #760: drawn on a 100 % canvas scaled to the Display size (viewBox), so
+  // every coordinate, font and stroke below scales with it.
+  const { factor: chartF } = useDisplayScale();
   const perUnit = distanceUnitMeters(units);
   const axis = tightAxis(Math.max(0, ...bars.map((b) => b.distanceM / perUnit)));
   const top = axis.max;
@@ -82,10 +88,12 @@ export function StatsBarChart({
         accessibilityLabel={
           empty ? `${TITLE[period]}: no activities` : `${TITLE[period]}. ${spoken}`
         }
-        onLayout={(e: LayoutChangeEvent) => setWidth(Math.round(e.nativeEvent.layout.width))}
+        onLayout={(e: LayoutChangeEvent) =>
+          setWidth(Math.round(e.nativeEvent.layout.width / chartF))
+        }
       >
         {width > 0 && (
-          <Svg width={width} height={CHART_H}>
+          <Svg width={width * chartF} height={CHART_H * chartF} viewBox={`0 0 ${width} ${CHART_H}`}>
             {axis.ticks.map((v) => (
               <Line
                 key={v}
@@ -156,7 +164,7 @@ export function StatsBarChart({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   title: { fontSize: 15, lineHeight: 20, fontWeight: '800' },
   plot: { height: CHART_H },
   unit: { fontSize: 11, lineHeight: 14, textAlign: 'right' },

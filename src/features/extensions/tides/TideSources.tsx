@@ -8,10 +8,11 @@ import { tideCoverageRows, type TideCoverage } from '@core/tides/coverage';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useState } from 'react';
 import { Linking, View } from 'react-native';
-import { Text, TouchableRipple } from 'react-native-paper';
+import { Text, TouchableRipple } from '@ui/paper';
 
-import { extensionRowStyles as styles } from '../rowStyles';
+import { extensionRowStylesSheet as stylesSheet } from '../rowStyles';
 import { fetchTideCoverage } from './coverage';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** The stations per source, fetched once per mount; null until (or while offline). */
 export function useTideCoverage(): TideCoverage | null {
@@ -28,12 +29,16 @@ export function useTideCoverage(): TideCoverage | null {
   return coverage;
 }
 
-/** Not for navigation: said under the sources wherever they show. */
-export const TIDE_SOURCES_NOTE =
-  'Values are shown as each agency publishes them. Not for navigation.';
+/**
+ * Said under the sources wherever they show. No navigation notice: of the
+ * tide sources only CHS's licence asks for one, and its cards carry it (#764).
+ */
+export const TIDE_SOURCES_NOTE = 'Values are shown as each agency publishes them.';
 
 /** One row per source (name · network, attribution, stations or "live") and the note. */
 export function TideSources({ coverage }: { coverage: TideCoverage | null }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const tokens = useSchemeTokens();
   return (
     <View style={styles.sources}>

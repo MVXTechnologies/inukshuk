@@ -11,15 +11,16 @@
  * - Members, live first and nearest first (`panelMembers`); each row opens
  *   that teammate's card on the map (Message, Navigate to, Centre), or their
  *   page when their position is unknown.
- * - From the old team button's menu, at the bottom: Tasks, Rally at a
- *   point…, Manage team. SOS is deliberately not here: only the hold button
- *   sends it.
+ * - Notes (#706) with its "2 new"; then, from the old team button's menu,
+ *   at the bottom: Tasks, Rally at a point…, Manage team. SOS is
+ *   deliberately not here: only the hold button sends it.
  *
  * A plain themed View over a scrim (no Paper Portal: paper-portal-touch-swallow);
  * Back and a tap on the scrim close it.
  */
 import { STATUS_LABEL } from '@core/teamui/system';
 import { distanceText, panelMembers } from '@core/teamui/teamBar';
+import { noteSections } from '@core/teamui/notes';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
 import { useSettingsStore } from '@state/settingsStore';
 import { useTeamStore } from '@state/teamStore';
@@ -28,7 +29,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { BackHandler, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { useTeamMapFocus } from '../map/teamMapFocus';
 import { useTeamMapSelection } from '../map/TeamMapOverlay';
@@ -38,7 +39,26 @@ import { openPeers, teamSyncLine } from '../syncLine';
 import { useActiveAlerts } from './AlertBands';
 import { GatherPanel } from './GatherPanel';
 import { BandAvatar, FaceStack } from './parts';
-import { useTeamBarSummary } from './TeamStatusBar';
+import { syncGlyph, useTeamBarSummary } from './TeamStatusBar';
+import { LinkChip } from '../components';
+import type { SyncState } from '@core/teamui/teamBar';
+import { useScaledStyles, useDisplayScale } from '@ui/displayScale';
+
+/** The panel header's connection chip (#705): "Internet + nearby", "No internet · nearby"… */
+export function netLine(sync: SyncState, nearby: number, status: string): string {
+  switch (sync) {
+    case 'net':
+      return nearby > 0 ? 'Internet + nearby' : 'Internet';
+    case 'noNet':
+      return 'No internet · nearby';
+    case 'lan':
+      return 'Nearby';
+    case 'look':
+      return 'Looking for teammates';
+    default:
+      return status;
+  }
+}
 
 export function TeamPanel({
   top,
@@ -53,6 +73,10 @@ export function TeamPanel({
   /** The gather's Go (#743). */
   onNavigate?: (latitude: number, longitude: number) => void;
 }) {
+  const { sz } = useDisplayScale();
+
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const units = useSettingsStore((s) => s.units);
   const router = useRouter();
@@ -64,8 +88,18 @@ export function TeamPanel({
   const peers = useTeamStore((s) => s.peers);
   const meshRunning = useTeamStore((s) => s.meshRunning);
   const statuses = useTeamStore((s) => s.statuses);
+  const net = useTeamStore((s) => s.net);
+  // The team's switch decides the chip; this phone's ability is in the Connection sheet.
+  const netOn = net !== null && net.on;
+  const nearbyCount =
+    net === null ? 0 : [...net.links.values()].filter((l) => l === 'nearby').length;
   const gather = useActiveAlerts().find((a) => a.kind === 'gather');
   const me = view?.me;
+  const newNotes = useTeamStore(
+    (s) =>
+      noteSections(s.pins, s.view?.me ?? '', (th) => s.record?.seen?.[th] ?? 0, Date.now(), 'new')
+        .counts.new,
+  );
   const myOpenTasks = useTeamStore(
     (s) => s.tasks.filter((x) => !x.done && x.assignee === me).length,
   );
@@ -131,31 +165,56 @@ export function TeamPanel({
         testID="team-panel"
       >
         <View style={styles.head}>
-          {summary.solo ? null : <FaceStack faces={summary.faces} size={26} ring={t.surface} />}
+          {summary.solo ? null : <FaceStack faces={summary.faces} size={sz(26)} ring={t.surface} />}
           <View style={styles.flex}>
             <Text style={[styles.title, { color: t.ink }]} numberOfLines={1}>
               {summary.name}
             </Text>
-            <View style={styles.syncRow}>
-              <Icon
-                source={summary.sync === 'off' ? 'access-point-off' : 'access-point'}
-                size={15}
-                color={summary.sync === 'lan' ? t.status.gnssFixed : t.inkMuted}
-              />
-              <Text
-                style={[styles.sync, styles.flex, { color: t.inkMuted }]}
-                numberOfLines={2}
-                testID="team-panel-sync"
+            {netOn ? (
+              // The team's internet (#705): a chip into the Connection sheet.
+              <Pressable
+                onPress={() => openSheet({ kind: 'connection' })}
+                style={[styles.syncRow, styles.syncChip, { backgroundColor: t.surfaceVariant }]}
+                accessibilityRole="button"
+                accessibilityLabel={`${netLine(summary.sync, nearbyCount, summary.status)}. Connection details`}
+                hitSlop={6}
+                testID="team-panel-connection"
               >
-                {summary.sync === 'lan'
-                  ? `Nearby · ${teamSyncLine(peers, meshRunning)}`
-                  : summary.status === 'Only you'
-                    ? `Only you · ${teamSyncLine(peers, meshRunning)}`
-                    : summary.sync === 'off' || summary.sync === 'pending'
-                      ? summary.status
-                      : teamSyncLine(peers, meshRunning)}
-              </Text>
-            </View>
+                <Icon
+                  source={syncGlyph(summary.sync, true).icon}
+                  size={15}
+                  color={summary.sync === 'net' ? t.status.gnssFixed : t.inkMuted}
+                />
+                <Text
+                  style={[styles.sync, styles.flexShrink, { color: t.inkMuted }]}
+                  numberOfLines={2}
+                >
+                  {netLine(summary.sync, nearbyCount, summary.status)}
+                </Text>
+                <Icon source="chevron-right" size={15} color={t.inkMuted} />
+              </Pressable>
+            ) : (
+              <View style={styles.syncRow}>
+                <Icon
+                  source={summary.sync === 'off' ? 'access-point-off' : 'access-point'}
+                  size={15}
+                  color={summary.sync === 'lan' ? t.status.gnssFixed : t.inkMuted}
+                />
+                <Text
+                  style={[styles.sync, styles.flex, { color: t.inkMuted }]}
+                  numberOfLines={2}
+                  testID="team-panel-sync"
+                >
+                  {summary.sync === 'lan'
+                    ? `Nearby · ${teamSyncLine(peers, meshRunning)}`
+                    : summary.status === 'Only you'
+                      ? `Only you · ${teamSyncLine(peers, meshRunning)}`
+                      : summary.sync === 'off' || summary.sync === 'pending'
+                        ? summary.status
+                        : teamSyncLine(peers, meshRunning)}
+                </Text>
+              </View>
+            )}
           </View>
           <Pressable
             onPress={close}
@@ -214,6 +273,7 @@ export function TeamPanel({
               </View>
               {rows.map((m) => {
                 const status = statuses.get(m.id);
+                const link = netOn ? net?.links.get(m.id) : undefined;
                 return (
                   <Pressable
                     key={m.id}
@@ -240,7 +300,7 @@ export function TeamPanel({
                       initials={m.initials}
                       color={m.color}
                       band={m.band}
-                      size={36}
+                      size={sz(36)}
                       ring={t.surface}
                       live
                     />
@@ -273,15 +333,33 @@ export function TeamPanel({
                           </View>
                         )}
                       </View>
-                      <Text
-                        style={[
-                          styles.line,
-                          { color: m.band === 'fresh' ? t.inkMuted : t.status.pausedInk },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {m.line}
-                      </Text>
+                      {link !== undefined ? (
+                        <View style={styles.linkRow}>
+                          <LinkChip link={link} />
+                          {link !== 'out' && (
+                            <Text
+                              style={[
+                                styles.line,
+                                styles.flexShrink,
+                                { color: m.band === 'fresh' ? t.inkMuted : t.status.pausedInk },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {m.short}
+                            </Text>
+                          )}
+                        </View>
+                      ) : (
+                        <Text
+                          style={[
+                            styles.line,
+                            { color: m.band === 'fresh' ? t.inkMuted : t.status.pausedInk },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {m.line}
+                        </Text>
+                      )}
                     </View>
                     {m.distanceM !== null && (
                       <View style={[styles.right, m.band !== 'fresh' && styles.dim]}>
@@ -301,6 +379,14 @@ export function TeamPanel({
           )}
         </ScrollView>
 
+        <Row
+          icon="note-text-outline"
+          label="Notes"
+          chip={newNotes > 0 ? `${newNotes} new` : undefined}
+          fresh
+          onPress={go('/team/notes')}
+          testID="team-panel-notes"
+        />
         <Row
           icon="checkbox-marked-circle-outline"
           label="Tasks"
@@ -334,15 +420,20 @@ function Row({
   icon,
   label,
   chip,
+  fresh = false,
   onPress,
   testID,
 }: {
   icon: string;
   label: string;
   chip?: string;
+  /** The chip says something new (the orange "2 new"). */
+  fresh?: boolean;
   onPress: () => void;
   testID: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <Pressable
@@ -355,8 +446,18 @@ function Row({
       <Icon source={icon} size={22} color={t.inkVariant} />
       <Text style={[styles.footLabel, styles.flex, { color: t.ink }]}>{label}</Text>
       {chip && (
-        <View style={[styles.schip, { backgroundColor: t.surfaceVariant }]}>
-          <Text style={[styles.schipText, { color: t.inkVariant }]}>{chip}</Text>
+        <View
+          style={[styles.schip, { backgroundColor: fresh ? t.team.bubbleNew : t.surfaceVariant }]}
+        >
+          <Text
+            style={[
+              styles.schipText,
+              { color: fresh ? t.team.bubbleNewInk : t.inkVariant },
+              fresh && styles.freshText,
+            ]}
+          >
+            {chip}
+          </Text>
         </View>
       )}
       <Icon source="chevron-right" size={22} color={t.inkMuted} />
@@ -364,7 +465,7 @@ function Row({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   dim: { opacity: 0.62 },
   panel: {
@@ -390,6 +491,20 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 18, lineHeight: 22, fontWeight: '800' },
   syncRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5 },
+  /** The internet chip is one line: its icons centre on the label. */
+  syncChip: {
+    alignSelf: 'flex-start',
+    alignItems: 'center',
+    borderRadius: 8,
+    paddingLeft: 5,
+    paddingRight: 2,
+    paddingVertical: 1,
+    marginTop: 1,
+    maxWidth: '100%',
+  },
+  // Wraps only when the chip and its age truly don't fit (Large, #760).
+  linkRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginTop: 1 },
+  flexShrink: { flexShrink: 1 },
   sync: { fontSize: 12.5 },
   x: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   acts: { paddingHorizontal: 14, paddingBottom: 10, borderBottomWidth: 1 },
@@ -444,6 +559,7 @@ const styles = StyleSheet.create({
   lastPos: { fontSize: 11.5, fontWeight: '700' },
   schip: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 1, flexShrink: 0 },
   schipText: { fontSize: 11, fontWeight: '800' },
+  freshText: { fontWeight: '900' },
   foot: {
     flexDirection: 'row',
     alignItems: 'center',

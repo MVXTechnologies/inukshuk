@@ -16,11 +16,17 @@
  * the user cancels deletes it.
  */
 import { lanDiscoveryTag } from '@core/mesh/tag';
+import { advertisedCapBody, needsAdvertisedCap } from '@core/teamdraw/caps';
 import { addBreadcrumb } from '@lib/errorReporting';
 import type { DeviceKeys, TeamCrypto } from '@core/team/crypto';
+import type { SignedOp } from '@core/team/envelope';
 import { makeJoinProof, type InviteToken } from '@core/team/invite';
 import { TeamReplica } from '@core/team/replica';
 import { SyncSession, type SessionEvent } from '@core/team/sync';
+
+import { InviteRoomJoin } from '@data/sync/inviteJoin';
+import type { Timers } from '@data/sync/linkHost';
+import type { WebSocketFactory } from '@data/sync/roomClient';
 
 import { MeshLink, type MeshLinkStatus } from './meshLink';
 import { MeshSessionHost } from './meshSessions';
@@ -53,6 +59,19 @@ export interface JoinState {
   /** Typed addresses being retried. */
   dials: string[];
   startedAt: number;
+  /** The invite's room on the relay is reached (internet joins, 2.7.0). */
+  internet: boolean;
+  /** Which way the admitting phone was reached, once a session opened. */
+  via: 'nearby' | 'internet' | null;
+}
+
+/** Joining through the invite's room (2.7.0 G7): the relay and the platform socket. */
+export interface JoinInternet {
+  host: string;
+  ws: WebSocketFactory;
+  timers: Timers;
+  jitterMs?: number;
+  random?: () => number;
 }
 
 /** After this long with no teammate found, suggest the hotspot fallback. */
@@ -66,6 +85,8 @@ export class JoinAttempt {
   private phase: JoinPhase = 'searching';
   private failure: JoinFailure | null = null;
   private safetyCode: string | null = null;
+  private room: InviteRoomJoin | null = null;
+  private via: 'nearby' | 'internet' | null = null;
   private readonly startedAt: number;
   private readonly hint: { host: string; port: number } | null;
 
@@ -77,6 +98,8 @@ export class JoinAttempt {
       now: () => number;
       onChange: () => void;
       tickMs?: number;
+      /** Also look for the team over the internet (its invite room). */
+      internet?: JoinInternet;
     },
     readonly token: InviteToken,
     keys: DeviceKeys,
@@ -107,14 +130,45 @@ export class JoinAttempt {
       mesh: this.link?.status() ?? null,
       dials: this.link?.manualDials ?? [],
       startedAt: this.startedAt,
+      internet: this.room?.inRoom ?? false,
+      via: this.via,
     };
+  }
+
+  /** The team let this phone in over the internet (provisional, R-INV-4). */
+  get viaInternet(): boolean {
+    return this.via === 'internet';
   }
 
   async start(): Promise<void> {
     const transport = this.deps.transport;
-    if (transport === null) return this.fail('no-mesh');
+    const internet = this.deps.internet;
+    if (transport === null && internet === undefined) return this.fail('no-mesh');
     if (this.token.expiresAt < this.deps.now()) return this.fail('expired');
     const proof = makeJoinProof(this.deps.c, this.token, this.replica.keys);
+    if (internet !== undefined) {
+      this.room = new InviteRoomJoin({
+        c: this.deps.c,
+        host: internet.host,
+        ws: internet.ws,
+        timers: internet.timers,
+        now: this.deps.now,
+        token: this.token,
+        proof,
+        store: this.store,
+        tickMs: this.deps.tickMs ?? 5_000,
+        ...(internet.jitterMs !== undefined ? { jitterMs: internet.jitterMs } : {}),
+        ...(internet.random ? { random: internet.random } : {}),
+        onEvent: (event, session) => this.onEvent(event, session, 'internet'),
+        onRoom: () => this.deps.onChange(),
+        onDiag: (e) => addBreadcrumb(`team join: ${e}`),
+      });
+      this.room.start();
+    }
+    if (transport === null) {
+      this.deps.onChange();
+      return;
+    }
     this.host = new MeshSessionHost<SessionEvent, SyncSession>(
       transport,
       {
@@ -123,7 +177,7 @@ export class JoinAttempt {
         // Not a member yet: an inbound session cannot complete (the core refuses it).
         respond: () => SyncSession.respond(this.deps.c, this.store),
       },
-      (_peerId, event, session) => this.onEvent(event, session),
+      (_peerId, event, session) => this.onEvent(event, session, 'nearby'),
       { now: this.deps.now, tickMs: this.deps.tickMs ?? 5_000, label: 'join' },
     );
     this.host.start();
@@ -151,6 +205,8 @@ export class JoinAttempt {
     const host = this.host;
     this.link = null;
     this.host = null;
+    this.room?.stop();
+    this.room = null;
     host?.stop('bye');
     await link?.stop();
   }
@@ -165,7 +221,7 @@ export class JoinAttempt {
 
   private onMesh(): void {
     const status = this.link?.status();
-    if (status?.localNetwork === 'denied' && this.phase === 'searching') {
+    if (status?.localNetwork === 'denied' && this.phase === 'searching' && this.room === null) {
       this.fail('local-network-denied');
       return;
     }
@@ -177,10 +233,11 @@ export class JoinAttempt {
     this.deps.onChange();
   }
 
-  private onEvent(event: SessionEvent, session: SyncSession): void {
+  private onEvent(event: SessionEvent, session: SyncSession, via: 'nearby' | 'internet'): void {
     switch (event.type) {
       case 'open':
         this.safetyCode = session.safetyCode ?? null;
+        this.via = via;
         if (this.phase !== 'verify') this.phase = 'connecting';
         this.check();
         return;
@@ -192,7 +249,9 @@ export class JoinAttempt {
           else if (/expired/.test(why)) this.fail('expired');
           else if (/revoked|bad-proof|unknown-invite|not-allowed|needs-admin/.test(why)) {
             this.fail('refused');
-          } else if (this.host?.size === 0) this.phase = 'searching';
+          } else if ((this.host?.size ?? 0) === 0 && !(this.room?.connecting ?? false)) {
+            this.phase = 'searching';
+          }
         }
         this.deps.onChange();
         return;
@@ -204,8 +263,12 @@ export class JoinAttempt {
 
   /** Another connection is still trying (one refusal is not the last word). */
   private othersAlive(closed: SyncSession): boolean {
-    return (this.host?.peers() ?? []).some(
-      (p) => p.session !== closed && p.session.phase !== 'closed',
+    return (
+      (this.host?.peers() ?? []).some(
+        (p) => p.session !== closed && p.session.phase !== 'closed',
+      ) ||
+      // The invite's room tries the next member's phone.
+      (this.room?.inRoom ?? false)
     );
   }
 
@@ -215,6 +278,34 @@ export class JoinAttempt {
       addBreadcrumb('team join: admitted');
       teamDebug('join', 'admitted');
     }
+    if (this.admitted && this.via === 'internet') {
+      this.room?.settle();
+      this.advertise();
+    }
     this.deps.onChange();
+  }
+
+  /**
+   * Over the internet, claim this phone's capabilities at once, in the join
+   * session: a member gives WebRTC signalling only to a phone claiming `rtc`,
+   * and the join session (through the room) is the only way the claim
+   * reaches it before a direct or relayed link exists.
+   */
+  private advertise(): void {
+    const r = this.replica;
+    const now = this.deps.now();
+    const me = r.id;
+    if (r.state.sendKeyId === undefined || !needsAdvertisedCap(r.data(now), me, now)) return;
+    const { stored } = this.store.track(() => ({
+      result: r.write(now, 'e.set', advertisedCapBody(me, now)),
+      accepted: [],
+    }));
+    this.room?.push(stored);
+  }
+
+  /** Write through the join's store and send it at once over the invite room (if any). */
+  writeOwn(fn: () => SignedOp | undefined): void {
+    const { stored } = this.store.track(() => ({ result: fn(), accepted: [] }));
+    this.room?.push(stored);
   }
 }

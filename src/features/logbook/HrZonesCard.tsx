@@ -3,9 +3,10 @@ import type { ZoneBreakdown } from '@core/stats/hrZones';
 import { tabularNums } from '@ui/fonts';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from '@ui/paper';
 
 import { StatsCard } from './StatsControls';
+import { useScaledStyles } from '@ui/displayScale';
 
 const ZONE_NAMES = ['Recovery', 'Endurance', 'Tempo', 'Threshold', 'Maximum'];
 
@@ -29,6 +30,8 @@ export function HrZonesCard({
   trailsWithHr: number;
   onChangeMaxHr: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const has = breakdown !== null && breakdown.totalS > 0 && maxHr !== null;
@@ -104,7 +107,7 @@ export function HrZonesCard({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   title: { fontSize: 15, lineHeight: 20, fontWeight: '800' },
   maxRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' },
   sub: { fontSize: 12, lineHeight: 16 },

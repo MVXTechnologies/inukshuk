@@ -7,7 +7,8 @@ import {
   type AccessibilityActionEvent,
   type GestureResponderEvent,
 } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 const A11Y_ACTIONS = [{ name: 'increment' }, { name: 'decrement' }];
 const THUMB = 20;
@@ -67,6 +68,8 @@ export function StepSlider({
   trackColor,
   tickColor,
 }: Props) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   const accent = accentColor ?? theme.colors.primary;
   const track = trackColor ?? theme.colors.surfaceVariant;
@@ -175,7 +178,7 @@ export function StepSlider({
 
 const TICK = 6;
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   dimmed: { opacity: 0.35 },
   trackBox: { height: 36, justifyContent: 'center' },

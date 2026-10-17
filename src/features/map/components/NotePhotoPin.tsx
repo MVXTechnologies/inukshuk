@@ -2,6 +2,7 @@ import type { NotePhotoPinLayout } from '@core/photos/notePins';
 import { Image, StyleSheet, View } from 'react-native';
 
 import { NoteNumberBadge } from './NoteNumberBadge';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * A note with a photo on the trail view's map (#742, "photo ring"): its
@@ -19,6 +20,8 @@ export function NotePhotoPin({
   num: number;
   layout: NotePhotoPinLayout;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const { diameter, badge, badgeX, badgeY } = layout;
   // A square that holds the badge too: a marker's children outside its
   // bounds are clipped on Android.
@@ -48,4 +51,4 @@ export function NotePhotoPin({
   );
 }
 
-const styles = StyleSheet.create({ abs: { position: 'absolute' } });
+const stylesSheet = StyleSheet.create({ abs: { position: 'absolute' } });

@@ -11,10 +11,11 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { ProgressRing } from './parts';
 import { usePendingAlert } from './pendingAlert';
+import { useScaledStyles } from '@ui/displayScale';
 
 const TICK_MS = 250;
 /**
@@ -26,6 +27,8 @@ export const UNDO_SNACK_LIFT = 8;
 const ERROR_MS = 4000;
 
 export function UndoSnack({ style }: { style: StyleProp<ViewStyle> }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const pending = usePendingAlert((s) => s.pending);
   const error = usePendingAlert((s) => s.error);
@@ -137,7 +140,7 @@ export function UndoSnack({ style }: { style: StyleProp<ViewStyle> }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   snack: {
     marginHorizontal: 8,

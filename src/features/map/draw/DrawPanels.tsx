@@ -5,7 +5,8 @@ import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Chrome of the drawing tools (#502/#503, boards `Route.dc.html` and
@@ -44,6 +45,8 @@ export function RouteModeChips({
   top: number;
   onChange: (mode: RouteMode) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const outline = useChromeOutline();
   return (
@@ -97,6 +100,8 @@ export function DrawTip({
   icon: string;
   testID?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
   return (
     <View style={[styles.hintWrap, { top }]} pointerEvents="none">
@@ -135,6 +140,8 @@ export function DrawHelpPopover({
   anchorX: number;
   onClose: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   // A Material tooltip: inverse colours, so it reads apart from the panel
   // (same surface) and the map, in light and dark alike.
   const { colors } = useTheme();
@@ -258,6 +265,8 @@ export function DrawPanel({
   onExit,
   onLayout,
 }: PanelProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   const [panelH, setPanelH] = useState(0);
@@ -467,6 +476,8 @@ export function ReturnChip({
   /** False when the row is narrow: icon + caret only (the spoken label stays). */
   showLabel?: boolean;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   const f = finishOf(finish);
@@ -519,6 +530,8 @@ export function ReturnMenu({
   bottom: number;
   onPick: (finish: RouteFinish) => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   return (
@@ -585,6 +598,8 @@ export function SelectedPointRow({
   onDelete: () => void;
   onDeselect: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const theme = useTheme();
   return (
@@ -626,6 +641,8 @@ export function DrawNotice({
   text: string;
   action?: { label: string; onPress: () => void };
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={styles.notice} accessibilityLiveRegion="polite">
@@ -649,6 +666,8 @@ export function DrawNotice({
 
 /** A quiet status line under the stats ("Snapping to trails…"). */
 export function DrawStatus({ text }: { text: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={styles.notice} accessibilityLiveRegion="polite">
@@ -658,7 +677,7 @@ export function DrawStatus({ text }: { text: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // Below the compass, clear of the controls rail on the right (16 + 48 + 12).
   // The search pill's slot: between the compass (16 + 48) and the rail, 12 dp
   // either side, the pill's height and shadow.

@@ -39,6 +39,7 @@ import {
 } from '@core/library/migrations';
 import { isAbsolutePath } from '@core/storage/documentPaths';
 import { removeNoteById } from '@core/library/notes';
+import { applySyncEdit, type SyncEdit } from '@core/library/syncEdit';
 import { nextFolderVisibility } from '@core/library/visibility';
 import { nextWaypointLabel } from '@core/library/waypoints';
 import { isWaypointSize, normalizeWaypointColor } from '@core/library/waypointStyle';
@@ -201,7 +202,8 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
    */
   showFolder: (id: string) => void;
   // Folders — flat, cross-type containers that organize maps + trails by area.
-  addFolder: (name: string) => string;
+  /** A new folder, at the top level or inside `parentId` (#712: sub-folders). */
+  addFolder: (name: string, parentId?: string) => string;
   renameFolder: (id: string, name: string) => void;
   /** Delete a folder; its maps/trails fall back to Ungrouped (folderId cleared). */
   removeFolder: (id: string) => void;
@@ -297,6 +299,12 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   /** Remove an area and every photo it owns. */
   removeArea: (id: string) => void;
   activeMap: () => MapDocument | null;
+  /**
+   * Share live (#712): what the library bridge (`@data/sync/libraryBridge`)
+   * planned for one shared folder, in ONE index write. The only way synced
+   * changes enter the Library; the bridge never echoes them back.
+   */
+  applySync: (edit: SyncEdit) => boolean;
 }
 
 /**
@@ -882,10 +890,12 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       return next;
     }),
 
-  addFolder: (name) => {
+  addFolder: (name, parentId) => {
     const id = storage.newId();
     set((s) => {
       const folder: Folder = { id, name: name.trim() || 'Folder', createdAt: Date.now() };
+      if (parentId !== undefined && s.folders.some((f) => f.id === parentId))
+        folder.parentId = parentId;
       const next = { ...s, folders: [...s.folders, folder] };
       persist(next);
       return next;
@@ -907,9 +917,16 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     set((s) => {
       const clear = <T extends { folderId?: string }>(item: T): T =>
         item.folderId === id ? { ...item, folderId: undefined } : item;
+      const gone = s.folders.find((f) => f.id === id);
+      // Its sub-folders move up to its parent.
+      const lift = (f: Folder): Folder => {
+        if (f.parentId !== id) return f;
+        const { parentId: _p, ...rest } = f;
+        return gone?.parentId === undefined ? rest : { ...rest, parentId: gone.parentId };
+      };
       const next = {
         ...s,
-        folders: s.folders.filter((f) => f.id !== id),
+        folders: s.folders.filter((f) => f.id !== id).map(lift),
         maps: s.maps.map(clear),
         tracks: s.tracks.map(clear),
         waypoints: s.waypoints.map(clear),
@@ -1196,5 +1213,17 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   activeMap: () => {
     const { maps, activeMapId } = get();
     return maps.find((m) => m.id === activeMapId) ?? null;
+  },
+
+  applySync: (edit) => {
+    let changed = false;
+    set((s) => {
+      const r = applySyncEdit(s, edit);
+      if (!r.changed) return s;
+      changed = true;
+      persistAndDelete(r.index, r.orphanedUris, r.deletedTrackIds);
+      return r.index;
+    });
+    return changed;
   },
 }));

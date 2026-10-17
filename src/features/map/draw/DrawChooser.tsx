@@ -1,7 +1,8 @@
 import { palette, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * "Draw" (the map's "+" menu): pick what to draw — a Route (a line) or an
@@ -41,6 +42,8 @@ export function DrawChooser({
   onPick: (kind: 'route' | 'area') => void;
   onClose: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View
@@ -90,7 +93,7 @@ export function DrawChooser({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   sheet: {
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,

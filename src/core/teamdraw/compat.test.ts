@@ -3,8 +3,9 @@
  *
  * An "old" phone is simulated by running the REAL code with the new kinds and
  * type unknown, in an isolated module registry:
- * - `RECORD_KINDS` without `drw`/`cap` (so `parseSetBody` fails `isKind`, as
- *   it does on 2.5.1, and the fold records `skipped: invalid`);
+ * - `RECORD_KINDS` without `drw`/`cap` (so no domain registers them, and the
+ *   fold skips them, as 2.5.1 does; 2.5.1 labels that `invalid`, the
+ *   simulated fold since the 2.7.0 sync-group seam `unknown`);
  * - `checkEnvelope` refusing `pen` with reason `type` (2.5.1's `OP_TYPES`).
  *
  * This suite also passed once against the frozen 2.5.1 sources (`src/core/team`
@@ -170,7 +171,7 @@ describe('backward compatibility (#683)', () => {
     });
     expect(drawOps.length).toBe(13);
     const skipped = new Map(oldEve.data(now).skipped.map((s) => [s.id, s.why]));
-    for (const op of drawOps) expect(skipped.get(op.id)).toBe('invalid');
+    for (const op of drawOps) expect(skipped.get(op.id)).toBe('unknown');
     expect(oldEve.versionVector()).toEqual(newEve.versionVector());
     expect(oldEve.parkedSize).toBe(0);
 
@@ -208,7 +209,7 @@ describe('backward compatibility (#683)', () => {
       }
       const data = oldEve.data(T0 + 3 * MIN);
       expect(data.entities.get(`msg:${bob.id}:after`)).toBeDefined();
-      expect(data.skipped.find((s) => s.id === n.id)?.why).toBe('invalid');
+      expect(data.skipped.find((s) => s.id === n.id)?.why).toBe('unknown');
       expect(oldEve.versionVector()[bob.id]).toBe(n1.env.sq);
       expect(oldEve.parkedSize).toBe(0);
       // It still serves the drawing onwards (the chain is intact for everyone).
@@ -234,8 +235,8 @@ describe('backward compatibility (#683)', () => {
     oldEve.ingest(envs(w.root, now + 6), now + 6);
     const data = oldEve.data(now + 6);
     const skipped = new Map(data.skipped.map((s) => [s.id, s.why]));
-    expect(skipped.get(del.id)).toBe('invalid');
-    expect(skipped.get(cap.id)).toBe('invalid');
+    expect(skipped.get(del.id)).toBe('unknown');
+    expect(skipped.get(cap.id)).toBe('unknown');
     // The claim carries the version and the expiry; the old fold skips it whole all the same.
     expect(rg.decode(cap)).toMatchObject({ k: 'cap', f: { pen: 1, v: 1, x: expect.any(Number) } });
     // What follows each in its author's chain still applies.

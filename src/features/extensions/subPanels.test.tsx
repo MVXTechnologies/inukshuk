@@ -141,7 +141,11 @@ describe('Tide stations sub-panel', () => {
     expect(screen.queryByLabelText('Extensions tab')).toBeNull();
     expect(screen.getByLabelText('Gauge symbols legend')).toBeTruthy();
     expect(screen.getByText('COVERAGE & SOURCES')).toBeTruthy();
-    expect(screen.getByText(/Not for navigation/)).toBeTruthy();
+    expect(screen.getByText('Values are shown as each agency publishes them.')).toBeTruthy();
+    // Only CHS's licence asks for a navigation notice: its cards carry it (#764).
+    expect(screen.queryByText(/navigation/i)).toBeNull();
+    // The stations are off: no levels row (no greyed row).
+    expect(screen.queryByLabelText('Show levels on the map')).toBeNull();
     // Without Geodetic points, no way to its tidal benchmarks.
     expect(screen.queryByLabelText('Tidal benchmarks')).toBeNull();
     await fireEvent.press(screen.getByLabelText('Show tide stations'));
@@ -158,6 +162,36 @@ describe('Tide stations sub-panel', () => {
     expect(screen.getByLabelText('Show geodetic points')).toBeTruthy();
     expect(screen.getByLabelText('Tidal')).toBeTruthy();
   });
+
+  it.each([false, true])(
+    '"Show levels on the map" sits under the switch while the stations show (dark %s)',
+    async (dark) => {
+      useSettingsStore.setState({ tideLevelsOnMap: false });
+      install({ tides: { installedAt: 1, show: true } });
+      await renderSheet(dark);
+      await fireEvent.press(screen.getByLabelText('Options for Tide stations'));
+      // Off by default; the level labels' legend only once it is on.
+      expect(checked('Show levels on the map')).toBe(false);
+      expect(screen.getByText('Water level by each station')).toBeTruthy();
+      expect(screen.queryByLabelText('Water level labels legend')).toBeNull();
+      await fireEvent.press(screen.getByLabelText('Show levels on the map'));
+      expect(useSettingsStore.getState().tideLevelsOnMap).toBe(true);
+      expect(checked('Show levels on the map')).toBe(true);
+      expect(screen.getByLabelText('Water level labels legend')).toBeTruthy();
+      expect(screen.getByText('Live')).toBeTruthy();
+      expect(screen.getByText('Predicted')).toBeTruthy();
+      expect(screen.getByText('Old')).toBeTruthy();
+      // Stations off: the row is not there at all (no greyed row), the setting kept.
+      await fireEvent.press(screen.getByLabelText('Show tide stations'));
+      expect(screen.queryByLabelText('Show levels on the map')).toBeNull();
+      expect(screen.queryByLabelText('Water level labels legend')).toBeNull();
+      expect(useSettingsStore.getState().tideLevelsOnMap).toBe(true);
+      await fireEvent.press(screen.getByLabelText('Show tide stations'));
+      expect(checked('Show levels on the map')).toBe(true);
+      await fireEvent.press(screen.getByLabelText('Show levels on the map'));
+      expect(useSettingsStore.getState().tideLevelsOnMap).toBe(false);
+    },
+  );
 });
 
 describe('External GNSS receiver sub-panel', () => {
@@ -231,7 +265,7 @@ describe('Team mode sub-panel', () => {
     expect(screen.getByLabelText('Your teams')).toBeTruthy();
     expect(screen.getByLabelText('Create a team')).toBeTruthy();
     expect(screen.getByLabelText('Join a team')).toBeTruthy();
-    expect(screen.getByText(/end-to-end encrypted/)).toBeTruthy();
+    expect(screen.getByText(/shared only while you turn sharing on/)).toBeTruthy();
 
     expect(checked('Share my position with the team')).toBe(false);
     await fireEvent.press(screen.getByLabelText('Share my position with the team'));

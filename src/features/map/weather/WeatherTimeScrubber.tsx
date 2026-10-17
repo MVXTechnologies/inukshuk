@@ -15,8 +15,9 @@ import {
 } from '@core/weather/scrubDrag';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, StyleSheet, View } from 'react-native';
-import { IconButton, Text } from 'react-native-paper';
+import { IconButton, Text } from '@ui/paper';
 import { weatherChrome as wc } from './weatherChrome';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Bottom time scrubber (weather UX M1, the Windy idiom): one floating dark
@@ -61,6 +62,8 @@ export function WeatherTimeScrubber({
   /** Micro caption by the chevron, e.g. "HRDPS 48 H"; falls back to kind. */
   modelCaption?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const [trackWidth, setTrackWidth] = useState(0);
   const frames = timeline.framesMs;
   const segments = useMemo(() => daySegments(frames), [frames]);
@@ -258,7 +261,7 @@ const CHIP_W = 84;
 /** Minimum px between minor ticks before thinning kicks in. */
 const MIN_TICK_GAP = 3;
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',

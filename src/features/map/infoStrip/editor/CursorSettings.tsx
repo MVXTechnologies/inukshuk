@@ -3,11 +3,12 @@ import type { CursorKind, CursorSettings as Cursor, CursorSize } from '@core/inf
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 
 import { CursorGlyph } from '../../components/CenterCursor';
 import { SectionTitle, Segmented, SubPanelHeader, SwitchRow } from '../../components/mapSheet';
 import { waypointInk } from '@core/library/waypointStyle';
+import { useScaledStyles } from '@ui/displayScale';
 
 export const CURSOR_KINDS: readonly { kind: CursorKind; label: string }[] = [
   { kind: 'dot', label: 'Dot' },
@@ -49,6 +50,8 @@ export function CursorSettings({
   onChange: (c: Cursor) => void;
   onBack: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const set = (patch: Partial<Cursor>) => onChange({ ...cursor, ...patch });
   return (
@@ -145,7 +148,7 @@ export function CursorSettings({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   preview: {
     height: 72,
     marginHorizontal: 16,

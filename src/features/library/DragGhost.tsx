@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Animated, StyleSheet } from 'react-native';
 import type { DragItem } from './useDragToFolder';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** The floating chip that follows the finger during a drag (window coords). */
 export function DragGhost({
@@ -16,6 +17,8 @@ export function DragGhost({
   color: string;
   renderLabel: (label: string, color: string) => ReactNode;
 }) {
+  const ghostStyles = useScaledStyles(ghostStylesSheet);
+
   if (!dragging) return null;
   return (
     <Animated.View
@@ -36,7 +39,7 @@ export function DragGhost({
   );
 }
 
-const ghostStyles = StyleSheet.create({
+const ghostStylesSheet = StyleSheet.create({
   chip: {
     position: 'absolute',
     top: 0,

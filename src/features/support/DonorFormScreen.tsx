@@ -12,8 +12,9 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, HelperText, Text, TextInput } from 'react-native-paper';
+import { ActivityIndicator, HelperText, Text, TextInput } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * "Add your name to the donors list" (#476): a display name and an optional
@@ -28,6 +29,8 @@ const FAILURE: Record<Exclude<DonorSubmitResult, 'sent'>, string> = {
 };
 
 export function DonorFormScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const t = useSchemeTokens();
@@ -157,7 +160,7 @@ export function DonorFormScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   header: {
     minHeight: 52,

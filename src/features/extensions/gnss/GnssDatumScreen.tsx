@@ -12,9 +12,10 @@ import { useGnssStore } from '@state/gnssStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, RadioButton, Text } from 'react-native-paper';
+import { Icon, RadioButton, Text } from '@ui/paper';
 
 import { GnssScreenFrame } from './GnssScreenFrame';
+import { useScaledStyles } from '@ui/displayScale';
 
 export type RouteLine =
   | { kind: 'ok'; text: string }
@@ -44,6 +45,8 @@ export function routeLine(
  * which, with its stated accuracy — or why not. Never a guessed shift.
  */
 export function GnssDatumScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const config = useGnssStore((s) => s.config);
   const update = useGnssStore((s) => s.updateConfig);
@@ -140,7 +143,7 @@ export function GnssDatumScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   flex: { flex: 1 },
   option: {
     flexDirection: 'row',

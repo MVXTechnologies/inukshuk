@@ -4,8 +4,9 @@ import { space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import Svg, { Path } from 'react-native-svg';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * Small shared pieces of the import UI (#432/#435, boards
@@ -65,6 +66,8 @@ export function SourceTile({ kind, size = 44 }: { kind: SourceTileKind; size?: n
 
 /** "Strava" — the small bordered mark on a trail imported from a source. */
 export function SourceMark({ label }: { label: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View
@@ -77,6 +80,8 @@ export function SourceMark({ label }: { label: string }) {
 }
 
 export function ProgressBar({ value, label }: { value: number; label: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const pct = Math.round(Math.min(1, Math.max(0, value)) * 100);
   return (
@@ -112,6 +117,8 @@ export function PillButton({
   compact?: boolean;
   accessibilityLabel?: string;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const inert = disabled || busy;
   return (
@@ -148,6 +155,8 @@ export function PillButton({
 
 /** A rounded card on the surface colour with a hairline. */
 export function Card({ children, style }: { children: ReactNode; style?: ViewStyle }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View
@@ -160,6 +169,8 @@ export function Card({ children, style }: { children: ReactNode; style?: ViewSty
 
 /** A number over a caption ("39 / new trails"). */
 export function CountTile({ value, label }: { value: number; label: string }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   return (
     <View style={[styles.countTile, { backgroundColor: t.elevation.level2 }]}>
@@ -169,7 +180,7 @@ export function CountTile({ value, label }: { value: number; label: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   mark: {
     borderWidth: 1,
     borderRadius: 6,

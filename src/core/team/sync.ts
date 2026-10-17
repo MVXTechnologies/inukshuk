@@ -22,11 +22,13 @@ import {
   categoryOf,
   LAN_LIMITS,
   PeerGuard,
+  TokenBucket,
   type OpCategory,
   type PeerLimits,
   type StrikeReason,
 } from './ratelimit';
 import type { IngestReport } from './replica';
+import { laneOfOp, LANE_LIVE, LANE_SYNC, LANE_URGENT, LANES, type Lane } from '../group/lanes';
 
 /**
  * The sync session (#589, deliverable 6): one connection between two peers,
@@ -72,6 +74,23 @@ import type { IngestReport } from './replica';
  * frames per second, and unsolicited ops per category; malformed frames, bad
  * signatures and protocol violations are strikes, and enough strikes close the
  * session with a ban. Nothing a peer sends can make this class throw.
+ *
+ * ## Seal on dequeue (2.7.0, design §4.4)
+ * Frames are sealed with a counter nonce, so once sealed they cannot be
+ * reordered. In **pull mode** ({@link SessionOptions.pull}) the session keeps
+ * one plaintext outbox per priority lane (`@core/group/lanes`) and seals a
+ * frame only when the link layer takes it ({@link SyncSession.nextFrame}):
+ * an SOS written behind thousands of queued catch-up ops is the next frame
+ * sealed. Wire bytes and per-session ordering rules are unchanged; only which
+ * plaintext goes next changes. Without `pull` (the default, every 2.6 caller)
+ * every frame is sealed at once and returned in {@link Step.send}, as before.
+ *
+ * ## Capability-gated frames (2.7.0, design §2.6, review R-RTC-1)
+ * `up`/`upok` (LAN upgrade from raw v1 framing to the link multiplexer) and
+ * `rtc` (WebRTC offer/answer/ICE, only ever inside this AEAD) are sent only to
+ * a peer whose `cap` record claims `lnk` / `rtc`, and accepted only when this
+ * session was told to speak them. A 2.6 peer never claims either, so it never
+ * sees one; a session not told to speak them strikes them as before.
  */
 export type SessionSide = 'initiator' | 'responder';
 export type SessionPhase = 'await-hi1' | 'await-hi2' | 'await-hi3' | 'open' | 'closed';
@@ -109,7 +128,69 @@ export type SessionEvent =
   | { type: 'ingested'; report: IngestReport }
   | { type: 'admitted'; member: string; op: SignedOp }
   | { type: 'strike'; reason: StrikeReason }
+  /** WebRTC signalling from the authenticated, active peer (cap `rtc`). */
+  | { type: 'rtc'; signal: RtcSignal }
+  /** Both directions of this connection now use link-mux framing (after `up`/`upok`). */
+  | { type: 'upgrade' }
   | { type: 'closed'; why: string };
+
+/** Capability a peer claims to accept the LAN `up` upgrade to link-mux framing. */
+export const LINK_CAP = 'lnk';
+/** Capability a peer claims to accept `rtc` signalling frames. */
+export const RTC_CAP = 'rtc';
+
+/** Largest SDP an `rtc` frame carries (an offer with one data channel is ~1–3 KiB). */
+export const MAX_RTC_SDP = 16 * 1024;
+/** Largest ICE candidate line. */
+export const MAX_RTC_CANDIDATE = 1024;
+/** `rtc` frames a peer may send: [per second, burst]. ICE trickles a few dozen per attempt. */
+export const RTC_RATE: [number, number] = [4, 64];
+/**
+ * Share of the peer's unsolicited-op budget a pull-mode session spends on
+ * pushes; beyond it the peer pulls (`vv` → `want`), which is never rate-struck.
+ */
+export const PUSH_SHARE = 0.5;
+/** Pull mode: a `want` that served nothing for this long is asked again on the next vector. */
+export const WANT_STALE_MS = 30_000;
+/** An `up` that gets no `upok` this long ends the session. */
+export const UPGRADE_TIMEOUT_MS = 30_000;
+
+/**
+ * WebRTC signalling (review R-RTC-1): it travels only inside this session's
+ * AEAD, keyed by a handshake both member identities signed.
+ */
+export type RtcSignal =
+  { k: 'offer' | 'answer'; sdp: string } | { k: 'ice'; c: string; mid?: string; ix?: number };
+
+/** Total parse of a received `rtc` frame body; `undefined` when malformed. */
+export function parseRtcSignal(f: Record<string, unknown>): RtcSignal | undefined {
+  const k = f['k'];
+  if (k === 'offer' || k === 'answer') {
+    if (!hasOnlyKeys(f, ['t', 'k', 'sdp'])) return undefined;
+    const sdp = f['sdp'];
+    if (typeof sdp !== 'string' || sdp.length === 0 || sdp.length > MAX_RTC_SDP) return undefined;
+    return { k, sdp };
+  }
+  if (k === 'ice') {
+    if (!hasOnlyKeys(f, ['t', 'k', 'c', 'mid', 'ix'])) return undefined;
+    const cand = f['c'];
+    const mid = f['mid'];
+    const ix = f['ix'];
+    if (typeof cand !== 'string' || cand.length > MAX_RTC_CANDIDATE) return undefined;
+    if (mid !== undefined && (typeof mid !== 'string' || mid.length > 64)) return undefined;
+    if (
+      ix !== undefined &&
+      (!Number.isSafeInteger(ix) || (ix as number) < 0 || (ix as number) > 255)
+    ) {
+      return undefined;
+    }
+    const out: RtcSignal = { k, c: cand };
+    if (mid !== undefined) out.mid = mid as string;
+    if (ix !== undefined) out.ix = ix as number;
+    return out;
+  }
+  return undefined;
+}
 
 export interface Step {
   send: Uint8Array[];
@@ -139,6 +220,44 @@ export interface SessionOptions {
    * honour until that claim expires, and strikes on every stroke meanwhile.
    */
   liveStrokeMute?: Set<string>;
+  /**
+   * Seal on dequeue (2.7 link layer): sealed frames wait as plaintext in one
+   * outbox per lane and are sealed by {@link SyncSession.nextFrame}; clear
+   * frames (handshake, a refusal) wait in front of them. `Step.send` stays
+   * empty. Off (default): every frame is sealed at once into `Step.send`.
+   */
+  pull?: boolean;
+  /**
+   * Speak the LAN upgrade to link-mux framing (`up`/`upok`). Needs `pull`
+   * (the session holds its output between `up` and `upok`). The initiator
+   * offers it only to a peer claiming {@link LINK_CAP}.
+   */
+  linkUpgrade?: boolean;
+  /** Carry WebRTC signalling (`rtc` frames), only with a peer claiming {@link RTC_CAP}. */
+  rtc?: boolean;
+  /**
+   * Link capabilities (`lnk`, `rtc`) the peer claims in **any** group the two
+   * phones share (#712: a shared folder is its own group, with no team): a
+   * claim in this session's own group always counts too.
+   */
+  claims?: (member: string, cap: string, now: number) => boolean;
+  /**
+   * Authenticate and signal only (the L0 room session, design §2.3/§2.4): no
+   * version vector, no `want`/`ops`, no pushes. The room is never a data
+   * relay (review §2.9); a peer that sends sync frames anyway is struck.
+   */
+  signalOnly?: boolean;
+  /**
+   * The log only (a joiner's catch-up through an invite room, 2.7.0 G7): no
+   * ephemeral op (positions, live strokes) is ever sent on this session.
+   */
+  logOnly?: boolean;
+}
+
+/** A frame waiting in a pull-mode outbox: plaintext until the link takes it. */
+interface Outgoing {
+  plain: Uint8Array;
+  mark?: 'up' | 'upok';
 }
 
 /** A session that ends this soon after a live stroke went out mutes its peer (`liveStrokeMute`). */
@@ -222,6 +341,15 @@ export class SyncSession {
   private peerVv: VersionVector | undefined;
   /** Ranges we asked for and have not fully received: author → highest wanted seq. */
   private outstanding = new Map<string, number>();
+  /** Pull mode: when each outstanding request was made or last served an op. */
+  private wantProgress = new Map<string, number>();
+  /**
+   * Pull mode: the highest seq asked of this peer per author, kept until the
+   * peer has served through it. A range can complete through another peer
+   * first (a faster path); this peer's copies still on the way answered our
+   * `want` and must not be judged unsolicited (found by the G6 simulator).
+   */
+  private asked = new Map<string, number>();
   /** `want` rounds since the peer's last vector (bounds re-requests while chains re-pin). */
   private wantRounds = 0;
   /** Whether we still need to confirm the peer's membership (we joined before knowing the team). */
@@ -230,6 +358,27 @@ export class SyncSession {
   private clock = 0;
   /** When a live stroke last went to the peer. */
   private lastPenAt: number | undefined;
+  /** Pull mode: clear frames that leave before anything sealed (handshake, refusals, the last bye). */
+  private pre: Uint8Array[] = [];
+  /** Pull mode: plaintext frames per lane, sealed when the link takes them. */
+  private outbox: Outgoing[][] = [[], [], [], []];
+  /** LAN upgrade progress: `offered` = `up` queued, `sent` = `up` sealed, waiting for `upok`. */
+  private upgrade: 'none' | 'offered' | 'sent' | 'done' = 'none';
+  /** Initiator between sealing `up` and receiving `upok`: nothing else may leave in v1 framing. */
+  private holding = false;
+  private upgradeSentAt = 0;
+  /** The peer's frames after this point use link-mux framing (`up` processed, or `upok` received). */
+  upgradeIn = false;
+  /** Our frames after this point use link-mux framing (`upok` sealed, or received). */
+  upgradeOut = false;
+  private readonly rtcBucket = new TokenBucket(...RTC_RATE);
+  /**
+   * Pull mode: our share ({@link PUSH_SHARE}) of the peer's budget for
+   * unsolicited ops per category (its `PeerGuard`, same constants). Without
+   * it, relaying a large catch-up to a third phone over an internet path gets
+   * the relaying phone struck and banned (found by the simulator).
+   */
+  private pushBudget: Record<OpCategory, TokenBucket> | undefined;
 
   private constructor(
     private readonly c: TeamCrypto,
@@ -238,6 +387,18 @@ export class SyncSession {
     private readonly options: SessionOptions,
   ) {
     this.guard = new PeerGuard(options.limits ?? LAN_LIMITS);
+    if (options.pull === true) {
+      const ops = this.guard.limits.ops;
+      const share = ([rate, burst]: [number, number]) =>
+        new TokenBucket(rate * PUSH_SHARE, Math.max(1, Math.floor(burst * PUSH_SHARE)));
+      this.pushBudget = {
+        control: share(ops.control),
+        data: share(ops.data),
+        msg: share(ops.msg),
+        pos: share(ops.pos),
+        draw: share(ops.draw),
+      };
+    }
     this.clock = options.now ?? 0;
     this.phase = side === 'initiator' ? 'await-hi2' : 'await-hi1';
   }
@@ -259,7 +420,9 @@ export class SyncSession {
       e: toB64u(c.x25519.publicKey(s.ephSecret)),
       cm: toB64u(s.commitment(s.commitNonce)),
     };
-    return { session: s, step: { send: [clear(s.hi1)], events: [] } };
+    const step = empty();
+    s.emitClear(step, clear(s.hi1));
+    return { session: s, step };
   }
 
   /** Accept a connection: waits for the peer's hello. */
@@ -310,16 +473,41 @@ export class SyncSession {
     return step;
   }
 
-  /** Gossip ops we just accepted or wrote to this peer (unsolicited push). */
-  push(ops: readonly SignedOp[], now?: number): Step {
+  /**
+   * Gossip ops we just accepted or wrote to this peer (unsolicited push).
+   * `lane` is the writer's classification (`laneOfWrite`): an SOS record looks
+   * like any `e.set` from outside. It matters in pull mode only.
+   */
+  push(ops: readonly SignedOp[], now?: number, lane: Lane = LANE_LIVE): Step {
     const step = empty();
     if (now !== undefined) this.clock = Math.max(this.clock, now);
-    if (this.phase !== 'open') return step;
-    const fresh = ops.filter(
-      (op) => op.env.sq === 0 || (this.peerVv?.[op.env.au] ?? 0) < op.env.sq,
+    if (this.phase !== 'open' || this.options.signalOnly === true) return step;
+    const fresh = ops.filter((op) =>
+      op.env.sq === 0 ? this.options.logOnly !== true : (this.peerVv?.[op.env.au] ?? 0) < op.env.sq,
     );
-    this.sendOps(fresh, false, step);
-    for (const op of fresh) {
+    let sent = fresh;
+    if (this.options.pull === true) {
+      // Each op to its lane: an SOS overtakes whatever waits in lower lanes.
+      const byLane: SignedOp[][] = [[], [], [], []];
+      sent = [];
+      let deferred = false;
+      for (const op of fresh) {
+        const l = laneOfOp(op, lane);
+        if (!this.mayPush(op, l)) {
+          // The peer would refuse it as over-rate (a strike). Logged ops are
+          // pulled instead (our vector, below); a stale position is just dropped.
+          if (op.env.sq > 0) deferred = true;
+          continue;
+        }
+        byLane[l]!.push(op);
+        sent.push(op);
+      }
+      for (const l of LANES) this.sendOps(byLane[l]!, false, step, l);
+      if (deferred) this.sendSealed({ t: 'vv', v: this.store.versionVector() }, step, LANE_SYNC);
+    } else {
+      this.sendOps(fresh, false, step, lane);
+    }
+    for (const op of sent) {
       if (op.env.sq > 0 && this.peerVv) {
         // Optimistically assume contiguous delivery so we don't re-push.
         const have = this.peerVv[op.env.au] ?? 0;
@@ -327,6 +515,19 @@ export class SyncSession {
       }
     }
     return step;
+  }
+
+  /**
+   * Whether an unsolicited op fits our share of the peer's budget. Lane 0
+   * always goes (it spends the budget when it can): the half we leave unused
+   * is its headroom, so an SOS is never refused as over-rate. Live strokes
+   * have their own per-author metering at the peer and pass as before.
+   */
+  private mayPush(op: SignedOp, lane: Lane): boolean {
+    const category = categoryOf(op.env.t);
+    if (category === 'draw') return true;
+    const ok = this.pushBudget![category].take(1, this.clock);
+    return ok || lane === LANE_URGENT;
   }
 
   /** Periodic re-sync: resend our vector so the peer can pull anything it missed. */
@@ -338,15 +539,130 @@ export class SyncSession {
       return step;
     }
     if (now !== undefined) this.store.flush?.(now);
-    if (this.phase === 'open') this.sendSealed({ t: 'vv', v: this.store.versionVector() }, step);
+    if (this.holding && this.clock - this.upgradeSentAt > UPGRADE_TIMEOUT_MS) {
+      this.fail(step, 'upgrade-timeout');
+      return step;
+    }
+    if (this.phase === 'open' && this.options.signalOnly !== true) {
+      this.sendSealed({ t: 'vv', v: this.store.versionVector() }, step);
+    }
+    return step;
+  }
+
+  // ── Pull mode (seal on dequeue) ───────────────────────────────────────────
+
+  /** Whether a frame waits for `lane` (clear frames count as lane 0). */
+  hasPending(lane: Lane): boolean {
+    if (lane === LANE_URGENT && this.pre.length > 0) return true;
+    return this.phase === 'open' && !this.holding && this.outbox[lane]!.length > 0;
+  }
+
+  /** Frames waiting in every lane (pull mode). */
+  get pendingFrames(): number {
+    return this.pre.length + this.outbox.reduce((n, q) => n + q.length, 0);
+  }
+
+  /**
+   * Take the next frame of `lane`, sealing it now (pull mode): the counter
+   * advances only for a frame actually handed to the link. Clear frames
+   * (handshake, refusals, the last bye) always leave first, whatever the lane.
+   */
+  nextFrame(lane: Lane): Uint8Array | undefined {
+    const raw = this.pre.shift();
+    if (raw !== undefined) return raw;
+    if (this.phase !== 'open' || this.holding) return undefined;
+    const out = this.outbox[lane]!.shift();
+    if (out === undefined) return undefined;
+    const sealed = this.seal(out.plain);
+    if (out.mark === 'up') {
+      this.upgrade = 'sent';
+      this.holding = true;
+      this.upgradeSentAt = this.clock;
+    } else if (out.mark === 'upok') {
+      this.upgradeOut = true;
+    }
+    return sealed;
+  }
+
+  // ── Capability-gated frames ───────────────────────────────────────────────
+
+  /** A link capability claim by `member`, here or in another group both phones share. */
+  private linkClaim(member: string, cap: string): boolean {
+    return (
+      this.store.canReceive?.(member, cap, this.clock) === true ||
+      this.options.claims?.(member, cap, this.clock) === true
+    );
+  }
+
+  /** Whether {@link requestUpgrade} would offer the LAN upgrade now. */
+  canUpgrade(now?: number): boolean {
+    if (now !== undefined) this.clock = Math.max(this.clock, now);
+    return (
+      this.options.pull === true &&
+      this.options.linkUpgrade === true &&
+      this.side === 'initiator' &&
+      this.phase === 'open' &&
+      this.upgrade === 'none' &&
+      this.peer !== undefined &&
+      !this.peerUnverified &&
+      this.linkClaim(this.peer, LINK_CAP)
+    );
+  }
+
+  /**
+   * Initiator: offer the switch from raw v1 framing to link-mux framing
+   * (design §2.6). Once `up` is sealed nothing else leaves until `upok`
+   * arrives; then both directions use mux framing (`upgradeIn/Out`).
+   */
+  requestUpgrade(now?: number): boolean {
+    if (!this.canUpgrade(now)) return false;
+    this.upgrade = 'offered';
+    this.sendSealed({ t: 'up' }, empty(), LANE_URGENT, 'up');
+    return true;
+  }
+
+  /**
+   * Whether `rtc` signalling may go to this peer now (review R-RTC-1/3): the
+   * transport speaks it, the peer is authenticated and an active member under
+   * our log, claims {@link RTC_CAP}, and we are not a provisional joiner.
+   */
+  canSignal(now?: number): boolean {
+    if (now !== undefined) this.clock = Math.max(this.clock, now);
+    return (
+      this.options.rtc === true &&
+      this.options.join === undefined &&
+      this.phase === 'open' &&
+      this.peer !== undefined &&
+      !this.peerUnverified &&
+      this.store.isActiveMember(this.peer) &&
+      this.linkClaim(this.peer, RTC_CAP)
+    );
+  }
+
+  /**
+   * How far the peer's last version vector says it holds `author`'s chain
+   * (0: nothing; undefined before its first vector). Share live's "changes
+   * waiting" (#712).
+   */
+  peerSeq(author: string): number | undefined {
+    return this.peerVv === undefined ? undefined : (this.peerVv[author] ?? 0);
+  }
+
+  /** Send WebRTC signalling; nothing when {@link canSignal} is false or the signal is malformed. */
+  signal(signal: RtcSignal, now?: number): Step {
+    const step = empty();
+    if (!this.canSignal(now)) return step;
+    const body = { ...signal, t: 'rtc' } as Record<string, unknown>;
+    if (parseRtcSignal(body) === undefined) return step;
+    this.sendSealed(body as Json, step, LANE_LIVE);
     return step;
   }
 
   close(why = 'bye'): Step {
     const step = empty();
     if (this.phase === 'closed') return step;
-    if (this.phase === 'open') this.sendSealed({ t: 'bye', why }, step);
-    else step.send.push(clear({ t: 'bye', why }));
+    if (this.phase === 'open') this.sendFinal({ t: 'bye', why }, step);
+    else this.emitClear(step, clear({ t: 'bye', why }));
     // Our own decision (backgrounded, a duplicate link): no reason to mute the peer.
     this.lastPenAt = undefined;
     this.finish(step, why);
@@ -404,7 +720,7 @@ export class SyncSession {
       mc: this.identityMac(this.t2, id, 'r'),
       sg: toB64u(this.c.ed25519.sign(this.t2, this.store.keys.signSecret)),
     };
-    step.send.push(clear({ t: 'hi2', e, x: this.sealHello('hs-r', this.t1, inner) }));
+    this.emitClear(step, clear({ t: 'hi2', e, x: this.sealHello('hs-r', this.t1, inner) }));
     this.phase = 'await-hi3';
   }
 
@@ -447,7 +763,7 @@ export class SyncSession {
     if (join) inner3['join'] = join as unknown as Json;
     const t3 = this.transcript(t2, 'hs3', inner3);
     inner3['sg'] = toB64u(this.c.ed25519.sign(t3, this.store.keys.signSecret));
-    step.send.push(clear({ t: 'hi3', x: this.sealHello('hs-i', t2, inner3) }));
+    this.emitClear(step, clear({ t: 'hi3', x: this.sealHello('hs-i', t2, inner3) }));
     this.deriveKeys(t3);
     this.peer = peer;
     this.peerUnverified = !knowsTeam;
@@ -573,17 +889,51 @@ export class SyncSession {
   private open(step: Step, joining: boolean, now: number): void {
     this.phase = 'open';
     step.events.push({ type: 'open', peer: this.peer!, joining });
+    if (this.options.signalOnly === true) return;
     this.sendSealed({ t: 'vv', v: this.store.versionVector() }, step);
-    this.sendOps(this.store.liveEphemeral(now), false, step);
+    if (this.options.logOnly !== true) {
+      this.sendOps(this.store.liveEphemeral(now), false, step, LANE_LIVE);
+    }
   }
 
   // ── Open phase ────────────────────────────────────────────────────────────
 
-  private sendSealed(obj: Json, step: Step): void {
+  private seal(plain: Uint8Array): Uint8Array {
+    return this.c.aead.seal(this.sendKey!, counterNonce(this.sendCounter++), plain, FRAME_AAD);
+  }
+
+  /** A clear frame (handshake, a refusal before keys): in order, ahead of anything sealed. */
+  private emitClear(step: Step, frame: Uint8Array): void {
+    if (this.options.pull === true) this.pre.push(frame);
+    else step.send.push(frame);
+  }
+
+  /** Seal now (default) or queue the plaintext on `lane` until the link takes it (pull mode). */
+  private sendSealed(obj: Json, step: Step, lane: Lane = LANE_SYNC, mark?: Outgoing['mark']): void {
     const plain = clear(obj);
-    step.send.push(
-      this.c.aead.seal(this.sendKey!, counterNonce(this.sendCounter++), plain, FRAME_AAD),
-    );
+    if (this.options.pull === true) {
+      const out: Outgoing = mark === undefined ? { plain } : { plain, mark };
+      // `upok` is the switch point to mux framing: get it out first.
+      if (mark === 'upok') this.outbox[lane]!.unshift(out);
+      else this.outbox[lane]!.push(out);
+      return;
+    }
+    step.send.push(this.seal(plain));
+  }
+
+  /**
+   * The session's last frame (`bye`). Pull mode drops the plaintext still
+   * queued (the counter stays contiguous: it was never sealed) and seals the
+   * bye now, behind any clear frame not yet taken. Between `up` and `upok`
+   * the peer expects mux framing, so no bye is sent at all.
+   */
+  private sendFinal(obj: Json, step: Step): void {
+    if (this.options.pull !== true) {
+      step.send.push(this.seal(clear(obj)));
+      return;
+    }
+    this.outbox = [[], [], [], []];
+    if (!this.holding) this.pre.push(this.seal(clear(obj)));
   }
 
   private onSealed(frame: Uint8Array, now: number, step: Step): void {
@@ -604,6 +954,13 @@ export class SyncSession {
     this.recvCounter++;
     const f = parseFrame(plain);
     if (f === undefined) return this.strike(step, 'malformed', now);
+    if (
+      this.options.signalOnly === true &&
+      (f['t'] === 'vv' || f['t'] === 'want' || f['t'] === 'ops')
+    ) {
+      // A signalling session never syncs (the room is no data relay).
+      return this.strike(step, 'protocol', now);
+    }
     switch (f['t']) {
       case 'vv':
         return this.onVv(f, now, step);
@@ -613,9 +970,57 @@ export class SyncSession {
         return this.onOps(f, now, step);
       case 'bye':
         return this.finish(step, typeof f['why'] === 'string' ? f['why'].slice(0, 64) : 'bye');
+      case 'up':
+        return this.onUp(f, now, step);
+      case 'upok':
+        return this.onUpOk(f, now, step);
+      case 'rtc':
+        return this.onRtc(f, now, step);
       default:
         return this.strike(step, 'protocol', now);
     }
+  }
+
+  /** Whether this session speaks the LAN upgrade (else `up`/`upok` are unknown frames, as in 2.6). */
+  private speaksUpgrade(): boolean {
+    return this.options.pull === true && this.options.linkUpgrade === true;
+  }
+
+  /** Responder: switch to mux framing; `upok` is our last v1-framed frame. */
+  private onUp(f: Record<string, unknown>, now: number, step: Step): void {
+    if (!this.speaksUpgrade() || this.side !== 'responder' || this.upgrade !== 'none') {
+      return this.strike(step, 'protocol', now);
+    }
+    if (!hasOnlyKeys(f, ['t'])) return this.strike(step, 'malformed', now);
+    this.upgrade = 'done';
+    this.upgradeIn = true;
+    this.sendSealed({ t: 'upok' }, step, LANE_URGENT, 'upok');
+    step.events.push({ type: 'upgrade' });
+  }
+
+  /** Initiator: the responder switched; so do we, both ways. */
+  private onUpOk(f: Record<string, unknown>, now: number, step: Step): void {
+    if (!this.speaksUpgrade() || this.side !== 'initiator' || this.upgrade !== 'sent') {
+      return this.strike(step, 'protocol', now);
+    }
+    if (!hasOnlyKeys(f, ['t'])) return this.strike(step, 'malformed', now);
+    this.upgrade = 'done';
+    this.holding = false;
+    this.upgradeIn = true;
+    this.upgradeOut = true;
+    step.events.push({ type: 'upgrade' });
+  }
+
+  /** WebRTC signalling, only from an authenticated active member (R-RTC-3), rate-limited. */
+  private onRtc(f: Record<string, unknown>, now: number, step: Step): void {
+    if (this.options.rtc !== true) return this.strike(step, 'protocol', now);
+    const signal = parseRtcSignal(f);
+    if (signal === undefined) return this.strike(step, 'malformed', now);
+    if (this.peerUnverified || !this.store.isActiveMember(this.peer!)) {
+      return this.strike(step, 'protocol', now);
+    }
+    if (!this.rtcBucket.take(1, now)) return this.strike(step, 'rate', now);
+    step.events.push({ type: 'rtc', signal });
   }
 
   private onVv(f: Record<string, unknown>, now: number, step: Step): void {
@@ -631,7 +1036,20 @@ export class SyncSession {
       vv[author] = n as number;
     }
     this.peerVv = vv;
-    this.outstanding.clear();
+    if (this.options.pull === true) {
+      // A slow path (relay, paced) can take longer than a tick to serve one
+      // `want`: forget only requests that stopped making progress, or the
+      // peer serves the same ranges twice and the late copies arrive
+      // unsolicited, over-rate, as strikes (found by the simulator).
+      for (const a of new Set([...this.outstanding.keys(), ...this.asked.keys()])) {
+        if (now - (this.wantProgress.get(a) ?? -Infinity) > WANT_STALE_MS) {
+          this.outstanding.delete(a);
+          this.asked.delete(a);
+        }
+      }
+    } else {
+      this.outstanding.clear();
+    }
     this.wantRounds = 0;
     this.requestMissing(step);
   }
@@ -640,8 +1058,12 @@ export class SyncSession {
   private requestMissing(step: Step): void {
     if (this.peerVv === undefined) return;
     const mine = this.store.versionVector();
-    const missing = missingRanges(mine, this.peerVv).filter(
-      ([a, , to]) => (this.outstanding.get(a) ?? 0) < to,
+    // Pull mode: one request in flight per author (the next slice follows when
+    // it is in); a second one would overlap it, and its late copies would
+    // arrive unsolicited. Without pull mode, as in 2.6: re-ask past the head.
+    const pull = this.options.pull === true;
+    const missing = missingRanges(mine, this.peerVv).filter(([a, , to]) =>
+      pull ? !this.outstanding.has(a) : (this.outstanding.get(a) ?? 0) < to,
     );
     if (missing.length === 0) return;
     const owner = this.store.state.owner;
@@ -654,7 +1076,11 @@ export class SyncSession {
         from,
         Math.min(to, from + MAX_RANGE_LEN - 1),
       ]);
-    for (const [a, , to] of ranges) this.outstanding.set(a, to);
+    for (const [a, , to] of ranges) {
+      this.outstanding.set(a, to);
+      this.wantProgress.set(a, this.clock);
+      if (pull) this.asked.set(a, Math.max(this.asked.get(a) ?? 0, to));
+    }
     this.sendSealed({ t: 'want', r: ranges }, step);
   }
 
@@ -710,7 +1136,7 @@ export class SyncSession {
         typeof author === 'string' &&
         typeof sq === 'number' &&
         sq >= 1 &&
-        sq <= (this.outstanding.get(author) ?? 0);
+        sq <= Math.max(this.outstanding.get(author) ?? 0, this.asked.get(author) ?? 0);
       const category = categoryOf(String(env?.['t'] ?? ''));
       if (!asked && !this.admit(category, author, now)) {
         // An over-rate live stroke is dropped without a strike: each one holds the
@@ -719,8 +1145,10 @@ export class SyncSession {
         if (category !== 'draw') overRate = true;
         continue;
       }
-      if (asked)
+      if (asked) {
         served.set(author as string, Math.max(served.get(author as string) ?? 0, sq as number));
+        this.wantProgress.set(author as string, now);
+      }
       admitted.push(raw);
     }
     if (overRate) this.strike(step, 'rate', now);
@@ -755,6 +1183,7 @@ export class SyncSession {
         // falls short (an anchored chain re-pinning: ask again from our new head).
         if ((vv[a] ?? 0) >= to || (served.get(a) ?? 0) >= to) this.outstanding.delete(a);
       }
+      for (const [a, n] of served) if (n >= (this.asked.get(a) ?? 0)) this.asked.delete(a);
       // Ask for the next slice once this round is in (a peer that sends nothing stalls only itself).
       if (this.outstanding.size === 0 && this.wantRounds < MAX_WANT_ROUNDS) {
         this.wantRounds++;
@@ -787,7 +1216,12 @@ export class SyncSession {
     return this.store.canReceive?.(this.peer, cap, this.clock) === true;
   }
 
-  private sendOps(all: readonly SignedOp[], solicited: boolean, step: Step): void {
+  private sendOps(
+    all: readonly SignedOp[],
+    solicited: boolean,
+    step: Step,
+    lane: Lane = LANE_SYNC,
+  ): void {
     const ops = all.filter((op) => this.mayCarry(op));
     if (ops.some((op) => own(GATED_TYPES, op.env.t) !== undefined)) this.lastPenAt = this.clock;
     const budget = this.guard.limits.maxFrameBytes - FRAME_OVERHEAD;
@@ -797,7 +1231,7 @@ export class SyncSession {
       if (batch.length === 0) return;
       const frame: Record<string, Json> = { t: 'ops', o: batch };
       if (solicited) frame['re'] = 1;
-      this.sendSealed(frame, step);
+      this.sendSealed(frame, step, lane);
       batch = [];
       size = 0;
     };
@@ -818,8 +1252,8 @@ export class SyncSession {
 
   private fail(step: Step, why: string): void {
     if (this.phase === 'closed') return;
-    if (this.phase === 'open') this.sendSealed({ t: 'bye', why }, step);
-    else step.send.push(clear({ t: 'bye', why }));
+    if (this.phase === 'open') this.sendFinal({ t: 'bye', why }, step);
+    else this.emitClear(step, clear({ t: 'bye', why }));
     this.finish(step, why);
   }
 

@@ -24,6 +24,7 @@ import { updateCurrentStrip } from '@features/map/infoStrip/stripSettings';
 import { BetaFeaturesSection } from './BetaFeaturesSection';
 import { CoordinateFormatSetting } from './CoordinateFormatSetting';
 import { NavigationButtonsSetting } from './NavigationButtonsSetting';
+import { DisplaySizeSetting } from './DisplaySizeSetting';
 import { PinSizeSetting } from './PinSizeSetting';
 import { UnitsSetting } from './UnitsSetting';
 import { ExtensionsSection } from './ExtensionsSection';
@@ -50,7 +51,7 @@ import {
   Text,
   TextInput,
   useTheme,
-} from 'react-native-paper';
+} from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DisplaySheet } from '@features/display/DisplaySheet';
 import { RecordingCheckPanel } from '@features/recording/RecordingCheckPanel';
@@ -63,6 +64,7 @@ import { OfflineMapsSection } from './OfflineMapsSection';
 import { ConnectionsSection } from './ConnectionsSection';
 import { TrainingSection } from './TrainingSection';
 import { PhotosSection } from './PhotosSection';
+import { useScaledStyles } from '@ui/displayScale';
 
 /** GPS point spacing stops, metres; labelled in the user's short unit ("2 m" / "7 ft"). */
 const DISPLACEMENT_STOPS_M = [2, 5, 10];
@@ -119,6 +121,8 @@ const updateLine = describeRunningUpdate({
 const DISPLAY_LABEL = { normal: 'Normal', sunlight: 'Sunlight', night: 'Night red' } as const;
 
 export function SettingsScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const router = useRouter();
   // `?open=<category>` opens that category (Statistics' "change" max-HR link);
   // `&ext=<key>` with `open=extensions` also opens that extension's details
@@ -363,6 +367,8 @@ export function SettingsScreen() {
                 <UnitsSetting />
                 {/* #677: one app-wide coordinate format (map chip, waypoint cards, copies). */}
                 <CoordinateFormatSetting />
+                {/* #760: Small 85 % · Default 100 % · Large 115 %, applied as you tap. */}
+                <DisplaySizeSetting />
                 {/* #686: every waypoint pin on the map at 75–150 %. */}
                 <PinSizeSetting />
                 <List.Item title="Theme" description="Follow the system, or force light / dark" />
@@ -829,7 +835,7 @@ export function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   fill: { flex: 1 },
   // Zeroes the paddingLeft Paper clones onto a lone accordion child, so
   // category bodies keep the same full-width row layout as before.

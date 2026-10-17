@@ -6,7 +6,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon, Text } from '@ui/paper';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -14,6 +14,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
+import { useScaledStyles } from '@ui/displayScale';
 
 function deviceLocale(): string | null {
   try {
@@ -49,6 +50,8 @@ export function TipBubble({
   /** Test hook: how long it stays up untouched. */
   visibleMs?: number;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const router = useRouter();
   const t = useSchemeTokens();
   const reduceMotion = useReducedMotion();
@@ -129,7 +132,7 @@ export function TipBubble({
 /** Side of the rotated square that draws the tail. */
 const TAIL = 12;
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   anchor: { position: 'absolute', alignItems: 'flex-end' },
   bubble: {
     maxWidth: 250,

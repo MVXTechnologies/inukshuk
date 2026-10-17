@@ -8,12 +8,15 @@ import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
-import { Button, Text, TextInput } from 'react-native-paper';
+import { Button, Text, TextInput } from '@ui/paper';
 
 import { ChoiceRow, Note, SectionLabel, TeamScreenFrame } from './components';
 import { actionMessage } from './messages';
+import { useScaledStyles } from '@ui/displayScale';
 
 export function GroupsScreen() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const view = useTeamStore((s) => s.view);
   const [name, setName] = useState('');
@@ -99,6 +102,6 @@ export function GroupsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   group: { borderLeftWidth: 2, paddingLeft: space.md, paddingVertical: space.xs },
 });

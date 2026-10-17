@@ -1,5 +1,6 @@
 import { InputAccessoryView, Keyboard, Platform, StyleSheet, View } from 'react-native';
-import { Button, useTheme } from 'react-native-paper';
+import { Button, useTheme } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * #235 — iOS has no way out of a text field.
@@ -53,6 +54,8 @@ export function KeyboardDoneBar() {
 }
 
 function DoneBarIos() {
+  const styles = useScaledStyles(stylesSheet);
+
   const theme = useTheme();
 
   return (
@@ -85,7 +88,7 @@ function DoneBarIos() {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   bar: {
     flexDirection: 'row',
     justifyContent: 'flex-end',

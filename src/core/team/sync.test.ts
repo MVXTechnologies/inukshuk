@@ -162,6 +162,25 @@ describe('joining over the LAN', () => {
     expect(link.a.phase).toBe('open');
   });
 
+  it('a log-only session (an invite room, G7) admits and catches up but sends no position', () => {
+    const w = newWorld();
+    w.root.position(T0 + 5, { la: 46.8, lo: -71.2, at: T0 + 5 }, 600);
+    const inv = invite(w.root, T0 + 10);
+    const j = device();
+    const joiner = new TeamReplica(c, w.teamId, j.keys);
+    const { session: a, step } = SyncSession.initiate(c, joiner, {
+      join: makeJoinProof(c, inv.token, j.keys),
+    });
+    const b = SyncSession.respond(c, w.root, { logOnly: true });
+    const link = { a, b, events: { a: [], b: [] } };
+    pump(link, step, T0 + MIN);
+    expect(joiner.isActiveMember(j.id)).toBe(true);
+    expect(joiner.liveEphemeral(T0 + MIN)).toEqual([]);
+    // A later push of a position is dropped too.
+    const pos = w.root.position(T0 + MIN, { la: 46.81, lo: -71.2, at: T0 + MIN }, 600)!;
+    expect(b.push([pos], T0 + MIN).send).toEqual([]);
+  });
+
   it('refuses expired, reused and forged invites, and strangers without one', () => {
     const w = newWorld();
     const inv = invite(w.root, T0 + 10, { expiresAt: T0 + DAY });

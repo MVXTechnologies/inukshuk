@@ -39,7 +39,7 @@ import { teamService, useTeamStore } from '@state/teamStore';
 import { drawMapColors } from '@ui/teamDrawTokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo, useEffect, useMemo, useState } from 'react';
-import { useTheme } from 'react-native-paper';
+import { useTheme } from '@ui/paper';
 
 /** Source rebuilds (steady and fading), for the render-budget tests (measure, don't assert). */
 export const drawLayerStats = { builds: 0, fadingBuilds: 0, ticks: 0 };

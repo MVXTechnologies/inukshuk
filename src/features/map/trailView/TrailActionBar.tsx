@@ -1,7 +1,8 @@
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { StyleSheet, View } from 'react-native';
-import { Button } from 'react-native-paper';
+import { Button } from '@ui/paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScaledStyles } from '@ui/displayScale';
 
 export interface TrailAction {
   key: string;
@@ -21,6 +22,8 @@ export const TRAIL_ACTION_BAR_H = 64;
  * (On map · Follow (#678) · Share · Export).
  */
 export function TrailActionBar({ actions }: { actions: readonly TrailAction[] }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const insets = useSafeAreaInsets();
   if (actions.length === 0) return null;
@@ -55,7 +58,7 @@ export function TrailActionBar({ actions }: { actions: readonly TrailAction[] })
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   bar: {
     position: 'absolute',
     left: 0,

@@ -1,11 +1,12 @@
 import type { OverlayRow } from '@core/map/overlayTabs';
-import { MAP_EDGE_INSET, MAP_STACK_GAP } from '@core/map/mapChrome';
 import { useSettingsStore } from '@state/settingsStore';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { MapActionsMenu, type MapActions } from './MapActionsMenu';
 import { MapButton } from './MapButton';
 import { MapOverlaysMenu } from './MapOverlaysMenu';
+import { useScaledStyles } from '@ui/displayScale';
+import { useMapChrome } from '../useMapChrome';
 
 interface Props {
   /** Distance from the top of the screen (safe-area inset + margin). */
@@ -58,6 +59,10 @@ interface Props {
  * controls') are unchanged.
  */
 export function MapControlsRail(props: Props) {
+  const styles = useScaledStyles(stylesSheet);
+  const chrome = useMapChrome();
+  const column = { right: chrome.edgeInset, gap: chrome.railGap };
+
   const compact = useSettingsStore((s) => s.compactMapChrome);
   const { compactOpen, onCompactOpenChange } = props;
   // The Map layers sheet and the "+" actions sheet are plain-View sheets in
@@ -87,7 +92,7 @@ export function MapControlsRail(props: Props) {
   // Compact map chrome: everything folded behind one chevron until asked.
   if (compact && !compactOpen) {
     return (
-      <View style={[styles.rightControls, { top }]} pointerEvents="box-none">
+      <View style={[styles.rightControls, column, { top }]} pointerEvents="box-none">
         <MapButton
           icon="chevron-left"
           onPress={() => onCompactOpenChange(true)}
@@ -101,7 +106,7 @@ export function MapControlsRail(props: Props) {
     <>
       {openMenu !== null && <Pressable style={styles.backdrop} onPress={() => setOpenMenu(null)} />}
       <View
-        style={[styles.rightControls, styles.railAboveBackdrop, { top }]}
+        style={[styles.rightControls, column, styles.railAboveBackdrop, { top }]}
         pointerEvents="box-none"
       >
         {compact && (
@@ -153,12 +158,12 @@ export function MapControlsRail(props: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  // The rail's column (`@core/map/mapChrome`): the team SOS button shares its axis (#756).
+const stylesSheet = StyleSheet.create({
+  // The rail's column (`@core/map/mapChrome`): the team SOS button shares its
+  // axis (#756). Its inset and gap come from useMapChrome (#760): 48 dp touch
+  // boxes that touch, their 40 dp discs 8 dp apart, all at the Display size.
   rightControls: {
     position: 'absolute',
-    right: MAP_EDGE_INSET,
-    gap: MAP_STACK_GAP,
     alignItems: 'flex-end',
   },
   // While a sheet is up, the rail must stack above its backdrop.

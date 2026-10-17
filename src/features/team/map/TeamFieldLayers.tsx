@@ -8,7 +8,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { FeatureCollection } from 'geojson';
 import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import { AppState } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { useTheme } from '@ui/paper';
 import { useReducedMotion } from 'react-native-reanimated';
 
 import { teamLabelFont } from './TeamMapLayers';

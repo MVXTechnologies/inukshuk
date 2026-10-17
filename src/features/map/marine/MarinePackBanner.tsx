@@ -1,9 +1,10 @@
 import { marinePackOfferMessage, type MarinePackOffer } from '@core/geo/marinePacks';
 import { formatBytes } from '@core/format';
 import { StyleSheet, View } from 'react-native';
-import { Icon, Surface, Text, TouchableRipple } from 'react-native-paper';
+import { Icon, Surface, Text, TouchableRipple } from '@ui/paper';
 
 import { weatherChrome as wc } from '../weather/weatherChrome';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The low-resolution marine prompt (marine wave D §D4, the owner's explicit
@@ -34,6 +35,8 @@ export function MarinePackBanner({
   onDownload: () => void;
   onDismiss: () => void;
 }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const busy = progress !== null;
   const size = formatBytes(offer.bytes);
   const detail = busy
@@ -84,7 +87,7 @@ export function MarinePackBanner({
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   card: {
     backgroundColor: wc.panelSolid,
     borderRadius: 14,

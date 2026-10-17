@@ -5,6 +5,7 @@ import { ReceiverChipView } from './ReceiverChipView';
 import { ReceiverSheet } from './ReceiverSheet';
 import { useReceiverChip } from './useReceiverChip';
 import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
+import { useScaledStyles } from '@ui/displayScale';
 
 /**
  * The receiver on the map (#588): its status chip in the top-centre lane
@@ -13,6 +14,8 @@ import { MAP_OVERLAY_Z } from '@features/map/overlayOrder';
  * chip's place (`showChip` false) and opens the same sheet.
  */
 export function ReceiverMapOverlay({ top, showChip }: { top: number; showChip: boolean }) {
+  const styles = useScaledStyles(stylesSheet);
+
   const chip = useReceiverChip();
   const sheetOpen = useGnssStore((s) => s.sheetOpen);
   const setSheetOpen = useGnssStore((s) => s.setSheetOpen);
@@ -34,7 +37,7 @@ export function ReceiverMapOverlay({ top, showChip }: { top: number; showChip: b
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   // MapScreen's top-centre lane: between the compass stack and the controls rail.
   lane: {
     position: 'absolute',

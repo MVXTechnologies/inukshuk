@@ -12,16 +12,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
-import {
-  Button,
-  Dialog,
-  IconButton,
-  List,
-  Portal,
-  Text,
-  TextInput,
-  useTheme,
-} from 'react-native-paper';
+import { Button, Dialog, IconButton, List, Portal, Text, TextInput, useTheme } from '@ui/paper';
 
 /** The name of one offline map to update: a region's label, or a trail download's without "(1/n)". */
 function updateName(group: readonly OfflineRegion[] | null): string {

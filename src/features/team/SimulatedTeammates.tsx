@@ -6,9 +6,11 @@
 import { DEFAULT_INVITE } from '@core/teamui/invites';
 import {
   addBadgeThreads,
+  addSimulatedNote,
   addSimulatedTeammate,
   BADGE_THREADS,
   simulatedAlert,
+  SIM_NOTE_TEXT,
   simulatedTeamToJoin,
 } from '@data/team/simulatedTeammates';
 import { teamService, useTeamStore } from '@state/teamStore';
@@ -16,16 +18,31 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import { Button, Text } from '@ui/paper';
+import { useScaledStyles } from '@ui/displayScale';
+
+import { myPosition } from './bar/parts';
 
 const NAMES = ['Julie Tremblay', 'Simon Gagnon', 'Ana Ruiz', 'Luc Bouchard'];
 const QUEBEC = { latitude: 46.8139, longitude: -71.208 };
 
-function center() {
+/**
+ * Where the simulated phones act: this phone's freshest fix (the OS's last
+ * known one), else the persisted last position, else Québec. Not the
+ * persisted one first: it is written at most once a minute, from the first
+ * fix after launch, so right after a location change (a Maestro flow's
+ * `setLocation`) it still names the previous place, and a teammate's note
+ * landed tens of km off screen.
+ */
+async function center(): Promise<{ latitude: number; longitude: number }> {
+  const fix = await myPosition(null);
+  if (fix !== null) return { latitude: fix[1], longitude: fix[0] };
   return useSettingsStore.getState().lastKnownPosition ?? QUEBEC;
 }
 
 export function SimulatedTeammates() {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const [busy, setBusy] = useState(false);
   const count = useTeamStore((s) => s.view?.activeCount ?? 0);
@@ -36,13 +53,21 @@ export function SimulatedTeammates() {
       return photo !== undefined && (s.photoThreads.get(photo.id)?.length ?? 0) >= comments;
     }),
   );
+  // The teammate's note (#706) as THIS phone holds it.
+  const noteHere = useTeamStore((s) =>
+    s.pins.some((p) => p.note !== null && p.note.text === SIM_NOTE_TEXT),
+  );
   const add = async () => {
     const session = teamService()?.active;
     if (!session) return;
     setBusy(true);
     const inv = session.createInvite(DEFAULT_INVITE);
     if (typeof inv !== 'string') {
-      await addSimulatedTeammate(inv, NAMES[(count - 1) % NAMES.length] ?? 'Teammate', center());
+      await addSimulatedTeammate(
+        inv,
+        NAMES[(count - 1) % NAMES.length] ?? 'Teammate',
+        await center(),
+      );
     }
     setBusy(false);
   };
@@ -52,7 +77,7 @@ export function SimulatedTeammates() {
     setBusy(true);
     const inv = session.createInvite(DEFAULT_INVITE);
     if (typeof inv !== 'string') {
-      await addSimulatedTeammate(inv, 'Alex (Guide)', center(), {
+      await addSimulatedTeammate(inv, 'Alex (Guide)', await center(), {
         photoComment: 'Superbe vue au sommet ! On repart à 14 h?',
       });
     }
@@ -73,7 +98,9 @@ export function SimulatedTeammates() {
         mode="outlined"
         onPress={() => {
           setBusy(true);
-          void addBadgeThreads(center()).finally(() => setBusy(false));
+          void center()
+            .then(addBadgeThreads)
+            .finally(() => setBusy(false));
         }}
         loading={busy}
         testID="team-sim-badges"
@@ -83,19 +110,31 @@ export function SimulatedTeammates() {
       <View style={styles.row}>
         <Button
           mode="outlined"
-          onPress={() => simulatedAlert('rally', center())}
+          onPress={() => void center().then((at) => simulatedAlert('rally', at))}
           testID="team-sim-rally"
         >
           They call a gather
         </Button>
         <Button
           mode="outlined"
-          onPress={() => simulatedAlert('sos', center())}
+          onPress={() => void center().then((at) => simulatedAlert('sos', at))}
           testID="team-sim-sos"
         >
           They raise an SOS
         </Button>
       </View>
+      <Button
+        mode="outlined"
+        onPress={() => void center().then(addSimulatedNote)}
+        testID="team-sim-note"
+      >
+        A teammate posts a note
+      </Button>
+      {noteHere && (
+        <Text variant="bodySmall" testID="team-sim-note-done">
+          The teammate’s note is on this phone
+        </Text>
+      )}
       {badgesHere && (
         <Text variant="bodySmall" testID="team-sim-badges-done">
           Badge threads synced to this phone
@@ -115,10 +154,12 @@ export function SimulatedTeamToJoin({ onLink }: { onLink: (link: string) => void
       testID="team-sim-team"
       onPress={() => {
         setBusy(true);
-        void simulatedTeamToJoin(center()).then((r) => {
-          setBusy(false);
-          if (r) onLink(r.link);
-        });
+        void center()
+          .then(simulatedTeamToJoin)
+          .then((r) => {
+            setBusy(false);
+            if (r) onLink(r.link);
+          });
       }}
     >
       Simulate a team nearby
@@ -126,7 +167,7 @@ export function SimulatedTeamToJoin({ onLink }: { onLink: (link: string) => void
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   box: { borderWidth: 1, borderStyle: 'dashed', borderRadius: 12, padding: 12, gap: 8 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });

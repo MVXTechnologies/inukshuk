@@ -3,11 +3,14 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRef } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import { Button, Text } from '@ui/paper';
 
 import type { QrScannerProps } from './QrScanner';
+import { useScaledStyles } from '@ui/displayScale';
 
 export function QrScannerView({ onCode, onClose }: QrScannerProps) {
+  const styles = useScaledStyles(stylesSheet);
+
   const t = useSchemeTokens();
   const [permission, request] = useCameraPermissions();
   const last = useRef<string | null>(null);
@@ -58,7 +61,7 @@ export function QrScannerView({ onCode, onClose }: QrScannerProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const stylesSheet = StyleSheet.create({
   box: { height: 360, borderRadius: 16, overflow: 'hidden' },
   center: { alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
   text: { textAlign: 'center' },
