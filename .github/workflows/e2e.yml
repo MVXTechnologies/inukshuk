@@ -147,6 +147,11 @@ jobs:
           # flow's Undo raced the real window (run 38750352646). E2E builds
           # only (src/core/teamui/undo.ts undoWindowMs); unit tests pin 5 s.
           EXPO_PUBLIC_E2E_UNDO_MS: '20000'
+          # The "New version" prompt's review screenshots (.maestro/update-prompt.yaml):
+          # inukshuk://e2e/update-prompt?state=… fakes a store offer for that launch.
+          # E2E builds only (src/features/map/updatePromptE2E.ts); store builds
+          # never set it, so the link is inert there.
+          EXPO_PUBLIC_E2E_UPDATE_PROMPT: '1'
 
       # The Gradle build already refused anything else (verifyPatchedHermes*,
       # plugins/withPatchedHermes.js); this checks the APK itself, logs the

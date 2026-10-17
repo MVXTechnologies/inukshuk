@@ -43,7 +43,7 @@
     ],
     "team": ["team-draw.yaml", "team.yaml"],
     "team-net": ["team-internet.yaml", "team-notes.yaml"],
-    "team-join": ["team-join.yaml"]
+    "team-join": ["update-prompt.yaml", "team-join.yaml"]
   },
   "requires": {
     "heatmap.yaml": ["category-record.yaml"],

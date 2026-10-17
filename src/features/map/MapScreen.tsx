@@ -296,6 +296,8 @@ import { useTrackHeat } from './useTrackHeat';
 import { useGeoJsonString } from './useGeoJsonString';
 import { MarineDisclaimerChip } from './marine/MarineDisclaimerChip';
 import { MarinePackBanner } from './marine/MarinePackBanner';
+import { UpdatePromptBanner } from './components/UpdatePromptBanner';
+import { useStoreUpdatePrompt } from './useStoreUpdatePrompt';
 import { DepthPointLine } from './marine/DepthPointLine';
 import { MarineLegend } from './marine/MarineLegend';
 import { marineChartSource, useMarineChart } from './marine/useMarineChart';
@@ -1200,6 +1202,9 @@ export function MapScreen() {
 
   // Plain messages and the EDIT / UNDO bar share one slot (useMapSnackbars).
   const mapSnacks = useMapSnackbars();
+  // The "New version" prompt (2.7.0): null unless the store has a newer
+  // binary; it hides itself while recording or during an SOS.
+  const updatePrompt = useStoreUpdatePrompt();
   const { message: snack, show: showSnack, dismiss: dismissSnack } = mapSnacks.plain;
   /** Positions in the user's coordinate format (#677): the point chip and the copy actions. */
   const formatCoords = useCoordinateFormatter();
@@ -4121,6 +4126,22 @@ export function MapScreen() {
               offline={marineChart.chart?.offline ?? false}
             />
           )}
+          {/* The "New version" prompt (2.7.0): one line + Update, in this
+            column like the marine offer (never a Dialog or Portal). Not while
+            the region selector, the map maker or a drawing owns the bottom. */}
+          {updatePrompt !== null &&
+            !selecting &&
+            makeMapState === null &&
+            !drawing.active &&
+            !teamDrawing && (
+              <UpdatePromptBanner
+                text={updatePrompt.text}
+                action={updatePrompt.action}
+                actionLabel={updatePrompt.actionLabel}
+                onAction={updatePrompt.onAction}
+                onDismiss={updatePrompt.onDismiss}
+              />
+            )}
           {/* Offline marine pack offer (wave D §D4): a quiet Surface row in
             the bottom stack — never a Dialog, never a Portal (One UI
             touch-swallow), and snoozed for 30 days by "Not now". */}
