@@ -1,7 +1,7 @@
 # Team notes e2e (#706), one phone, on the loopback mesh build (see team.yaml).
 #
 # Create a team → a simulated teammate joins and posts a note → on the map
-# her note shows as text, unread → its card (Seen by, Fades in; no ⋮) → a
+# her note shows as text, unread → its card (Seen by, Fades in; an admin's ⋮: Delete only) → a
 # long-press → Note here → compose (counter, 1 day) → Post → my note's card
 # with its ⋮ menu and the Fades after sub-panel → the panel's Notes list
 # (All, Mine) → a row opens the card → Draw's Text tool opens the composer
@@ -183,10 +183,27 @@ appId: com.inukshuk.app
     id: 'note-seen-by'
 - assertVisible:
     id: 'note-fades-in'
-# Not my note: no options menu.
-- assertNotVisible:
-    id: 'note-more'
 - takeScreenshot: team-note-card
+# Not my note, but I made the team (its admin): the menu holds Delete only,
+# none of the author's Edit text, Fades after or Move (run 38982598827).
+- tapOn:
+    id: 'note-more'
+- extendedWaitUntil:
+    visible:
+      id: 'note-menu-delete'
+    timeout: 3000
+- assertNotVisible:
+    id: 'note-menu-edit'
+- assertNotVisible:
+    id: 'note-menu-fade'
+- assertNotVisible:
+    id: 'note-menu-move'
+- tapOn:
+    id: 'note-more'
+- extendedWaitUntil:
+    notVisible:
+      id: 'note-menu'
+    timeout: 3000
 - tapOn: 'Close'
 - extendedWaitUntil:
     notVisible:

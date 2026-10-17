@@ -109,8 +109,11 @@ appId: com.inukshuk.app
     direction: DOWN
 - assertVisible: 'Over the internet'
 - takeScreenshot: review-team-internet-create-${MODE}
-- tapOn: 'Cancel'
-# Cancel goes back to Settings, which has no tab bar: back to Library.
+# The header's Back, not the footer's Cancel: the name field takes the focus
+# when New team opens, and its keyboard covers the footer (run 38982598827).
+# Never hideKeyboard here: with the keyboard already down it presses Back.
+- tapOn: 'Back'
+# Back on Settings, which has no tab bar: back to Library.
 - extendedWaitUntil:
     notVisible:
       id: 'team-create-screen'
