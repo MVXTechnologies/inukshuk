@@ -21,7 +21,7 @@ mapfile -t FLOWS <<< "$PLAN"
 # runs, which otherwise leave no logcat. A larger ring so a flow's start is
 # not dropped before the dump.
 KEEP_PASS_LOGCAT=0
-if [ "$SHARD" = catalog ]; then
+if [ "$SHARD" = catalog ] || [ "$SHARD" = extensions ]; then
   KEEP_PASS_LOGCAT=1
   adb logcat -G 16M || true
 fi

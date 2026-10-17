@@ -133,7 +133,11 @@ export function useTideLevels(
             reading: series ? levelReading(series, now) : null,
           };
         });
-        setData(levelFeatures(entries, units, tideClock));
+        const fc = levelFeatures(entries, units, tideClock);
+        console.warn(
+          `[tides764] z=${view.zoom.toFixed(2)} tier=${tier} queried=${features.length} stations=${stations.length} picked=${picked.length} series=${results.filter((r) => r !== null).length} labels=${fc.features.length} first=${JSON.stringify(fc.features[0]?.properties ?? null)}`,
+        );
+        setData(fc);
       })();
     }, SETTLE_DELAY_MS);
     return () => {
@@ -175,6 +179,9 @@ export function TideLevelsOverlay({
           />
         ));
   }, [dark, beforeId, glyphs]);
+  console.warn(
+    `[tides764] overlay on=${on} view=${view === null ? 'null' : view.zoom.toFixed(2)} data=${data === null ? 'null' : data.features.length} glyphs=${glyphs ?? 'none'} font=${font?.join(',') ?? 'null'} beforeId=${beforeId}`,
+  );
   if (data === null || font === null) return null;
   return (
     <GeoJSONSource id={TIDE_LEVEL_SOURCE} data={data}>
