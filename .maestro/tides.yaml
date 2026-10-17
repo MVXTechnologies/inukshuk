@@ -149,13 +149,14 @@ appId: com.inukshuk.app
 - tapOn: 'Close overlays'
 - assertVisible: 'Map actions'
 - setLocation:
-    latitude: 42.35209
+    latitude: 42.35389
     longitude: -71.05028
 # The levels on the map (#764) and a station's card, graph first (light):
-# the map follows the fix, 200 m south of NOAA's Boston gauge (8443970), so
-# the puck doesn't hide the station: at the follow camera's z14 it sits 28 dp
-# above the map's centre (the map area ends at the info strip: centre 47 %,
-# the station 44 %). A tap there opens its card; the guarded tap retries while the
+# the map follows the fix onto NOAA's Boston gauge (8443970), so the
+# station sits at the map's centre (the map area ends at the info strip:
+# 47 %). Not offset from the puck: the follow camera's zoom is not fixed
+# enough to aim at a point beside it (run 39005885737 missed). A tap there
+# opens its card; the guarded tap retries while the
 # station's tile is still loading. The graph proves the series loaded, the
 # same series the map's labels draw from; with the card closed, the map
 # shot shows them.
@@ -173,7 +174,7 @@ appId: com.inukshuk.app
                     id: 'tide-card'
                 commands:
                   - tapOn:
-                      point: '50%,44%'
+                      point: '50%,47%'
             - extendedWaitUntil:
                 visible:
                   id: 'tide-card'
@@ -195,10 +196,11 @@ appId: com.inukshuk.app
     env:
       NEXT: Dark
 # The levels on the map (#764) and a station's card, graph first (dark):
-# the map follows the fix, 200 m south of NOAA's Boston gauge (8443970), so
-# the puck doesn't hide the station: at the follow camera's z14 it sits 28 dp
-# above the map's centre (the map area ends at the info strip: centre 47 %,
-# the station 44 %). A tap there opens its card; the guarded tap retries while the
+# the map follows the fix onto NOAA's Boston gauge (8443970), so the
+# station sits at the map's centre (the map area ends at the info strip:
+# 47 %). Not offset from the puck: the follow camera's zoom is not fixed
+# enough to aim at a point beside it (run 39005885737 missed). A tap there
+# opens its card; the guarded tap retries while the
 # station's tile is still loading. The graph proves the series loaded, the
 # same series the map's labels draw from; with the card closed, the map
 # shot shows them.
@@ -216,7 +218,7 @@ appId: com.inukshuk.app
                     id: 'tide-card'
                 commands:
                   - tapOn:
-                      point: '50%,44%'
+                      point: '50%,47%'
             - extendedWaitUntil:
                 visible:
                   id: 'tide-card'
