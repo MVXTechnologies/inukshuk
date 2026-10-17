@@ -464,10 +464,14 @@ const stylesSheet = StyleSheet.create({
     fontSize: 15,
   },
   error: { marginBottom: 8 },
+  // In the flow above the card, not absolute: the dock is anchored at its
+  // bottom, so the menu extends it upward and stays inside its parent's
+  // bounds. Drawn outside them (bottom: '100%'), Android reported its rows
+  // "not visible to user": out of the accessibility tree, so TalkBack and the
+  // E2E could not reach Fades after (run 38992528840).
   menu: {
-    position: 'absolute',
-    right: 16,
-    bottom: '100%',
+    alignSelf: 'flex-end',
+    marginRight: 16,
     marginBottom: -56,
     width: 228,
     borderRadius: 16,
