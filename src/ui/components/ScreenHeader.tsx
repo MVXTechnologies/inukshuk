@@ -63,12 +63,14 @@ export function HeaderAction({
   accessibilityLabel,
   disabled,
   size,
+  testID,
 }: {
   icon: string;
   onPress: () => void;
   accessibilityLabel: string;
   disabled?: boolean;
   size?: number;
+  testID?: string;
 }) {
   const styles = useScaledStyles(stylesSheet);
 
@@ -82,6 +84,7 @@ export function HeaderAction({
       onPress={onPress}
       disabled={disabled}
       accessibilityLabel={accessibilityLabel}
+      testID={testID}
     />
   );
 }

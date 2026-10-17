@@ -111,8 +111,11 @@ appId: com.inukshuk.app
 - takeScreenshot: review-team-internet-create-${MODE}
 # The header's Back, not the footer's Cancel: the name field takes the focus
 # when New team opens, and its keyboard covers the footer (run 38982598827).
+# By id: with the keyboard up, Android's navigation Back (the IME's ⌄) is
+# named "Back" too and only closes the keyboard (run 39014661721's retry).
 # Never hideKeyboard here: with the keyboard already down it presses Back.
-- tapOn: 'Back'
+- tapOn:
+    id: 'screen-back'
 # Back on Settings, which has no tab bar: back to Library.
 - extendedWaitUntil:
     notVisible:

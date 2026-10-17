@@ -32,7 +32,14 @@ export function GnssScreenFrame({
       testID={testID}
     >
       <View style={styles.header}>
-        <HeaderAction icon="arrow-left" onPress={() => router.back()} accessibilityLabel="Back" />
+        <HeaderAction
+          icon="arrow-left"
+          onPress={() => router.back()}
+          accessibilityLabel="Back"
+          // E2E taps it by id: with the keyboard up, Android's own Back (the
+          // IME's ⌄) is also named "Back" and only closes the keyboard.
+          testID="screen-back"
+        />
         <Text accessibilityRole="header" style={[styles.title, { color: t.ink }]}>
           {title}
         </Text>
