@@ -1,0 +1,48 @@
+# The "New version" prompt (2.7.0) on the Map, with review screenshots
+# (review-*.png, uploaded by e2e.yml) of its three states in light and dark:
+# offered (Update), downloading (no button), downloaded (Restart).
+#
+# No store offers an update to a CI emulator, so the E2E build
+# (EXPO_PUBLIC_E2E_UPDATE_PROMPT=1, set only by e2e.yml) takes
+# inukshuk://e2e/update-prompt?state=… and fakes that state for this launch
+# (src/features/map/updatePromptE2E.ts). Nothing is persisted and the store is
+# never asked. Puts the theme back on System for the flows after it.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+# Android's one-time "Viewing full screen" hint can sit over a fresh map.
+- tapOn:
+    text: 'Got it'
+    optional: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- runFlow:
+    file: subflows/update-prompt-states.yaml
+    env:
+      THEME: light
+- runFlow:
+    file: subflows/set-theme.yaml
+    env:
+      NEXT: Dark
+- runFlow:
+    file: subflows/update-prompt-states.yaml
+    env:
+      THEME: dark
+- runFlow:
+    file: subflows/set-theme.yaml
+    env:
+      NEXT: System

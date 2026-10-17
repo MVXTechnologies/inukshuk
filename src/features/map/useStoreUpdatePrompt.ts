@@ -23,6 +23,8 @@ import { onPlayInstallState } from '@lib/playAppUpdate';
 import { useRecorderStore } from '@state/recorderStore';
 import { useTeamStore } from '@state/teamStore';
 
+import { useUpdatePromptFake, type FakeStoreAnswer } from './updatePromptE2E';
+
 /**
  * The store check waits this long after the Map mounts: off the launch path,
  * after the map's own first work.
@@ -59,6 +61,9 @@ export function useStoreUpdatePrompt(): StoreUpdatePrompt | null {
   const sosActive = useTeamStore((s) => s.sosAlarm !== null || s.soses.some((x) => !x.resolved));
   const [state, setState] = useState<UpdateCheckState | null>(null);
   const [phase, setPhase] = useState<UpdatePhase>({ kind: 'available' });
+  // E2E builds only (review screenshots): a faked answer wins over the store's.
+  const fake = useUpdatePromptFake((s) => s.fake);
+  const [fakeClosed, setFakeClosed] = useState<FakeStoreAnswer | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -129,12 +134,29 @@ export function useStoreUpdatePrompt(): StoreUpdatePrompt | null {
     });
   }, [state, offer, phase.kind]);
 
+  const onFakeAction = useCallback(() => {}, []);
+  const onFakeDismiss = useCallback(() => setFakeClosed(fake), [fake]);
+
   const onDismiss = useCallback(() => {
     if (state === null || state.offer === null) return;
     const next = { ...state, dismissed: offerKey(state.offer) };
     saveUpdateCheckState(next);
     setState(next);
   }, [state]);
+
+  if (fake !== null) {
+    if (
+      fake === fakeClosed ||
+      !isUpdatePromptVisible({ offer: fake.offer, dismissed: null, recording, sosActive })
+    ) {
+      return null;
+    }
+    return {
+      ...updatePromptCopy(fake.offer, fake.phase),
+      onAction: onFakeAction,
+      onDismiss: onFakeDismiss,
+    };
+  }
 
   if (
     offer === null ||

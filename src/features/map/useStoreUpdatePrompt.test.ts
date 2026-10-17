@@ -7,6 +7,7 @@ import {
   resetUpdateCheckForTests,
   useStoreUpdatePrompt,
 } from './useStoreUpdatePrompt';
+import { applyUpdatePromptLink, useUpdatePromptFake } from './updatePromptE2E';
 
 jest.mock('@data/storeUpdate', () => ({
   readUpdateCheckState: jest.fn(),
@@ -80,6 +81,7 @@ beforeEach(() => {
   jest.useFakeTimers({ now: NOW });
   jest.clearAllMocks();
   resetUpdateCheckForTests();
+  useUpdatePromptFake.setState({ fake: null });
   useRecorderStore.setState({ status: 'idle' });
   useTeamStore.setState({ sosAlarm: null, soses: [] });
   data.readUpdateCheckState.mockResolvedValue(EMPTY);
@@ -283,4 +285,44 @@ it('Android: an accepted download is asked about again at the next launch', asyn
   expect(data.saveUpdateCheckState).toHaveBeenLastCalledWith(
     expect.objectContaining({ downloadPending: true }),
   );
+});
+
+describe('the E2E fake (review screenshots)', () => {
+  it('shows the linked state at once, never asks the store, and closes', async () => {
+    const { result } = await renderHook(() => useStoreUpdatePrompt());
+    await act(async () => {
+      applyUpdatePromptLink('inukshuk://e2e/update-prompt?state=downloaded', true);
+    });
+    expect(result.current).toMatchObject({ text: 'Update downloaded', action: 'Restart' });
+    await act(async () => result.current?.onAction());
+    expect(data.installDownloadedUpdate).not.toHaveBeenCalled();
+    expect(data.startStoreUpdate).not.toHaveBeenCalled();
+
+    // A later real answer does not replace the faked state.
+    await act(async () => {
+      jest.advanceTimersByTime(UPDATE_CHECK_DELAY_MS);
+    });
+    await act(async () => {});
+    expect(result.current?.text).toBe('Update downloaded');
+
+    await act(async () => result.current?.onDismiss());
+    expect(result.current).toBeNull();
+    expect(data.saveUpdateCheckState).not.toHaveBeenCalledWith(
+      expect.objectContaining({ dismissed: expect.any(String) }),
+    );
+    // The next link shows the prompt again.
+    await act(async () => {
+      applyUpdatePromptLink('inukshuk://e2e/update-prompt?state=downloading', true);
+    });
+    expect(result.current?.text).toBe('Downloading update · 42 %');
+  });
+
+  it('still never shows during a recording', async () => {
+    useRecorderStore.setState({ status: 'recording' });
+    const { result } = await renderHook(() => useStoreUpdatePrompt());
+    await act(async () => {
+      applyUpdatePromptLink('inukshuk://e2e/update-prompt?state=available', true);
+    });
+    expect(result.current).toBeNull();
+  });
 });

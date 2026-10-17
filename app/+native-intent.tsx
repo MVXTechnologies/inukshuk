@@ -3,6 +3,7 @@ import { NO_GEOREFERENCE_NOTICE } from '@core/library/overlayPages';
 import { findDuplicateTrack } from '@features/share/findDuplicateTrack';
 import { importGpxFromUri } from '@features/library/importGpx';
 import { importMapFromUri } from '@features/library/importMap';
+import { applyUpdatePromptLink } from '@features/map/updatePromptE2E';
 import {
   activityImportMessage,
   importActivitiesFromUri,
@@ -46,6 +47,9 @@ export async function redirectSystemPath({
     addBreadcrumb('strava oauth redirect received');
     return '/settings';
   }
+  // E2E builds only (EXPO_PUBLIC_E2E_UPDATE_PROMPT): fake the "New version"
+  // prompt for review screenshots; a no-op returning false in store builds.
+  if (applyUpdatePromptLink(path)) return '/';
   if (/^(content|file):\/\//i.test(path)) {
     addBreadcrumb('open-with intent received');
     try {

@@ -312,3 +312,40 @@ export function sanitizeUpdateCheckState(raw: unknown): UpdateCheckState {
     downloadPending: r.downloadPending === true,
   };
 }
+
+/** The prompt states an E2E build can fake for its review screenshots. */
+export const FAKE_UPDATE_STATES = ['available', 'downloading', 'downloaded'] as const;
+export type FakeUpdateState = (typeof FAKE_UPDATE_STATES)[number];
+
+/**
+ * `inukshuk://e2e/update-prompt?state=available|downloading|downloaded` (or
+ * the same as a path): the state to fake, or null for any other link or an
+ * unknown state. Only `@features/map/updatePromptE2E` calls this, and only in
+ * a build made with the E2E flag.
+ */
+export function parseUpdatePromptLink(url: string): FakeUpdateState | null {
+  const [base = '', query = ''] = url.split('?', 2);
+  if (!/(^|[/:])e2e\/update-prompt\/?$/.test(base)) return null;
+  const state = /(?:^|&)state=([a-z]+)(?:&|$)/.exec(query)?.[1] ?? 'available';
+  return (FAKE_UPDATE_STATES as readonly string[]).includes(state)
+    ? (state as FakeUpdateState)
+    : null;
+}
+
+/** A store answer for a faked state, worded as the platform words a real one. */
+export function fakeStoreAnswer(
+  state: FakeUpdateState,
+  platform: 'ios' | 'android',
+): { offer: StoreOffer; phase: UpdatePhase } {
+  const offer: StoreOffer =
+    platform === 'ios'
+      ? { platform: 'ios', version: '2.7.1', trackId: 1 }
+      : { platform: 'android', versionCode: 999_999 };
+  const phase: UpdatePhase =
+    state === 'downloading'
+      ? { kind: 'downloading', fraction: 0.42 }
+      : state === 'downloaded'
+        ? { kind: 'downloaded' }
+        : { kind: 'available' };
+  return { offer, phase };
+}

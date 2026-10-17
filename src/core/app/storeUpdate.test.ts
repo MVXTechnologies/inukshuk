@@ -4,6 +4,7 @@ import {
   UPDATE_CHECK_INTERVAL_MS,
   appStoreUrl,
   compareVersions,
+  fakeStoreAnswer,
   iosOfferFromLookup,
   isNewerVersion,
   isOfferNewer,
@@ -11,6 +12,7 @@ import {
   isUpdatePromptVisible,
   offerKey,
   parseItunesLookup,
+  parseUpdatePromptLink,
   phaseFromPlayStatus,
   playStoreUrls,
   sanitizeUpdateCheckState,
@@ -284,5 +286,37 @@ describe('sanitizeUpdateCheckState', () => {
       sanitizeUpdateCheckState({ offer: { platform: 'ios', version: '2.7.1', trackId: 0 } }),
     ).toEqual(EMPTY_UPDATE_CHECK_STATE);
     expect(sanitizeUpdateCheckState({ offer: null })).toEqual(EMPTY_UPDATE_CHECK_STATE);
+  });
+});
+
+describe('parseUpdatePromptLink', () => {
+  it('reads the faked state from the scheme link or the path', () => {
+    expect(parseUpdatePromptLink('inukshuk://e2e/update-prompt?state=downloading')).toBe(
+      'downloading',
+    );
+    expect(parseUpdatePromptLink('/e2e/update-prompt?state=downloaded')).toBe('downloaded');
+    expect(parseUpdatePromptLink('e2e/update-prompt/?state=available&x=1')).toBe('available');
+    expect(parseUpdatePromptLink('inukshuk://e2e/update-prompt')).toBe('available');
+  });
+
+  it('ignores every other link and unknown states', () => {
+    expect(parseUpdatePromptLink('inukshuk://e2e/update-prompt?state=installed')).toBeNull();
+    expect(parseUpdatePromptLink('inukshuk://convert?state=available')).toBeNull();
+    expect(parseUpdatePromptLink('inukshuk://e2e/update-prompt-x?state=available')).toBeNull();
+    expect(parseUpdatePromptLink('inukshuk://xe2e/update-prompt?state=available')).toBeNull();
+    expect(parseUpdatePromptLink('content://downloads/e2e/update-prompt.gpx')).toBeNull();
+  });
+});
+
+describe('fakeStoreAnswer', () => {
+  it('fakes each state with the platform wording', () => {
+    const ios = fakeStoreAnswer('available', 'ios');
+    expect(updatePromptCopy(ios.offer, ios.phase).text).toBe('Version 2.7.1 available');
+    const a = fakeStoreAnswer('available', 'android');
+    expect(updatePromptCopy(a.offer, a.phase).text).toBe('New version available');
+    const d = fakeStoreAnswer('downloading', 'android');
+    expect(updatePromptCopy(d.offer, d.phase).text).toBe('Downloading update · 42 %');
+    const r = fakeStoreAnswer('downloaded', 'android');
+    expect(updatePromptCopy(r.offer, r.phase).action).toBe('Restart');
   });
 });

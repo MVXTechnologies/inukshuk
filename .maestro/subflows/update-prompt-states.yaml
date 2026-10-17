@@ -1,0 +1,35 @@
+# Subflow of update-prompt.yaml: fake each state of the "New version" prompt
+# through the E2E link, check its words and button, and screenshot it as
+# review-update-prompt-<state>-${THEME}. Starts and ends on the Map tab.
+# Texts are Android's (Play gives no version name: "New version available");
+# the iOS build says "Version 2.7.1 available", hence the alternation.
+appId: com.inukshuk.app
+---
+# --- Offered: the line and Update.
+- openLink: 'inukshuk://e2e/update-prompt?state=available'
+- extendedWaitUntil:
+    visible: '(New version|Version 2\.7\.1) available'
+    timeout: 15000
+- assertVisible:
+    id: 'update-prompt-action'
+- assertVisible: 'Update'
+- assertVisible:
+    id: 'update-prompt-close'
+- takeScreenshot: review-update-prompt-available-${THEME}
+# --- Downloading: the progress, no button.
+- openLink: 'inukshuk://e2e/update-prompt?state=downloading'
+- extendedWaitUntil:
+    visible: 'Downloading update · 42 %'
+    timeout: 15000
+- assertNotVisible:
+    id: 'update-prompt-action'
+- takeScreenshot: review-update-prompt-downloading-${THEME}
+# --- Downloaded: Restart.
+- openLink: 'inukshuk://e2e/update-prompt?state=downloaded'
+- extendedWaitUntil:
+    visible: 'Update downloaded'
+    timeout: 15000
+- assertVisible:
+    id: 'update-prompt-action'
+- assertVisible: 'Restart'
+- takeScreenshot: review-update-prompt-downloaded-${THEME}
