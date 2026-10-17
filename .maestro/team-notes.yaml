@@ -319,6 +319,12 @@ appId: com.inukshuk.app
     visible:
       id: 'team-bar-pill'
     timeout: 10000
+# The basemap redraws in the dark style after the theme change: a moment
+# before the review shot (the repo's sentinel idiom, as team.yaml's badges).
+- extendedWaitUntil:
+    visible: 'never-shown-sentinel'
+    timeout: 4000
+    optional: true
 - takeScreenshot: review-team-notes-map-dark
 - tapOn:
     id: 'team-bar-pill'
