@@ -119,7 +119,10 @@ appId: com.inukshuk.app
       id: 'team-create-screen'
     timeout: 5000
 - tapOn: 'Back'
-# A shared folder's invite (a newer app's): the join screen asks for the update.
+# A newer app's invite (an invite flag this version doesn't know, 4): the join
+# screen asks for the update. Not flag 2: since G10 that is a shared folder's
+# invite, which this version reads (run 38987712071). inviteUpdate.test.ts
+# checks this very link.
 - runFlow: team-settings-open.yaml
 - tapOn:
     id: 'team-join-row'
@@ -129,7 +132,7 @@ appId: com.inukshuk.app
     timeout: 10000
 - tapOn:
     id: 'team-join-paste'
-- inputText: 'https://inukshuk.mvxtechnologies.com/j#AQIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+- inputText: 'https://inukshuk.mvxtechnologies.com/j#AQQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 - hideKeyboard
 - tapOn:
     id: 'team-join-paste-go'

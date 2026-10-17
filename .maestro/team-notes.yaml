@@ -7,8 +7,7 @@
 # (All, Mine) → a row opens the card → Draw's Text tool opens the composer
 # where tapped → leave the team.
 #
-# In the team shard after team-draw.yaml, before team.yaml (which clears state
-# and stays last); it does not clear state itself, so it creates its own team
+# In the team-net shard after team-internet.yaml; it does not clear state itself, so it creates its own team
 # and leaves it at the end. Settings rows merge title + subtitle on iOS:
 # wildcard regexes (maestro-ios-tap-traps). Never hideKeyboard when the
 # keyboard may be down: on Android it then presses Back.
@@ -198,12 +197,21 @@ appId: com.inukshuk.app
     id: 'note-menu-fade'
 - assertNotVisible:
     id: 'note-menu-move'
+# Delete asks first; Cancel keeps the note and closes the menu (the menu
+# covers the ⋮ that would toggle it: run 38987712071's tap hit Delete).
 - tapOn:
-    id: 'note-more'
+    id: 'note-menu-delete'
 - extendedWaitUntil:
-    notVisible:
-      id: 'note-menu'
+    visible: 'Delete this note\?'
     timeout: 3000
+- tapOn: '(?i)cancel'
+- extendedWaitUntil:
+    notVisible: 'Delete this note\?'
+    timeout: 3000
+- assertNotVisible:
+    id: 'note-menu'
+- assertVisible:
+    id: 'team-note-card'
 - tapOn: 'Close'
 - extendedWaitUntil:
     notVisible:

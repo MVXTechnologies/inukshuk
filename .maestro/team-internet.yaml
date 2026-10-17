@@ -5,8 +5,8 @@
 # a newer app's invite asking for the update. Each is asserted before its
 # review screenshot, in light and in dark (the owner's phone runs dark).
 #
-# In the team shard after team-draw.yaml, before team.yaml (which clears
-# state and must stay last): it creates its own team, leaves it at the end
+# In the team-net shard, before team-notes.yaml (the team shard had no time
+# left for both: run 38987712071 hit its 35 min): it creates its own team, leaves it at the end
 # and puts the theme back on System (subflows/set-theme.yaml: it starts and
 # ends on the Map tab). Settings rows merge title + subtitle on
 # iOS: wildcard regexes (maestro-ios-tap-traps).

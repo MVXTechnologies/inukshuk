@@ -17,6 +17,13 @@ describe('inviteNeedsUpdate (G7)', () => {
     expect(inviteNeedsUpdate(header(2, 0))).toBe(true);
   });
 
+  it('the E2E link (team-internet-shots.yaml) is a newer app’s invite', () => {
+    const link =
+      'https://inukshuk.mvxtechnologies.com/j#AQQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    expect(link.endsWith(header(1, 4))).toBe(true);
+    expect(inviteNeedsUpdate(link)).toBe(true);
+  });
+
   it('is not for a readable invite, nor for junk', () => {
     expect(inviteNeedsUpdate(header(1, 0))).toBe(false);
     expect(inviteNeedsUpdate('hello')).toBe(false);
